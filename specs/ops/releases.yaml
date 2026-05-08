@@ -1,0 +1,13 @@
+# Release Trail
+# Log every meaningful ship. Format:
+#
+# - date: "2026-05-07"
+#   title: "Short description of what shipped"
+#   priority: 1  # Which PRIORITIES workstream this advances
+#   layer: 1     # Which proof-points layer this supports
+#   notes: "Optional details"
+#   artifacts:
+#     - specs/current/architecture.md
+#     - src/lib/schema.ts
+
+# --- Releases below ---

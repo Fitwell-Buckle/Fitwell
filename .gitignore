@@ -1,0 +1,42 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# env files
+.env
+.env*.local
+!.env.example
+
+# vercel
+.vercel
+
+# testing
+/test-results/
+/playwright-report/
+/blob-report/
+/coverage/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+
+# drizzle
+drizzle/meta
+
+# sentry
+.sentryclirc

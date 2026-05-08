@@ -1,0 +1,28 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/health",
+      "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/extract-shopify",
+      "schedule": "15 */2 * * *"
+    },
+    {
+      "path": "/api/cron/extract-ga4",
+      "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/extract-google-ads",
+      "schedule": "45 6 * * *"
+    },
+    {
+      "path": "/api/cron/extract-gsc",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/extract-posthog",
+      "schedule": "0 */3 * * *"
+    }
+  ]
+}
