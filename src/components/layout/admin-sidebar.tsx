@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -29,10 +30,15 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r bg-zinc-50">
-      <div className="flex h-16 items-center border-b px-6">
-        <Link href="/dashboard" className="text-lg font-bold">
-          Fitwell Admin
+    <aside className="flex h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-900">
+      <div className="flex h-16 items-center border-b border-zinc-800 px-6">
+        <Link href="/dashboard">
+          <Image
+            src="/images/fitwell-logo.png"
+            alt="Fitwell Admin"
+            width={120}
+            height={29}
+          />
         </Link>
       </div>
       <nav className="flex-1 space-y-1 p-4">
@@ -45,8 +51,8 @@ export function AdminSidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-zinc-200 text-zinc-900"
-                  : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+                  ? "bg-zinc-800 text-white"
+                  : "text-zinc-400 hover:bg-zinc-800 hover:text-white",
               )}
             >
               <item.icon className="h-4 w-4" />
