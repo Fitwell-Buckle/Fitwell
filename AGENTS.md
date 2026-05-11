@@ -112,6 +112,24 @@ Open questions, risks, alternatives considered.
 
 **Never run `drizzle-kit push` against production.** Always use the generate/migrate workflow.
 
+### Neon database branches:
+
+The project uses Neon branching to isolate environments. Each developer gets their own copy-on-write branch forked from production.
+
+| Branch | Endpoint | Used by |
+|---|---|---|
+| `production` | `ep-divine-field-aqvgidm6` | Vercel production + preview deploys |
+| `greg-dev` | `ep-solitary-dawn-aqdv9xxi` | Greg's local dev |
+| `tom-dev` | (create when needed) | Tom's local dev |
+| `oliver-dev` | (create when needed) | Oliver's local dev |
+
+- **Neon project ID**: `quiet-cell-94455140`
+- **Neon org ID**: `org-fancy-night-97982234`
+- **Local `.env.local`** should point to your personal dev branch, never production
+- **Vercel `DATABASE_URL`** points to the production branch (pooled endpoint: `ep-divine-field-aqvgidm6-pooler`)
+- Create a new dev branch: `npx neonctl branches create --project-id quiet-cell-94455140 --org-id org-fancy-night-97982234 --name <name>-dev --parent production`
+- Migrations: apply to your dev branch first, verify, then apply to production before deploying
+
 ---
 
 ## 7. Shopify Integration Rules

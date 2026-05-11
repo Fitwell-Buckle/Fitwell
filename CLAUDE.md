@@ -17,7 +17,14 @@ npm run test:e2e     # Playwright (e2e/playwright.config.ts)
 npm run db:generate  # Generate Drizzle migrations
 npm run db:migrate   # Apply migrations
 npm run db:studio    # Drizzle Studio (browser UI)
+npm run vc           # Vercel CLI (uses ~/.vercel-fitwell config)
 ```
+
+## Vercel
+
+- Project: https://vercel.com/fitwellbuckle/fitwell
+- Production URL: https://admin.fitwellbuckle.co (fallback: https://fitwell-ashy.vercel.app)
+- Vercel CLI uses a separate config dir (`~/.vercel-fitwell`) for the greg@fitwellbuckle.co account. All `vercel` commands in this repo should use `npm run vc` or `vercel --global-config ~/.vercel-fitwell`.
 
 ## Path Alias
 

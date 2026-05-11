@@ -11,3 +11,11 @@
 #     - src/lib/schema.ts
 
 # --- Releases below ---
+
+- date: "2026-05-11"
+  title: "Infrastructure setup complete"
+  priority: 1
+  layer: 1
+  notes: "NeonDB (with dev branching), Vercel, admin.fitwellbuckle.co, Google OAuth, ADMIN_EMAILS lockdown. Sentry descoped."
+  artifacts:
+    - specs/work-plans/completed/infrastructure-setup.md
