@@ -1,113 +1,407 @@
-import type { ShopifyOrder, ShopifyCustomer } from "@/types/shopify";
+import type {
+  ShopifyOrder,
+  ShopifyCustomer,
+  ShopifyProduct,
+} from "@/types/shopify";
 
-const SHOPIFY_API_VERSION = "2024-10";
+const SHOPIFY_API_VERSION = "2025-01";
+const MAX_RETRIES = 3;
+const RATE_LIMIT_DELAY_MS = 500;
 
-interface ShopifyPaginatedResponse<T> {
-  data: T[];
-  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+/**
+ * Parse RFC 5988 Link header to extract the "next" page URL.
+ * Format: `<https://...>; rel="next"`, possibly with other links comma-separated.
+ */
+function parseLinkHeader(header: string | null): string | null {
+  if (!header) return null;
+  const parts = header.split(",");
+  for (const part of parts) {
+    const match = part.match(/<([^>]+)>;\s*rel="next"/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/** Convert a Shopify decimal string ("49.95") to cents integer (4995). */
+export function toCents(value: string): number {
+  return Math.round(parseFloat(value) * 100);
 }
 
 class ShopifyClient {
   private domain: string;
-  private token: string;
+  private clientId: string;
+  private clientSecret: string;
+  private accessToken: string | null = null;
+  private tokenExpiresAt: number = 0;
   private baseUrl: string;
 
   constructor() {
     this.domain = process.env.SHOPIFY_STORE_DOMAIN ?? "";
-    this.token = process.env.SHOPIFY_ADMIN_API_TOKEN ?? "";
+    this.clientId = process.env.SHOPIFY_CLIENT_ID ?? "";
+    this.clientSecret = process.env.SHOPIFY_CLIENT_SECRET ?? "";
+
+    if (!this.domain) {
+      console.warn("Shopify client: SHOPIFY_STORE_DOMAIN not set");
+    }
+    if (!this.clientId || !this.clientSecret) {
+      console.warn(
+        "Shopify client: SHOPIFY_CLIENT_ID or SHOPIFY_CLIENT_SECRET not set",
+      );
+    }
     this.baseUrl = `https://${this.domain}/admin/api/${SHOPIFY_API_VERSION}`;
   }
 
-  private async fetch<T>(endpoint: string, init?: RequestInit): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
-    const res = await fetch(url, {
-      ...init,
-      headers: {
-        "X-Shopify-Access-Token": this.token,
-        "Content-Type": "application/json",
-        ...init?.headers,
-      },
-    });
-
-    // Respect rate limits
-    const remaining = res.headers.get("x-shopify-shop-api-call-limit");
-    if (remaining) {
-      const [used, limit] = remaining.split("/").map(Number);
-      if (used / limit > 0.8) {
-        await new Promise((r) => setTimeout(r, 1000));
-      }
+  private async getToken(): Promise<string> {
+    const now = Date.now();
+    if (this.accessToken && now < this.tokenExpiresAt - 60_000) {
+      return this.accessToken;
     }
+
+    const res = await fetch(
+      `https://${this.domain}/admin/oauth/access_token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+        }),
+      },
+    );
 
     if (!res.ok) {
-      throw new Error(`Shopify API error: ${res.status} ${res.statusText}`);
+      throw new Error(
+        `Shopify token exchange failed: ${res.status} ${await res.text()}`,
+      );
     }
 
-    return res.json() as Promise<T>;
+    const data = (await res.json()) as {
+      access_token: string;
+      expires_in: number;
+    };
+    this.accessToken = data.access_token;
+    this.tokenExpiresAt = now + data.expires_in * 1000;
+    console.log(
+      `Shopify token refreshed, expires in ${Math.round(data.expires_in / 3600)}h`,
+    );
+    return this.accessToken;
   }
+
+  /**
+   * Core fetch with rate-limit awareness and exponential backoff on 429.
+   * Returns the parsed JSON body. Throws on non-retryable errors.
+   */
+  async fetch<T>(endpoint: string, init?: RequestInit): Promise<T> {
+    const url = endpoint.startsWith("https://")
+      ? endpoint
+      : `${this.baseUrl}${endpoint}`;
+
+    let lastError: Error | null = null;
+    const token = await this.getToken();
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const res = await fetch(url, {
+        ...init,
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+          ...init?.headers,
+        },
+      });
+
+      // Check rate limit bucket before processing response
+      const callLimit = res.headers.get("X-Shopify-Shop-Api-Call-Limit");
+      if (callLimit) {
+        const [used, limit] = callLimit.split("/").map(Number);
+        const ratio = used / limit;
+        if (ratio > 0.5) {
+          console.log(
+            `Shopify rate limit: ${used}/${limit} (${Math.round(ratio * 100)}%)`,
+          );
+        }
+        if (ratio > 0.75) {
+          await sleep(RATE_LIMIT_DELAY_MS);
+        }
+      }
+
+      // Handle 429 with exponential backoff
+      if (res.status === 429) {
+        if (attempt < MAX_RETRIES) {
+          const backoff = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+          console.warn(
+            `Shopify 429 rate limited, retrying in ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
+          );
+          await sleep(backoff);
+          continue;
+        }
+        throw new Error(
+          `Shopify API rate limited after ${MAX_RETRIES} retries`,
+        );
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        lastError = new Error(
+          `Shopify API error: ${res.status} ${res.statusText} — ${body}`,
+        );
+        // Retry on 5xx server errors
+        if (res.status >= 500 && attempt < MAX_RETRIES) {
+          const backoff = Math.pow(2, attempt) * 1000;
+          console.warn(
+            `Shopify ${res.status}, retrying in ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
+          );
+          await sleep(backoff);
+          continue;
+        }
+        throw lastError;
+      }
+
+      return res.json() as Promise<T>;
+    }
+
+    throw lastError ?? new Error("Shopify API: max retries exceeded");
+  }
+
+  /**
+   * Fetch a single page with Link-header pagination info.
+   * Returns the parsed body and the next page URL if present.
+   */
+  private async fetchPage<T>(
+    endpoint: string,
+    init?: RequestInit,
+  ): Promise<{ body: T; nextPageUrl: string | null }> {
+    const url = endpoint.startsWith("https://")
+      ? endpoint
+      : `${this.baseUrl}${endpoint}`;
+
+    let lastError: Error | null = null;
+    const token = await this.getToken();
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const res = await fetch(url, {
+        ...init,
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+          ...init?.headers,
+        },
+      });
+
+      const callLimit = res.headers.get("X-Shopify-Shop-Api-Call-Limit");
+      if (callLimit) {
+        const [used, limit] = callLimit.split("/").map(Number);
+        const ratio = used / limit;
+        if (ratio > 0.5) {
+          console.log(
+            `Shopify rate limit: ${used}/${limit} (${Math.round(ratio * 100)}%)`,
+          );
+        }
+        if (ratio > 0.75) {
+          await sleep(RATE_LIMIT_DELAY_MS);
+        }
+      }
+
+      if (res.status === 429) {
+        if (attempt < MAX_RETRIES) {
+          const backoff = Math.pow(2, attempt) * 1000;
+          console.warn(
+            `Shopify 429, retrying in ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
+          );
+          await sleep(backoff);
+          continue;
+        }
+        throw new Error(
+          `Shopify API rate limited after ${MAX_RETRIES} retries`,
+        );
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        lastError = new Error(
+          `Shopify API error: ${res.status} ${res.statusText} — ${body}`,
+        );
+        if (res.status >= 500 && attempt < MAX_RETRIES) {
+          const backoff = Math.pow(2, attempt) * 1000;
+          console.warn(
+            `Shopify ${res.status}, retrying in ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
+          );
+          await sleep(backoff);
+          continue;
+        }
+        throw lastError;
+      }
+
+      const linkHeader = res.headers.get("Link");
+      const nextPageUrl = parseLinkHeader(linkHeader);
+      const body = (await res.json()) as T;
+
+      return { body, nextPageUrl };
+    }
+
+    throw lastError ?? new Error("Shopify API: max retries exceeded");
+  }
+
+  // ── Orders ────────────────────────────────────────────────────────
 
   async getOrders(
     params: {
       limit?: number;
-      since_id?: string;
       status?: string;
       created_at_min?: string;
+      updated_at_min?: string;
+      page_info?: string;
     } = {},
-  ): Promise<ShopifyPaginatedResponse<ShopifyOrder>> {
-    const searchParams = new URLSearchParams();
-    searchParams.set("limit", String(params.limit ?? 50));
-    if (params.since_id) searchParams.set("since_id", params.since_id);
-    if (params.status) searchParams.set("status", params.status);
-    if (params.created_at_min)
-      searchParams.set("created_at_min", params.created_at_min);
+  ): Promise<{ orders: ShopifyOrder[]; nextPageUrl: string | null }> {
+    // If page_info is provided, it's the full URL from a Link header
+    if (params.page_info) {
+      const { body, nextPageUrl } = await this.fetchPage<{
+        orders: ShopifyOrder[];
+      }>(params.page_info);
+      return { orders: body.orders, nextPageUrl };
+    }
 
-    const result = await this.fetch<{ orders: ShopifyOrder[] }>(
-      `/orders.json?${searchParams.toString()}`,
-    );
+    const sp = new URLSearchParams();
+    sp.set("limit", String(params.limit ?? 250));
+    if (params.status) sp.set("status", params.status);
+    if (params.created_at_min) sp.set("created_at_min", params.created_at_min);
+    if (params.updated_at_min) sp.set("updated_at_min", params.updated_at_min);
 
-    return {
-      data: result.orders,
-      pageInfo: {
-        hasNextPage: result.orders.length === (params.limit ?? 50),
-        endCursor: result.orders.at(-1)?.id.toString() ?? null,
-      },
-    };
+    const { body, nextPageUrl } = await this.fetchPage<{
+      orders: ShopifyOrder[];
+    }>(`/orders.json?${sp.toString()}`);
+    return { orders: body.orders, nextPageUrl };
   }
+
+  async getOrder(id: number | string): Promise<ShopifyOrder> {
+    const result = await this.fetch<{ order: ShopifyOrder }>(
+      `/orders/${id}.json`,
+    );
+    return result.order;
+  }
+
+  async getOrderCount(
+    params: {
+      status?: string;
+      created_at_min?: string;
+      updated_at_min?: string;
+    } = {},
+  ): Promise<number> {
+    const sp = new URLSearchParams();
+    if (params.status) sp.set("status", params.status);
+    if (params.created_at_min) sp.set("created_at_min", params.created_at_min);
+    if (params.updated_at_min) sp.set("updated_at_min", params.updated_at_min);
+
+    const result = await this.fetch<{ count: number }>(
+      `/orders/count.json?${sp.toString()}`,
+    );
+    return result.count;
+  }
+
+  // ── Customers ─────────────────────────────────────────────────────
 
   async getCustomers(
-    params: { limit?: number; since_id?: string } = {},
-  ): Promise<ShopifyPaginatedResponse<ShopifyCustomer>> {
-    const searchParams = new URLSearchParams();
-    searchParams.set("limit", String(params.limit ?? 50));
-    if (params.since_id) searchParams.set("since_id", params.since_id);
+    params: {
+      limit?: number;
+      updated_at_min?: string;
+      page_info?: string;
+    } = {},
+  ): Promise<{ customers: ShopifyCustomer[]; nextPageUrl: string | null }> {
+    if (params.page_info) {
+      const { body, nextPageUrl } = await this.fetchPage<{
+        customers: ShopifyCustomer[];
+      }>(params.page_info);
+      return { customers: body.customers, nextPageUrl };
+    }
 
-    const result = await this.fetch<{ customers: ShopifyCustomer[] }>(
-      `/customers.json?${searchParams.toString()}`,
-    );
+    const sp = new URLSearchParams();
+    sp.set("limit", String(params.limit ?? 250));
+    if (params.updated_at_min) sp.set("updated_at_min", params.updated_at_min);
 
-    return {
-      data: result.customers,
-      pageInfo: {
-        hasNextPage: result.customers.length === (params.limit ?? 50),
-        endCursor: result.customers.at(-1)?.id.toString() ?? null,
-      },
-    };
+    const { body, nextPageUrl } = await this.fetchPage<{
+      customers: ShopifyCustomer[];
+    }>(`/customers.json?${sp.toString()}`);
+    return { customers: body.customers, nextPageUrl };
   }
 
-  async getProducts(params: { limit?: number } = {}) {
-    const searchParams = new URLSearchParams();
-    searchParams.set("limit", String(params.limit ?? 50));
+  async getCustomer(id: number | string): Promise<ShopifyCustomer> {
+    const result = await this.fetch<{ customer: ShopifyCustomer }>(
+      `/customers/${id}.json`,
+    );
+    return result.customer;
+  }
 
-    return this.fetch<{
-      products: Array<{
-        id: number;
-        title: string;
-        variants: Array<{ id: number; sku: string; price: string }>;
-      }>;
-    }>(`/products.json?${searchParams.toString()}`);
+  async getCustomerCount(
+    params: { updated_at_min?: string } = {},
+  ): Promise<number> {
+    const sp = new URLSearchParams();
+    if (params.updated_at_min) sp.set("updated_at_min", params.updated_at_min);
+
+    const result = await this.fetch<{ count: number }>(
+      `/customers/count.json?${sp.toString()}`,
+    );
+    return result.count;
+  }
+
+  // ── Products ──────────────────────────────────────────────────────
+
+  async getProducts(
+    params: {
+      limit?: number;
+      page_info?: string;
+    } = {},
+  ): Promise<{ products: ShopifyProduct[]; nextPageUrl: string | null }> {
+    if (params.page_info) {
+      const { body, nextPageUrl } = await this.fetchPage<{
+        products: ShopifyProduct[];
+      }>(params.page_info);
+      return { products: body.products, nextPageUrl };
+    }
+
+    const sp = new URLSearchParams();
+    sp.set("limit", String(params.limit ?? 250));
+
+    const { body, nextPageUrl } = await this.fetchPage<{
+      products: ShopifyProduct[];
+    }>(`/products.json?${sp.toString()}`);
+    return { products: body.products, nextPageUrl };
+  }
+
+  // ── Generic paginator ─────────────────────────────────────────────
+
+  /**
+   * Follow Link-header pagination to fetch ALL pages.
+   * Yields one array of items per page so callers can process incrementally.
+   *
+   * @param firstEndpoint - The initial endpoint (relative or absolute URL)
+   * @param key - The JSON key containing the array (e.g., "orders", "customers")
+   */
+  async *fetchAll<T>(
+    firstEndpoint: string,
+    key: string,
+  ): AsyncGenerator<T[], void, unknown> {
+    let url: string | null = firstEndpoint.startsWith("https://")
+      ? firstEndpoint
+      : `${this.baseUrl}${firstEndpoint}`;
+
+    while (url) {
+      const result: { body: Record<string, T[]>; nextPageUrl: string | null } =
+        await this.fetchPage<Record<string, T[]>>(url);
+      const items = result.body[key];
+      if (items && items.length > 0) {
+        yield items;
+      }
+      url = result.nextPageUrl;
+    }
   }
 }
 
-// Singleton
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Singleton ─────────────────────────────────────────────────────
+
 let client: ShopifyClient | null = null;
 
 export function getShopifyClient(): ShopifyClient {

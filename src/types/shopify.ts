@@ -41,9 +41,13 @@ export interface ShopifyOrder {
   email: string;
   total_price: string;
   subtotal_price: string;
+  total_discounts: string;
+  total_tax: string;
   currency: string;
   financial_status: string;
   fulfillment_status: string | null;
+  discount_codes: Array<{ code: string; amount: string; type: string }>;
+  refunds: Array<{ id: number; created_at: string }>;
   processed_at: string;
   created_at: string;
   updated_at: string;
@@ -53,6 +57,30 @@ export interface ShopifyOrder {
   referring_site: string | null;
   note: string | null;
   tags: string;
+}
+
+export interface ShopifyVariant {
+  id: number;
+  product_id: number;
+  title: string;
+  sku: string | null;
+  price: string;
+  inventory_quantity: number;
+  weight: number;
+  weight_unit: string;
+}
+
+export interface ShopifyProduct {
+  id: number;
+  title: string;
+  handle: string;
+  vendor: string;
+  product_type: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  variants: ShopifyVariant[];
+  images: Array<{ id: number; src: string; position: number }>;
 }
 
 export interface WebhookPayload {

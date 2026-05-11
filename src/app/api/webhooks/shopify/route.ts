@@ -5,6 +5,7 @@ export async function POST(req: NextRequest) {
   const body = await req.text();
   const hmacHeader = req.headers.get("x-shopify-hmac-sha256");
   const topic = req.headers.get("x-shopify-topic");
+  const shopDomain = req.headers.get("x-shopify-shop-domain");
 
   if (!hmacHeader || !topic) {
     return NextResponse.json({ error: "Missing headers" }, { status: 400 });
@@ -20,10 +21,12 @@ export async function POST(req: NextRequest) {
     await handleWebhookTopic(topic, payload);
     return NextResponse.json({ status: "ok" });
   } catch (error) {
-    console.error("Webhook processing failed:", error);
-    return NextResponse.json(
-      { error: "Processing failed" },
-      { status: 500 },
+    // Log the error but return 200 to prevent Shopify retries on transient errors.
+    // Shopify will keep retrying on non-2xx responses, which can cause cascading failures.
+    console.error(
+      `Webhook processing error [topic=${topic}, shop=${shopDomain}]:`,
+      error,
     );
+    return NextResponse.json({ status: "ok", warning: "processing error logged" });
   }
 }
