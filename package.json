@@ -16,8 +16,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "vc": "vercel --global-config ~/.vercel-fitwell",
-    "shopify": "tsx scripts/shopify-cli.ts",
-    "backfill:shopify": "tsx scripts/backfill-shopify.ts"
+    "shopify": "node --env-file=.env.local --import tsx/esm scripts/shopify-cli.ts",
+    "backfill:shopify": "node --env-file=.env.local --import tsx/esm scripts/backfill-shopify.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",

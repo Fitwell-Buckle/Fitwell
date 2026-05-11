@@ -53,6 +53,7 @@ export interface ShopifyOrder {
   updated_at: string;
   line_items: ShopifyLineItem[];
   customer: ShopifyCustomer;
+  source_name: string | null;
   landing_site: string | null;
   referring_site: string | null;
   note: string | null;

@@ -1,8 +1,23 @@
 import { db } from "@/lib/db";
-import { customer, order, orderLineItem } from "@/lib/schema";
+import { customer, order, orderLineItem, utmAttribution } from "@/lib/schema";
 import { getShopifyClient, toCents } from "./client";
 import { eq, sql } from "drizzle-orm";
 import type { ShopifyCustomer, ShopifyOrder } from "@/types/shopify";
+
+function parseUtmParams(landingSite: string | null): Record<string, string> {
+  if (!landingSite) return {};
+  try {
+    const url = new URL(landingSite, "https://fitwellbuckle.co");
+    const params: Record<string, string> = {};
+    for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]) {
+      const val = url.searchParams.get(key);
+      if (val) params[key] = val;
+    }
+    return params;
+  } catch {
+    return {};
+  }
+}
 
 // ── Customer upsert ─────────────────────────────────────────────────
 
@@ -66,6 +81,7 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
   }
 
   const shopifyId = String(shopifyOrder.id);
+  const utm = parseUtmParams(shopifyOrder.landing_site);
   const orderValues = {
     shopifyId,
     shopifyOrderNumber: shopifyOrder.order_number,
@@ -75,7 +91,10 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
     currency: shopifyOrder.currency,
     financialStatus: shopifyOrder.financial_status,
     fulfillmentStatus: shopifyOrder.fulfillment_status,
-    processedAt: new Date(shopifyOrder.processed_at),
+    sourceName: shopifyOrder.source_name,
+    processedAt: shopifyOrder.processed_at
+      ? new Date(shopifyOrder.processed_at)
+      : new Date(shopifyOrder.created_at),
     updatedAt: new Date(),
   };
 
@@ -92,6 +111,7 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
         currency: orderValues.currency,
         financialStatus: orderValues.financialStatus,
         fulfillmentStatus: orderValues.fulfillmentStatus,
+        sourceName: orderValues.sourceName,
         processedAt: orderValues.processedAt,
         updatedAt: orderValues.updatedAt,
       },
@@ -100,6 +120,32 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
 
   const orderId = result.id;
 
+  // Track UTM attribution if present
+  if (Object.keys(utm).length > 0) {
+    await db.insert(utmAttribution).values({
+      visitorId: customerId,
+      source: utm.utm_source ?? null,
+      medium: utm.utm_medium ?? null,
+      campaign: utm.utm_campaign ?? null,
+      term: utm.utm_term ?? null,
+      content: utm.utm_content ?? null,
+      landingPage: shopifyOrder.landing_site,
+      referrer: shopifyOrder.referring_site,
+    });
+
+    // Set first-touch UTM on customer if not already set
+    if (customerId && utm.utm_source) {
+      await db
+        .update(customer)
+        .set({
+          utmSource: sql`COALESCE(${customer.utmSource}, ${utm.utm_source})`,
+          utmMedium: sql`COALESCE(${customer.utmMedium}, ${utm.utm_medium ?? null})`,
+          utmCampaign: sql`COALESCE(${customer.utmCampaign}, ${utm.utm_campaign ?? null})`,
+        })
+        .where(eq(customer.id, customerId));
+    }
+  }
+
   // Replace line items: delete existing, then bulk insert
   await db.delete(orderLineItem).where(eq(orderLineItem.orderId, orderId));
 
@@ -107,8 +153,8 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
     await db.insert(orderLineItem).values(
       shopifyOrder.line_items.map((item) => ({
         orderId,
-        shopifyProductId: String(item.product_id),
-        shopifyVariantId: String(item.variant_id),
+        shopifyProductId: item.product_id ? String(item.product_id) : null,
+        shopifyVariantId: item.variant_id ? String(item.variant_id) : null,
         title: item.title,
         variantTitle: item.variant_title,
         sku: item.sku,

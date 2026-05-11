@@ -7,9 +7,6 @@
  * Safe to re-run — all writes are upserts so duplicates are handled gracefully.
  */
 
-import { config } from "dotenv";
-config({ path: ".env.local" });
-
 import { getShopifyClient } from "@/lib/shopify/client";
 import { upsertOrder, upsertCustomer } from "@/lib/shopify/sync";
 import type { ShopifyOrder, ShopifyCustomer, ShopifyProduct } from "@/types/shopify";

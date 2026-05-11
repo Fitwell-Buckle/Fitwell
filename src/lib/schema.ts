@@ -108,6 +108,7 @@ export const order = pgTable(
     currency: text("currency").default("USD"),
     financialStatus: text("financial_status"),
     fulfillmentStatus: text("fulfillment_status"),
+    sourceName: text("source_name"),
     processedAt: timestamp("processed_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),

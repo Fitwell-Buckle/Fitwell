@@ -23,8 +23,10 @@ function parseLinkHeader(header: string | null): string | null {
 }
 
 /** Convert a Shopify decimal string ("49.95") to cents integer (4995). */
-export function toCents(value: string): number {
-  return Math.round(parseFloat(value) * 100);
+export function toCents(value: string | null | undefined): number {
+  if (!value) return 0;
+  const n = parseFloat(value);
+  return isNaN(n) ? 0 : Math.round(n * 100);
 }
 
 class ShopifyClient {
