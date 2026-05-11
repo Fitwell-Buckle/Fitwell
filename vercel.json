@@ -21,6 +21,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/extract-meta-ads",
+      "schedule": "15 7 * * *"
+    },
+    {
       "path": "/api/cron/extract-posthog",
       "schedule": "0 */3 * * *"
     }

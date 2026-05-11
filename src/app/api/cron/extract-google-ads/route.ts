@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractGoogleAdsData } from "@/lib/analytics/google-ads";
+import { extractGoogleAdsDaily } from "@/lib/analytics/google-ads";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -8,10 +8,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await extractGoogleAdsData();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const rows = await extractGoogleAdsDaily(yesterday);
     return NextResponse.json({
       status: "ok",
-      ...result,
+      date: yesterday.toISOString().split("T")[0],
+      rows,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

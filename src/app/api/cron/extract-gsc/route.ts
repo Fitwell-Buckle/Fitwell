@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractGSCData } from "@/lib/analytics/gsc";
+import { extractGSCDaily } from "@/lib/analytics/gsc";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -8,10 +8,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await extractGSCData();
+    // GSC data has 2-3 day lag
+    const date = new Date();
+    date.setDate(date.getDate() - 3);
+
+    const rows = await extractGSCDaily(date);
     return NextResponse.json({
       status: "ok",
-      ...result,
+      date: date.toISOString().split("T")[0],
+      rows,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

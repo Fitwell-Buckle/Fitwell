@@ -108,12 +108,7 @@ export default async function DashboardPage() {
                 recentOrders.map((o) => (
                   <TableRow key={o.id}>
                     <TableCell className="font-medium">
-                      <Link
-                        href={`/orders`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        #{o.shopifyOrderNumber}
-                      </Link>
+                      #{o.shopifyOrderNumber}
                     </TableCell>
                     <TableCell>
                       {o.customerFirstName} {o.customerLastName}

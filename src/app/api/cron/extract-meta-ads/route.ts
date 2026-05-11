@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractGA4Daily } from "@/lib/analytics/ga4";
+import { extractMetaAdsDaily } from "@/lib/analytics/meta-ads";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -8,11 +8,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Extract yesterday's data
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const rows = await extractGA4Daily(yesterday);
+    const rows = await extractMetaAdsDaily(yesterday);
     return NextResponse.json({
       status: "ok",
       date: yesterday.toISOString().split("T")[0],
@@ -20,7 +19,7 @@ export async function GET(req: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("GA4 extraction failed:", error);
+    console.error("Meta Ads extraction failed:", error);
     return NextResponse.json(
       { error: "Extraction failed", message: String(error) },
       { status: 500 },
