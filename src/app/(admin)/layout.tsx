@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { AdminSidebar } from "@/components/layout/admin-sidebar";
+import { DateRangePicker } from "@/components/layout/date-range-picker";
 
 export default async function AdminLayout({
   children,
@@ -16,7 +18,17 @@ export default async function AdminLayout({
   return (
     <div className="flex h-screen">
       <AdminSidebar />
-      <main className="flex-1 overflow-auto bg-zinc-50 p-8">{children}</main>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200/80 bg-white px-10">
+          <div />
+          <Suspense>
+            <DateRangePicker />
+          </Suspense>
+        </header>
+        <main className="flex-1 overflow-auto bg-[#fafafa] px-10 py-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { customer, order, orderLineItem } from "@/lib/schema";
 import { count, max } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = {
   title: "Settings | Fitwell Admin",
@@ -32,10 +33,7 @@ export default async function SettingsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Settings</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Admin configuration and sync status
-      </p>
+      <PageHeader title="Settings" />
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <Card>

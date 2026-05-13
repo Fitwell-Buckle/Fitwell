@@ -1,37 +1,249 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { order, customer } from "@/lib/schema";
+import { sql, desc, count, sum, and, gte, lte } from "drizzle-orm";
+import { parseDateRange } from "@/lib/date-range";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = {
   title: "Attribution | Fitwell Admin",
 };
 
-export default function AttributionPage() {
+function fmt(cents: number) {
+  return (cents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
+export default async function AttributionPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const session = await auth();
+  if (!session) redirect("/auth/login");
+
+  const params = await searchParams;
+  const { from, to } = parseDateRange(params);
+
+  const [byReferrer, bySource, byLandingPage, byUtm] = await Promise.all([
+    db
+      .select({
+        referringSite: order.referringSite,
+        orders: count(),
+        revenue: sum(order.totalPrice),
+      })
+      .from(order)
+      .where(
+        and(
+          sql`${order.referringSite} IS NOT NULL`,
+          gte(order.processedAt, from),
+          lte(order.processedAt, to),
+        ),
+      )
+      .groupBy(order.referringSite)
+      .orderBy(desc(count()))
+      .limit(15),
+
+    db
+      .select({
+        sourceName: order.sourceName,
+        orders: count(),
+        revenue: sum(order.totalPrice),
+      })
+      .from(order)
+      .where(
+        and(
+          sql`${order.sourceName} IS NOT NULL`,
+          gte(order.processedAt, from),
+          lte(order.processedAt, to),
+        ),
+      )
+      .groupBy(order.sourceName)
+      .orderBy(desc(count())),
+
+    db
+      .select({
+        landingSite: sql<string>`split_part(${order.landingSite}, '?', 1)`,
+        orders: count(),
+        revenue: sum(order.totalPrice),
+      })
+      .from(order)
+      .where(
+        and(
+          sql`${order.landingSite} IS NOT NULL`,
+          gte(order.processedAt, from),
+          lte(order.processedAt, to),
+        ),
+      )
+      .groupBy(sql`split_part(${order.landingSite}, '?', 1)`)
+      .orderBy(desc(count()))
+      .limit(15),
+
+    db
+      .select({
+        utmSource: customer.utmSource,
+        utmMedium: customer.utmMedium,
+        utmCampaign: customer.utmCampaign,
+        customers: count(),
+      })
+      .from(customer)
+      .where(
+        and(
+          sql`${customer.utmSource} IS NOT NULL`,
+          gte(customer.createdAt, from),
+          lte(customer.createdAt, to),
+        ),
+      )
+      .groupBy(customer.utmSource, customer.utmMedium, customer.utmCampaign)
+      .orderBy(desc(count()))
+      .limit(15),
+  ]);
+
   return (
     <div>
-      <h1 className="text-2xl font-bold">Attribution</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Channel attribution and marketing ROI
-      </p>
+      <PageHeader title="Attribution" />
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">By Channel</CardTitle>
+            <CardTitle className="text-lg">Order Source</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-zinc-400">
-              Attribution data will appear once UTM tracking and orders are synced.
-            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Source</TableHead>
+                  <TableHead className="text-right">Orders</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bySource.map((row) => (
+                  <TableRow key={row.sourceName}>
+                    <TableCell className="font-medium">
+                      {row.sourceName}
+                    </TableCell>
+                    <TableCell className="text-right">{row.orders}</TableCell>
+                    <TableCell className="text-right">
+                      {fmt(Number(row.revenue ?? 0))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">By Campaign</CardTitle>
+            <CardTitle className="text-lg">Referring Site</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-zinc-400">
-              Connect campaigns to see per-campaign attribution.
-            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Referrer</TableHead>
+                  <TableHead className="text-right">Orders</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {byReferrer.map((row, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium text-sm">
+                      {row.referringSite}
+                    </TableCell>
+                    <TableCell className="text-right">{row.orders}</TableCell>
+                    <TableCell className="text-right">
+                      {fmt(Number(row.revenue ?? 0))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Landing Page</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Page</TableHead>
+                  <TableHead className="text-right">Orders</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {byLandingPage.map((row, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium text-sm">
+                      {row.landingSite}
+                    </TableCell>
+                    <TableCell className="text-right">{row.orders}</TableCell>
+                    <TableCell className="text-right">
+                      {fmt(Number(row.revenue ?? 0))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">UTM Attribution (Customers)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {byUtm.length === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No UTM data captured yet.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Medium</TableHead>
+                    <TableHead>Campaign</TableHead>
+                    <TableHead className="text-right">Customers</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {byUtm.map((row, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-medium">
+                        {row.utmSource}
+                      </TableCell>
+                      <TableCell>{row.utmMedium ?? "—"}</TableCell>
+                      <TableCell className="text-sm">
+                        {row.utmCampaign ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {row.customers}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>

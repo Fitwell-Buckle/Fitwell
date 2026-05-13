@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 interface MetricCardProps {
@@ -13,26 +12,29 @@ interface MetricCardProps {
 
 export function MetricCard({ label, value, trend, className }: MetricCardProps) {
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-zinc-500">
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {trend && (
-          <p
-            className={cn(
-              "mt-1 text-xs",
-              trend.direction === "up" ? "text-green-600" : "text-red-600",
-            )}
-          >
-            {trend.direction === "up" ? "+" : "-"}
-            {Math.abs(trend.value)}% from last period
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <div
+      className={cn(
+        "rounded-xl border border-zinc-200/80 bg-white px-6 py-5 shadow-[0_1px_3px_0_rgb(0_0_0/0.04)]",
+        className,
+      )}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+        {label}
+      </p>
+      <p className="mt-2 font-mono text-3xl font-medium tracking-tight text-zinc-900">
+        {value}
+      </p>
+      {trend && (
+        <p
+          className={cn(
+            "mt-1.5 text-xs font-medium",
+            trend.direction === "up" ? "text-zinc-900" : "text-zinc-400",
+          )}
+        >
+          {trend.direction === "up" ? "↑" : "↓"}{" "}
+          {Math.abs(trend.value)}% from last period
+        </p>
+      )}
+    </div>
   );
 }

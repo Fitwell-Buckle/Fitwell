@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { DM_Sans, DM_Mono } from "next/font/google";
 import { PosthogProvider } from "@/components/providers/posthog-provider";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
+const dmMono = DM_Mono({
+  weight: ["400", "500"],
+  subsets: ["latin"],
+  variable: "--font-mono",
+});
 
 export const metadata: Metadata = {
   title: "Fitwell Buckle Co.",
@@ -18,7 +23,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} min-h-screen bg-white antialiased`}>
+      <body
+        className={`${dmSans.variable} ${dmMono.variable} min-h-screen bg-white font-sans antialiased`}
+      >
         <PosthogProvider>{children}</PosthogProvider>
       </body>
     </html>

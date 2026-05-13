@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { orderLineItem, order } from "@/lib/schema";
+import { orderLineItem } from "@/lib/schema";
 import { sql, sum, count } from "drizzle-orm";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableHeader,
@@ -13,6 +12,8 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
+import { PageHeader } from "@/components/ui/page-header";
+import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 
 export const metadata: Metadata = {
   title: "Products | Fitwell Admin",
@@ -43,20 +44,17 @@ export default async function ProductsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Products</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        SKU-level sales data from synced orders
-      </p>
+      <PageHeader title="Products" />
 
-      <div className="mt-8 rounded-lg border bg-white">
+      <DataTable className="mt-6">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Product</TableHead>
               <TableHead>SKU</TableHead>
-              <TableHead>Units Sold</TableHead>
-              <TableHead>Orders</TableHead>
-              <TableHead>Revenue</TableHead>
+              <TableHead className="text-right">Units Sold</TableHead>
+              <TableHead className="text-right">Orders</TableHead>
+              <TableHead className="text-right">Revenue</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -66,27 +64,33 @@ export default async function ProductsPage() {
                   colSpan={5}
                   className="py-8 text-center text-zinc-400"
                 >
-                  No product data yet. Run the Shopify sync to populate orders.
+                  No product data yet.
                 </TableCell>
               </TableRow>
             ) : (
               products.map((p, i) => (
                 <TableRow key={`${p.sku}-${i}`}>
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium text-zinc-900">
                     {p.title ?? "—"}
                   </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    {p.sku ?? "—"}
+                  <TableCell>
+                    <Muted>{p.sku ?? "—"}</Muted>
                   </TableCell>
-                  <TableCell>{p.unitsSold ?? 0}</TableCell>
-                  <TableCell>{p.orderCount}</TableCell>
-                  <TableCell>{fmt(Number(p.revenue) || 0)}</TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{p.unitsSold ?? 0}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{p.orderCount}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{fmt(Number(p.revenue) || 0)}</Mono>
+                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
-      </div>
+      </DataTable>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { order, customer } from "@/lib/schema";
 import { desc, eq, and, gte, lte, count } from "drizzle-orm";
+import { parseDateRange } from "@/lib/date-range";
 import {
   Table,
   TableHeader,
@@ -14,6 +15,9 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 
 export const metadata: Metadata = {
   title: "Orders | Fitwell Admin",
@@ -39,11 +43,14 @@ export default async function OrdersPage({
   const limit = 20;
   const offset = (page - 1) * limit;
   const status = typeof params.status === "string" ? params.status : undefined;
+  const { from, to } = parseDateRange(params);
 
   const conditions = [];
   if (status) {
     conditions.push(eq(order.financialStatus, status));
   }
+  conditions.push(gte(order.processedAt, from));
+  conditions.push(lte(order.processedAt, to));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -75,14 +82,13 @@ export default async function OrdersPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Orders</h1>
-      <p className="mt-1 text-sm text-zinc-500">All orders synced from Shopify</p>
+      <PageHeader title="Orders" />
 
       <form action="" method="GET" className="mt-6 flex gap-2 items-center">
         <select
           name="status"
           defaultValue={status ?? ""}
-          className="h-10 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950"
+          className="h-9 rounded-lg border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
         >
           <option value="">All statuses</option>
           <option value="paid">Paid</option>
@@ -99,7 +105,7 @@ export default async function OrdersPage({
         )}
       </form>
 
-      <div className="mt-6 rounded-lg border bg-white">
+      <DataTable className="mt-6">
         <Table>
           <TableHeader>
             <TableRow>
@@ -126,19 +132,23 @@ export default async function OrdersPage({
             ) : (
               orders.map((o) => (
                 <TableRow key={o.id}>
-                  <TableCell className="font-medium">
-                    #{o.shopifyOrderNumber}
-                  </TableCell>
                   <TableCell>
+                    <Muted>{o.shopifyOrderNumber}</Muted>
+                  </TableCell>
+                  <TableCell className="text-zinc-500">
                     {o.processedAt
-                      ? o.processedAt.toLocaleDateString("en-US")
+                      ? o.processedAt.toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
                       : "—"}
                   </TableCell>
                   <TableCell>
                     {o.customerId ? (
                       <Link
                         href={`/customers/${o.customerId}`}
-                        className="text-blue-600 hover:underline"
+                        className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
                       >
                         {o.customerFirstName} {o.customerLastName}
                       </Link>
@@ -146,15 +156,21 @@ export default async function OrdersPage({
                       "—"
                     )}
                   </TableCell>
-                  <TableCell>{fmt(o.totalPrice ?? 0)}</TableCell>
-                  <TableCell>{o.financialStatus ?? "—"}</TableCell>
-                  <TableCell>{o.fulfillmentStatus ?? "unfulfilled"}</TableCell>
+                  <TableCell>
+                    <Mono>{fmt(o.totalPrice ?? 0)}</Mono>
+                  </TableCell>
+                  <TableCell>
+                    <Badge>{o.financialStatus ?? "—"}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge>{o.fulfillmentStatus ?? "unfulfilled"}</Badge>
+                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
-      </div>
+      </DataTable>
 
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between">

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { order, customer } from "@/lib/schema";
-import { sql, eq, desc, count, sum } from "drizzle-orm";
+import { sql, eq, desc, count, sum, gte, lte, and } from "drizzle-orm";
+import { parseDateRange } from "@/lib/date-range";
 import { MetricCard } from "@/components/charts/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -15,6 +16,9 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
+import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Mono, Muted } from "@/components/ui/data-table";
 
 export const metadata: Metadata = {
   title: "Dashboard | Fitwell Admin",
@@ -27,9 +31,16 @@ function fmt(cents: number) {
   });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await auth();
   if (!session) redirect("/auth/login");
+
+  const params = await searchParams;
+  const { from, to } = parseDateRange(params);
 
   const [revenueResult, orderCountResult, customerCountResult, recentOrders] =
     await Promise.all([
@@ -37,10 +48,20 @@ export default async function DashboardPage() {
         .select({ total: sum(order.totalPrice) })
         .from(order)
         .where(
-          sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+          and(
+            sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+            gte(order.processedAt, from),
+            lte(order.processedAt, to),
+          ),
         ),
-      db.select({ count: count() }).from(order),
-      db.select({ count: count() }).from(customer),
+      db
+        .select({ count: count() })
+        .from(order)
+        .where(and(gte(order.processedAt, from), lte(order.processedAt, to))),
+      db
+        .select({ count: count() })
+        .from(customer)
+        .where(and(gte(customer.createdAt, from), lte(customer.createdAt, to))),
       db
         .select({
           id: order.id,
@@ -55,6 +76,7 @@ export default async function DashboardPage() {
         })
         .from(order)
         .leftJoin(customer, eq(order.customerId, customer.id))
+        .where(and(gte(order.processedAt, from), lte(order.processedAt, to)))
         .orderBy(desc(order.processedAt))
         .limit(10),
     ]);
@@ -66,21 +88,18 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Overview of key business metrics
-      </p>
+      <PageHeader title="Dashboard" />
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Revenue" value={fmt(totalRevenue)} />
         <MetricCard label="Orders" value={totalOrders.toLocaleString()} />
         <MetricCard label="Customers" value={totalCustomers.toLocaleString()} />
-        <MetricCard label="AOV" value={fmt(avgOrderValue)} />
+        <MetricCard label="Avg Order Value" value={fmt(avgOrderValue)} />
       </div>
 
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle className="text-lg">Recent Orders</CardTitle>
+          <CardTitle>Recent Orders</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -107,18 +126,28 @@ export default async function DashboardPage() {
               ) : (
                 recentOrders.map((o) => (
                   <TableRow key={o.id}>
-                    <TableCell className="font-medium">
-                      #{o.shopifyOrderNumber}
-                    </TableCell>
                     <TableCell>
+                      <Muted>{o.shopifyOrderNumber}</Muted>
+                    </TableCell>
+                    <TableCell className="font-medium text-zinc-900">
                       {o.customerFirstName} {o.customerLastName}
                     </TableCell>
-                    <TableCell>{fmt(o.totalPrice ?? 0)}</TableCell>
-                    <TableCell>{o.financialStatus ?? "—"}</TableCell>
-                    <TableCell>{o.fulfillmentStatus ?? "unfulfilled"}</TableCell>
                     <TableCell>
+                      <Mono>{fmt(o.totalPrice ?? 0)}</Mono>
+                    </TableCell>
+                    <TableCell>
+                      <Badge>{o.financialStatus ?? "—"}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge>{o.fulfillmentStatus ?? "unfulfilled"}</Badge>
+                    </TableCell>
+                    <TableCell className="text-zinc-500">
                       {o.processedAt
-                        ? o.processedAt.toLocaleDateString("en-US")
+                        ? o.processedAt.toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })
                         : "—"}
                     </TableCell>
                   </TableRow>

@@ -12,6 +12,8 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { DataTable } from "@/components/ui/data-table";
 
 export const metadata: Metadata = {
   title: "Customers | Fitwell Admin",
@@ -43,10 +45,7 @@ export default async function CustomersPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Customers</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        All customers synced from Shopify
-      </p>
+      <PageHeader title="Customers" />
 
       <form action="" method="GET" className="mt-6 flex gap-2">
         <input
@@ -54,12 +53,12 @@ export default async function CustomersPage({
           name="search"
           defaultValue={search ?? ""}
           placeholder="Search by name or email..."
-          className="flex h-10 w-full max-w-sm rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950"
+          className="flex h-9 w-full max-w-xs rounded-lg border border-zinc-200 bg-white px-3 text-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
         />
         <Button type="submit">Search</Button>
       </form>
 
-      <div className="mt-6 rounded-lg border bg-white">
+      <DataTable className="mt-6">
         <Table>
           <TableHeader>
             <TableRow>
@@ -89,7 +88,7 @@ export default async function CustomersPage({
                   <TableCell>
                     <Link
                       href={`/customers/${c.id}`}
-                      className="font-medium text-blue-600 hover:underline"
+                      className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
                     >
                       {c.firstName} {c.lastName}
                     </Link>
@@ -112,7 +111,7 @@ export default async function CustomersPage({
             )}
           </TableBody>
         </Table>
-      </div>
+      </DataTable>
 
       {pagination.totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between">
