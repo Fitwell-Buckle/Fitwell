@@ -43,6 +43,7 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 6. **Marketing pages are public** — no auth required.
 7. **Update specs when reality diverges** from documentation.
 8. **Tests ship in the same phase as code** — never defer testing to a later phase.
+9. **Never use auto-memory for project state.** Blockers, follow-ups, decisions, technical context, and anything another team member might need must go into checked-in files (`specs/ops/PRIORITIES.md`, domain files, work plans, `AGENTS.md`). Auto-memory is invisible to other users and other machines. Only use it for genuinely user-personal preferences (collaboration style, not project facts).
 
 ---
 

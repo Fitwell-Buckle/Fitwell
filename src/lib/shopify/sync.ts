@@ -92,6 +92,8 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
     financialStatus: shopifyOrder.financial_status,
     fulfillmentStatus: shopifyOrder.fulfillment_status,
     sourceName: shopifyOrder.source_name,
+    landingSite: shopifyOrder.landing_site,
+    referringSite: shopifyOrder.referring_site,
     processedAt: shopifyOrder.processed_at
       ? new Date(shopifyOrder.processed_at)
       : new Date(shopifyOrder.created_at),
@@ -112,6 +114,8 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
         financialStatus: orderValues.financialStatus,
         fulfillmentStatus: orderValues.fulfillmentStatus,
         sourceName: orderValues.sourceName,
+        landingSite: orderValues.landingSite,
+        referringSite: orderValues.referringSite,
         processedAt: orderValues.processedAt,
         updatedAt: orderValues.updatedAt,
       },

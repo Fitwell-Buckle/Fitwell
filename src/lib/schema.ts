@@ -109,6 +109,8 @@ export const order = pgTable(
     financialStatus: text("financial_status"),
     fulfillmentStatus: text("fulfillment_status"),
     sourceName: text("source_name"),
+    landingSite: text("landing_site"),
+    referringSite: text("referring_site"),
     processedAt: timestamp("processed_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),

@@ -16,5 +16,8 @@
       "Bash(cat*)",
       "Bash(wc*)"
     ]
+  },
+  "enabledPlugins": {
+    "slack@claude-plugins-official": true
   }
 }

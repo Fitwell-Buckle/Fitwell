@@ -63,6 +63,33 @@ All incoming webhooks verified via HMAC-SHA256:
 
 ---
 
+## Google Service Account (shared auth for GA4, GSC, Google Ads)
+
+**Service account**: `fitwell-analytics@fitwell-496020.iam.gserviceaccount.com`
+**GCP Project**: `fitwell-496020` (under `fitwellbuckle.co` Workspace org)
+**Auth module**: `src/lib/google/auth.ts` — JWT token exchange with 1-hour caching
+
+Env vars: `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`
+
+### Setup Notes
+
+**Org policy blocker (resolved 2026-05-12):** The `fitwellbuckle.co` Workspace org had `iam.disableServiceAccountKeyCreation` enforced by Google's "Secure by Default" policy. Oliver needed to grant himself Organization Policy Administrator at the ORG level (not project level) in GCP IAM, then override the policy. Steps: GCP Console → IAM (select org, not project) → Grant Access → Organization Policy Administrator → then Organization Policies → disable the constraint.
+
+**GA4 UI bug (active as of 2026-05-13):** Google has a confirmed bug (since ~April 23, 2026) where the GA4 and Search Console UIs reject newly created service accounts with "This email doesn't match a Google Account." Service accounts created before that date work fine. 167+ reports, Google has acknowledged but not fixed.
+
+**Workaround — use the Analytics Admin API via OAuth Playground:**
+1. Go to https://developers.google.com/oauthplayground/
+2. Authorize scope: `https://www.googleapis.com/auth/analytics.manage.users`
+3. Sign in as a GA4 admin (e.g., `greg@fitwellbuckle.co`)
+4. Exchange authorization code for tokens
+5. POST to `https://analyticsadmin.googleapis.com/v1alpha/properties/{PROPERTY_ID}/accessBindings`
+6. Body: `{"user":"SERVICE_ACCOUNT_EMAIL","roles":["predefinedRoles/viewer"]}`
+7. 200 OK = success. The service account appears in GA4 access management.
+
+This same OAuth Playground approach works for Search Console (use the Webmasters API).
+
+---
+
 ## GA4 (Google Analytics 4)
 
 **Purpose**: Website traffic analytics, audience insights.
