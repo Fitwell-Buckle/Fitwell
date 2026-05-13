@@ -86,7 +86,7 @@ Env vars: `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`
 6. Body: `{"user":"SERVICE_ACCOUNT_EMAIL","roles":["predefinedRoles/viewer"]}`
 7. 200 OK = success. The service account appears in GA4 access management.
 
-This same OAuth Playground approach works for Search Console (use the Webmasters API).
+**Search Console has no API for adding users** — it's UI-only. And the UI has the same bug (rejects new service accounts with "email not found"). GSC extraction is blocked until Google fixes this. Check periodically by trying to add the service account at: Search Console → Settings → Users and permissions → Add user.
 
 ---
 
