@@ -60,10 +60,12 @@ All pages functional with real data, shared UI components (PageHeader, Badge, Da
 - [ ] Add service account to GSC via OAuth Playground (same workaround as GA4)
 - [ ] Test extraction, backfill
 
-**Google Ads — code ready, needs developer token**
-- [ ] Apply for developer token: Google Ads → Tools → API Center
-- [ ] Grant service account access to Ads account
-- [ ] Test extraction, backfill
+**Google Ads — pending API approval**
+- [x] Manager Account created (272-385-8162), linked to Fitwell Ads (293-513-7197)
+- [x] Developer token obtained, set in Vercel + .env.local
+- [x] Google Ads API enabled on GCP project
+- [x] Basic access application submitted (2026-05-14) — expect ~3 business days
+- [ ] Once approved: test extraction, backfill 30 days
 
 **Meta Ads — code ready, needs credentials**
 - [ ] Need META_AD_ACCOUNT_ID + META_ACCESS_TOKEN
