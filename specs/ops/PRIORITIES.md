@@ -67,10 +67,17 @@ All pages functional with real data, shared UI components (PageHeader, Badge, Da
 - [x] Basic access application submitted (2026-05-14) — expect ~3 business days
 - [ ] Once approved: test extraction, backfill 30 days
 
-**Meta Ads — code ready, needs credentials**
-- [ ] Need META_AD_ACCOUNT_ID + META_ACCESS_TOKEN
+**Meta Ads — pending token approval**
+- [x] Ad Account ID: 821060387465001
+- [x] Meta App "Ad Manager" created, connected to Fitwell Buckles business
+- [x] System user "Fitwell Analytics" created (Employee access — upgrade to Admin after 7 days for write access / inventory management)
+- [x] Ad Manager app assigned with full control
+- [ ] **Token generation pending team approval** — Oliver or Tom needs to approve in Meta Business Settings
+- [ ] Once token is available: set META_ACCESS_TOKEN in Vercel + .env.local
 - [ ] Add `meta_ads_daily` table migration
-- [ ] Test extraction
+- [ ] Test extraction, backfill
+
+**Future: upgrade Meta system user to Admin** for inventory-aware ad management (pause ads when products go out of stock). Requires 7 days from system user creation (~2026-05-21).
 
 ---
 
