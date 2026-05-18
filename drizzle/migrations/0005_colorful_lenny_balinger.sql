@@ -1,0 +1,1 @@
+ALTER TABLE "meta_ads_daily" ADD COLUMN "platform" text;

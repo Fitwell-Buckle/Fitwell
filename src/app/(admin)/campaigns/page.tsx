@@ -111,6 +111,7 @@ export default async function CampaignsPage({
           conversions: sum(metaAdsDaily.conversions).mapWith(Number),
           revenue: sum(metaAdsDaily.conversionValue).mapWith(Number),
           reach: sum(metaAdsDaily.reach).mapWith(Number),
+          platform: metaAdsDaily.platform,
         })
         .from(metaAdsDaily)
         .where(metaDateRange)
@@ -118,6 +119,7 @@ export default async function CampaignsPage({
           metaAdsDaily.campaignName,
           metaAdsDaily.adsetName,
           metaAdsDaily.adName,
+          metaAdsDaily.platform,
         )
         .orderBy(desc(sum(metaAdsDaily.cost))),
     ]);
@@ -346,7 +348,7 @@ export default async function CampaignsPage({
                     <TableRow key={`meta-${i}`}>
                       <TableCell className="sticky left-0 bg-inherit">
                         <div className="flex items-center gap-2">
-                          <PlatformBadge platform="meta" />
+                          <PlatformBadge platform={row.platform ?? "meta"} />
                           <span className="font-medium text-zinc-900">
                             {row.campaignName ?? "—"}
                           </span>
@@ -557,18 +559,26 @@ function RoasBadge({ revenue, spend }: { revenue: number; spend: number }) {
 }
 
 function PlatformBadge({ platform }: { platform: string }) {
-  const cls =
-    platform === "meta"
-      ? "bg-blue-600 text-white"
-      : platform === "google"
-        ? "bg-amber-500 text-white"
-        : "bg-emerald-600 text-white";
-  const label =
-    platform === "meta"
-      ? "Meta"
-      : platform === "google"
-        ? "Google"
-        : "Organic";
+  const p = platform?.toLowerCase() ?? "";
+  const styles: Record<string, string> = {
+    facebook: "bg-blue-700 text-white",
+    instagram: "bg-gradient-to-r from-purple-600 to-pink-500 text-white",
+    threads: "bg-zinc-900 text-white",
+    audience_network: "bg-blue-400 text-white",
+    messenger: "bg-blue-500 text-white",
+    google: "bg-amber-500 text-white",
+  };
+  const labels: Record<string, string> = {
+    facebook: "FB",
+    instagram: "IG",
+    threads: "Threads",
+    audience_network: "AN",
+    messenger: "Msgr",
+    google: "Google",
+    unknown: "Meta",
+  };
+  const cls = styles[p] ?? "bg-zinc-500 text-white";
+  const label = labels[p] ?? platform ?? "Meta";
   return (
     <span
       className={`inline-flex h-4 items-center rounded px-1.5 text-[10px] font-semibold ${cls}`}

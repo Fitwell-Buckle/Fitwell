@@ -9,6 +9,7 @@ interface MetaInsight {
   adset_id: string;
   ad_name: string;
   ad_id: string;
+  publisher_platform: string;
   impressions: string;
   clicks: string;
   spend: string;
@@ -43,6 +44,7 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
         "campaign_name,campaign_id,adset_name,adset_id,ad_name,ad_id,impressions,clicks,spend,reach,frequency,actions,action_values",
       time_range: JSON.stringify({ since: dateStr, until: dateStr }),
       level: "ad",
+      breakdowns: "publisher_platform",
       limit: "500",
     }).toString();
 
@@ -81,6 +83,7 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
       adsetId: row.adset_id,
       adName: row.ad_name,
       adId: row.ad_id,
+      platform: row.publisher_platform,
       impressions: parseInt(row.impressions) || 0,
       clicks: parseInt(row.clicks) || 0,
       cost: toCents(row.spend),
