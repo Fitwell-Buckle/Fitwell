@@ -70,8 +70,6 @@ export function DateRangePicker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  if (!PICKER_PATHS.some((p) => pathname.startsWith(p))) return null;
-
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const activeDays = getActiveDays(from, to);
@@ -109,6 +107,8 @@ export function DateRangePicker() {
     },
     [router, pathname, searchParams],
   );
+
+  if (!PICKER_PATHS.some((p) => pathname.startsWith(p))) return null;
 
   return (
     <div className="flex h-12 shrink-0 items-center justify-end border-b border-zinc-200/80 bg-white px-10">
