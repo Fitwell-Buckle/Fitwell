@@ -232,6 +232,26 @@ export const googleAdsDaily = pgTable(
   (t) => [index("google_ads_daily_date_idx").on(t.date)],
 );
 
+export const metaAdsDaily = pgTable(
+  "meta_ads_daily",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    date: timestamp("date", { mode: "date" }).notNull(),
+    campaignName: text("campaign_name"),
+    campaignId: text("campaign_id"),
+    impressions: integer("impressions").default(0),
+    clicks: integer("clicks").default(0),
+    cost: integer("cost").default(0),
+    conversions: real("conversions"),
+    conversionValue: real("conversion_value"),
+    reach: integer("reach").default(0),
+    frequency: real("frequency"),
+  },
+  (t) => [index("meta_ads_daily_date_idx").on(t.date)],
+);
+
 export const posthogDaily = pgTable(
   "posthog_daily",
   {

@@ -1,3 +1,7 @@
+import { db } from "@/lib/db";
+import { metaAdsDaily } from "@/lib/schema";
+import { sql } from "drizzle-orm";
+
 interface MetaInsight {
   campaign_name: string;
   campaign_id: string;
@@ -8,6 +12,11 @@ interface MetaInsight {
   frequency: string;
   actions?: Array<{ action_type: string; value: string }>;
   action_values?: Array<{ action_type: string; value: string }>;
+}
+
+function toCents(value: string): number {
+  const n = parseFloat(value);
+  return isNaN(n) ? 0 : Math.round(n * 100);
 }
 
 export async function extractMetaAdsDaily(date: Date): Promise<number> {
@@ -42,21 +51,35 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
 
   if (!data.data || data.data.length === 0) return 0;
 
-  // Log for now — table will be added in a future migration
-  console.log(`Meta Ads: ${data.data.length} campaigns for ${dateStr}`);
-  for (const row of data.data) {
+  await db
+    .delete(metaAdsDaily)
+    .where(sql`${metaAdsDaily.date}::date = ${dateStr}::date`);
+
+  const values = data.data.map((row) => {
     const conversions = row.actions?.find(
       (a) => a.action_type === "offsite_conversion.fb_pixel_purchase",
     );
     const revenue = row.action_values?.find(
       (a) => a.action_type === "offsite_conversion.fb_pixel_purchase",
     );
-    console.log(
-      `  ${row.campaign_name}: ${row.impressions} imp, ${row.clicks} clicks, $${row.spend} spend` +
-        (conversions ? `, ${conversions.value} conversions` : "") +
-        (revenue ? `, $${revenue.value} revenue` : ""),
-    );
+
+    return {
+      date,
+      campaignName: row.campaign_name,
+      campaignId: row.campaign_id,
+      impressions: parseInt(row.impressions) || 0,
+      clicks: parseInt(row.clicks) || 0,
+      cost: toCents(row.spend),
+      conversions: conversions ? parseFloat(conversions.value) : 0,
+      conversionValue: revenue ? parseFloat(revenue.value) : 0,
+      reach: parseInt(row.reach) || 0,
+      frequency: parseFloat(row.frequency) || 0,
+    };
+  });
+
+  if (values.length > 0) {
+    await db.insert(metaAdsDaily).values(values);
   }
 
-  return data.data.length;
+  return values.length;
 }
