@@ -44,7 +44,7 @@ export default async function AttributionPage({
   const params = await searchParams;
   const { from, to, granularity } = parseDateRange(params);
 
-  const [byReferrer, bySource, byLandingPage, byUtm] = await Promise.all([
+  const [byReferrer, byLandingPage, byUtm] = await Promise.all([
     db
       .select({
         referringSite: order.referringSite,
@@ -62,23 +62,6 @@ export default async function AttributionPage({
       .groupBy(order.referringSite)
       .orderBy(desc(count()))
       .limit(15),
-
-    db
-      .select({
-        sourceName: order.sourceName,
-        orders: count(),
-        revenue: sum(order.totalPrice),
-      })
-      .from(order)
-      .where(
-        and(
-          sql`${order.sourceName} IS NOT NULL`,
-          gte(order.processedAt, from),
-          lte(order.processedAt, to),
-        ),
-      )
-      .groupBy(order.sourceName)
-      .orderBy(desc(count())),
 
     db
       .select({
@@ -182,36 +165,6 @@ export default async function AttributionPage({
       </Card>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Order Source</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Source</TableHead>
-                  <TableHead className="text-right">Orders</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bySource.map((row) => (
-                  <TableRow key={row.sourceName}>
-                    <TableCell className="font-medium">
-                      {row.sourceName}
-                    </TableCell>
-                    <TableCell className="text-right">{row.orders}</TableCell>
-                    <TableCell className="text-right">
-                      {fmt(Number(row.revenue ?? 0))}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Referring Site</CardTitle>

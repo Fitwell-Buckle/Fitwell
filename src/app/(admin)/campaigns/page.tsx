@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/charts/metric-card";
-import { DataTable, Mono } from "@/components/ui/data-table";
+import { Mono } from "@/components/ui/data-table";
 
 export const metadata: Metadata = {
   title: "Campaigns | Fitwell Admin",
@@ -228,29 +228,122 @@ export default async function CampaignsPage({
     0,
   );
   const totalClicks = totalMetaClicks + totalGoogleClicks;
-  const totalMetaImpressions = metaCampaigns.reduce(
-    (s, r) => s + (r.impressions ?? 0),
-    0,
-  );
-  const totalMetaReach = metaCampaigns.reduce(
-    (s, r) => s + (r.reach ?? 0),
-    0,
-  );
-  const totalMetaConversions = metaCampaigns.reduce(
-    (s, r) => s + (r.conversions ?? 0),
-    0,
-  );
-  const totalMetaRevenue = metaCampaigns.reduce(
-    (s, r) => s + (r.revenue ?? 0),
-    0,
-  );
-  const metaOrders = metaAttributedOrders[0]?.orders ?? 0;
   const metaRevenue = metaAttributedOrders[0]?.revenue ?? 0;
-  const googleOrders = googleAttributedOrders[0]?.orders ?? 0;
   const googleRevenue = googleAttributedOrders[0]?.revenue ?? 0;
   const totalAttributedRevenue = metaRevenue + googleRevenue;
   const blendedRoas = totalSpend > 0 ? totalAttributedRevenue / totalSpend : 0;
   const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
+
+  // ── Build unified campaign paths ──────────────────────────────────
+  interface CampaignPath {
+    platform: "meta" | "google";
+    kind: "campaign" | "landing-page";
+    campaignName: string;
+    landingPage: string | null;
+    utmCampaign: string | null;
+    impressions: number;
+    clicks: number;
+    spend: number; // cents
+    orders: number;
+    revenue: number; // cents
+  }
+
+  const paths: CampaignPath[] = [];
+
+  // Meta campaign-level rows
+  for (const row of metaCampaigns) {
+    const cost = row.cost ?? 0;
+    const matchingPages = metaByLandingPage.filter((lp) => {
+      if (!lp.utmCampaign || !row.campaignName) return false;
+      const decoded = decodeURIComponent(lp.utmCampaign).toLowerCase();
+      const name = row.campaignName.toLowerCase();
+      return decoded === name || decoded.includes(name) || name.includes(decoded);
+    });
+    const lpOrders = matchingPages.reduce((s, lp) => s + (lp.orders ?? 0), 0);
+    const lpRevenue = matchingPages.reduce((s, lp) => s + (lp.revenue ?? 0), 0);
+    paths.push({
+      platform: "meta",
+      kind: "campaign",
+      campaignName: row.campaignName ?? "—",
+      landingPage: null,
+      utmCampaign: null,
+      impressions: row.impressions ?? 0,
+      clicks: row.clicks ?? 0,
+      spend: cost,
+      orders: lpOrders,
+      revenue: lpRevenue,
+    });
+  }
+
+  // Meta landing page rows
+  for (const lp of metaByLandingPage) {
+    paths.push({
+      platform: "meta",
+      kind: "landing-page",
+      campaignName: "",
+      landingPage: lp.landingPage ?? null,
+      utmCampaign: lp.utmCampaign ? decodeURIComponent(lp.utmCampaign) : null,
+      impressions: 0,
+      clicks: 0,
+      spend: 0,
+      orders: lp.orders ?? 0,
+      revenue: lp.revenue ?? 0,
+    });
+  }
+
+  // Google campaign-level rows
+  for (const row of adCampaigns) {
+    const cost = row.cost ?? 0;
+    const matchingPages = googleByLandingPage.filter((lp) => {
+      if (!lp.utmCampaign || !row.campaignName) return false;
+      const decoded = decodeURIComponent(lp.utmCampaign).toLowerCase();
+      const name = row.campaignName.toLowerCase();
+      return decoded === name || decoded.includes(name) || name.includes(decoded);
+    });
+    const lpOrders = matchingPages.reduce((s, lp) => s + (lp.orders ?? 0), 0);
+    const lpRevenue = matchingPages.reduce((s, lp) => s + (lp.revenue ?? 0), 0);
+    paths.push({
+      platform: "google",
+      kind: "campaign",
+      campaignName: row.campaignName ?? "—",
+      landingPage: null,
+      utmCampaign: null,
+      impressions: row.impressions ?? 0,
+      clicks: row.clicks ?? 0,
+      spend: cost,
+      orders: lpOrders,
+      revenue: lpRevenue,
+    });
+  }
+
+  // Google landing page rows
+  for (const lp of googleByLandingPage) {
+    paths.push({
+      platform: "google",
+      kind: "landing-page",
+      campaignName: "",
+      landingPage: lp.landingPage ?? null,
+      utmCampaign: lp.utmCampaign ? decodeURIComponent(lp.utmCampaign) : null,
+      impressions: 0,
+      clicks: 0,
+      spend: 0,
+      orders: lp.orders ?? 0,
+      revenue: lp.revenue ?? 0,
+    });
+  }
+
+  const metaPaths = paths.filter((p) => p.platform === "meta");
+  const googlePaths = paths.filter((p) => p.platform === "google");
+  const totalImpressions =
+    paths.reduce((s, p) => s + p.impressions, 0);
+  const totalOrders = paths
+    .filter((p) => p.kind === "campaign")
+    .reduce((s, p) => s + p.orders, 0);
+  const totalRevenue = paths
+    .filter((p) => p.kind === "campaign")
+    .reduce((s, p) => s + p.revenue, 0);
+  const totalCtr =
+    totalImpressions > 0 ? totalClicks / totalImpressions : 0;
 
   // ── Chart data: Ad Spend vs Revenue + Traffic Sources ────────────
   const orderBucketExpr =
@@ -397,396 +490,381 @@ export default async function CampaignsPage({
         <MetricCard label="Avg CPC" value={fmt(avgCpc)} />
       </div>
 
-      {/* ── Meta Ads Table ───────────────────────────────────────── */}
+      {/* ── Unified Campaign Performance Table ───────────────────── */}
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle>Meta Ads Campaigns</CardTitle>
+          <CardTitle>Campaign Performance</CardTitle>
         </CardHeader>
         <CardContent>
-          {metaCampaigns.length === 0 ? (
+          {paths.length === 0 ? (
             <p className="py-8 text-center text-sm text-zinc-400">
-              No Meta Ads data for this period.
+              No campaign data for this period.
             </p>
           ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Campaign</TableHead>
-                    <TableHead className="text-right">Impressions</TableHead>
-                    <TableHead className="text-right">Clicks</TableHead>
-                    <TableHead className="text-right">CTR</TableHead>
-                    <TableHead className="text-right">Reach</TableHead>
-                    <TableHead className="text-right">Spend</TableHead>
-                    <TableHead className="text-right">CPC</TableHead>
-                    <TableHead className="text-right">Conversions</TableHead>
-                    <TableHead className="text-right">Revenue</TableHead>
-                    <TableHead className="text-right">ROAS</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {metaCampaigns.map((row, i) => {
-                    const impressions = row.impressions ?? 0;
-                    const clicks = row.clicks ?? 0;
-                    const cost = row.cost ?? 0;
-                    const ctr = impressions > 0 ? clicks / impressions : 0;
-                    const cpc = clicks > 0 ? cost / clicks : 0;
-                    const roas =
-                      cost > 0
-                        ? ((row.revenue ?? 0) / (cost / 100)).toFixed(1)
-                        : "—";
-                    return (
-                      <TableRow key={i}>
-                        <TableCell className="font-medium text-zinc-900">
-                          {row.campaignName ?? "—"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Mono>{impressions.toLocaleString()}</Mono>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Mono>{clicks.toLocaleString()}</Mono>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Mono>{pct(ctr)}</Mono>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Mono>{(row.reach ?? 0).toLocaleString()}</Mono>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Mono>{fmt(cost)}</Mono>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Mono>{fmt(cpc)}</Mono>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Mono>{row.conversions ?? 0}</Mono>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Mono>
-                            $
-                            {(row.revenue ?? 0).toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </Mono>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Mono>{roas}x</Mono>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-                <TableFooter>
-                  <TableRow className="font-medium">
-                    <TableCell>Total</TableCell>
-                    <TableCell className="text-right">
-                      <Mono>{totalMetaImpressions.toLocaleString()}</Mono>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>{totalMetaClicks.toLocaleString()}</Mono>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>
-                        {pct(
-                          totalMetaImpressions > 0
-                            ? totalMetaClicks / totalMetaImpressions
-                            : 0,
-                        )}
-                      </Mono>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>{totalMetaReach.toLocaleString()}</Mono>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>{fmt(totalMetaSpend)}</Mono>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>
-                        {fmt(
-                          totalMetaClicks > 0
-                            ? totalMetaSpend / totalMetaClicks
-                            : 0,
-                        )}
-                      </Mono>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>{totalMetaConversions}</Mono>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>
-                        $
-                        {totalMetaRevenue.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </Mono>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>
-                        {totalMetaSpend > 0
-                          ? (totalMetaRevenue / (totalMetaSpend / 100)).toFixed(
-                              1,
-                            )
-                          : "—"}
-                        x
-                      </Mono>
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
-              <div className="mt-3 flex items-center gap-4 rounded-lg bg-zinc-50 px-4 py-3 text-sm">
-                <span className="text-zinc-500">Shopify-attributed:</span>
-                <span className="font-mono font-medium text-zinc-900">
-                  {metaOrders} orders
-                </span>
-                <span className="font-mono font-medium text-zinc-900">
-                  {fmt(metaRevenue)}
-                </span>
-                <span className="text-zinc-500">vs Meta-reported:</span>
-                <span className="font-mono font-medium text-zinc-900">
-                  {totalMetaConversions} conversions
-                </span>
-              </div>
-              {metaByLandingPage.length > 0 && (
-                <div className="mt-4">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                    Meta — Landing Page Breakdown
-                  </p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Landing Page</TableHead>
-                        <TableHead>UTM Campaign</TableHead>
-                        <TableHead className="text-right">Orders</TableHead>
-                        <TableHead className="text-right">Revenue</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {metaByLandingPage.map((row, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-mono text-xs text-zinc-600">
-                            {row.landingPage ?? "—"}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="sticky left-0 min-w-[280px] bg-white">
+                    Path
+                  </TableHead>
+                  <TableHead className="text-right">Impressions</TableHead>
+                  <TableHead className="text-right">Clicks</TableHead>
+                  <TableHead className="text-right">CTR</TableHead>
+                  <TableHead className="text-right">Spend</TableHead>
+                  <TableHead className="text-right">CPC</TableHead>
+                  <TableHead className="text-right">Orders</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                  <TableHead className="text-right">ROAS</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {/* ── Meta Section ── */}
+                {metaPaths.length > 0 && (
+                  <>
+                    <TableRow className="border-b-0 hover:bg-transparent">
+                      <TableCell
+                        colSpan={9}
+                        className="pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-400"
+                      >
+                        Meta Ads
+                      </TableCell>
+                    </TableRow>
+                    {metaPaths.map((row, i) => {
+                      const isCampaign = row.kind === "campaign";
+                      const ctr =
+                        row.impressions > 0
+                          ? row.clicks / row.impressions
+                          : 0;
+                      const cpc =
+                        row.clicks > 0 ? row.spend / row.clicks : 0;
+                      return (
+                        <TableRow
+                          key={`meta-${i}`}
+                          className={
+                            isCampaign ? "" : "border-b-zinc-50 bg-zinc-50/30"
+                          }
+                        >
+                          <TableCell className="sticky left-0 bg-inherit">
+                            {isCampaign ? (
+                              <div className="flex items-center gap-2">
+                                <PlatformBadge platform="meta" />
+                                <span className="font-medium text-zinc-900">
+                                  {row.campaignName}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="pl-7">
+                                <span className="font-mono text-xs text-zinc-500">
+                                  {row.landingPage ?? "—"}
+                                </span>
+                                {row.utmCampaign && (
+                                  <span className="ml-2 text-[11px] text-zinc-400">
+                                    {row.utmCampaign}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </TableCell>
-                          <TableCell className="text-xs text-zinc-500">
-                            {row.utmCampaign ? decodeURIComponent(row.utmCampaign) : "—"}
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <Mono>{row.impressions.toLocaleString()}</Mono>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <Mono>{row.clicks.toLocaleString()}</Mono>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <span className="font-mono text-zinc-500">
+                                {pct(ctr)}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <Mono>{fmt(row.spend)}</Mono>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <span className="font-mono text-zinc-500">
+                                {fmt(cpc)}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <Mono>{row.orders}</Mono>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Mono>{fmt(row.revenue ?? 0)}</Mono>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Detail Tables (Traffic + Google Ads) ─────────────────── */}
-      <div className="mt-8 grid gap-5 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Traffic by Source / Medium</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Medium</TableHead>
-                  <TableHead className="text-right">Sessions</TableHead>
-                  <TableHead className="text-right">Users</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {trafficBySource.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={4}
-                      className="py-8 text-center text-zinc-400"
-                    >
-                      No GA4 data yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  trafficBySource.map((row, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="font-medium text-zinc-900">
-                        {row.source ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-zinc-500">
-                        {row.medium ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{(row.sessions ?? 0).toLocaleString()}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{(row.users ?? 0).toLocaleString()}</Mono>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Google Ads Campaigns</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {adCampaigns.length === 0 ? (
-              <p className="py-8 text-center text-sm text-zinc-400">
-                No Google Ads data yet. Requires service account access +
-                developer token.
-              </p>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Campaign</TableHead>
-                      <TableHead className="text-right">Impressions</TableHead>
-                      <TableHead className="text-right">Clicks</TableHead>
-                      <TableHead className="text-right">CTR</TableHead>
-                      <TableHead className="text-right">Cost</TableHead>
-                      <TableHead className="text-right">CPC</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {adCampaigns.map((row, i) => {
-                      const impressions = row.impressions ?? 0;
-                      const clicks = row.clicks ?? 0;
-                      const cost = row.cost ?? 0;
-                      const ctr = impressions > 0 ? clicks / impressions : 0;
-                      const cpc = clicks > 0 ? cost / clicks : 0;
-                      return (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium text-zinc-900">
-                            {row.campaignName ?? "—"}
+                            <Mono>{fmt(row.revenue)}</Mono>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Mono>{impressions.toLocaleString()}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono>{clicks.toLocaleString()}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono>{pct(ctr)}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono>{fmt(cost)}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono>{fmt(cpc)}</Mono>
+                            {isCampaign ? (
+                              <RoasBadge
+                                revenue={row.revenue}
+                                spend={row.spend}
+                              />
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
                     })}
-                  </TableBody>
-                  <TableFooter>
-                    <TableRow className="font-medium">
-                      <TableCell>Total</TableCell>
-                      <TableCell className="text-right">
-                        <Mono>
-                          {adCampaigns
-                            .reduce(
-                              (s, r) => s + (r.impressions ?? 0),
-                              0,
-                            )
-                            .toLocaleString()}
-                        </Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{totalGoogleClicks.toLocaleString()}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>
-                          {pct(
-                            adCampaigns.reduce(
-                              (s, r) => s + (r.impressions ?? 0),
-                              0,
-                            ) > 0
-                              ? totalGoogleClicks /
-                                  adCampaigns.reduce(
-                                    (s, r) => s + (r.impressions ?? 0),
-                                    0,
-                                  )
-                              : 0,
-                          )}
-                        </Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{fmt(totalGoogleSpend)}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>
-                          {fmt(
-                            totalGoogleClicks > 0
-                              ? totalGoogleSpend / totalGoogleClicks
-                              : 0,
-                          )}
-                        </Mono>
+                  </>
+                )}
+
+                {/* ── Google Section ── */}
+                {googlePaths.length > 0 && (
+                  <>
+                    <TableRow className="border-b-0 hover:bg-transparent">
+                      <TableCell
+                        colSpan={9}
+                        className="pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-400"
+                      >
+                        Google Ads
                       </TableCell>
                     </TableRow>
-                  </TableFooter>
-                </Table>
-                <div className="mt-3 flex items-center gap-4 rounded-lg bg-zinc-50 px-4 py-3 text-sm">
-                  <span className="text-zinc-500">Shopify-attributed:</span>
-                  <span className="font-mono font-medium text-zinc-900">
-                    {googleOrders} orders
-                  </span>
-                  <span className="font-mono font-medium text-zinc-900">
-                    {fmt(googleRevenue)}
-                  </span>
-                </div>
-                {googleByLandingPage.length > 0 && (
-                  <div className="mt-4">
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                      Google — Landing Page Breakdown
-                    </p>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Landing Page</TableHead>
-                          <TableHead>UTM Campaign</TableHead>
-                          <TableHead className="text-right">Orders</TableHead>
-                          <TableHead className="text-right">Revenue</TableHead>
+                    {googlePaths.map((row, i) => {
+                      const isCampaign = row.kind === "campaign";
+                      const ctr =
+                        row.impressions > 0
+                          ? row.clicks / row.impressions
+                          : 0;
+                      const cpc =
+                        row.clicks > 0 ? row.spend / row.clicks : 0;
+                      return (
+                        <TableRow
+                          key={`google-${i}`}
+                          className={
+                            isCampaign ? "" : "border-b-zinc-50 bg-zinc-50/30"
+                          }
+                        >
+                          <TableCell className="sticky left-0 bg-inherit">
+                            {isCampaign ? (
+                              <div className="flex items-center gap-2">
+                                <PlatformBadge platform="google" />
+                                <span className="font-medium text-zinc-900">
+                                  {row.campaignName}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="pl-7">
+                                <span className="font-mono text-xs text-zinc-500">
+                                  {row.landingPage ?? "—"}
+                                </span>
+                                {row.utmCampaign && (
+                                  <span className="ml-2 text-[11px] text-zinc-400">
+                                    {row.utmCampaign}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <Mono>{row.impressions.toLocaleString()}</Mono>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <Mono>{row.clicks.toLocaleString()}</Mono>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <span className="font-mono text-zinc-500">
+                                {pct(ctr)}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <Mono>{fmt(row.spend)}</Mono>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <span className="font-mono text-zinc-500">
+                                {fmt(cpc)}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Mono>{row.orders}</Mono>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Mono>{fmt(row.revenue)}</Mono>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCampaign ? (
+                              <RoasBadge
+                                revenue={row.revenue}
+                                spend={row.spend}
+                              />
+                            ) : (
+                              <span className="text-zinc-300">&mdash;</span>
+                            )}
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {googleByLandingPage.map((row, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-mono text-xs text-zinc-600">
-                              {row.landingPage ?? "—"}
-                            </TableCell>
-                            <TableCell className="text-xs text-zinc-500">
-                              {row.utmCampaign ? decodeURIComponent(row.utmCampaign) : "—"}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Mono>{row.orders}</Mono>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Mono>{fmt(row.revenue ?? 0)}</Mono>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                      );
+                    })}
+                  </>
                 )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              </TableBody>
+              <TableFooter>
+                <TableRow className="font-medium">
+                  <TableCell className="sticky left-0 bg-zinc-50/50">
+                    Total
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{totalImpressions.toLocaleString()}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{totalClicks.toLocaleString()}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span className="font-mono text-zinc-500">
+                      {pct(totalCtr)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{fmt(totalSpend)}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span className="font-mono text-zinc-500">
+                      {fmt(avgCpc)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{totalOrders}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{fmt(totalRevenue)}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <RoasBadge revenue={totalRevenue} spend={totalSpend} />
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Traffic by Source / Medium ────────────────────────────── */}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Traffic by Source / Medium</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Source</TableHead>
+                <TableHead>Medium</TableHead>
+                <TableHead className="text-right">Sessions</TableHead>
+                <TableHead className="text-right">Users</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {trafficBySource.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="py-8 text-center text-zinc-400"
+                  >
+                    No GA4 data yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                trafficBySource.map((row, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium text-zinc-900">
+                      {row.source ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-zinc-500">
+                      {row.medium ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{(row.sessions ?? 0).toLocaleString()}</Mono>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{(row.users ?? 0).toLocaleString()}</Mono>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+/* ── Inline components ──────────────────────────────────────────── */
+
+function RoasBadge({ revenue, spend }: { revenue: number; spend: number }) {
+  if (spend === 0) return <span className="text-zinc-300">&mdash;</span>;
+  const r = revenue / spend;
+  const cls =
+    r >= 1.5
+      ? "bg-emerald-600 text-white"
+      : r >= 0.5
+        ? "bg-blue-600 text-white"
+        : r >= 0.1
+          ? "bg-amber-500 text-white"
+          : "bg-red-600 text-white";
+  return (
+    <span
+      className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${cls}`}
+    >
+      {r.toFixed(2)}x
+    </span>
+  );
+}
+
+function PlatformBadge({ platform }: { platform: string }) {
+  const cls =
+    platform === "meta"
+      ? "bg-blue-600 text-white"
+      : platform === "google"
+        ? "bg-amber-500 text-white"
+        : "bg-emerald-600 text-white";
+  const label =
+    platform === "meta"
+      ? "Meta"
+      : platform === "google"
+        ? "Google"
+        : "Organic";
+  return (
+    <span
+      className={`inline-flex h-4 items-center rounded px-1.5 text-[10px] font-semibold ${cls}`}
+    >
+      {label}
+    </span>
   );
 }
