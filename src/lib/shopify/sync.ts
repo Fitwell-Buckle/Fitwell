@@ -4,7 +4,9 @@ import { getShopifyClient, toCents } from "./client";
 import { eq, sql } from "drizzle-orm";
 import type { ShopifyCustomer, ShopifyOrder } from "@/types/shopify";
 
-function parseUtmParams(landingSite: string | null): Record<string, string> {
+export function parseUtmParams(
+  landingSite: string | null,
+): Record<string, string> {
   if (!landingSite) return {};
   try {
     const url = new URL(landingSite, "https://fitwellbuckle.co");

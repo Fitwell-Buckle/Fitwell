@@ -15,6 +15,7 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.integration.test.ts"],
     exclude: ["**/node_modules/**"],
+    setupFiles: ["./src/test-setup/integration-env.ts"],
     fileParallelism: false,
     passWithNoTests: true,
   },
