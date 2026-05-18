@@ -12,6 +12,7 @@ import {
   Filter,
   Package,
   Settings,
+  BookOpen,
   LogOut,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/funnel", label: "Funnel", icon: Filter },
   { href: "/products", label: "Products", icon: Package },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/docs", label: "Docs", icon: BookOpen },
 ];
 
 export function AdminSidebar() {
