@@ -70,6 +70,8 @@ export default async function CampaignsPage({
     metaCampaigns,
     metaAttributedOrders,
     googleAttributedOrders,
+    metaByLandingPage,
+    googleByLandingPage,
   ] = await Promise.all([
     db
       .select({
@@ -154,6 +156,56 @@ export default async function CampaignsPage({
           sql`(${order.landingSite} ILIKE '%gad_source%' OR ${order.landingSite} ILIKE '%gclid%' OR ${order.landingSite} ILIKE '%utm_source=google%')`,
         ),
       ),
+
+    // Meta-attributed orders by landing page + UTM campaign
+    db
+      .select({
+        landingPage: sql<string>`split_part(${order.landingSite}, '?', 1)`,
+        utmCampaign: sql<string>`substring(${order.landingSite} from 'utm_campaign=([^&]+)')`,
+        orders: count(),
+        revenue: sum(order.totalPrice).mapWith(Number),
+      })
+      .from(order)
+      .where(
+        and(
+          gte(order.processedAt, from),
+          lte(order.processedAt, to),
+          sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+          sql`${order.sourceName} = 'web'`,
+          sql`(${order.landingSite} ILIKE '%utm_source=meta%' OR ${order.landingSite} ILIKE '%utm_source=ig%' OR ${order.landingSite} ILIKE '%utm_source=fb%' OR ${order.landingSite} ILIKE '%utm_source=instagram%' OR ${order.referringSite} ILIKE '%facebook.com%' OR ${order.referringSite} ILIKE '%instagram.com%')`,
+        ),
+      )
+      .groupBy(
+        sql`split_part(${order.landingSite}, '?', 1)`,
+        sql`substring(${order.landingSite} from 'utm_campaign=([^&]+)')`,
+      )
+      .orderBy(desc(count()))
+      .limit(20),
+
+    // Google-attributed orders by landing page
+    db
+      .select({
+        landingPage: sql<string>`split_part(${order.landingSite}, '?', 1)`,
+        utmCampaign: sql<string>`substring(${order.landingSite} from 'utm_campaign=([^&]+)')`,
+        orders: count(),
+        revenue: sum(order.totalPrice).mapWith(Number),
+      })
+      .from(order)
+      .where(
+        and(
+          gte(order.processedAt, from),
+          lte(order.processedAt, to),
+          sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+          sql`${order.sourceName} = 'web'`,
+          sql`(${order.landingSite} ILIKE '%gad_source%' OR ${order.landingSite} ILIKE '%gclid%' OR ${order.landingSite} ILIKE '%utm_source=google%')`,
+        ),
+      )
+      .groupBy(
+        sql`split_part(${order.landingSite}, '?', 1)`,
+        sql`substring(${order.landingSite} from 'utm_campaign=([^&]+)')`,
+      )
+      .orderBy(desc(count()))
+      .limit(20),
   ]);
 
   const totals = totalTraffic[0] ?? {
@@ -496,6 +548,41 @@ export default async function CampaignsPage({
                   {totalMetaConversions} conversions
                 </span>
               </div>
+              {metaByLandingPage.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                    Meta — Landing Page Breakdown
+                  </p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Landing Page</TableHead>
+                        <TableHead>UTM Campaign</TableHead>
+                        <TableHead className="text-right">Orders</TableHead>
+                        <TableHead className="text-right">Revenue</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {metaByLandingPage.map((row, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-mono text-xs text-zinc-600">
+                            {row.landingPage ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-zinc-500">
+                            {row.utmCampaign ? decodeURIComponent(row.utmCampaign) : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Mono>{row.orders}</Mono>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Mono>{fmt(row.revenue ?? 0)}</Mono>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </>
           )}
         </CardContent>
@@ -660,6 +747,41 @@ export default async function CampaignsPage({
                     {fmt(googleRevenue)}
                   </span>
                 </div>
+                {googleByLandingPage.length > 0 && (
+                  <div className="mt-4">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                      Google — Landing Page Breakdown
+                    </p>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Landing Page</TableHead>
+                          <TableHead>UTM Campaign</TableHead>
+                          <TableHead className="text-right">Orders</TableHead>
+                          <TableHead className="text-right">Revenue</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {googleByLandingPage.map((row, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-mono text-xs text-zinc-600">
+                              {row.landingPage ?? "—"}
+                            </TableCell>
+                            <TableCell className="text-xs text-zinc-500">
+                              {row.utmCampaign ? decodeURIComponent(row.utmCampaign) : "—"}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Mono>{row.orders}</Mono>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Mono>{fmt(row.revenue ?? 0)}</Mono>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </>
             )}
           </CardContent>
