@@ -11,6 +11,7 @@ import {
   GitBranch,
   Filter,
   Package,
+  RefreshCw,
   Settings,
   BookOpen,
   LogOut,
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/attribution", label: "Attribution", icon: GitBranch },
   { href: "/funnel", label: "Funnel", icon: Filter },
   { href: "/products", label: "Products", icon: Package },
+  { href: "/data-sync", label: "Data Sync", icon: RefreshCw },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/docs", label: "Docs", icon: BookOpen },
 ];

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractGA4Daily } from "@/lib/analytics/ga4";
+import { verifyCronOrAdmin } from "@/lib/cron-auth";
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!(await verifyCronOrAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
