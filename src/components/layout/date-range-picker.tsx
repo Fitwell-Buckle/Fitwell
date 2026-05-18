@@ -111,7 +111,8 @@ export function DateRangePicker() {
   );
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex h-12 shrink-0 items-center justify-end border-b border-zinc-200/80 bg-white px-10">
+      <div className="flex items-center gap-1">
       {PRESETS.map((preset) => (
         <button
           key={preset.label}
@@ -141,6 +142,7 @@ export function DateRangePicker() {
           {g.label}
         </button>
       ))}
+      </div>
     </div>
   );
 }
