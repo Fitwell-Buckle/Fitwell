@@ -1,6 +1,16 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import {
+  order,
+  customer,
+  ga4Daily,
+  googleAdsDaily,
+  gscDaily,
+  metaAdsDaily,
+} from "@/lib/schema";
+import { max } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -10,74 +20,29 @@ export const metadata: Metadata = {
   title: "Data Sync | Fitwell Admin",
 };
 
-const JOBS = [
-  {
-    id: "extract-shopify",
-    name: "Shopify Sync",
-    description: "Orders, customers, and line items from Shopify",
-    schedule: "Every 2 hours (:15 past)",
-    cron: "15 */2 * * *",
-    path: "/api/cron/extract-shopify",
-    status: "active" as const,
-  },
-  {
-    id: "extract-ga4",
-    name: "GA4 Traffic",
-    description: "Sessions, users, pageviews by source/medium",
-    schedule: "Daily at 6:30 AM UTC",
-    cron: "30 6 * * *",
-    path: "/api/cron/extract-ga4",
-    status: "active" as const,
-  },
-  {
-    id: "extract-google-ads",
-    name: "Google Ads",
-    description: "Campaign impressions, clicks, cost, conversions",
-    schedule: "Daily at 6:45 AM UTC",
-    cron: "45 6 * * *",
-    path: "/api/cron/extract-google-ads",
-    status: "blocked" as const,
-    note: "Pending Basic API access approval",
-  },
-  {
-    id: "extract-gsc",
-    name: "Google Search Console",
-    description: "Search queries, impressions, clicks, rankings",
-    schedule: "Daily at 7:00 AM UTC",
-    cron: "0 7 * * *",
-    path: "/api/cron/extract-gsc",
-    status: "blocked" as const,
-    note: "Blocked by Google service account UI bug",
-  },
-  {
-    id: "extract-meta-ads",
-    name: "Meta Ads",
-    description: "Campaign impressions, clicks, spend, conversions, ROAS",
-    schedule: "Daily at 7:15 AM UTC",
-    cron: "15 7 * * *",
-    path: "/api/cron/extract-meta-ads",
-    status: "active" as const,
-  },
-  {
-    id: "extract-posthog",
-    name: "PostHog Events",
-    description: "Event rollups for landing page analytics",
-    schedule: "Every 3 hours",
-    cron: "0 */3 * * *",
-    path: "/api/cron/extract-posthog",
-    status: "deferred" as const,
-    note: "Not configured — deferred until landing pages are built",
-  },
-  {
-    id: "health",
-    name: "Health Check",
-    description: "Database connectivity and API status",
-    schedule: "Every 4 hours",
-    cron: "0 */4 * * *",
-    path: "/api/cron/health",
-    status: "active" as const,
-  },
-];
+function timeAgo(date: Date | null): string {
+  if (!date) return "never";
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+interface Job {
+  id: string;
+  name: string;
+  description: string;
+  schedule: string;
+  cron: string;
+  path: string;
+  status: "active" | "blocked" | "deferred";
+  note?: string;
+  lastRun?: string;
+}
 
 const STATUS_STYLES = {
   active: "bg-emerald-50 text-emerald-700",
@@ -88,6 +53,103 @@ const STATUS_STYLES = {
 export default async function DataSyncPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
+
+  const [
+    lastOrder,
+    lastCustomer,
+    lastGa4,
+    lastGoogleAds,
+    lastGsc,
+    lastMeta,
+  ] = await Promise.all([
+    db.select({ latest: max(order.updatedAt) }).from(order),
+    db.select({ latest: max(customer.updatedAt) }).from(customer),
+    db.select({ latest: max(ga4Daily.date) }).from(ga4Daily),
+    db.select({ latest: max(googleAdsDaily.date) }).from(googleAdsDaily),
+    db.select({ latest: max(gscDaily.date) }).from(gscDaily),
+    db.select({ latest: max(metaAdsDaily.date) }).from(metaAdsDaily),
+  ]);
+
+  const shopifyLastRun = [
+    lastOrder[0]?.latest,
+    lastCustomer[0]?.latest,
+  ]
+    .filter(Boolean)
+    .sort((a, b) => b!.getTime() - a!.getTime())[0] ?? null;
+
+  const jobs: Job[] = [
+    {
+      id: "extract-shopify",
+      name: "Shopify Sync",
+      description: "Orders, customers, and line items from Shopify",
+      schedule: "Every 2 hours (:15 past)",
+      cron: "15 */2 * * *",
+      path: "/api/cron/extract-shopify",
+      status: "active",
+      lastRun: timeAgo(shopifyLastRun),
+    },
+    {
+      id: "extract-ga4",
+      name: "GA4 Traffic",
+      description: "Sessions, users, pageviews by source/medium",
+      schedule: "Daily at 6:30 AM UTC",
+      cron: "30 6 * * *",
+      path: "/api/cron/extract-ga4",
+      status: "active",
+      lastRun: timeAgo(lastGa4[0]?.latest ?? null),
+    },
+    {
+      id: "extract-google-ads",
+      name: "Google Ads",
+      description: "Campaign impressions, clicks, cost, conversions",
+      schedule: "Daily at 6:45 AM UTC",
+      cron: "45 6 * * *",
+      path: "/api/cron/extract-google-ads",
+      status: "blocked",
+      note: "Pending Basic API access approval",
+      lastRun: timeAgo(lastGoogleAds[0]?.latest ?? null),
+    },
+    {
+      id: "extract-gsc",
+      name: "Google Search Console",
+      description: "Search queries, impressions, clicks, rankings",
+      schedule: "Daily at 7:00 AM UTC",
+      cron: "0 7 * * *",
+      path: "/api/cron/extract-gsc",
+      status: "blocked",
+      note: "Blocked by Google service account UI bug",
+      lastRun: timeAgo(lastGsc[0]?.latest ?? null),
+    },
+    {
+      id: "extract-meta-ads",
+      name: "Meta Ads",
+      description: "Campaign impressions, clicks, spend, conversions, ROAS",
+      schedule: "Daily at 7:15 AM UTC",
+      cron: "15 7 * * *",
+      path: "/api/cron/extract-meta-ads",
+      status: "active",
+      lastRun: timeAgo(lastMeta[0]?.latest ?? null),
+    },
+    {
+      id: "extract-posthog",
+      name: "PostHog Events",
+      description: "Event rollups for landing page analytics",
+      schedule: "Every 3 hours",
+      cron: "0 */3 * * *",
+      path: "/api/cron/extract-posthog",
+      status: "deferred",
+      note: "Not configured — deferred until landing pages are built",
+    },
+    {
+      id: "health",
+      name: "Health Check",
+      description: "Database connectivity and API status",
+      schedule: "Every 4 hours",
+      cron: "0 */4 * * *",
+      path: "/api/cron/health",
+      status: "active",
+    },
+  ];
 
   return (
     <div>
@@ -104,7 +166,7 @@ export default async function DataSyncPage() {
           </p>
 
           <div className="space-y-4">
-            {JOBS.map((job) => (
+            {jobs.map((job) => (
               <div
                 key={job.id}
                 className="flex items-center justify-between rounded-lg border border-zinc-200/80 px-5 py-4"
@@ -115,6 +177,11 @@ export default async function DataSyncPage() {
                     <Badge className={STATUS_STYLES[job.status]}>
                       {job.status}
                     </Badge>
+                    {job.lastRun && (
+                      <span className="text-[11px] text-zinc-400">
+                        Last data: {job.lastRun}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-0.5 text-sm text-zinc-500">
                     {job.description}
@@ -127,7 +194,10 @@ export default async function DataSyncPage() {
                     <p className="mt-1 text-xs text-amber-600">{job.note}</p>
                   )}
                 </div>
-                <SyncJobRunner path={job.path} disabled={job.status !== "active"} />
+                <SyncJobRunner
+                  path={job.path}
+                  disabled={job.status !== "active"}
+                />
               </div>
             ))}
           </div>
@@ -141,7 +211,12 @@ export default async function DataSyncPage() {
         <CardContent>
           <div className="flex items-center justify-between rounded-lg border border-zinc-200/80 px-5 py-4">
             <div>
-              <p className="font-medium text-zinc-900">Shopify Webhooks</p>
+              <div className="flex items-center gap-3">
+                <p className="font-medium text-zinc-900">Shopify Webhooks</p>
+                <Badge className="bg-emerald-50 text-emerald-700">
+                  registered
+                </Badge>
+              </div>
               <p className="mt-0.5 text-sm text-zinc-500">
                 orders/create, orders/updated, customers/create,
                 customers/update
@@ -150,9 +225,6 @@ export default async function DataSyncPage() {
                 → admin.fitwellbuckle.co/api/webhooks/shopify
               </p>
             </div>
-            <Badge className="bg-emerald-50 text-emerald-700">
-              registered
-            </Badge>
           </div>
         </CardContent>
       </Card>
