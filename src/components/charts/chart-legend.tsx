@@ -9,8 +9,8 @@ export interface LegendItem {
   dashed?: boolean;
 }
 
-export function useLegendToggle(keys: string[]) {
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
+export function useLegendToggle(keys: string[], defaultHidden: string[] = []) {
+  const [hidden, setHidden] = useState<Set<string>>(new Set(defaultHidden));
 
   const toggle = useCallback(
     (key: string) => {

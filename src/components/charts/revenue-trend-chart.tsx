@@ -48,7 +48,7 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 export function RevenueTrendChart({ data }: { data: DataPoint[] }) {
-  const { isHidden, toggle, isolate } = useLegendToggle(SERIES.map((s) => s.key));
+  const { isHidden, toggle, isolate } = useLegendToggle(SERIES.map((s) => s.key), ["wholesale"]);
 
   if (data.length === 0) return <p className="py-8 text-center text-sm text-zinc-400">No revenue data for this period.</p>;
 
