@@ -63,150 +63,64 @@ export default async function CampaignsPage({
     lte(metaAdsDaily.date, to),
   );
 
-  const [
-    trafficBySource,
-    totalTraffic,
-    adCampaigns,
-    metaCampaigns,
-    metaAttributedOrders,
-    googleAttributedOrders,
-    metaByLandingPage,
-    googleByLandingPage,
-  ] = await Promise.all([
-    db
-      .select({
-        source: ga4Daily.source,
-        medium: ga4Daily.medium,
-        sessions: sum(ga4Daily.sessions).mapWith(Number),
-        users: sum(ga4Daily.users).mapWith(Number),
-      })
-      .from(ga4Daily)
-      .where(ga4DateRange)
-      .groupBy(ga4Daily.source, ga4Daily.medium)
-      .orderBy(desc(sum(ga4Daily.sessions)))
-      .limit(15),
+  const [trafficBySource, totalTraffic, adCampaigns, metaAds] =
+    await Promise.all([
+      db
+        .select({
+          source: ga4Daily.source,
+          medium: ga4Daily.medium,
+          sessions: sum(ga4Daily.sessions).mapWith(Number),
+          users: sum(ga4Daily.users).mapWith(Number),
+        })
+        .from(ga4Daily)
+        .where(ga4DateRange)
+        .groupBy(ga4Daily.source, ga4Daily.medium)
+        .orderBy(desc(sum(ga4Daily.sessions)))
+        .limit(15),
 
-    db
-      .select({
-        sessions: sum(ga4Daily.sessions).mapWith(Number),
-        users: sum(ga4Daily.users).mapWith(Number),
-        pageviews: sum(ga4Daily.pageviews).mapWith(Number),
-        days: count(),
-      })
-      .from(ga4Daily)
-      .where(ga4DateRange),
+      db
+        .select({
+          sessions: sum(ga4Daily.sessions).mapWith(Number),
+          users: sum(ga4Daily.users).mapWith(Number),
+          pageviews: sum(ga4Daily.pageviews).mapWith(Number),
+          days: count(),
+        })
+        .from(ga4Daily)
+        .where(ga4DateRange),
 
-    db
-      .select({
-        campaignName: googleAdsDaily.campaignName,
-        impressions: sum(googleAdsDaily.impressions).mapWith(Number),
-        clicks: sum(googleAdsDaily.clicks).mapWith(Number),
-        cost: sum(googleAdsDaily.cost).mapWith(Number),
-      })
-      .from(googleAdsDaily)
-      .where(adsDateRange)
-      .groupBy(googleAdsDaily.campaignName)
-      .orderBy(desc(sum(googleAdsDaily.clicks))),
+      db
+        .select({
+          campaignName: googleAdsDaily.campaignName,
+          impressions: sum(googleAdsDaily.impressions).mapWith(Number),
+          clicks: sum(googleAdsDaily.clicks).mapWith(Number),
+          cost: sum(googleAdsDaily.cost).mapWith(Number),
+        })
+        .from(googleAdsDaily)
+        .where(adsDateRange)
+        .groupBy(googleAdsDaily.campaignName)
+        .orderBy(desc(sum(googleAdsDaily.clicks))),
 
-    db
-      .select({
-        campaignName: metaAdsDaily.campaignName,
-        impressions: sum(metaAdsDaily.impressions).mapWith(Number),
-        clicks: sum(metaAdsDaily.clicks).mapWith(Number),
-        cost: sum(metaAdsDaily.cost).mapWith(Number),
-        conversions: sum(metaAdsDaily.conversions).mapWith(Number),
-        revenue: sum(metaAdsDaily.conversionValue).mapWith(Number),
-        reach: sum(metaAdsDaily.reach).mapWith(Number),
-      })
-      .from(metaAdsDaily)
-      .where(metaDateRange)
-      .groupBy(metaAdsDaily.campaignName)
-      .orderBy(desc(sum(metaAdsDaily.clicks))),
-
-    // Meta-attributed orders from Shopify
-    db
-      .select({
-        orders: count(),
-        revenue: sum(order.totalPrice).mapWith(Number),
-      })
-      .from(order)
-      .where(
-        and(
-          gte(order.processedAt, from),
-          lte(order.processedAt, to),
-          sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
-          sql`${order.sourceName} = 'web'`,
-          sql`(${order.landingSite} ILIKE '%utm_source=meta%' OR ${order.landingSite} ILIKE '%utm_source=ig%' OR ${order.landingSite} ILIKE '%utm_source=fb%' OR ${order.landingSite} ILIKE '%utm_source=instagram%' OR ${order.referringSite} ILIKE '%facebook.com%' OR ${order.referringSite} ILIKE '%instagram.com%')`,
-        ),
-      ),
-
-    // Google-attributed orders from Shopify
-    db
-      .select({
-        orders: count(),
-        revenue: sum(order.totalPrice).mapWith(Number),
-      })
-      .from(order)
-      .where(
-        and(
-          gte(order.processedAt, from),
-          lte(order.processedAt, to),
-          sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
-          sql`${order.sourceName} = 'web'`,
-          sql`(${order.landingSite} ILIKE '%gad_source%' OR ${order.landingSite} ILIKE '%gclid%' OR ${order.landingSite} ILIKE '%utm_source=google%')`,
-        ),
-      ),
-
-    // Meta-attributed orders by landing page + UTM campaign
-    db
-      .select({
-        landingPage: sql<string>`split_part(${order.landingSite}, '?', 1)`,
-        utmCampaign: sql<string>`substring(${order.landingSite} from 'utm_campaign=([^&]+)')`,
-        orders: count(),
-        revenue: sum(order.totalPrice).mapWith(Number),
-      })
-      .from(order)
-      .where(
-        and(
-          gte(order.processedAt, from),
-          lte(order.processedAt, to),
-          sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
-          sql`${order.sourceName} = 'web'`,
-          sql`(${order.landingSite} ILIKE '%utm_source=meta%' OR ${order.landingSite} ILIKE '%utm_source=ig%' OR ${order.landingSite} ILIKE '%utm_source=fb%' OR ${order.landingSite} ILIKE '%utm_source=instagram%' OR ${order.referringSite} ILIKE '%facebook.com%' OR ${order.referringSite} ILIKE '%instagram.com%')`,
-        ),
-      )
-      .groupBy(
-        sql`split_part(${order.landingSite}, '?', 1)`,
-        sql`substring(${order.landingSite} from 'utm_campaign=([^&]+)')`,
-      )
-      .orderBy(desc(count()))
-      .limit(20),
-
-    // Google-attributed orders by landing page
-    db
-      .select({
-        landingPage: sql<string>`split_part(${order.landingSite}, '?', 1)`,
-        utmCampaign: sql<string>`substring(${order.landingSite} from 'utm_campaign=([^&]+)')`,
-        orders: count(),
-        revenue: sum(order.totalPrice).mapWith(Number),
-      })
-      .from(order)
-      .where(
-        and(
-          gte(order.processedAt, from),
-          lte(order.processedAt, to),
-          sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
-          sql`${order.sourceName} = 'web'`,
-          sql`(${order.landingSite} ILIKE '%gad_source%' OR ${order.landingSite} ILIKE '%gclid%' OR ${order.landingSite} ILIKE '%utm_source=google%')`,
-        ),
-      )
-      .groupBy(
-        sql`split_part(${order.landingSite}, '?', 1)`,
-        sql`substring(${order.landingSite} from 'utm_campaign=([^&]+)')`,
-      )
-      .orderBy(desc(count()))
-      .limit(20),
-  ]);
+      db
+        .select({
+          campaignName: metaAdsDaily.campaignName,
+          adsetName: metaAdsDaily.adsetName,
+          adName: metaAdsDaily.adName,
+          impressions: sum(metaAdsDaily.impressions).mapWith(Number),
+          clicks: sum(metaAdsDaily.clicks).mapWith(Number),
+          cost: sum(metaAdsDaily.cost).mapWith(Number),
+          conversions: sum(metaAdsDaily.conversions).mapWith(Number),
+          revenue: sum(metaAdsDaily.conversionValue).mapWith(Number),
+          reach: sum(metaAdsDaily.reach).mapWith(Number),
+        })
+        .from(metaAdsDaily)
+        .where(metaDateRange)
+        .groupBy(
+          metaAdsDaily.campaignName,
+          metaAdsDaily.adsetName,
+          metaAdsDaily.adName,
+        )
+        .orderBy(desc(sum(metaAdsDaily.cost))),
+    ]);
 
   const totals = totalTraffic[0] ?? {
     sessions: 0,
@@ -216,134 +130,39 @@ export default async function CampaignsPage({
   };
 
   // ── Summary metrics ────────────────────────────────────────────────
-  const totalMetaSpend = metaCampaigns.reduce((s, r) => s + (r.cost ?? 0), 0);
+  const totalMetaSpend = metaAds.reduce((s, r) => s + (r.cost ?? 0), 0);
   const totalGoogleSpend = adCampaigns.reduce((s, r) => s + (r.cost ?? 0), 0);
   const totalSpend = totalMetaSpend + totalGoogleSpend;
-  const totalMetaClicks = metaCampaigns.reduce(
-    (s, r) => s + (r.clicks ?? 0),
-    0,
-  );
+  const totalMetaClicks = metaAds.reduce((s, r) => s + (r.clicks ?? 0), 0);
   const totalGoogleClicks = adCampaigns.reduce(
     (s, r) => s + (r.clicks ?? 0),
     0,
   );
   const totalClicks = totalMetaClicks + totalGoogleClicks;
-  const metaRevenue = metaAttributedOrders[0]?.revenue ?? 0;
-  const googleRevenue = googleAttributedOrders[0]?.revenue ?? 0;
-  const totalAttributedRevenue = metaRevenue + googleRevenue;
-  const blendedRoas = totalSpend > 0 ? totalAttributedRevenue / totalSpend : 0;
+  // Meta-reported conversion value (dollars) → cents
+  const metaRevenueCents = Math.round(
+    metaAds.reduce((s, r) => s + (r.revenue ?? 0), 0) * 100,
+  );
+  const blendedRoas =
+    totalSpend > 0 ? metaRevenueCents / totalSpend : 0;
   const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
 
-  // ── Build unified campaign paths ──────────────────────────────────
-  interface CampaignPath {
-    platform: "meta" | "google";
-    kind: "campaign" | "landing-page";
-    campaignName: string;
-    landingPage: string | null;
-    utmCampaign: string | null;
-    impressions: number;
-    clicks: number;
-    spend: number; // cents
-    orders: number;
-    revenue: number; // cents
-  }
-
-  const paths: CampaignPath[] = [];
-
-  // Meta campaign-level rows
-  for (const row of metaCampaigns) {
-    const cost = row.cost ?? 0;
-    const matchingPages = metaByLandingPage.filter((lp) => {
-      if (!lp.utmCampaign || !row.campaignName) return false;
-      const decoded = decodeURIComponent(lp.utmCampaign).toLowerCase();
-      const name = row.campaignName.toLowerCase();
-      return decoded === name || decoded.includes(name) || name.includes(decoded);
-    });
-    const lpOrders = matchingPages.reduce((s, lp) => s + (lp.orders ?? 0), 0);
-    const lpRevenue = matchingPages.reduce((s, lp) => s + (lp.revenue ?? 0), 0);
-    paths.push({
-      platform: "meta",
-      kind: "campaign",
-      campaignName: row.campaignName ?? "—",
-      landingPage: null,
-      utmCampaign: null,
-      impressions: row.impressions ?? 0,
-      clicks: row.clicks ?? 0,
-      spend: cost,
-      orders: lpOrders,
-      revenue: lpRevenue,
-    });
-  }
-
-  // Meta landing page rows
-  for (const lp of metaByLandingPage) {
-    paths.push({
-      platform: "meta",
-      kind: "landing-page",
-      campaignName: "",
-      landingPage: lp.landingPage ?? null,
-      utmCampaign: lp.utmCampaign ? decodeURIComponent(lp.utmCampaign) : null,
-      impressions: 0,
-      clicks: 0,
-      spend: 0,
-      orders: lp.orders ?? 0,
-      revenue: lp.revenue ?? 0,
-    });
-  }
-
-  // Google campaign-level rows
-  for (const row of adCampaigns) {
-    const cost = row.cost ?? 0;
-    const matchingPages = googleByLandingPage.filter((lp) => {
-      if (!lp.utmCampaign || !row.campaignName) return false;
-      const decoded = decodeURIComponent(lp.utmCampaign).toLowerCase();
-      const name = row.campaignName.toLowerCase();
-      return decoded === name || decoded.includes(name) || name.includes(decoded);
-    });
-    const lpOrders = matchingPages.reduce((s, lp) => s + (lp.orders ?? 0), 0);
-    const lpRevenue = matchingPages.reduce((s, lp) => s + (lp.revenue ?? 0), 0);
-    paths.push({
-      platform: "google",
-      kind: "campaign",
-      campaignName: row.campaignName ?? "—",
-      landingPage: null,
-      utmCampaign: null,
-      impressions: row.impressions ?? 0,
-      clicks: row.clicks ?? 0,
-      spend: cost,
-      orders: lpOrders,
-      revenue: lpRevenue,
-    });
-  }
-
-  // Google landing page rows
-  for (const lp of googleByLandingPage) {
-    paths.push({
-      platform: "google",
-      kind: "landing-page",
-      campaignName: "",
-      landingPage: lp.landingPage ?? null,
-      utmCampaign: lp.utmCampaign ? decodeURIComponent(lp.utmCampaign) : null,
-      impressions: 0,
-      clicks: 0,
-      spend: 0,
-      orders: lp.orders ?? 0,
-      revenue: lp.revenue ?? 0,
-    });
-  }
-
-  const metaPaths = paths.filter((p) => p.platform === "meta");
-  const googlePaths = paths.filter((p) => p.platform === "google");
-  const totalImpressions =
-    paths.reduce((s, p) => s + p.impressions, 0);
-  const totalOrders = paths
-    .filter((p) => p.kind === "campaign")
-    .reduce((s, p) => s + p.orders, 0);
-  const totalRevenue = paths
-    .filter((p) => p.kind === "campaign")
-    .reduce((s, p) => s + p.revenue, 0);
-  const totalCtr =
-    totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+  // ── Aggregate table totals ────────────────────────────────────────
+  const totalMetaImpressions = metaAds.reduce(
+    (s, r) => s + (r.impressions ?? 0),
+    0,
+  );
+  const totalMetaConversions = metaAds.reduce(
+    (s, r) => s + (r.conversions ?? 0),
+    0,
+  );
+  const totalGoogleImpressions = adCampaigns.reduce(
+    (s, r) => s + (r.impressions ?? 0),
+    0,
+  );
+  const totalImpressions = totalMetaImpressions + totalGoogleImpressions;
+  const totalConversions = totalMetaConversions; // only Meta has pixel data
+  const totalCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
 
   // ── Chart data: Ad Spend vs Revenue + Traffic Sources ────────────
   const orderBucketExpr =
@@ -482,21 +301,18 @@ export default async function CampaignsPage({
       {/* ── Paid Channel Summary ─────────────────────────────────── */}
       <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Total Ad Spend" value={fmt(totalSpend)} />
-        <MetricCard
-          label="DTC Revenue (attributed)"
-          value={fmt(totalAttributedRevenue)}
-        />
+        <MetricCard label="Meta Revenue" value={fmt(metaRevenueCents)} />
         <MetricCard label="Blended ROAS" value={`${blendedRoas.toFixed(2)}x`} />
         <MetricCard label="Avg CPC" value={fmt(avgCpc)} />
       </div>
 
-      {/* ── Unified Campaign Performance Table ───────────────────── */}
+      {/* ── Campaign Performance Table ──────────────────────────── */}
       <Card className="mt-8">
         <CardHeader>
           <CardTitle>Campaign Performance</CardTitle>
         </CardHeader>
         <CardContent>
-          {paths.length === 0 ? (
+          {metaAds.length === 0 && adCampaigns.length === 0 ? (
             <p className="py-8 text-center text-sm text-zinc-400">
               No campaign data for this period.
             </p>
@@ -504,7 +320,7 @@ export default async function CampaignsPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="sticky left-0 min-w-[280px] bg-white">
+                  <TableHead className="sticky left-0 min-w-[320px] bg-white">
                     Path
                   </TableHead>
                   <TableHead className="text-right">Impressions</TableHead>
@@ -512,227 +328,117 @@ export default async function CampaignsPage({
                   <TableHead className="text-right">CTR</TableHead>
                   <TableHead className="text-right">Spend</TableHead>
                   <TableHead className="text-right">CPC</TableHead>
-                  <TableHead className="text-right">Orders</TableHead>
+                  <TableHead className="text-right">Conversions</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="text-right">ROAS</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* ── Meta Section ── */}
-                {metaPaths.length > 0 && (
-                  <>
-                    <TableRow className="border-b-0 hover:bg-transparent">
-                      <TableCell
-                        colSpan={9}
-                        className="pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-400"
-                      >
-                        Meta Ads
+                {metaAds.map((row, i) => {
+                  const impressions = row.impressions ?? 0;
+                  const clicks = row.clicks ?? 0;
+                  const cost = row.cost ?? 0;
+                  const conversions = row.conversions ?? 0;
+                  const revenue = row.revenue ?? 0;
+                  const ctr = impressions > 0 ? clicks / impressions : 0;
+                  const cpc = clicks > 0 ? cost / clicks : 0;
+                  return (
+                    <TableRow key={`meta-${i}`}>
+                      <TableCell className="sticky left-0 bg-inherit">
+                        <div className="flex items-center gap-2">
+                          <PlatformBadge platform="meta" />
+                          <span className="font-medium text-zinc-900">
+                            {row.campaignName ?? "—"}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 pl-[calc(theme(spacing.2)+36px)] text-xs text-zinc-500">
+                          {row.adsetName ?? "—"}
+                        </div>
+                        <div className="pl-[calc(theme(spacing.2)+36px)] font-mono text-xs text-zinc-400">
+                          {row.adName ?? "—"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Mono>{impressions.toLocaleString()}</Mono>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Mono>{clicks.toLocaleString()}</Mono>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="font-mono text-zinc-500">
+                          {pct(ctr)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Mono>{fmt(cost)}</Mono>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="font-mono text-zinc-500">
+                          {fmt(cpc)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Mono>{conversions.toLocaleString()}</Mono>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Mono>{fmt(Math.round(revenue * 100))}</Mono>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <RoasBadge
+                          revenue={Math.round(revenue * 100)}
+                          spend={cost}
+                        />
                       </TableCell>
                     </TableRow>
-                    {metaPaths.map((row, i) => {
-                      const isCampaign = row.kind === "campaign";
-                      const ctr =
-                        row.impressions > 0
-                          ? row.clicks / row.impressions
-                          : 0;
-                      const cpc =
-                        row.clicks > 0 ? row.spend / row.clicks : 0;
-                      return (
-                        <TableRow
-                          key={`meta-${i}`}
-                          className={
-                            isCampaign ? "" : "border-b-zinc-50 bg-zinc-50/30"
-                          }
-                        >
-                          <TableCell className="sticky left-0 bg-inherit">
-                            {isCampaign ? (
-                              <div className="flex items-center gap-2">
-                                <PlatformBadge platform="meta" />
-                                <span className="font-medium text-zinc-900">
-                                  {row.campaignName}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="pl-7">
-                                <span className="font-mono text-xs text-zinc-500">
-                                  {row.landingPage ?? "—"}
-                                </span>
-                                {row.utmCampaign && (
-                                  <span className="ml-2 text-[11px] text-zinc-400">
-                                    {row.utmCampaign}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <Mono>{row.impressions.toLocaleString()}</Mono>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <Mono>{row.clicks.toLocaleString()}</Mono>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <span className="font-mono text-zinc-500">
-                                {pct(ctr)}
-                              </span>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <Mono>{fmt(row.spend)}</Mono>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <span className="font-mono text-zinc-500">
-                                {fmt(cpc)}
-                              </span>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono>{row.orders}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono>{fmt(row.revenue)}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <RoasBadge
-                                revenue={row.revenue}
-                                spend={row.spend}
-                              />
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </>
-                )}
-
-                {/* ── Google Section ── */}
-                {googlePaths.length > 0 && (
-                  <>
-                    <TableRow className="border-b-0 hover:bg-transparent">
-                      <TableCell
-                        colSpan={9}
-                        className="pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-400"
-                      >
-                        Google Ads
+                  );
+                })}
+                {adCampaigns.map((row, i) => {
+                  const impressions = row.impressions ?? 0;
+                  const clicks = row.clicks ?? 0;
+                  const cost = row.cost ?? 0;
+                  const ctr = impressions > 0 ? clicks / impressions : 0;
+                  const cpc = clicks > 0 ? cost / clicks : 0;
+                  return (
+                    <TableRow key={`google-${i}`}>
+                      <TableCell className="sticky left-0 bg-inherit">
+                        <div className="flex items-center gap-2">
+                          <PlatformBadge platform="google" />
+                          <span className="font-medium text-zinc-900">
+                            {row.campaignName ?? "—"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Mono>{impressions.toLocaleString()}</Mono>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Mono>{clicks.toLocaleString()}</Mono>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="font-mono text-zinc-500">
+                          {pct(ctr)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Mono>{fmt(cost)}</Mono>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="font-mono text-zinc-500">
+                          {fmt(cpc)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-zinc-300">&mdash;</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-zinc-300">&mdash;</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="text-zinc-300">&mdash;</span>
                       </TableCell>
                     </TableRow>
-                    {googlePaths.map((row, i) => {
-                      const isCampaign = row.kind === "campaign";
-                      const ctr =
-                        row.impressions > 0
-                          ? row.clicks / row.impressions
-                          : 0;
-                      const cpc =
-                        row.clicks > 0 ? row.spend / row.clicks : 0;
-                      return (
-                        <TableRow
-                          key={`google-${i}`}
-                          className={
-                            isCampaign ? "" : "border-b-zinc-50 bg-zinc-50/30"
-                          }
-                        >
-                          <TableCell className="sticky left-0 bg-inherit">
-                            {isCampaign ? (
-                              <div className="flex items-center gap-2">
-                                <PlatformBadge platform="google" />
-                                <span className="font-medium text-zinc-900">
-                                  {row.campaignName}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="pl-7">
-                                <span className="font-mono text-xs text-zinc-500">
-                                  {row.landingPage ?? "—"}
-                                </span>
-                                {row.utmCampaign && (
-                                  <span className="ml-2 text-[11px] text-zinc-400">
-                                    {row.utmCampaign}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <Mono>{row.impressions.toLocaleString()}</Mono>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <Mono>{row.clicks.toLocaleString()}</Mono>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <span className="font-mono text-zinc-500">
-                                {pct(ctr)}
-                              </span>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <Mono>{fmt(row.spend)}</Mono>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <span className="font-mono text-zinc-500">
-                                {fmt(cpc)}
-                              </span>
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono>{row.orders}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Mono>{fmt(row.revenue)}</Mono>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {isCampaign ? (
-                              <RoasBadge
-                                revenue={row.revenue}
-                                spend={row.spend}
-                              />
-                            ) : (
-                              <span className="text-zinc-300">&mdash;</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </>
-                )}
+                  );
+                })}
               </TableBody>
               <TableFooter>
                 <TableRow className="font-medium">
@@ -759,13 +465,16 @@ export default async function CampaignsPage({
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Mono>{totalOrders}</Mono>
+                    <Mono>{totalConversions.toLocaleString()}</Mono>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Mono>{fmt(totalRevenue)}</Mono>
+                    <Mono>{fmt(metaRevenueCents)}</Mono>
                   </TableCell>
                   <TableCell className="text-right">
-                    <RoasBadge revenue={totalRevenue} spend={totalSpend} />
+                    <RoasBadge
+                      revenue={metaRevenueCents}
+                      spend={totalSpend}
+                    />
                   </TableCell>
                 </TableRow>
               </TableFooter>

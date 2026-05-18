@@ -5,6 +5,10 @@ import { sql } from "drizzle-orm";
 interface MetaInsight {
   campaign_name: string;
   campaign_id: string;
+  adset_name: string;
+  adset_id: string;
+  ad_name: string;
+  ad_id: string;
   impressions: string;
   clicks: string;
   spend: string;
@@ -30,32 +34,38 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
 
   const dateStr = date.toISOString().split("T")[0];
 
-  const params = new URLSearchParams({
-    access_token: accessToken,
-    fields:
-      "campaign_name,campaign_id,impressions,clicks,spend,reach,frequency,actions,action_values",
-    time_range: JSON.stringify({ since: dateStr, until: dateStr }),
-    level: "campaign",
-    limit: "500",
-  });
+  const allRows: MetaInsight[] = [];
+  let url: string | null =
+    `https://graph.facebook.com/v21.0/act_${adAccountId}/insights?` +
+    new URLSearchParams({
+      access_token: accessToken,
+      fields:
+        "campaign_name,campaign_id,adset_name,adset_id,ad_name,ad_id,impressions,clicks,spend,reach,frequency,actions,action_values",
+      time_range: JSON.stringify({ since: dateStr, until: dateStr }),
+      level: "ad",
+      limit: "500",
+    }).toString();
 
-  const res = await fetch(
-    `https://graph.facebook.com/v21.0/act_${adAccountId}/insights?${params}`,
-  );
-
-  if (!res.ok) {
-    throw new Error(`Meta Ads API error: ${res.status} ${await res.text()}`);
+  while (url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Meta Ads API error: ${res.status} ${await res.text()}`);
+    }
+    const page = (await res.json()) as {
+      data: MetaInsight[];
+      paging?: { next?: string };
+    };
+    if (page.data) allRows.push(...page.data);
+    url = page.paging?.next ?? null;
   }
 
-  const data = (await res.json()) as { data: MetaInsight[] };
-
-  if (!data.data || data.data.length === 0) return 0;
+  if (allRows.length === 0) return 0;
 
   await db
     .delete(metaAdsDaily)
     .where(sql`${metaAdsDaily.date}::date = ${dateStr}::date`);
 
-  const values = data.data.map((row) => {
+  const values = allRows.map((row) => {
     const conversions = row.actions?.find(
       (a) => a.action_type === "offsite_conversion.fb_pixel_purchase",
     );
@@ -67,6 +77,10 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
       date,
       campaignName: row.campaign_name,
       campaignId: row.campaign_id,
+      adsetName: row.adset_name,
+      adsetId: row.adset_id,
+      adName: row.ad_name,
+      adId: row.ad_id,
       impressions: parseInt(row.impressions) || 0,
       clicks: parseInt(row.clicks) || 0,
       cost: toCents(row.spend),
@@ -77,8 +91,8 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
     };
   });
 
-  if (values.length > 0) {
-    await db.insert(metaAdsDaily).values(values);
+  for (let i = 0; i < values.length; i += 500) {
+    await db.insert(metaAdsDaily).values(values.slice(i, i + 500));
   }
 
   return values.length;

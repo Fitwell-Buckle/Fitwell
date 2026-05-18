@@ -164,12 +164,12 @@ export default async function AttributionPage({
         </CardContent>
       </Card>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+      <div className="mt-6 space-y-5">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Referring Site</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="max-h-64 overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -181,7 +181,7 @@ export default async function AttributionPage({
               <TableBody>
                 {byReferrer.map((row, i) => (
                   <TableRow key={i}>
-                    <TableCell className="font-medium text-sm">
+                    <TableCell className="font-medium text-sm break-all">
                       {row.referringSite}
                     </TableCell>
                     <TableCell className="text-right">{row.orders}</TableCell>
@@ -199,7 +199,7 @@ export default async function AttributionPage({
           <CardHeader>
             <CardTitle className="text-lg">Landing Page</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="max-h-64 overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -211,7 +211,7 @@ export default async function AttributionPage({
               <TableBody>
                 {byLandingPage.map((row, i) => (
                   <TableRow key={i}>
-                    <TableCell className="font-medium text-sm">
+                    <TableCell className="font-medium text-sm break-all">
                       {row.landingSite}
                     </TableCell>
                     <TableCell className="text-right">{row.orders}</TableCell>
@@ -229,7 +229,7 @@ export default async function AttributionPage({
           <CardHeader>
             <CardTitle className="text-lg">UTM Attribution (Customers)</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="max-h-64 overflow-auto">
             {byUtm.length === 0 ? (
               <p className="text-sm text-zinc-400">
                 No UTM data captured yet.
@@ -251,7 +251,7 @@ export default async function AttributionPage({
                         {row.utmSource}
                       </TableCell>
                       <TableCell>{row.utmMedium ?? "—"}</TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="text-sm break-all">
                         {row.utmCampaign ?? "—"}
                       </TableCell>
                       <TableCell className="text-right">
