@@ -36,7 +36,7 @@ function getPresetRange(days: number): { from: string; to: string } | null {
 }
 
 function getActiveDays(from: string | null, to: string | null): number | null {
-  if (!from) return 0;
+  if (!from) return 30;
   const now = new Date();
   const fromDate = new Date(from);
   const ytd = new Date();
