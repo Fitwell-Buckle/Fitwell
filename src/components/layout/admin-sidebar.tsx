@@ -14,7 +14,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -30,6 +30,7 @@ const navItems = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-900">
@@ -63,7 +64,12 @@ export function AdminSidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-zinc-800 p-4">
+      <div className="border-t border-zinc-800 px-6 py-4">
+        {session?.user?.email && (
+          <p className="mb-3 truncate text-xs text-zinc-500">
+            {session.user.email}
+          </p>
+        )}
         <button
           onClick={() => signOut({ callbackUrl: "/auth/login" })}
           className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"

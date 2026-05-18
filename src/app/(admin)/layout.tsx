@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { AdminSidebar } from "@/components/layout/admin-sidebar";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
+import { AuthSessionProvider } from "@/components/providers/session-provider";
 
 export default async function AdminLayout({
   children,
@@ -16,6 +17,7 @@ export default async function AdminLayout({
   }
 
   return (
+    <AuthSessionProvider>
     <div className="flex h-screen">
       <AdminSidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -30,5 +32,6 @@ export default async function AdminLayout({
         </main>
       </div>
     </div>
+    </AuthSessionProvider>
   );
 }

@@ -2,9 +2,16 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ga4Daily, googleAdsDaily, metaAdsDaily } from "@/lib/schema";
+import { ga4Daily, googleAdsDaily, metaAdsDaily, order } from "@/lib/schema";
 import { sql, desc, sum, count, and, gte, lte } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import {
+  formatBucketLabel,
+  dateToBucketKey,
+  generateBucketKeys,
+} from "@/lib/chart-utils";
+import { AdSpendRevenueChart } from "@/components/charts/ad-spend-revenue-chart";
+import { TrafficSourcesChart } from "@/components/charts/traffic-sources-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -38,7 +45,7 @@ export default async function CampaignsPage({
   if (!session) redirect("/auth/login");
 
   const params = await searchParams;
-  const { from, to } = parseDateRange(params);
+  const { from, to, granularity } = parseDateRange(params);
 
   const ga4DateRange = and(gte(ga4Daily.date, from), lte(ga4Daily.date, to));
   const adsDateRange = and(
@@ -110,6 +117,96 @@ export default async function CampaignsPage({
     days: 0,
   };
 
+  // ── Chart data: Ad Spend vs Revenue + Traffic Sources ────────────
+  const orderBucketExpr =
+    granularity === "day"
+      ? sql`date_trunc('day', ${order.processedAt})::date`
+      : granularity === "week"
+        ? sql`date_trunc('week', ${order.processedAt})::date`
+        : sql`date_trunc('month', ${order.processedAt})::date`;
+
+  const [metaByBucket, googleByBucket, orderRevenueByBucket] =
+    await Promise.all([
+      db
+        .select({
+          bucket: sql`date_trunc('${sql.raw(granularity)}', ${metaAdsDaily.date})::date`,
+          spend: sum(metaAdsDaily.cost).mapWith(Number),
+        })
+        .from(metaAdsDaily)
+        .where(metaDateRange)
+        .groupBy(
+          sql`date_trunc('${sql.raw(granularity)}', ${metaAdsDaily.date})::date`,
+        ),
+      db
+        .select({
+          bucket: sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
+          spend: sum(googleAdsDaily.cost).mapWith(Number),
+        })
+        .from(googleAdsDaily)
+        .where(adsDateRange)
+        .groupBy(
+          sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
+        ),
+      db
+        .select({
+          bucket: orderBucketExpr,
+          revenue: sum(order.totalPrice).mapWith(Number),
+        })
+        .from(order)
+        .where(
+          and(
+            gte(order.processedAt, from),
+            lte(order.processedAt, to),
+            sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+          ),
+        )
+        .groupBy(orderBucketExpr)
+        .orderBy(orderBucketExpr),
+    ]);
+
+  const bucketKeys = generateBucketKeys(from, to, granularity);
+  const metaSpendMap = new Map<string, number>();
+  for (const row of metaByBucket) {
+    metaSpendMap.set(
+      dateToBucketKey(new Date(row.bucket as string), granularity),
+      row.spend ?? 0,
+    );
+  }
+  const googleSpendMap = new Map<string, number>();
+  for (const row of googleByBucket) {
+    googleSpendMap.set(
+      dateToBucketKey(new Date(row.bucket as string), granularity),
+      row.spend ?? 0,
+    );
+  }
+  const orderRevenueMap = new Map<string, number>();
+  for (const row of orderRevenueByBucket) {
+    orderRevenueMap.set(
+      dateToBucketKey(new Date(row.bucket as string), granularity),
+      row.revenue ?? 0,
+    );
+  }
+  const adSpendRevenueData = bucketKeys.map((key) => {
+    const metaSpend = metaSpendMap.get(key) ?? 0;
+    const googleSpend = googleSpendMap.get(key) ?? 0;
+    const revenue = orderRevenueMap.get(key) ?? 0;
+    const totalSpend = metaSpend + googleSpend;
+    return {
+      bucket: key,
+      label: formatBucketLabel(key, granularity),
+      metaSpend,
+      googleSpend,
+      revenue,
+      roas: totalSpend > 0 ? revenue / totalSpend : 0,
+    };
+  });
+
+  const trafficSourcesData = trafficBySource.map((row) => ({
+    source: `${row.source ?? "(none)"}/${row.medium ?? "(none)"}`,
+    sessions: row.sessions ?? 0,
+    users: row.users ?? 0,
+  }));
+
   return (
     <div>
       <PageHeader title="Campaigns & Traffic" />
@@ -132,6 +229,24 @@ export default async function CampaignsPage({
           value={(totals.days ?? 0).toLocaleString()}
         />
       </div>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Ad Spend vs Revenue</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AdSpendRevenueChart data={adSpendRevenueData} />
+        </CardContent>
+      </Card>
+
+      <Card className="mt-5">
+        <CardHeader>
+          <CardTitle>Traffic Sources</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TrafficSourcesChart data={trafficSourcesData} />
+        </CardContent>
+      </Card>
 
       <div className="mt-8 grid gap-5 lg:grid-cols-2">
         <Card>

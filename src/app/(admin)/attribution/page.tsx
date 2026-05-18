@@ -5,6 +5,12 @@ import { db } from "@/lib/db";
 import { order, customer } from "@/lib/schema";
 import { sql, desc, count, sum, and, gte, lte } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import {
+  formatBucketLabel,
+  dateToBucketKey,
+  generateBucketKeys,
+} from "@/lib/chart-utils";
+import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -36,7 +42,7 @@ export default async function AttributionPage({
   if (!session) redirect("/auth/login");
 
   const params = await searchParams;
-  const { from, to } = parseDateRange(params);
+  const { from, to, granularity } = parseDateRange(params);
 
   const [byReferrer, bySource, byLandingPage, byUtm] = await Promise.all([
     db
@@ -112,9 +118,61 @@ export default async function AttributionPage({
       .limit(15),
   ]);
 
+  // ── Revenue by source over time chart ──────────────────────────────
+  const bucketExpr =
+    granularity === "day"
+      ? sql`date_trunc('day', ${order.processedAt})::date`
+      : granularity === "week"
+        ? sql`date_trunc('week', ${order.processedAt})::date`
+        : sql`date_trunc('month', ${order.processedAt})::date`;
+
+  const revenueByBucketAndSource = await db
+    .select({
+      bucket: bucketExpr,
+      sourceName: order.sourceName,
+      revenue: sum(order.totalPrice).mapWith(Number),
+    })
+    .from(order)
+    .where(
+      and(
+        gte(order.processedAt, from),
+        lte(order.processedAt, to),
+        sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+      ),
+    )
+    .groupBy(bucketExpr, order.sourceName)
+    .orderBy(bucketExpr);
+
+  const bucketKeys = generateBucketKeys(from, to, granularity);
+  const revenueMap = new Map<string, { web: number; wholesale: number }>();
+  for (const key of bucketKeys) {
+    revenueMap.set(key, { web: 0, wholesale: 0 });
+  }
+  for (const row of revenueByBucketAndSource) {
+    const key = dateToBucketKey(new Date(row.bucket as string), granularity);
+    const entry = revenueMap.get(key) ?? { web: 0, wholesale: 0 };
+    if (row.sourceName === "web") entry.web += row.revenue ?? 0;
+    else entry.wholesale += row.revenue ?? 0;
+    revenueMap.set(key, entry);
+  }
+  const revenueTrendData = bucketKeys.map((key) => ({
+    bucket: key,
+    label: formatBucketLabel(key, granularity),
+    ...revenueMap.get(key)!,
+  }));
+
   return (
     <div>
       <PageHeader title="Attribution" />
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-lg">Revenue by Channel Over Time</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <RevenueTrendChart data={revenueTrendData} />
+        </CardContent>
+      </Card>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-2">
         <Card>

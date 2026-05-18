@@ -5,6 +5,12 @@ import { db } from "@/lib/db";
 import { order, customer, ga4Daily } from "@/lib/schema";
 import { sql, gte, lte, and, count, sum } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import {
+  formatBucketLabel,
+  dateToBucketKey,
+  generateBucketKeys,
+} from "@/lib/chart-utils";
+import { ConversionTrendChart } from "@/components/charts/conversion-trend-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/charts/metric-card";
@@ -35,7 +41,7 @@ export default async function FunnelPage({
   if (!session) redirect("/auth/login");
 
   const params = await searchParams;
-  const { from, to } = parseDateRange(params);
+  const { from, to, granularity } = parseDateRange(params);
 
   const [
     sessionData,
@@ -102,6 +108,68 @@ export default async function FunnelPage({
     { label: "Orders (All)", value: orders },
   ];
 
+  // ── Conversion trend chart data ──────────────────────────────────
+  const orderBucketExpr =
+    granularity === "day"
+      ? sql`date_trunc('day', ${order.processedAt})::date`
+      : granularity === "week"
+        ? sql`date_trunc('week', ${order.processedAt})::date`
+        : sql`date_trunc('month', ${order.processedAt})::date`;
+
+  const [sessionsByBucket, ordersByBucket] = await Promise.all([
+    db
+      .select({
+        bucket: sql`date_trunc('${sql.raw(granularity)}', ${ga4Daily.date})::date`,
+        sessions: sum(ga4Daily.sessions).mapWith(Number),
+      })
+      .from(ga4Daily)
+      .where(and(gte(ga4Daily.date, from), lte(ga4Daily.date, to)))
+      .groupBy(
+        sql`date_trunc('${sql.raw(granularity)}', ${ga4Daily.date})::date`,
+      ),
+    db
+      .select({
+        bucket: orderBucketExpr,
+        orders: count(),
+      })
+      .from(order)
+      .where(
+        and(
+          gte(order.processedAt, from),
+          lte(order.processedAt, to),
+          sql`${order.sourceName} = 'web'`,
+        ),
+      )
+      .groupBy(orderBucketExpr),
+  ]);
+
+  const bucketKeys = generateBucketKeys(from, to, granularity);
+  const sessionsMap = new Map<string, number>();
+  for (const row of sessionsByBucket) {
+    sessionsMap.set(
+      dateToBucketKey(new Date(row.bucket as string), granularity),
+      row.sessions ?? 0,
+    );
+  }
+  const ordersMap = new Map<string, number>();
+  for (const row of ordersByBucket) {
+    ordersMap.set(
+      dateToBucketKey(new Date(row.bucket as string), granularity),
+      row.orders ?? 0,
+    );
+  }
+  const conversionTrendData = bucketKeys.map((key) => {
+    const s = sessionsMap.get(key) ?? 0;
+    const o = ordersMap.get(key) ?? 0;
+    return {
+      bucket: key,
+      label: formatBucketLabel(key, granularity),
+      sessions: s,
+      orders: o,
+      conversionRate: s > 0 ? (o / s) * 100 : 0,
+    };
+  });
+
   return (
     <div>
       <PageHeader title="Conversion Funnel" />
@@ -124,6 +192,15 @@ export default async function FunnelPage({
           value={repeatCount.toLocaleString()}
         />
       </div>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Conversion Trend</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ConversionTrendChart data={conversionTrendData} />
+        </CardContent>
+      </Card>
 
       <div className="mt-8 grid gap-5 lg:grid-cols-2">
         <Card>

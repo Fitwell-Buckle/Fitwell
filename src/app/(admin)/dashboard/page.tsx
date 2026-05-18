@@ -3,10 +3,17 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { order, customer } from "@/lib/schema";
+import { order, customer, metaAdsDaily, googleAdsDaily } from "@/lib/schema";
 import { sql, eq, desc, count, sum, gte, lte, and } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import {
+  formatBucketLabel,
+  dateToBucketKey,
+  generateBucketKeys,
+} from "@/lib/chart-utils";
 import { MetricCard } from "@/components/charts/metric-card";
+import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart";
+import { AdSpendRevenueChart } from "@/components/charts/ad-spend-revenue-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -40,7 +47,14 @@ export default async function DashboardPage({
   if (!session) redirect("/auth/login");
 
   const params = await searchParams;
-  const { from, to } = parseDateRange(params);
+  const { from, to, granularity } = parseDateRange(params);
+
+  const bucketExpr =
+    granularity === "day"
+      ? sql`date_trunc('day', ${order.processedAt})::date`
+      : granularity === "week"
+        ? sql`date_trunc('week', ${order.processedAt})::date`
+        : sql`date_trunc('month', ${order.processedAt})::date`;
 
   const [revenueResult, orderCountResult, customerCountResult, recentOrders] =
     await Promise.all([
@@ -86,6 +100,120 @@ export default async function DashboardPage({
   const totalCustomers = customerCountResult[0]?.count ?? 0;
   const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
 
+  // ── Chart data: Revenue trend + Ad Spend vs Revenue ──────────────
+  const [revenueByBucket, metaByBucket, googleByBucket, orderRevenueByBucket] =
+    await Promise.all([
+      db
+        .select({
+          bucket: bucketExpr,
+          sourceName: order.sourceName,
+          revenue: sum(order.totalPrice).mapWith(Number),
+        })
+        .from(order)
+        .where(
+          and(
+            gte(order.processedAt, from),
+            lte(order.processedAt, to),
+            sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+          ),
+        )
+        .groupBy(bucketExpr, order.sourceName)
+        .orderBy(bucketExpr),
+      db
+        .select({
+          bucket: sql`date_trunc('${sql.raw(granularity)}', ${metaAdsDaily.date})::date`,
+          spend: sum(metaAdsDaily.cost).mapWith(Number),
+        })
+        .from(metaAdsDaily)
+        .where(and(gte(metaAdsDaily.date, from), lte(metaAdsDaily.date, to)))
+        .groupBy(
+          sql`date_trunc('${sql.raw(granularity)}', ${metaAdsDaily.date})::date`,
+        ),
+      db
+        .select({
+          bucket: sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
+          spend: sum(googleAdsDaily.cost).mapWith(Number),
+        })
+        .from(googleAdsDaily)
+        .where(
+          and(gte(googleAdsDaily.date, from), lte(googleAdsDaily.date, to)),
+        )
+        .groupBy(
+          sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
+        ),
+      db
+        .select({
+          bucket: bucketExpr,
+          revenue: sum(order.totalPrice).mapWith(Number),
+        })
+        .from(order)
+        .where(
+          and(
+            gte(order.processedAt, from),
+            lte(order.processedAt, to),
+            sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+          ),
+        )
+        .groupBy(bucketExpr)
+        .orderBy(bucketExpr),
+    ]);
+
+  // Build revenue trend data
+  const bucketKeys = generateBucketKeys(from, to, granularity);
+  const revenueMap = new Map<string, { web: number; wholesale: number }>();
+  for (const key of bucketKeys) {
+    revenueMap.set(key, { web: 0, wholesale: 0 });
+  }
+  for (const row of revenueByBucket) {
+    const key = dateToBucketKey(new Date(row.bucket as string), granularity);
+    const entry = revenueMap.get(key) ?? { web: 0, wholesale: 0 };
+    if (row.sourceName === "web") entry.web += row.revenue ?? 0;
+    else entry.wholesale += row.revenue ?? 0;
+    revenueMap.set(key, entry);
+  }
+  const revenueTrendData = bucketKeys.map((key) => ({
+    bucket: key,
+    label: formatBucketLabel(key, granularity),
+    ...revenueMap.get(key)!,
+  }));
+
+  // Build ad spend vs revenue data
+  const metaSpendMap = new Map<string, number>();
+  for (const row of metaByBucket) {
+    metaSpendMap.set(
+      dateToBucketKey(new Date(row.bucket as string), granularity),
+      row.spend ?? 0,
+    );
+  }
+  const googleSpendMap = new Map<string, number>();
+  for (const row of googleByBucket) {
+    googleSpendMap.set(
+      dateToBucketKey(new Date(row.bucket as string), granularity),
+      row.spend ?? 0,
+    );
+  }
+  const orderRevenueMap = new Map<string, number>();
+  for (const row of orderRevenueByBucket) {
+    orderRevenueMap.set(
+      dateToBucketKey(new Date(row.bucket as string), granularity),
+      row.revenue ?? 0,
+    );
+  }
+  const adSpendRevenueData = bucketKeys.map((key) => {
+    const metaSpend = metaSpendMap.get(key) ?? 0;
+    const googleSpend = googleSpendMap.get(key) ?? 0;
+    const revenue = orderRevenueMap.get(key) ?? 0;
+    const totalSpend = metaSpend + googleSpend;
+    return {
+      bucket: key,
+      label: formatBucketLabel(key, granularity),
+      metaSpend,
+      googleSpend,
+      revenue,
+      roas: totalSpend > 0 ? revenue / totalSpend : 0,
+    };
+  });
+
   return (
     <div>
       <PageHeader title="Dashboard" />
@@ -95,6 +223,25 @@ export default async function DashboardPage({
         <MetricCard label="Orders" value={totalOrders.toLocaleString()} />
         <MetricCard label="Customers" value={totalCustomers.toLocaleString()} />
         <MetricCard label="Avg Order Value" value={fmt(avgOrderValue)} />
+      </div>
+
+      <div className="mt-8 grid gap-5 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Revenue Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RevenueTrendChart data={revenueTrendData} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Ad Spend vs Revenue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AdSpendRevenueChart data={adSpendRevenueData} />
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="mt-8">
