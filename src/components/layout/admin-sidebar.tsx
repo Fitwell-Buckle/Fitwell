@@ -12,7 +12,9 @@ import {
   Filter,
   Package,
   Settings,
+  LogOut,
 } from "lucide-react";
+import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -61,6 +63,15 @@ export function AdminSidebar() {
           );
         })}
       </nav>
+      <div className="border-t border-zinc-800 p-4">
+        <button
+          onClick={() => signOut({ callbackUrl: "/auth/login" })}
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign out
+        </button>
+      </div>
     </aside>
   );
 }
