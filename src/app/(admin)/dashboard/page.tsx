@@ -106,7 +106,12 @@ export default async function DashboardPage({
       db
         .select({
           bucket: bucketExpr,
-          sourceName: order.sourceName,
+          channel: sql<string>`CASE
+            WHEN ${order.sourceName} != 'web' THEN 'wholesale'
+            WHEN ${order.landingSite} ILIKE '%utm_source=meta%' OR ${order.landingSite} ILIKE '%utm_source=ig%' OR ${order.landingSite} ILIKE '%utm_source=fb%' OR ${order.landingSite} ILIKE '%utm_source=instagram%' OR ${order.referringSite} ILIKE '%facebook.com%' OR ${order.referringSite} ILIKE '%instagram.com%' THEN 'meta'
+            WHEN ${order.landingSite} ILIKE '%gad_source%' OR ${order.landingSite} ILIKE '%gclid%' OR ${order.landingSite} ILIKE '%utm_source=google%' THEN 'google'
+            ELSE 'organic'
+          END`,
           revenue: sum(order.totalPrice).mapWith(Number),
         })
         .from(order)
@@ -117,7 +122,12 @@ export default async function DashboardPage({
             sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
           ),
         )
-        .groupBy(bucketExpr, order.sourceName)
+        .groupBy(bucketExpr, sql`CASE
+            WHEN ${order.sourceName} != 'web' THEN 'wholesale'
+            WHEN ${order.landingSite} ILIKE '%utm_source=meta%' OR ${order.landingSite} ILIKE '%utm_source=ig%' OR ${order.landingSite} ILIKE '%utm_source=fb%' OR ${order.landingSite} ILIKE '%utm_source=instagram%' OR ${order.referringSite} ILIKE '%facebook.com%' OR ${order.referringSite} ILIKE '%instagram.com%' THEN 'meta'
+            WHEN ${order.landingSite} ILIKE '%gad_source%' OR ${order.landingSite} ILIKE '%gclid%' OR ${order.landingSite} ILIKE '%utm_source=google%' THEN 'google'
+            ELSE 'organic'
+          END`)
         .orderBy(bucketExpr),
       db
         .select({
@@ -159,17 +169,17 @@ export default async function DashboardPage({
         .orderBy(bucketExpr),
     ]);
 
-  // Build revenue trend data
+  // Build revenue trend data by channel
   const bucketKeys = generateBucketKeys(from, to, granularity);
-  const revenueMap = new Map<string, { web: number; wholesale: number }>();
+  const revenueMap = new Map<string, { wholesale: number; organic: number; meta: number; google: number }>();
   for (const key of bucketKeys) {
-    revenueMap.set(key, { web: 0, wholesale: 0 });
+    revenueMap.set(key, { wholesale: 0, organic: 0, meta: 0, google: 0 });
   }
   for (const row of revenueByBucket) {
     const key = dateToBucketKey(new Date(row.bucket as string), granularity);
-    const entry = revenueMap.get(key) ?? { web: 0, wholesale: 0 };
-    if (row.sourceName === "web") entry.web += row.revenue ?? 0;
-    else entry.wholesale += row.revenue ?? 0;
+    const entry = revenueMap.get(key) ?? { wholesale: 0, organic: 0, meta: 0, google: 0 };
+    const channel = (row.channel as string) ?? "organic";
+    if (channel in entry) entry[channel as keyof typeof entry] += row.revenue ?? 0;
     revenueMap.set(key, entry);
   }
   const revenueTrendData = bucketKeys.map((key) => ({

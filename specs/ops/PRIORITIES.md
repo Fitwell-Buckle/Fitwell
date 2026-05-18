@@ -65,6 +65,7 @@ All pages functional with real data, shared UI components (PageHeader, Badge, Da
 - [x] Developer token obtained, set in Vercel + .env.local
 - [x] Google Ads API enabled on GCP project
 - [x] Basic access application submitted (2026-05-14) — expect ~3 business days
+- Check approval status: Google Ads → switch to manager account 272-385-8162 → Tools (wrench) → Setup → API Center → "Access level" (Test → Basic → Standard). Google also emails the application contact on status change. Definitive test: a real extraction fails with DEVELOPER_TOKEN_NOT_APPROVED until Basic is granted.
 - [ ] Once approved: test extraction, backfill 30 days
 
 **Meta Ads — pending token approval**
