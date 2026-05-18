@@ -158,6 +158,7 @@ export default async function CampaignsPage({
             gte(order.processedAt, from),
             lte(order.processedAt, to),
             sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+            sql`${order.sourceName} = 'web'`,
           ),
         )
         .groupBy(orderBucketExpr)

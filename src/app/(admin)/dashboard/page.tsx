@@ -152,6 +152,7 @@ export default async function DashboardPage({
             gte(order.processedAt, from),
             lte(order.processedAt, to),
             sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
+            sql`${order.sourceName} = 'web'`,
           ),
         )
         .groupBy(bucketExpr)
