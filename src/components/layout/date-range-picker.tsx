@@ -57,10 +57,20 @@ function defaultGranularity(days: number): Granularity {
   return "month";
 }
 
+const PICKER_PATHS = [
+  "/dashboard",
+  "/campaigns",
+  "/attribution",
+  "/funnel",
+  "/orders",
+];
+
 export function DateRangePicker() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  if (!PICKER_PATHS.some((p) => pathname.startsWith(p))) return null;
 
   const from = searchParams.get("from");
   const to = searchParams.get("to");

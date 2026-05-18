@@ -3,6 +3,22 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
+function summarizeResult(data: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const [key, val] of Object.entries(data)) {
+    if (key === "status" || key === "timestamp" || key === "since") continue;
+    if (typeof val === "object" && val !== null && "synced" in val) {
+      const s = val as { synced: number; errors?: number };
+      parts.push(`${s.synced} ${key}${s.errors ? ` (${s.errors} errors)` : ""}`);
+    } else if (key === "rows" && typeof val === "number") {
+      parts.push(`${val} rows`);
+    } else if (key === "date" && typeof val === "string") {
+      parts.push(val);
+    }
+  }
+  return parts.length > 0 ? parts.join(", ") : "Done";
+}
+
 export function SyncJobRunner({
   path,
   disabled,
@@ -25,17 +41,17 @@ export function SyncJobRunner({
       const data = await res.json();
       if (res.ok) {
         setState("done");
-        setResult(JSON.stringify(data, null, 2));
-        setTimeout(() => setState("idle"), 5000);
+        setResult(summarizeResult(data));
+        setTimeout(() => setState("idle"), 8000);
       } else {
         setState("error");
         setResult(data.error || data.message || res.statusText);
-        setTimeout(() => setState("idle"), 5000);
+        setTimeout(() => setState("idle"), 8000);
       }
     } catch (err) {
       setState("error");
       setResult(err instanceof Error ? err.message : "Unknown error");
-      setTimeout(() => setState("idle"), 5000);
+      setTimeout(() => setState("idle"), 8000);
     }
   }
 
@@ -43,12 +59,12 @@ export function SyncJobRunner({
     <div className="ml-4 flex shrink-0 items-center gap-3">
       {result && (
         <span
-          className={`max-w-[200px] truncate text-xs ${
+          className={`max-w-[250px] truncate text-xs ${
             state === "error" ? "text-red-500" : "text-emerald-600"
           }`}
           title={result}
         >
-          {state === "done" ? "Success" : result}
+          {state === "done" ? `✓ ${result}` : result}
         </span>
       )}
       <Button
