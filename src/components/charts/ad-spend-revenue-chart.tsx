@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { GRID_PROPS, X_AXIS_STYLE, Y_AXIS_STYLE, COLORS, formatCurrency } from "@/lib/chart-utils";
+import { ChartLegend, useLegendToggle } from "./chart-legend";
 
 interface DataPoint {
   bucket: string;
@@ -21,6 +22,13 @@ interface DataPoint {
   revenue: number;
   roas: number;
 }
+
+const SERIES = [
+  { key: "metaSpend", label: "Meta Spend", color: COLORS.metaSpend },
+  { key: "googleSpend", label: "Google Spend", color: COLORS.googleSpend },
+  { key: "revenue", label: "Revenue", color: COLORS.revenue },
+  { key: "roas", label: "ROAS", color: COLORS.roas, dashed: true },
+];
 
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -48,22 +56,35 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 export function AdSpendRevenueChart({ data }: { data: DataPoint[] }) {
+  const { isHidden, toggle, isolate } = useLegendToggle(SERIES.map((s) => s.key));
+
   if (data.length === 0) return <p className="py-8 text-center text-sm text-zinc-400">No ad spend data for this period.</p>;
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <ComposedChart data={data} margin={{ top: 4, right: 40, left: -10, bottom: 0 }}>
-        <CartesianGrid {...GRID_PROPS} />
-        <XAxis dataKey="label" tick={X_AXIS_STYLE} tickLine={false} axisLine={false} />
-        <YAxis yAxisId="left" tick={Y_AXIS_STYLE} tickLine={false} axisLine={false} tickFormatter={(v) => `$${(v / 100).toLocaleString()}`} />
-        <YAxis yAxisId="right" orientation="right" tick={Y_AXIS_STYLE} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}x`} domain={[0, "auto"]} />
-        <Tooltip content={<ChartTooltip />} />
-        <ReferenceLine yAxisId="right" y={1} stroke="#d4d4d8" strokeDasharray="3 3" label={{ value: "1x ROAS", position: "right", fontSize: 10, fill: "#a1a1aa" }} />
-        <Bar yAxisId="left" dataKey="metaSpend" name="Meta Spend" fill={COLORS.metaSpend} radius={[2, 2, 0, 0]} stackId="spend" barSize={20} />
-        <Bar yAxisId="left" dataKey="googleSpend" name="Google Spend" fill={COLORS.googleSpend} radius={[2, 2, 0, 0]} stackId="spend" barSize={20} />
-        <Line yAxisId="left" type="monotone" dataKey="revenue" name="Revenue" stroke={COLORS.revenue} strokeWidth={2} dot={false} />
-        <Line yAxisId="right" type="monotone" dataKey="roas" name="ROAS" stroke={COLORS.roas} strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div>
+      <ChartLegend items={SERIES} isHidden={isHidden} onToggle={toggle} onIsolate={isolate} />
+      <ResponsiveContainer width="100%" height={260}>
+        <ComposedChart data={data} margin={{ top: 4, right: 40, left: -10, bottom: 0 }}>
+          <CartesianGrid {...GRID_PROPS} />
+          <XAxis dataKey="label" tick={X_AXIS_STYLE} tickLine={false} axisLine={false} />
+          <YAxis yAxisId="left" tick={Y_AXIS_STYLE} tickLine={false} axisLine={false} tickFormatter={(v) => `$${(v / 100).toLocaleString()}`} />
+          <YAxis yAxisId="right" orientation="right" tick={Y_AXIS_STYLE} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}x`} domain={[0, "auto"]} />
+          <Tooltip content={<ChartTooltip />} />
+          <ReferenceLine yAxisId="right" y={1} stroke="#d4d4d8" strokeDasharray="3 3" label={{ value: "1x", position: "right", fontSize: 10, fill: "#a1a1aa" }} />
+          {!isHidden("metaSpend") && (
+            <Bar yAxisId="left" dataKey="metaSpend" name="Meta Spend" fill={COLORS.metaSpend} radius={[2, 2, 0, 0]} stackId="spend" barSize={20} />
+          )}
+          {!isHidden("googleSpend") && (
+            <Bar yAxisId="left" dataKey="googleSpend" name="Google Spend" fill={COLORS.googleSpend} radius={[2, 2, 0, 0]} stackId="spend" barSize={20} />
+          )}
+          {!isHidden("revenue") && (
+            <Line yAxisId="left" type="monotone" dataKey="revenue" name="Revenue" stroke={COLORS.revenue} strokeWidth={2} dot={false} />
+          )}
+          {!isHidden("roas") && (
+            <Line yAxisId="right" type="monotone" dataKey="roas" name="ROAS" stroke={COLORS.roas} strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

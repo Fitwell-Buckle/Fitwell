@@ -7,7 +7,15 @@ export function formatBucketLabel(key: string, granularity: Granularity): string
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
   if (granularity === "week") {
-    return `W${key.split("-W")[1]}`;
+    // Convert ISO week key (YYYY-Www) to first day of that week
+    const [yearStr, weekStr] = key.split("-W");
+    const year = parseInt(yearStr);
+    const week = parseInt(weekStr);
+    const jan4 = new Date(year, 0, 4);
+    const dayOfWeek = jan4.getDay() || 7;
+    const monday = new Date(jan4);
+    monday.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
+    return monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
   if (granularity === "month") {
     const d = new Date(key + "-01");
