@@ -354,7 +354,7 @@ export default async function CampaignsPage({
                         <div className="mt-0.5 pl-[calc(theme(spacing.2)+36px)] text-xs text-zinc-500">
                           {row.adsetName ?? "—"}
                         </div>
-                        <div className="pl-[calc(theme(spacing.2)+36px)] font-mono text-xs text-zinc-400">
+                        <div className="pl-[calc(theme(spacing.2)+36px)] text-xs text-zinc-400">
                           {row.adName ?? "—"}
                         </div>
                       </TableCell>

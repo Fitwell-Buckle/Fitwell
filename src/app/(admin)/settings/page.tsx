@@ -44,11 +44,11 @@ export default async function SettingsPage() {
             <dl className="space-y-3 text-sm">
               <div>
                 <dt className="text-zinc-500">Allowed Emails</dt>
-                <dd className="font-mono text-xs">{adminEmails}</dd>
+                <dd className="text-xs">{adminEmails}</dd>
               </div>
               <div>
                 <dt className="text-zinc-500">Shopify Store</dt>
-                <dd className="font-mono text-xs">
+                <dd className="text-xs">
                   {process.env.SHOPIFY_STORE_DOMAIN ?? "Not configured"}
                 </dd>
               </div>

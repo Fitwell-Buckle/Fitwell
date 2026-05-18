@@ -186,9 +186,9 @@ export default async function DataSyncPage() {
                   <p className="mt-0.5 text-sm text-zinc-500">
                     {job.description}
                   </p>
-                  <p className="mt-1 font-mono text-[11px] text-zinc-400">
+                  <p className="mt-1 text-[11px] text-zinc-400">
                     {job.schedule}
-                    <span className="ml-2 text-zinc-300">({job.cron})</span>
+                    <span className="ml-2 font-mono text-zinc-300">({job.cron})</span>
                   </p>
                   {job.note && (
                     <p className="mt-1 text-xs text-amber-600">{job.note}</p>
