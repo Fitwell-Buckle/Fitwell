@@ -246,6 +246,7 @@ export const metaAdsDaily = pgTable(
     adName: text("ad_name"),
     adId: text("ad_id"),
     platform: text("platform"),
+    landingUrl: text("landing_url"),
     impressions: integer("impressions").default(0),
     clicks: integer("clicks").default(0),
     cost: integer("cost").default(0),

@@ -4,9 +4,9 @@
 - PostHog is our product analytics platform for visitor behavior, attribution, and (separately) admin-dashboard usage.
 - **Architecture reality (confirmed 2026-05-18):** every visitor-facing page — campaign landing pages, storefront, cart, and checkout — is served by **Shopify under `www.fitwellbuckle.co`**. There is no Next.js client surface in the buyer funnel. The only Next.js-hosted surface is the admin dashboard at `admin.fitwellbuckle.co`.
 - **Consequence:** visitor tracking is **not** a Next.js `PosthogProvider`. Following PostHog's official Shopify guide (https://posthog.com/docs/libraries/shopify), it is **two surfaces**: (a) the full `posthog-js` snippet injected in the theme's `theme.liquid` `</head>` for landing + storefront pages (normal theme pages, not sandboxed), and (b) a **Shopify Custom Web Pixel** (Settings → Customer events) for the checkout page only, because the checkout page rejects the snippet. The Next.js PostHog client is scoped to admin-usage tracking only.
-- **Where this plan deliberately extends the official guide:** PostHog's Shopify doc gives *no* guidance on (i) identity continuity from theme → sandboxed checkout pixel, or (ii) UTM/attribution capture. Both are core to our goal, so we add an explicit `fw_distinct_id` identity bridge and a `utm_attribution` write-through on top of the standard install.
-- Because the entire funnel is one registrable domain (`fitwellbuckle.co`), a first-party cookie scoped to `Domain=.fitwellbuckle.co` spans landing → storefront → checkout. The same `fw_distinct_id` is present on the first landing pageview and on `checkout_completed`, so the purchase → person link is **deterministic** — no probabilistic email matching required (email match is retained only as a backfill for pre-pixel orders).
-- This closes the attribution loop deterministically: visitor → Shopify landing page → browse → checkout → PostHog person profile with first-touch UTM + revenue.
+- **What the official guide already does:** its checkout pixel calls `posthog.identify(customer.email)` before capturing the order, so **purchases are always tied to an email-identified person — never anonymous.** The open question is *identity stitching*, not anonymity: does the pre-purchase anonymous browsing (pageviews, UTM, funnel) merge into that email-identified buyer? That hinges on whether the sandboxed checkout pixel's `posthog-js` can read the same `.fitwellbuckle.co` cookie the storefront snippet set — behaviour PostHog's doc does not specify. Most likely it stitches (common case, why the default is fine for many stores); the failure mode is "buyer is identified by email but disconnected from their earlier anonymous funnel," i.e. lost first-touch linkage — **not** anonymous purchases.
+- **Where this plan extends the official guide:** it adds (i) an explicit `fw_distinct_id` identity bridge to *de-risk* the stitching question above, and (ii) UTM/attribution write-through, which the official doc does not cover at all. Whether the bridge is load-bearing or merely belt-and-suspenders is decided empirically by Phase 0 — do not assume the default is broken.
+- Because the entire funnel is one registrable domain (`fitwellbuckle.co`), a first-party cookie scoped to `Domain=.fitwellbuckle.co` *can* span landing → storefront → checkout. If Phase 0 confirms the pixel can read it, the same `fw_distinct_id` is present on the first landing pageview and on `checkout_completed`, making the purchase → person link deterministic (email match then retained only as backfill for pre-pixel orders). If Phase 0 shows default stitching already works without the bridge, the bridge becomes a redundancy safeguard, not the mechanism.
 - Reference: specs/current/integrations.md, specs/current/data-flows.md, specs/invariants/attribution.md
 - Depends on Shopify integration being complete (order/customer data flowing).
 
@@ -42,6 +42,21 @@ Excluded:
 - Client-side feature flags / landing-page A/B testing — **deferred**: not feasible from a sandboxed Shopify Custom Pixel without theme/app-embed work. Tracked as a follow-up, out of scope here.
 
 ## Implementation Phases
+
+### Phase 0: Spike — does default Shopify-pixel stitching already work? (de-risk, ~half day)
+**Goal:** empirically settle whether the official vanilla install already stitches anonymous browsing → identified buyer, *before* committing to build the `fw_distinct_id` bridge. Outcome decides whether Phase 1's bridge is the mechanism or a safeguard.
+
+- [ ] Stand up the **official guide install only** — `posthog-js` snippet in `theme.liquid` + a minimal Custom Pixel that does `posthog.identify(email)` + `posthog.capture('purchase_completed')`. No `fw_distinct_id` bridge yet.
+- [ ] Use a Shopify dev/preview theme or test storefront; place a real test order end-to-end (landing with `?utm_source=spiketest` → product → checkout).
+- [ ] In PostHog, inspect the resulting person: does the `purchase_completed` event share a person with the pre-purchase `$pageview`/UTM events (single timeline), or are they two separate persons?
+- [ ] Record the anonymous `distinct_id` from the storefront cookie and the `distinct_id` the pixel used — same or different? (Answers the sandbox-cookie-sharing question directly.)
+- [ ] Test on at least: desktop Chrome, mobile Safari (ITP), and with the pixel sandbox in Shopify's stricter mode if configurable.
+- [ ] Write findings to `specs/research/posthog-shopify-stitching.md`: which case (stitches / doesn't), under what conditions, and the decision: bridge required vs. safeguard vs. unnecessary.
+
+#### Exit criteria / branch
+- **Stitches reliably** → demote the `fw_distinct_id` bridge in Phase 1 to optional hardening; proceed mostly on the official path.
+- **Does not stitch (or flaky by browser)** → bridge is load-bearing; Phase 1 proceeds as written.
+- Either way, the overstated "default silently breaks attribution" framing is replaced by the measured result.
 
 ### Phase 1: PostHog on Shopify — theme snippet + checkout pixel + identity bridge
 - [ ] **Theme snippet (landing + storefront):** add the official `posthog-js` snippet to `theme.liquid` before `</head>`, init `phc_xhdBzfsf47Vy5MU9spMMtaJWtBuAJFkGxg2DcRiGN7Aq`, `api_host: https://us.i.posthog.com`. Autocapture + `$pageview` come for free here.

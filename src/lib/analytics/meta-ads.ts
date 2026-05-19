@@ -63,6 +63,41 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
 
   if (allRows.length === 0) return 0;
 
+  // Fetch landing URLs from ad creatives (deduplicated by ad_id)
+  const uniqueAdIds = [...new Set(allRows.map((r) => r.ad_id))];
+  const landingUrlMap = new Map<string, string>();
+  for (let i = 0; i < uniqueAdIds.length; i += 50) {
+    const batch = uniqueAdIds.slice(i, i + 50);
+    const ids = batch.join(",");
+    try {
+      const creativeRes = await fetch(
+        `https://graph.facebook.com/v21.0/?ids=${ids}&fields=creative{object_story_spec}&access_token=${accessToken}`,
+      );
+      if (creativeRes.ok) {
+        const creativeData = (await creativeRes.json()) as Record<
+          string,
+          { creative?: { object_story_spec?: { video_data?: { call_to_action?: { value?: { link?: string } } }; link_data?: { link?: string } } } }
+        >;
+        for (const [adId, ad] of Object.entries(creativeData)) {
+          const spec = ad?.creative?.object_story_spec;
+          const link =
+            spec?.video_data?.call_to_action?.value?.link ??
+            spec?.link_data?.link;
+          if (link) {
+            try {
+              const u = new URL(link);
+              landingUrlMap.set(adId, u.pathname);
+            } catch {
+              landingUrlMap.set(adId, link);
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-critical — landing URLs are supplementary
+    }
+  }
+
   await db
     .delete(metaAdsDaily)
     .where(sql`${metaAdsDaily.date}::date = ${dateStr}::date`);
@@ -84,6 +119,7 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
       adName: row.ad_name,
       adId: row.ad_id,
       platform: row.publisher_platform,
+      landingUrl: landingUrlMap.get(row.ad_id) ?? null,
       impressions: parseInt(row.impressions) || 0,
       clicks: parseInt(row.clicks) || 0,
       cost: toCents(row.spend),

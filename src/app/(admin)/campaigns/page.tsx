@@ -113,6 +113,7 @@ export default async function CampaignsPage({
           revenue: sum(metaAdsDaily.conversionValue).mapWith(Number),
           reach: sum(metaAdsDaily.reach).mapWith(Number),
           platform: metaAdsDaily.platform,
+          landingUrl: metaAdsDaily.landingUrl,
         })
         .from(metaAdsDaily)
         .where(metaDateRange)
@@ -121,6 +122,7 @@ export default async function CampaignsPage({
           metaAdsDaily.adsetName,
           metaAdsDaily.adName,
           metaAdsDaily.platform,
+          metaAdsDaily.landingUrl,
         )
         .orderBy(desc(sum(metaAdsDaily.cost))),
     ]);
@@ -184,6 +186,7 @@ export default async function CampaignsPage({
         campaignName: row.campaignName ?? "—",
         adsetName: row.adsetName ?? null,
         adName: row.adName ?? null,
+        landingUrl: row.landingUrl ?? null,
         impressions,
         clicks,
         cost,
@@ -192,9 +195,9 @@ export default async function CampaignsPage({
         conversions,
         revenue: revCents,
         roas,
-        classificationBadge: <ClassificationBadge revenue={revCents} spend={cost} />,
+        classificationBadge: <ClassificationBadge revenue={revCents} spend={cost} clicks={clicks} />,
         platformBadge: <PlatformBadge platform={row.platform ?? "meta"} />,
-        roasBadge: <RoasBadge revenue={revCents} spend={cost} />,
+        roasBadge: <RoasBadge revenue={revCents} spend={cost} clicks={clicks} />,
       };
     }),
     ...adCampaigns.map((row) => {
@@ -208,6 +211,7 @@ export default async function CampaignsPage({
         campaignName: row.campaignName ?? "—",
         adsetName: null,
         adName: null,
+        landingUrl: null,
         impressions,
         clicks,
         cost,
@@ -328,14 +332,6 @@ export default async function CampaignsPage({
         </CardContent>
       </Card>
 
-      {/* ── Paid Channel Summary ─────────────────────────────────── */}
-      <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Total Ad Spend" value={fmt(totalSpend)} />
-        <MetricCard label="Meta Revenue" value={fmt(metaRevenueCents)} />
-        <MetricCard label="Blended ROAS" value={`${blendedRoas.toFixed(2)}x`} />
-        <MetricCard label="Avg CPC" value={fmt(avgCpc)} />
-      </div>
-
       {/* ── Campaign Performance Table ──────────────────────────── */}
       <Card className="mt-8">
         <CardHeader>
@@ -366,7 +362,7 @@ export default async function CampaignsPage({
                 conversions: totalConversions,
                 revenue: metaRevenueCents,
                 roas: blendedRoas,
-                roasBadge: <RoasBadge revenue={metaRevenueCents} spend={totalSpend} />,
+                roasBadge: <RoasBadge revenue={metaRevenueCents} spend={totalSpend} clicks={totalClicks} />,
               }}
             />
           )}
@@ -426,32 +422,31 @@ export default async function CampaignsPage({
 
 /* ── Inline components ──────────────────────────────────────────── */
 
-type Classification = "winner" | "promising" | "underperforming" | "dead";
+type Classification = "winner" | "promising" | "underperforming" | "insufficient";
 
 const CLASSIFICATIONS: {
   cls: Classification;
   label: string;
-  roasMin: number;
   style: string;
   desc: string;
 }[] = [
-  { cls: "winner", label: "Winner", roasMin: 1.5, style: "bg-emerald-600 text-white", desc: "ROAS ≥ 1.5x — profitable" },
-  { cls: "promising", label: "Promising", roasMin: 0.5, style: "bg-blue-600 text-white", desc: "ROAS ≥ 0.5x — approaching profitability" },
-  { cls: "underperforming", label: "Underperforming", roasMin: 0.1, style: "bg-amber-500 text-white", desc: "ROAS ≥ 0.1x — needs optimization" },
-  { cls: "dead", label: "Dead", roasMin: 0, style: "bg-red-600 text-white", desc: "ROAS < 0.1x — consider pausing" },
+  { cls: "winner", label: "Winner", style: "bg-emerald-600 text-white", desc: "ROAS ≥ 1.5x — profitable" },
+  { cls: "promising", label: "Promising", style: "bg-blue-600 text-white", desc: "ROAS ≥ 0.5x — approaching profitability" },
+  { cls: "underperforming", label: "Underperforming", style: "bg-amber-500 text-white", desc: "ROAS < 0.5x — needs optimization" },
+  { cls: "insufficient", label: "Low Data", style: "bg-zinc-300 text-zinc-600", desc: "< 100 clicks — not enough data" },
 ];
 
-function classify(revenue: number, spend: number): Classification {
-  if (spend === 0) return "dead";
+function classify(revenue: number, spend: number, clicks: number): Classification {
+  if (clicks < 100) return "insufficient";
+  if (spend === 0) return "insufficient";
   const r = revenue / spend;
   if (r >= 1.5) return "winner";
   if (r >= 0.5) return "promising";
-  if (r >= 0.1) return "underperforming";
-  return "dead";
+  return "underperforming";
 }
 
-function ClassificationBadge({ revenue, spend }: { revenue: number; spend: number }) {
-  const cls = classify(revenue, spend);
+function ClassificationBadge({ revenue, spend, clicks }: { revenue: number; spend: number; clicks: number }) {
+  const cls = classify(revenue, spend, clicks);
   const def = CLASSIFICATIONS.find((c) => c.cls === cls)!;
   return (
     <span
@@ -463,10 +458,10 @@ function ClassificationBadge({ revenue, spend }: { revenue: number; spend: numbe
   );
 }
 
-function RoasBadge({ revenue, spend }: { revenue: number; spend: number }) {
-  if (spend === 0) return <span className="text-zinc-300">&mdash;</span>;
+function RoasBadge({ revenue, spend, clicks }: { revenue: number; spend: number; clicks: number }) {
+  if (spend === 0 || clicks < 100) return <span className="text-zinc-300">&mdash;</span>;
   const r = revenue / spend;
-  const cls = classify(revenue, spend);
+  const cls = classify(revenue, spend, clicks);
   const def = CLASSIFICATIONS.find((c) => c.cls === cls)!;
   return (
     <span

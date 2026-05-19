@@ -51,8 +51,10 @@ UTM data persists in a first-party cookie for linking post-purchase.
 ### 4. Purchase Linking
 When a Shopify order is synced, link it to an attribution record. Two methods, in priority order:
 
-1. **Deterministic (primary, `link_method = 'pixel'`)**: the Shopify Custom Pixel carries `fw_distinct_id` from the first landing pageview through `checkout_completed` (and into the `_fw_distinct_id` checkout note attribute). The order links to the exact visitor — no guessing.
-2. **Email match (fallback, `link_method = 'email_match'`)**: only for orders predating the pixel or missing the attribute. Match `utm_attribution` email ↔ order email; if multiple, use the most recent within the 30-day window. Lower confidence — surfaced separately in reporting.
+Note: PostHog's standard Shopify install already identifies every purchase by customer email (`posthog.identify(email)` in the checkout pixel) — purchases are never anonymous. These methods govern how the order is linked back to the *pre-purchase attribution touch*.
+
+1. **Pixel-stitched (preferred, `link_method = 'pixel'`)**: the Custom Pixel carries `fw_distinct_id` from the first landing pageview through `checkout_completed` (and into the `_fw_distinct_id` checkout note attribute), so the order links to the exact visitor. Whether this is the active mechanism or a redundant safeguard is determined by the Phase 0 stitching spike (see work-plan) — if PostHog's default already stitches anonymous→identified across the Shopify sandbox, that is sufficient and the bridge is hardening.
+2. **Email match (fallback, `link_method = 'email_match'`)**: for orders predating the pixel or missing the attribute. Match `utm_attribution` email ↔ order email; if multiple, use the most recent within the 30-day window. Lower confidence — surfaced separately in reporting.
 
 - Set `converted = true` and `converted_at` on the attribution record.
 - If neither method resolves, the purchase is "direct/unattributed".

@@ -18,6 +18,7 @@ interface AdRow {
   campaignName: string;
   adsetName: string | null;
   adName: string | null;
+  landingUrl: string | null;
   impressions: number;
   clicks: number;
   cost: number;
@@ -115,21 +116,26 @@ export function SortableCampaignTable({
         {sorted.map((row, i) => (
           <TableRow key={i}>
             <TableCell className="sticky left-0 bg-inherit">
-              <div className="flex items-center gap-2">
+              <div className="mb-1 flex items-center gap-1.5">
                 {row.platformBadge}
                 {row.classificationBadge}
-                <span className="font-medium text-zinc-900">
-                  {row.campaignName}
-                </span>
+              </div>
+              <div className="text-sm font-medium leading-tight text-zinc-900">
+                {row.campaignName}
               </div>
               {row.adsetName && (
-                <div className="mt-0.5 pl-[calc(theme(spacing.2)+36px+36px)] text-xs text-zinc-500">
+                <div className="text-xs leading-tight text-zinc-500">
                   {row.adsetName}
                 </div>
               )}
               {row.adName && (
-                <div className="pl-[calc(theme(spacing.2)+36px+36px)] text-xs text-zinc-400">
+                <div className="text-xs leading-tight text-zinc-400">
                   {row.adName}
+                </div>
+              )}
+              {row.landingUrl && (
+                <div className="font-mono text-[11px] leading-tight text-zinc-300">
+                  {row.landingUrl}
                 </div>
               )}
             </TableCell>
