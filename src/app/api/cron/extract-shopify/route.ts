@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncRecentOrders, syncRecentCustomers } from "@/lib/shopify/sync";
 import { verifyCronOrAdmin } from "@/lib/cron-auth";
+import { flushEvents } from "@/lib/analytics/posthog";
 
 export async function GET(req: NextRequest) {
   if (!(await verifyCronOrAdmin(req))) {
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest) {
     // Sequential, not parallel, to respect Shopify rate limits
     const orderResult = await syncRecentOrders(since);
     const customerResult = await syncRecentCustomers(since);
+    await flushEvents();
 
     return NextResponse.json({
       status: "ok",

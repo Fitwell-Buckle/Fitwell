@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyCronOrAdmin } from "@/lib/cron-auth";
+import { extractPostHogDaily } from "@/lib/analytics/posthog-extract";
 
 export async function GET(req: NextRequest) {
   if (!(await verifyCronOrAdmin(req))) {
@@ -7,13 +8,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // TODO: Implement PostHog event extraction via PostHog API
-    // 1. Query PostHog for daily event counts
-    // 2. Aggregate by event name
-    // 3. Upsert into posthogDaily table
+    // Extract yesterday (UTC) — today is still accumulating.
+    const yesterday = new Date();
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+
+    const rows = await extractPostHogDaily(yesterday);
     return NextResponse.json({
       status: "ok",
-      message: "PostHog extraction not yet implemented",
+      date: yesterday.toISOString().split("T")[0],
+      rows,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

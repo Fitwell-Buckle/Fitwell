@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { order, customer } from "@/lib/schema";
+import { order } from "@/lib/schema";
 import { sql, desc, count, sum, and, gte, lte } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
 import {
@@ -21,6 +21,10 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
+import {
+  getChannelPerformance,
+  getLinkConfidence,
+} from "@/lib/analytics/attribution";
 
 export const metadata: Metadata = {
   title: "Attribution | Fitwell Admin",
@@ -44,7 +48,7 @@ export default async function AttributionPage({
   const params = await searchParams;
   const { from, to, granularity } = parseDateRange(params);
 
-  const [byReferrer, byLandingPage, byUtm] = await Promise.all([
+  const [byReferrer, byLandingPage] = await Promise.all([
     db
       .select({
         referringSite: order.referringSite,
@@ -80,26 +84,16 @@ export default async function AttributionPage({
       .groupBy(sql`split_part(${order.landingSite}, '?', 1)`)
       .orderBy(desc(count()))
       .limit(15),
-
-    db
-      .select({
-        utmSource: customer.utmSource,
-        utmMedium: customer.utmMedium,
-        utmCampaign: customer.utmCampaign,
-        customers: count(),
-      })
-      .from(customer)
-      .where(
-        and(
-          sql`${customer.utmSource} IS NOT NULL`,
-          gte(customer.createdAt, from),
-          lte(customer.createdAt, to),
-        ),
-      )
-      .groupBy(customer.utmSource, customer.utmMedium, customer.utmCampaign)
-      .orderBy(desc(count()))
-      .limit(15),
   ]);
+
+  const [channelPerf, linkConfidence] = await Promise.all([
+    getChannelPerformance(from, to),
+    getLinkConfidence(from, to),
+  ]);
+  const linkTotal =
+    linkConfidence.pixel +
+    linkConfidence.emailMatch +
+    linkConfidence.unattributed;
 
   // ── Revenue by source over time chart ──────────────────────────────
   const bucketExpr =
@@ -227,35 +221,53 @@ export default async function AttributionPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">UTM Attribution (Customers)</CardTitle>
+            <CardTitle className="text-lg">
+              Channel Performance — Orders &amp; Revenue (first-touch)
+            </CardTitle>
+            <p className="mt-1 text-xs text-zinc-400">
+              Attribution confidence in this window:{" "}
+              {linkTotal === 0 ? (
+                "no orders"
+              ) : (
+                <>
+                  <span className="text-emerald-400">
+                    {linkConfidence.pixel} pixel
+                  </span>
+                  {" · "}
+                  <span className="text-amber-400">
+                    {linkConfidence.emailMatch} email-match
+                  </span>
+                  {" · "}
+                  <span className="text-zinc-500">
+                    {linkConfidence.unattributed} unattributed
+                  </span>
+                </>
+              )}
+            </p>
           </CardHeader>
           <CardContent className="max-h-64 overflow-auto">
-            {byUtm.length === 0 ? (
+            {channelPerf.length === 0 ? (
               <p className="text-sm text-zinc-400">
-                No UTM data captured yet.
+                No orders in this date range.
               </p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Medium</TableHead>
-                    <TableHead>Campaign</TableHead>
-                    <TableHead className="text-right">Customers</TableHead>
+                    <TableHead>Channel</TableHead>
+                    <TableHead className="text-right">Orders</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {byUtm.map((row, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="font-medium">
-                        {row.utmSource}
+                  {channelPerf.map((row) => (
+                    <TableRow key={row.channel}>
+                      <TableCell className="font-medium capitalize">
+                        {row.channel.replace(/_/g, " ")}
                       </TableCell>
-                      <TableCell>{row.utmMedium ?? "—"}</TableCell>
-                      <TableCell className="text-sm break-all">
-                        {row.utmCampaign ?? "—"}
-                      </TableCell>
+                      <TableCell className="text-right">{row.orders}</TableCell>
                       <TableCell className="text-right">
-                        {row.customers}
+                        {fmt(row.revenue)}
                       </TableCell>
                     </TableRow>
                   ))}

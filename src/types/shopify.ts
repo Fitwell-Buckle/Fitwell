@@ -57,6 +57,7 @@ export interface ShopifyOrder {
   landing_site: string | null;
   referring_site: string | null;
   note: string | null;
+  note_attributes: Array<{ name: string; value: string }>;
   tags: string;
 }
 

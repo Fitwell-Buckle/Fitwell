@@ -1,0 +1,102 @@
+{%- comment -%}
+  Fitwell · PostHog + first-touch attribution (storefront / landing pages)
+
+  Paste this block into theme.liquid immediately before </head>.
+  This is NOT the checkout — the checkout uses shopify/custom-pixel.js.
+
+  What it does:
+   1. Loads posthog-js and inits the project.
+   2. Mirrors PostHog's distinct_id into a first-party cookie `fw_distinct_id`
+      scoped to .fitwellbuckle.co so the sandboxed checkout pixel can read the
+      same identity (the bridge the official PostHog Shopify guide omits).
+   3. Captures first-touch UTM/referrer once per session:
+        - as PostHog person properties ($set_once), and
+        - POSTed to https://admin.fitwellbuckle.co/api/tracking/utm, and
+        - written to the Shopify cart as the `_fw_distinct_id` attribute so
+          the order webhook has a deterministic server-side link too.
+  See specs/invariants/attribution.md and specs/work-plans/todo/posthog-integration.md
+{%- endcomment -%}
+<script>
+!function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageViewId captureTraceFeedback captureTraceMetric".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+
+posthog.init('phc_xhdBzfsf47Vy5MU9spMMtaJWtBuAJFkGxg2DcRiGN7Aq', {
+  api_host: 'https://us.i.posthog.com',
+  person_profiles: 'identified_only',
+  // Share the cookie across the whole funnel (landing → storefront → checkout).
+  cross_subdomain_cookie: true,
+  persistence: 'localStorage+cookie',
+  loaded: function (ph) {
+    try { fwAttribution(ph); } catch (e) { /* never break the storefront */ }
+  }
+});
+
+function fwAttribution(ph) {
+  var DOMAIN = '.fitwellbuckle.co';
+  var TRACK_ENDPOINT = 'https://admin.fitwellbuckle.co/api/tracking/utm';
+
+  function setCookie(name, value, days) {
+    var d = new Date(); d.setTime(d.getTime() + days * 864e5);
+    document.cookie = name + '=' + encodeURIComponent(value) +
+      ';expires=' + d.toUTCString() + ';path=/;domain=' + DOMAIN +
+      ';SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
+  }
+  function getCookie(name) {
+    var m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? decodeURIComponent(m.pop()) : '';
+  }
+
+  // 1. Identity bridge: mirror PostHog's distinct_id to a readable cookie.
+  var distinctId = ph.get_distinct_id();
+  if (distinctId) setCookie('fw_distinct_id', distinctId, 400);
+
+  // 2. First-touch only — one attribution record per session.
+  if (getCookie('fw_attribution')) return;
+
+  var q = new URLSearchParams(location.search);
+  var sessionId = (ph.get_session_id && ph.get_session_id()) ||
+    (distinctId + ':' + Date.now());
+  var utm = {
+    fwDistinctId: distinctId,
+    sessionId: sessionId,
+    source: q.get('utm_source'),
+    medium: q.get('utm_medium'),
+    campaign: q.get('utm_campaign'),
+    term: q.get('utm_term'),
+    content: q.get('utm_content'),
+    gclid: q.get('gclid'),
+    landingPage: location.href,
+    referrer: document.referrer || null
+  };
+
+  // Only record a real touch (has a source/gclid) or a genuine referral.
+  if (!utm.source && !utm.gclid && !utm.referrer) { setCookie('fw_attribution', '1', 30); return; }
+
+  setCookie('fw_attribution', '1', 30);
+
+  // a) PostHog person — first-touch is immutable.
+  ph.setPersonProperties(
+    { last_utm_source: utm.source, last_referrer: utm.referrer },
+    { utm_source: utm.source, utm_medium: utm.medium, utm_campaign: utm.campaign,
+      utm_term: utm.term, utm_content: utm.content, gclid: utm.gclid,
+      landing_page: utm.landingPage, first_referrer: utm.referrer }
+  );
+
+  // b) Durable copy in our DB.
+  fetch(TRACK_ENDPOINT, {
+    method: 'POST', mode: 'cors', keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(utm)
+  }).catch(function () {});
+
+  // c) Server-side deterministic backstop: stamp the cart so the order
+  //    webhook receives `_fw_distinct_id` in note_attributes even if the
+  //    checkout pixel beacon is blocked.
+  if (distinctId) {
+    fetch('/cart/update.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attributes: { _fw_distinct_id: distinctId } })
+    }).catch(function () {});
+  }
+}
+</script>

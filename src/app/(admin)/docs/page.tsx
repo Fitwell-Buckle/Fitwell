@@ -170,31 +170,26 @@ export default async function DocsPage() {
           </p>
         </Section>
 
-        <Section title="Useful Commands">
-          <ul className="list-disc">
-            <li>
-              <code>npm run dev</code> — start the dev server (port 30100)
-            </li>
-            <li>
-              <code>npm run check</code> — typecheck + run tests
-            </li>
-            <li>
-              <code>npm run shopify sync</code> — pull latest Shopify data
-            </li>
-            <li>
-              <code>npm run shopify orders</code> — list recent orders
-            </li>
-            <li>
-              <code>npm run shopify customers</code> — list customers
-            </li>
-            <li>
-              <code>npm run shopify sync-status</code> — check sync health
-            </li>
-            <li>
-              <code>npm run vc</code> — Vercel CLI (uses the Fitwell
-              account)
-            </li>
-          </ul>
+        <Section title="Syncing Data">
+          <p>
+            Data flows into the dashboard automatically — Shopify sends
+            webhooks on every order, and cron jobs pull from GA4 and Meta
+            Ads on a schedule. You don&apos;t need to do anything for
+            day-to-day use.
+          </p>
+          <p>
+            If you want to manually pull fresh data (for example, after
+            first setup or to test something), go to the{" "}
+            <strong>Data Sync</strong> tab in the sidebar. Each data
+            source has a <strong>Run</strong> button that triggers an
+            immediate sync. You&apos;ll see a confirmation with the
+            number of records pulled.
+          </p>
+          <p>
+            The Data Sync page also shows the schedule for each
+            automatic job, its current status (active, blocked, or
+            deferred), and when data was last received.
+          </p>
         </Section>
 
         <Section title="How the Codebase is Organized">

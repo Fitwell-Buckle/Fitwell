@@ -122,6 +122,7 @@ describe.skipIf(noDb)("shopify sync dedupe (real DB)", () => {
       landing_site: null,
       referring_site: null,
       note: null,
+      note_attributes: [],
       tags: "",
       line_items: [
         {

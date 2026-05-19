@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { customer, order, orderLineItem, utmAttribution } from "@/lib/schema";
 import { getShopifyClient, toCents } from "./client";
 import { eq, sql } from "drizzle-orm";
+import { linkOrderToAttribution } from "@/lib/analytics/order-attribution";
 import type { ShopifyCustomer, ShopifyOrder } from "@/types/shopify";
 
 export function parseUtmParams(
@@ -169,6 +170,10 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
       })),
     );
   }
+
+  // Deterministic (pixel) / fallback link to a pre-purchase attribution touch
+  // + PostHog person enrichment. Best-effort; never throws. Caller flushes.
+  await linkOrderToAttribution(orderId, customerId, shopifyOrder);
 
   return orderId;
 }

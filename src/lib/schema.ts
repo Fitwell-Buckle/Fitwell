@@ -85,12 +85,15 @@ export const customer = pgTable(
     utmSource: text("utm_source"),
     utmMedium: text("utm_medium"),
     utmCampaign: text("utm_campaign"),
+    // PostHog distinct_id bridged from the Shopify pixel/theme (identity stitch)
+    fwDistinctId: text("fw_distinct_id"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },
   (t) => [
     uniqueIndex("customer_shopify_id_idx").on(t.shopifyId),
     index("customer_email_idx").on(t.email),
+    index("customer_fw_distinct_id_idx").on(t.fwDistinctId),
   ],
 );
 
@@ -111,6 +114,10 @@ export const order = pgTable(
     sourceName: text("source_name"),
     landingSite: text("landing_site"),
     referringSite: text("referring_site"),
+    // Identity-bridge: distinct_id carried from the pixel via checkout note attribute
+    fwDistinctId: text("fw_distinct_id"),
+    // How the order was linked to a pre-purchase touch: 'pixel' | 'email_match' | null
+    linkMethod: text("link_method"),
     processedAt: timestamp("processed_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
@@ -119,6 +126,7 @@ export const order = pgTable(
     uniqueIndex("order_shopify_id_idx").on(t.shopifyId),
     index("order_customer_id_idx").on(t.customerId),
     index("order_processed_at_idx").on(t.processedAt),
+    index("order_fw_distinct_id_idx").on(t.fwDistinctId),
   ],
 );
 
@@ -156,11 +164,20 @@ export const utmAttribution = pgTable(
     content: text("content"),
     landingPage: text("landing_page"),
     referrer: text("referrer"),
+    gclid: text("gclid"),
+    sessionId: text("session_id"),
+    // PostHog distinct_id from the theme snippet (first-touch identity)
+    fwDistinctId: text("fw_distinct_id"),
+    // Set when this touch is linked to a purchase (attribution invariant §4)
+    converted: boolean("converted").default(false),
+    convertedAt: timestamp("converted_at", { mode: "date" }),
     capturedAt: timestamp("captured_at", { mode: "date" }).defaultNow(),
   },
   (t) => [
     index("utm_visitor_id_idx").on(t.visitorId),
     index("utm_captured_at_idx").on(t.capturedAt),
+    index("utm_fw_distinct_id_idx").on(t.fwDistinctId),
+    uniqueIndex("utm_session_id_idx").on(t.sessionId),
   ],
 );
 

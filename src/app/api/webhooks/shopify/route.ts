@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook, handleWebhookTopic } from "@/lib/shopify/webhooks";
+import { flushEvents } from "@/lib/analytics/posthog";
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -19,6 +20,8 @@ export async function POST(req: NextRequest) {
   try {
     const payload = JSON.parse(body);
     await handleWebhookTopic(topic, payload);
+    // Serverless dies after the response — flush buffered PostHog events now.
+    await flushEvents();
     return NextResponse.json({ status: "ok" });
   } catch (error) {
     // Log the error but return 200 to prevent Shopify retries on transient errors.
