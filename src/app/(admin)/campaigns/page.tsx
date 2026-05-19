@@ -318,42 +318,13 @@ export default async function CampaignsPage({
     <div>
       <PageHeader title="Campaigns & Traffic" />
 
-      {/* ── GA4 Traffic Metrics ──────────────────────────────────── */}
-      <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Sessions (GA4)"
-          value={(totals.sessions ?? 0).toLocaleString()}
-        />
-        <MetricCard
-          label="Users"
-          value={(totals.users ?? 0).toLocaleString()}
-        />
-        <MetricCard
-          label="Pageviews"
-          value={(totals.pageviews ?? 0).toLocaleString()}
-        />
-        <MetricCard
-          label="Days of Data"
-          value={(totals.days ?? 0).toLocaleString()}
-        />
-      </div>
-
       {/* ── Charts ───────────────────────────────────────────────── */}
-      <Card className="mt-8">
+      <Card className="mt-6">
         <CardHeader>
           <CardTitle>Ad Spend vs Revenue</CardTitle>
         </CardHeader>
         <CardContent>
           <AdSpendRevenueChart data={adSpendRevenueData} />
-        </CardContent>
-      </Card>
-
-      <Card className="mt-5">
-        <CardHeader>
-          <CardTitle>Traffic Sources</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TrafficSourcesChart data={trafficSourcesData} />
         </CardContent>
       </Card>
 
