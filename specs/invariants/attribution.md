@@ -45,14 +45,17 @@ UTM data persists in a first-party cookie for linking post-purchase.
 - Contains: session_id, utm params, timestamp
 - HttpOnly: false (needs client-side read for PostHog)
 - SameSite: Lax
+- **Domain: `.fitwellbuckle.co`** — required. The entire funnel (landing, storefront, checkout) is one Shopify site under `www.fitwellbuckle.co`; the cookie must span the registrable domain so the same visitor identity carries from first landing pageview through `checkout_completed`.
+- Companion cookie `fw_distinct_id` (uuid, `Domain=.fitwellbuckle.co`, 400-day, SameSite=Lax) is the stable PostHog `distinct_id` used to link visit → purchase deterministically.
 
 ### 4. Purchase Linking
-When a Shopify order is synced, attempt to link it to an attribution record.
+When a Shopify order is synced, link it to an attribution record. Two methods, in priority order:
 
-- Match by customer email: `utm_attribution.customer_id` linked via email lookup
-- If multiple attribution records exist, use the most recent within the window
-- Set `converted = true` and `converted_at` on the attribution record
-- If no attribution record exists, the purchase is "direct/unattributed"
+1. **Deterministic (primary, `link_method = 'pixel'`)**: the Shopify Custom Pixel carries `fw_distinct_id` from the first landing pageview through `checkout_completed` (and into the `_fw_distinct_id` checkout note attribute). The order links to the exact visitor — no guessing.
+2. **Email match (fallback, `link_method = 'email_match'`)**: only for orders predating the pixel or missing the attribute. Match `utm_attribution` email ↔ order email; if multiple, use the most recent within the 30-day window. Lower confidence — surfaced separately in reporting.
+
+- Set `converted = true` and `converted_at` on the attribution record.
+- If neither method resolves, the purchase is "direct/unattributed".
 
 ### 5. Deduplication
 Prevent double-counting conversions.

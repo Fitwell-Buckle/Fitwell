@@ -25,6 +25,7 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/charts/metric-card";
 import { Mono } from "@/components/ui/data-table";
+import { SortableCampaignTable } from "./sortable-table";
 
 export const metadata: Metadata = {
   title: "Campaigns | Fitwell Admin",
@@ -165,6 +166,62 @@ export default async function CampaignsPage({
   const totalImpressions = totalMetaImpressions + totalGoogleImpressions;
   const totalConversions = totalMetaConversions; // only Meta has pixel data
   const totalCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+
+  // ── Build unified rows for sortable table ─────────────────────────
+  const allRows = [
+    ...metaAds.map((row) => {
+      const impressions = row.impressions ?? 0;
+      const clicks = row.clicks ?? 0;
+      const cost = row.cost ?? 0;
+      const conversions = row.conversions ?? 0;
+      const revenue = row.revenue ?? 0;
+      const revCents = Math.round(revenue * 100);
+      const ctr = impressions > 0 ? clicks / impressions : 0;
+      const cpc = clicks > 0 ? cost / clicks : 0;
+      const roas = cost > 0 ? revCents / cost : 0;
+      return {
+        platform: row.platform ?? "meta",
+        campaignName: row.campaignName ?? "—",
+        adsetName: row.adsetName ?? null,
+        adName: row.adName ?? null,
+        impressions,
+        clicks,
+        cost,
+        ctr,
+        cpc,
+        conversions,
+        revenue: revCents,
+        roas,
+        classificationBadge: <ClassificationBadge revenue={revCents} spend={cost} />,
+        platformBadge: <PlatformBadge platform={row.platform ?? "meta"} />,
+        roasBadge: <RoasBadge revenue={revCents} spend={cost} />,
+      };
+    }),
+    ...adCampaigns.map((row) => {
+      const impressions = row.impressions ?? 0;
+      const clicks = row.clicks ?? 0;
+      const cost = row.cost ?? 0;
+      const ctr = impressions > 0 ? clicks / impressions : 0;
+      const cpc = clicks > 0 ? cost / clicks : 0;
+      return {
+        platform: "google",
+        campaignName: row.campaignName ?? "—",
+        adsetName: null,
+        adName: null,
+        impressions,
+        clicks,
+        cost,
+        ctr,
+        cpc,
+        conversions: 0,
+        revenue: 0,
+        roas: 0,
+        classificationBadge: null as React.ReactNode,
+        platformBadge: <PlatformBadge platform="google" />,
+        roasBadge: <span className="text-zinc-300">&mdash;</span> as React.ReactNode,
+      };
+    }),
+  ];
 
   // ── Chart data: Ad Spend vs Revenue + Traffic Sources ────────────
   const orderBucketExpr =
@@ -312,175 +369,35 @@ export default async function CampaignsPage({
       <Card className="mt-8">
         <CardHeader>
           <CardTitle>Campaign Performance</CardTitle>
+          <div className="mt-2 flex flex-wrap gap-3">
+            {CLASSIFICATIONS.map((c) => (
+              <div key={c.cls} className="flex items-center gap-1.5">
+                <span className={`inline-flex h-4 items-center rounded px-1.5 text-[10px] font-semibold ${c.style}`}>
+                  {c.label}
+                </span>
+                <span className="text-[11px] text-zinc-400">{c.desc}</span>
+              </div>
+            ))}
+          </div>
         </CardHeader>
         <CardContent>
-          {metaAds.length === 0 && adCampaigns.length === 0 ? (
+          {allRows.length === 0 ? (
             <p className="py-8 text-center text-sm text-zinc-400">
               No campaign data for this period.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="sticky left-0 min-w-[320px] bg-white">
-                    Path
-                  </TableHead>
-                  <TableHead className="text-right">Impressions</TableHead>
-                  <TableHead className="text-right">Clicks</TableHead>
-                  <TableHead className="text-right">CTR</TableHead>
-                  <TableHead className="text-right">Spend</TableHead>
-                  <TableHead className="text-right">CPC</TableHead>
-                  <TableHead className="text-right">Conversions</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">ROAS</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {metaAds.map((row, i) => {
-                  const impressions = row.impressions ?? 0;
-                  const clicks = row.clicks ?? 0;
-                  const cost = row.cost ?? 0;
-                  const conversions = row.conversions ?? 0;
-                  const revenue = row.revenue ?? 0;
-                  const ctr = impressions > 0 ? clicks / impressions : 0;
-                  const cpc = clicks > 0 ? cost / clicks : 0;
-                  return (
-                    <TableRow key={`meta-${i}`}>
-                      <TableCell className="sticky left-0 bg-inherit">
-                        <div className="flex items-center gap-2">
-                          <PlatformBadge platform={row.platform ?? "meta"} />
-                          <span className="font-medium text-zinc-900">
-                            {row.campaignName ?? "—"}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 pl-[calc(theme(spacing.2)+36px)] text-xs text-zinc-500">
-                          {row.adsetName ?? "—"}
-                        </div>
-                        <div className="pl-[calc(theme(spacing.2)+36px)] text-xs text-zinc-400">
-                          {row.adName ?? "—"}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{impressions.toLocaleString()}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{clicks.toLocaleString()}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="font-mono text-zinc-500">
-                          {pct(ctr)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{fmt(cost)}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="font-mono text-zinc-500">
-                          {fmt(cpc)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{conversions.toLocaleString()}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{fmt(Math.round(revenue * 100))}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RoasBadge
-                          revenue={Math.round(revenue * 100)}
-                          spend={cost}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {adCampaigns.map((row, i) => {
-                  const impressions = row.impressions ?? 0;
-                  const clicks = row.clicks ?? 0;
-                  const cost = row.cost ?? 0;
-                  const ctr = impressions > 0 ? clicks / impressions : 0;
-                  const cpc = clicks > 0 ? cost / clicks : 0;
-                  return (
-                    <TableRow key={`google-${i}`}>
-                      <TableCell className="sticky left-0 bg-inherit">
-                        <div className="flex items-center gap-2">
-                          <PlatformBadge platform="google" />
-                          <span className="font-medium text-zinc-900">
-                            {row.campaignName ?? "—"}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{impressions.toLocaleString()}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{clicks.toLocaleString()}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="font-mono text-zinc-500">
-                          {pct(ctr)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{fmt(cost)}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="font-mono text-zinc-500">
-                          {fmt(cpc)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="text-zinc-300">&mdash;</span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="text-zinc-300">&mdash;</span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="text-zinc-300">&mdash;</span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-              <TableFooter>
-                <TableRow className="font-medium">
-                  <TableCell className="sticky left-0 bg-zinc-50/50">
-                    Total
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{totalImpressions.toLocaleString()}</Mono>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{totalClicks.toLocaleString()}</Mono>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className="font-mono text-zinc-500">
-                      {pct(totalCtr)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{fmt(totalSpend)}</Mono>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className="font-mono text-zinc-500">
-                      {fmt(avgCpc)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{totalConversions.toLocaleString()}</Mono>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{fmt(metaRevenueCents)}</Mono>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <RoasBadge
-                      revenue={metaRevenueCents}
-                      spend={totalSpend}
-                    />
-                  </TableCell>
-                </TableRow>
-              </TableFooter>
-            </Table>
+            <SortableCampaignTable
+              rows={allRows}
+              totals={{
+                impressions: totalImpressions,
+                clicks: totalClicks,
+                cost: totalSpend,
+                conversions: totalConversions,
+                revenue: metaRevenueCents,
+                roas: blendedRoas,
+                roasBadge: <RoasBadge revenue={metaRevenueCents} spend={totalSpend} />,
+              }}
+            />
           )}
         </CardContent>
       </Card>
@@ -538,20 +455,51 @@ export default async function CampaignsPage({
 
 /* ── Inline components ──────────────────────────────────────────── */
 
+type Classification = "winner" | "promising" | "underperforming" | "dead";
+
+const CLASSIFICATIONS: {
+  cls: Classification;
+  label: string;
+  roasMin: number;
+  style: string;
+  desc: string;
+}[] = [
+  { cls: "winner", label: "Winner", roasMin: 1.5, style: "bg-emerald-600 text-white", desc: "ROAS ≥ 1.5x — profitable" },
+  { cls: "promising", label: "Promising", roasMin: 0.5, style: "bg-blue-600 text-white", desc: "ROAS ≥ 0.5x — approaching profitability" },
+  { cls: "underperforming", label: "Underperforming", roasMin: 0.1, style: "bg-amber-500 text-white", desc: "ROAS ≥ 0.1x — needs optimization" },
+  { cls: "dead", label: "Dead", roasMin: 0, style: "bg-red-600 text-white", desc: "ROAS < 0.1x — consider pausing" },
+];
+
+function classify(revenue: number, spend: number): Classification {
+  if (spend === 0) return "dead";
+  const r = revenue / spend;
+  if (r >= 1.5) return "winner";
+  if (r >= 0.5) return "promising";
+  if (r >= 0.1) return "underperforming";
+  return "dead";
+}
+
+function ClassificationBadge({ revenue, spend }: { revenue: number; spend: number }) {
+  const cls = classify(revenue, spend);
+  const def = CLASSIFICATIONS.find((c) => c.cls === cls)!;
+  return (
+    <span
+      className={`inline-flex h-4 items-center rounded px-1.5 text-[10px] font-semibold ${def.style}`}
+      title={def.desc}
+    >
+      {def.label}
+    </span>
+  );
+}
+
 function RoasBadge({ revenue, spend }: { revenue: number; spend: number }) {
   if (spend === 0) return <span className="text-zinc-300">&mdash;</span>;
   const r = revenue / spend;
-  const cls =
-    r >= 1.5
-      ? "bg-emerald-600 text-white"
-      : r >= 0.5
-        ? "bg-blue-600 text-white"
-        : r >= 0.1
-          ? "bg-amber-500 text-white"
-          : "bg-red-600 text-white";
+  const cls = classify(revenue, spend);
+  const def = CLASSIFICATIONS.find((c) => c.cls === cls)!;
   return (
     <span
-      className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${cls}`}
+      className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${def.style}`}
     >
       {r.toFixed(2)}x
     </span>
