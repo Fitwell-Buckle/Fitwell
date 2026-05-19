@@ -224,6 +224,64 @@ export default async function DocsPage() {
           </ul>
         </Section>
 
+        <Section title="Deploying Changes">
+          <p>
+            The app deploys automatically. When you push code to the{" "}
+            <code>main</code> branch on GitHub, Vercel detects the
+            change and builds a new version. This usually takes about
+            40 seconds.
+          </p>
+          <p>
+            You can check the deploy status at{" "}
+            <code>vercel.com/fitwellbuckle/fitwell</code> or by
+            running <code>npm run vc ls</code> in Terminal. The
+            production site at <code>admin.fitwellbuckle.co</code>{" "}
+            updates automatically once the build succeeds.
+          </p>
+          <p>
+            Pull requests also get their own preview deployment — Vercel
+            creates a temporary URL so you can test changes before
+            merging to main.
+          </p>
+        </Section>
+
+        <Section title="Database Changes">
+          <p>
+            If you or Claude make changes to the database structure
+            (adding columns, new tables), those changes need to be
+            applied as a <strong>migration</strong>. Claude handles
+            this automatically in most cases, but here&apos;s what
+            happens:
+          </p>
+          <ol className="list-decimal">
+            <li>
+              The schema is defined in{" "}
+              <code>src/lib/schema.ts</code> — this is the source of
+              truth for what the database looks like
+            </li>
+            <li>
+              <code>npm run db:generate</code> creates a migration
+              file describing the change (e.g., &quot;add column X to
+              table Y&quot;)
+            </li>
+            <li>
+              <code>npm run db:migrate</code> applies that change to
+              your local database
+            </li>
+            <li>
+              Before deploying, the same migration needs to be applied
+              to the production database — Claude or Greg will handle
+              this
+            </li>
+          </ol>
+          <p>
+            Each developer has their own database branch, so running
+            migrations locally won&apos;t affect anyone else. The
+            migration files in <code>drizzle/migrations/</code> get
+            committed to git so they&apos;re shared across the team.
+          </p>
+        </Section>
+
         <Section title="Getting Help">
           <p>
             Open Claude Code in the project folder and ask it anything
