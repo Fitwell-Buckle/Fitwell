@@ -369,53 +369,6 @@ export default async function CampaignsPage({
         </CardContent>
       </Card>
 
-      {/* ── Traffic by Source / Medium ────────────────────────────── */}
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Traffic by Source / Medium</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Source</TableHead>
-                <TableHead>Medium</TableHead>
-                <TableHead className="text-right">Sessions</TableHead>
-                <TableHead className="text-right">Users</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {trafficBySource.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="py-8 text-center text-zinc-400"
-                  >
-                    No GA4 data yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                trafficBySource.map((row, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="font-medium text-zinc-900">
-                      {row.source ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-zinc-500">
-                      {row.medium ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>{(row.sessions ?? 0).toLocaleString()}</Mono>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Mono>{(row.users ?? 0).toLocaleString()}</Mono>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
   );
 }
