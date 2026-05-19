@@ -10,7 +10,7 @@ import {
   dateToBucketKey,
   generateBucketKeys,
 } from "@/lib/chart-utils";
-import { AdSpendRevenueChart } from "@/components/charts/ad-spend-revenue-chart";
+import { AdSpendRoasChart } from "@/components/charts/ad-spend-roas-chart";
 import { TrafficSourcesChart } from "@/components/charts/traffic-sources-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -227,88 +227,74 @@ export default async function CampaignsPage({
     }),
   ];
 
-  // ── Chart data: Ad Spend vs Revenue + Traffic Sources ────────────
-  const orderBucketExpr =
-    granularity === "day"
-      ? sql`date_trunc('day', ${order.processedAt})::date`
-      : granularity === "week"
-        ? sql`date_trunc('week', ${order.processedAt})::date`
-        : sql`date_trunc('month', ${order.processedAt})::date`;
+  // ── Chart data: Spend by channel + per-channel ROAS ─────────────
+  const metaBucketExpr = sql`date_trunc('${sql.raw(granularity)}', ${metaAdsDaily.date})::date`;
 
-  const [metaByBucket, googleByBucket, orderRevenueByBucket] =
-    await Promise.all([
-      db
-        .select({
-          bucket: sql`date_trunc('${sql.raw(granularity)}', ${metaAdsDaily.date})::date`,
-          spend: sum(metaAdsDaily.cost).mapWith(Number),
-        })
-        .from(metaAdsDaily)
-        .where(metaDateRange)
-        .groupBy(
-          sql`date_trunc('${sql.raw(granularity)}', ${metaAdsDaily.date})::date`,
-        ),
-      db
-        .select({
-          bucket: sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
-          spend: sum(googleAdsDaily.cost).mapWith(Number),
-        })
-        .from(googleAdsDaily)
-        .where(adsDateRange)
-        .groupBy(
-          sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
-        ),
-      db
-        .select({
-          bucket: orderBucketExpr,
-          revenue: sum(order.totalPrice).mapWith(Number),
-        })
-        .from(order)
-        .where(
-          and(
-            gte(order.processedAt, from),
-            lte(order.processedAt, to),
-            sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
-            sql`${order.sourceName} = 'web'`,
-          ),
-        )
-        .groupBy(orderBucketExpr)
-        .orderBy(orderBucketExpr),
-    ]);
+  const [metaByPlatformBucket, googleByBucket] = await Promise.all([
+    db
+      .select({
+        bucket: metaBucketExpr,
+        platform: metaAdsDaily.platform,
+        spend: sum(metaAdsDaily.cost).mapWith(Number),
+        revenue: sql<number>`sum(${metaAdsDaily.conversionValue} * 100)::int`.mapWith(Number),
+      })
+      .from(metaAdsDaily)
+      .where(metaDateRange)
+      .groupBy(metaBucketExpr, metaAdsDaily.platform),
+    db
+      .select({
+        bucket: sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
+        spend: sum(googleAdsDaily.cost).mapWith(Number),
+      })
+      .from(googleAdsDaily)
+      .where(adsDateRange)
+      .groupBy(
+        sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
+      ),
+  ]);
 
   const bucketKeys = generateBucketKeys(from, to, granularity);
-  const metaSpendMap = new Map<string, number>();
-  for (const row of metaByBucket) {
-    metaSpendMap.set(
-      dateToBucketKey(new Date(row.bucket as string), granularity),
-      row.spend ?? 0,
-    );
+  type ChannelBucket = { spend: number; revenue: number };
+  const fbMap = new Map<string, ChannelBucket>();
+  const igMap = new Map<string, ChannelBucket>();
+  const googleMap = new Map<string, number>();
+
+  for (const row of metaByPlatformBucket) {
+    const key = dateToBucketKey(new Date(row.bucket as string), granularity);
+    const p = (row.platform ?? "").toLowerCase();
+    const map = p === "facebook" ? fbMap : p === "instagram" ? igMap : null;
+    if (map) {
+      const prev = map.get(key) ?? { spend: 0, revenue: 0 };
+      map.set(key, {
+        spend: prev.spend + (row.spend ?? 0),
+        revenue: prev.revenue + (row.revenue ?? 0),
+      });
+    } else {
+      // Lump threads/AN/messenger into FB for chart simplicity
+      const prev = fbMap.get(key) ?? { spend: 0, revenue: 0 };
+      fbMap.set(key, {
+        spend: prev.spend + (row.spend ?? 0),
+        revenue: prev.revenue + (row.revenue ?? 0),
+      });
+    }
   }
-  const googleSpendMap = new Map<string, number>();
   for (const row of googleByBucket) {
-    googleSpendMap.set(
-      dateToBucketKey(new Date(row.bucket as string), granularity),
-      row.spend ?? 0,
-    );
+    const key = dateToBucketKey(new Date(row.bucket as string), granularity);
+    googleMap.set(key, (googleMap.get(key) ?? 0) + (row.spend ?? 0));
   }
-  const orderRevenueMap = new Map<string, number>();
-  for (const row of orderRevenueByBucket) {
-    orderRevenueMap.set(
-      dateToBucketKey(new Date(row.bucket as string), granularity),
-      row.revenue ?? 0,
-    );
-  }
-  const adSpendRevenueData = bucketKeys.map((key) => {
-    const metaSpend = metaSpendMap.get(key) ?? 0;
-    const googleSpend = googleSpendMap.get(key) ?? 0;
-    const revenue = orderRevenueMap.get(key) ?? 0;
-    const totalSpend = metaSpend + googleSpend;
+
+  const adSpendRoasData = bucketKeys.map((key) => {
+    const fb = fbMap.get(key) ?? { spend: 0, revenue: 0 };
+    const ig = igMap.get(key) ?? { spend: 0, revenue: 0 };
+    const googleSpend = googleMap.get(key) ?? 0;
     return {
       bucket: key,
       label: formatBucketLabel(key, granularity),
-      metaSpend,
+      fbSpend: fb.spend,
+      igSpend: ig.spend,
       googleSpend,
-      revenue,
-      roas: totalSpend > 0 ? revenue / totalSpend : 0,
+      fbRoas: fb.spend > 0 ? fb.revenue / fb.spend : 0,
+      igRoas: ig.spend > 0 ? ig.revenue / ig.spend : 0,
     };
   });
 
@@ -325,10 +311,10 @@ export default async function CampaignsPage({
       {/* ── Charts ───────────────────────────────────────────────── */}
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Ad Spend vs Revenue</CardTitle>
+          <CardTitle>Ad Spend & ROAS by Channel</CardTitle>
         </CardHeader>
         <CardContent>
-          <AdSpendRevenueChart data={adSpendRevenueData} />
+          <AdSpendRoasChart data={adSpendRoasData} />
         </CardContent>
       </Card>
 

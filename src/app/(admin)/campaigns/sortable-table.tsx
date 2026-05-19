@@ -129,12 +129,12 @@ export function SortableCampaignTable({
                 </div>
               )}
               {row.adName && (
-                <div className="text-xs leading-tight text-zinc-400">
+                <div className="text-xs leading-tight text-zinc-500">
                   {row.adName}
                 </div>
               )}
               {row.landingUrl && (
-                <div className="font-mono text-[11px] leading-tight text-zinc-300">
+                <div className="font-mono text-[11px] leading-tight text-zinc-500">
                   {row.landingUrl}
                 </div>
               )}
