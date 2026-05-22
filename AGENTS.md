@@ -19,11 +19,12 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 
 | Trigger | Read First |
 |---------|------------|
-| Changing database schema | `specs/current/schema.md` |
-| Adding/modifying API routes | `specs/current/routes.md` |
+| Adding a new admin section | `specs/current/contributing.md` |
+| Changing database schema | `specs/current/schema.md` + `specs/current/contributing.md` (Schema Rules) |
+| Adding/modifying API routes | `specs/current/routes.md` + `specs/current/contributing.md` (API Routes) |
 | Shopify integration work | `specs/current/integrations.md` (Shopify section) |
 | Analytics or tracking changes | `specs/current/integrations.md` + `specs/current/data-flows.md` |
-| UI components | `specs/current/components.md` |
+| UI components | `specs/current/components.md` + `specs/current/contributing.md` (UI Components) |
 | Adding marketing pages | `specs/current/routes.md` + `(marketing)` route group |
 | Cron job changes | `specs/current/scheduled-jobs.md` + `vercel.json` |
 | Deciding what to work on | `specs/ops/PRIORITIES.md` |
@@ -36,14 +37,17 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 ## 3. Critical Rules
 
 1. **DO NOT commit or push** unless the user explicitly asks.
-2. **Read specs before building** — don't reinvent what's already been decided.
-3. **All Shopify data sync must be idempotent** — use `shopify_id` as the dedup key.
-4. **Never store raw payment/card data** — Shopify handles checkout entirely.
-5. **Admin routes require authentication** — always check session via NextAuth.
-6. **Marketing pages are public** — no auth required.
-7. **Update specs when reality diverges** from documentation.
-8. **Tests ship in the same phase as code** — never defer testing to a later phase.
-9. **Never use auto-memory for project state.** Blockers, follow-ups, decisions, technical context, and anything another team member might need must go into checked-in files (`specs/ops/PRIORITIES.md`, domain files, work plans, `AGENTS.md`). Auto-memory is invisible to other users and other machines. Only use it for genuinely user-personal preferences (collaboration style, not project facts).
+2. **Never push directly to `main`** — create a feature branch and open a pull request. Each contributor has their own Neon database branch, so working on a branch doesn't slow anything down. PRs don't require approval gating — the author can self-merge if they choose — but the PR exists so changes are visible to the team.
+3. **Read specs before building** — don't reinvent what's already been decided. Start with `specs/current/contributing.md` for new sections.
+4. **Discuss major decisions with Greg before implementing** — new database tables, new external integrations, structural changes, and data model choices that affect multiple sections. See `specs/current/contributing.md` for the full list.
+5. **One shared schema** — all tables live in `src/lib/schema.ts`. Reuse existing entities (`customer`, `order`, `order_line_item`, `campaign`) rather than creating parallel tables. FK into existing tables instead of duplicating data.
+6. **All Shopify data sync must be idempotent** — use `shopify_id` as the dedup key.
+7. **Never store raw payment/card data** — Shopify handles checkout entirely.
+8. **Admin routes require authentication** — always check session via NextAuth.
+9. **Marketing pages are public** — no auth required.
+10. **Update docs with every major change** — when adding pages, tables, routes, or nav items, update the relevant specs (`specs/current/schema.md`, `specs/current/routes.md`, `specs/current/components.md`, etc.) in the same PR. These files render in the admin UI at `/docs` and are the team's shared reference. Don't let them drift.
+11. **Tests ship in the same phase as code** — never defer testing to a later phase.
+12. **Never use auto-memory for project state.** Blockers, follow-ups, decisions, technical context, and anything another team member might need must go into checked-in files (`specs/ops/PRIORITIES.md`, domain files, work plans, `AGENTS.md`). Auto-memory is invisible to other users and other machines. Only use it for genuinely user-personal preferences (collaboration style, not project facts).
 
 ---
 

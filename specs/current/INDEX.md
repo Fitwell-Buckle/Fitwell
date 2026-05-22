@@ -14,6 +14,7 @@ Living documentation for the Fitwell admin dashboard, analytics platform, and ma
 | [scheduled-jobs.md](scheduled-jobs.md) | Cron job schedule and responsibilities |
 | [data-flows.md](data-flows.md) | How data moves through the system |
 | [privacy.md](privacy.md) | PII inventory and data handling |
+| [contributing.md](contributing.md) | How to add pages, nav items, schema, API routes — conventions and escalation rules |
 
 ## Conventions
 
