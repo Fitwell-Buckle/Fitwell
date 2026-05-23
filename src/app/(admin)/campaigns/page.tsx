@@ -2,7 +2,14 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ga4Daily, googleAdsDaily, metaAdsDaily, order } from "@/lib/schema";
+import {
+  ga4Daily,
+  googleAdsDaily,
+  googleAdsAdGroupDaily,
+  metaAdsDaily,
+  metaAdsetAudience,
+  order,
+} from "@/lib/schema";
 import { sql, desc, sum, count, and, gte, lte } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
 import {
@@ -64,8 +71,20 @@ export default async function CampaignsPage({
     lte(metaAdsDaily.date, to),
   );
 
-  const [trafficBySource, totalTraffic, adCampaigns, metaAds] =
-    await Promise.all([
+  // Latest-non-null aggregates for Meta delivery rankings — use array_agg
+  // ordered by date desc so we pick the most recent observation in the range.
+  const latestQuality = sql<string | null>`(array_agg(${metaAdsDaily.qualityRanking} ORDER BY ${metaAdsDaily.date} DESC) FILTER (WHERE ${metaAdsDaily.qualityRanking} IS NOT NULL))[1]`;
+  const latestEngagement = sql<string | null>`(array_agg(${metaAdsDaily.engagementRanking} ORDER BY ${metaAdsDaily.date} DESC) FILTER (WHERE ${metaAdsDaily.engagementRanking} IS NOT NULL))[1]`;
+  const latestConversion = sql<string | null>`(array_agg(${metaAdsDaily.conversionRanking} ORDER BY ${metaAdsDaily.date} DESC) FILTER (WHERE ${metaAdsDaily.conversionRanking} IS NOT NULL))[1]`;
+
+  const [
+    trafficBySource,
+    totalTraffic,
+    adCampaigns,
+    metaAds,
+    googleAdGroupShare,
+    metaAudience,
+  ] = await Promise.all([
       db
         .select({
           source: ga4Daily.source,
@@ -91,7 +110,9 @@ export default async function CampaignsPage({
 
       db
         .select({
+          campaignId: googleAdsDaily.campaignId,
           campaignName: googleAdsDaily.campaignName,
+          adGroupId: googleAdsDaily.adGroupId,
           adGroupName: googleAdsDaily.adGroupName,
           adName: googleAdsDaily.adName,
           platform: googleAdsDaily.platform,
@@ -105,7 +126,9 @@ export default async function CampaignsPage({
         .from(googleAdsDaily)
         .where(adsDateRange)
         .groupBy(
+          googleAdsDaily.campaignId,
           googleAdsDaily.campaignName,
+          googleAdsDaily.adGroupId,
           googleAdsDaily.adGroupName,
           googleAdsDaily.adName,
           googleAdsDaily.platform,
@@ -116,6 +139,7 @@ export default async function CampaignsPage({
       db
         .select({
           campaignName: metaAdsDaily.campaignName,
+          adsetId: metaAdsDaily.adsetId,
           adsetName: metaAdsDaily.adsetName,
           adName: metaAdsDaily.adName,
           impressions: sum(metaAdsDaily.impressions).mapWith(Number),
@@ -126,18 +150,107 @@ export default async function CampaignsPage({
           reach: sum(metaAdsDaily.reach).mapWith(Number),
           platform: metaAdsDaily.platform,
           landingUrl: metaAdsDaily.landingUrl,
+          qualityRanking: latestQuality,
+          engagementRanking: latestEngagement,
+          conversionRanking: latestConversion,
         })
         .from(metaAdsDaily)
         .where(metaDateRange)
         .groupBy(
           metaAdsDaily.campaignName,
+          metaAdsDaily.adsetId,
           metaAdsDaily.adsetName,
           metaAdsDaily.adName,
           metaAdsDaily.platform,
           metaAdsDaily.landingUrl,
         )
         .orderBy(desc(sum(metaAdsDaily.cost))),
+
+      // Google impression share per ad_group across date range.
+      // Aggregation: SUM(impressions) / SUM(impressions / IS) — the math-correct
+      // way to combine ratios. Lost-IS metrics use impression-weighted avg.
+      db
+        .select({
+          campaignId: googleAdsAdGroupDaily.campaignId,
+          adGroupId: googleAdsAdGroupDaily.adGroupId,
+          impressionShare: sql<number | null>`
+            case when sum(case when ${googleAdsAdGroupDaily.searchImpressionShare} > 0
+                              then ${googleAdsAdGroupDaily.impressions}::float / ${googleAdsAdGroupDaily.searchImpressionShare}
+                              end) > 0
+              then sum(case when ${googleAdsAdGroupDaily.searchImpressionShare} is not null then ${googleAdsAdGroupDaily.impressions} else 0 end)::float
+                   / sum(case when ${googleAdsAdGroupDaily.searchImpressionShare} > 0
+                              then ${googleAdsAdGroupDaily.impressions}::float / ${googleAdsAdGroupDaily.searchImpressionShare}
+                              end)
+              else null end
+          `,
+          budgetLostIs: sql<number | null>`
+            case when sum(case when ${googleAdsAdGroupDaily.searchBudgetLostIs} is not null then ${googleAdsAdGroupDaily.impressions} else 0 end) > 0
+              then sum(${googleAdsAdGroupDaily.searchBudgetLostIs} * ${googleAdsAdGroupDaily.impressions})::float
+                   / sum(case when ${googleAdsAdGroupDaily.searchBudgetLostIs} is not null then ${googleAdsAdGroupDaily.impressions} else 0 end)
+              else null end
+          `,
+          rankLostIs: sql<number | null>`
+            case when sum(case when ${googleAdsAdGroupDaily.searchRankLostIs} is not null then ${googleAdsAdGroupDaily.impressions} else 0 end) > 0
+              then sum(${googleAdsAdGroupDaily.searchRankLostIs} * ${googleAdsAdGroupDaily.impressions})::float
+                   / sum(case when ${googleAdsAdGroupDaily.searchRankLostIs} is not null then ${googleAdsAdGroupDaily.impressions} else 0 end)
+              else null end
+          `,
+          absoluteTopIs: sql<number | null>`
+            case when sum(case when ${googleAdsAdGroupDaily.searchAbsoluteTopIs} is not null then ${googleAdsAdGroupDaily.impressions} else 0 end) > 0
+              then sum(${googleAdsAdGroupDaily.searchAbsoluteTopIs} * ${googleAdsAdGroupDaily.impressions})::float
+                   / sum(case when ${googleAdsAdGroupDaily.searchAbsoluteTopIs} is not null then ${googleAdsAdGroupDaily.impressions} else 0 end)
+              else null end
+          `,
+        })
+        .from(googleAdsAdGroupDaily)
+        .where(
+          and(
+            gte(googleAdsAdGroupDaily.date, from),
+            lte(googleAdsAdGroupDaily.date, to),
+          ),
+        )
+        .groupBy(googleAdsAdGroupDaily.campaignId, googleAdsAdGroupDaily.adGroupId),
+
+      // Meta audience size — single latest snapshot per adset
+      db
+        .select({
+          adsetId: metaAdsetAudience.adsetId,
+          audienceLowerBound: metaAdsetAudience.audienceLowerBound,
+          audienceUpperBound: metaAdsetAudience.audienceUpperBound,
+        })
+        .from(metaAdsetAudience),
     ]);
+
+  // ── Lookup maps for Reach % ──────────────────────────────────────
+  type GoogleShare = {
+    impressionShare: number | null;
+    budgetLostIs: number | null;
+    rankLostIs: number | null;
+    absoluteTopIs: number | null;
+  };
+  const googleShareByAdGroup = new Map<string, GoogleShare>();
+  for (const row of googleAdGroupShare) {
+    if (!row.campaignId || !row.adGroupId) continue;
+    googleShareByAdGroup.set(`${row.campaignId}:${row.adGroupId}`, {
+      impressionShare: row.impressionShare,
+      budgetLostIs: row.budgetLostIs,
+      rankLostIs: row.rankLostIs,
+      absoluteTopIs: row.absoluteTopIs,
+    });
+  }
+
+  type MetaAudience = {
+    lower: number | null;
+    upper: number | null;
+  };
+  const metaAudienceByAdset = new Map<string, MetaAudience>();
+  for (const row of metaAudience) {
+    if (!row.adsetId) continue;
+    metaAudienceByAdset.set(row.adsetId, {
+      lower: row.audienceLowerBound,
+      upper: row.audienceUpperBound,
+    });
+  }
 
   const totals = totalTraffic[0] ?? {
     sessions: 0,
@@ -196,10 +309,21 @@ export default async function CampaignsPage({
       const cost = row.cost ?? 0;
       const conversions = row.conversions ?? 0;
       const revenue = row.revenue ?? 0;
+      const reach = row.reach ?? 0;
       const revCents = Math.round(revenue * 100);
       const ctr = impressions > 0 ? clicks / impressions : 0;
       const cpc = clicks > 0 ? cost / clicks : 0;
       const roas = cost > 0 ? revCents / cost : 0;
+      const audience = row.adsetId
+        ? metaAudienceByAdset.get(row.adsetId)
+        : undefined;
+      // Use lower bound for conservative Reach %. reach is summed across
+      // days so this overstates true unique reach; see tooltip caveat.
+      const audienceSize = audience?.lower ?? null;
+      const reachPct =
+        reach > 0 && audienceSize && audienceSize > 0
+          ? Math.min(reach / audienceSize, 1)
+          : null;
       return {
         platform: row.platform ?? "meta",
         campaignName: row.campaignName ?? "—",
@@ -214,6 +338,18 @@ export default async function CampaignsPage({
         conversions,
         revenue: revCents,
         roas,
+        reachPct,
+        reachExtras: {
+          kind: "meta" as const,
+          reach,
+          audienceLower: audience?.lower ?? null,
+          audienceUpper: audience?.upper ?? null,
+          frequency:
+            reach > 0 && impressions > 0 ? impressions / reach : null,
+          qualityRanking: row.qualityRanking ?? null,
+          engagementRanking: row.engagementRanking ?? null,
+          conversionRanking: row.conversionRanking ?? null,
+        },
         classificationBadge: <ClassificationBadge revenue={revCents} spend={cost} clicks={clicks} />,
         platformBadge: <PlatformBadge platform={row.platform ?? "meta"} />,
         roasBadge: <RoasBadge revenue={revCents} spend={cost} clicks={clicks} />,
@@ -229,6 +365,10 @@ export default async function CampaignsPage({
       const ctr = impressions > 0 ? clicks / impressions : 0;
       const cpc = clicks > 0 ? cost / clicks : 0;
       const roas = cost > 0 ? revCents / cost : 0;
+      const share =
+        row.campaignId && row.adGroupId
+          ? googleShareByAdGroup.get(`${row.campaignId}:${row.adGroupId}`)
+          : undefined;
       return {
         platform: row.platform ?? "google",
         campaignName: row.campaignName ?? "—",
@@ -243,6 +383,13 @@ export default async function CampaignsPage({
         conversions,
         revenue: revCents,
         roas,
+        reachPct: share?.impressionShare ?? null,
+        reachExtras: {
+          kind: "google" as const,
+          budgetLostIs: share?.budgetLostIs ?? null,
+          rankLostIs: share?.rankLostIs ?? null,
+          absoluteTopIs: share?.absoluteTopIs ?? null,
+        },
         classificationBadge: <ClassificationBadge revenue={revCents} spend={cost} clicks={clicks} />,
         platformBadge: <PlatformBadge platform={row.platform ?? "google"} />,
         roasBadge: <RoasBadge revenue={revCents} spend={cost} clicks={clicks} />,

@@ -104,7 +104,8 @@ export default async function DataSyncPage() {
     {
       id: "extract-google-ads",
       name: "Google Ads",
-      description: "Campaign impressions, clicks, cost, conversions",
+      description:
+        "Campaign impressions, clicks, cost, conversions + ad-group impression share",
       schedule: "Daily at 6:45 AM UTC",
       cron: "45 6 * * *",
       path: "/api/cron/extract-google-ads",
@@ -127,7 +128,8 @@ export default async function DataSyncPage() {
     {
       id: "extract-meta-ads",
       name: "Meta Ads",
-      description: "Campaign impressions, clicks, spend, conversions, ROAS",
+      description:
+        "Campaign impressions, clicks, spend, conversions, ROAS + delivery rankings & audience size",
       schedule: "Daily at 7:15 AM UTC",
       cron: "15 7 * * *",
       path: "/api/cron/extract-meta-ads",

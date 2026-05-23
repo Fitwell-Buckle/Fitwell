@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractGoogleAdsDaily } from "@/lib/analytics/google-ads";
+import {
+  extractGoogleAdsDaily,
+  extractGoogleAdsAdGroupDaily,
+} from "@/lib/analytics/google-ads";
 import { verifyCronOrAdmin } from "@/lib/cron-auth";
 
 export async function GET(req: NextRequest) {
@@ -12,18 +15,21 @@ export async function GET(req: NextRequest) {
       Math.max(parseInt(req.nextUrl.searchParams.get("days") ?? "1"), 1),
       365,
     );
-    let totalRows = 0;
+    let adRows = 0;
+    let adGroupRows = 0;
 
     for (let i = 1; i <= days; i++) {
       const date = new Date();
       date.setDate(date.getDate() - i);
-      totalRows += await extractGoogleAdsDaily(date);
+      adRows += await extractGoogleAdsDaily(date);
+      adGroupRows += await extractGoogleAdsAdGroupDaily(date);
     }
 
     return NextResponse.json({
       status: "ok",
       days,
-      rows: totalRows,
+      adRows,
+      adGroupRows,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

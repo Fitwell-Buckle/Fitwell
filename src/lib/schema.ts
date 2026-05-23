@@ -277,8 +277,56 @@ export const metaAdsDaily = pgTable(
     conversionValue: real("conversion_value"),
     reach: integer("reach").default(0),
     frequency: real("frequency"),
+    // Delivery diagnostics (Meta's analogue to "lost to rank")
+    // Values: "above_average" | "average" | "below_average_*" | "unknown"
+    qualityRanking: text("quality_ranking"),
+    engagementRanking: text("engagement_ranking"),
+    conversionRanking: text("conversion_ranking"),
   },
   (t) => [index("meta_ads_daily_date_idx").on(t.date)],
+);
+
+// Google Ads impression share metrics, queried FROM ad_group (not ad_group_ad).
+// Stored as ratios in [0,1]; null when Google doesn't report (e.g. PMax, low volume).
+export const googleAdsAdGroupDaily = pgTable(
+  "google_ads_adgroup_daily",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    date: timestamp("date", { mode: "date" }).notNull(),
+    campaignId: text("campaign_id"),
+    campaignName: text("campaign_name"),
+    adGroupId: text("ad_group_id"),
+    adGroupName: text("ad_group_name"),
+    platform: text("platform"),
+    impressions: integer("impressions").default(0),
+    // % of eligible impressions we got
+    searchImpressionShare: real("search_impression_share"),
+    // % missed because budget capped delivery
+    searchBudgetLostIs: real("search_budget_lost_is"),
+    // % missed because Ad Rank (bid × Quality Score) was too low
+    searchRankLostIs: real("search_rank_lost_is"),
+    // % of shown impressions that were at the very top
+    searchAbsoluteTopIs: real("search_absolute_top_is"),
+  },
+  (t) => [
+    index("google_ads_adgroup_daily_date_idx").on(t.date),
+    index("google_ads_adgroup_daily_lookup_idx").on(t.campaignId, t.adGroupId),
+  ],
+);
+
+// Slow-changing per-adset audience size estimate from Meta's /delivery_estimate.
+// Snapshot-based: we keep the latest per adset and read it back at query time.
+export const metaAdsetAudience = pgTable(
+  "meta_adset_audience",
+  {
+    adsetId: text("adset_id").primaryKey(),
+    adsetName: text("adset_name"),
+    audienceLowerBound: integer("audience_lower_bound"),
+    audienceUpperBound: integer("audience_upper_bound"),
+    snapshotAt: timestamp("snapshot_at", { mode: "date" }).notNull(),
+  },
 );
 
 export const posthogDaily = pgTable(
