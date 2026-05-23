@@ -39,7 +39,9 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/modules` | Modules hub (Production; Marketing coming soon) |
 | `/modules/production` | Production PO list with supplier/status/stage filters |
 | `/modules/production/po/new` | Create a PO with line items |
-| `/modules/production/po/[id]` | PO detail — stage advance, status, timeline |
+| `/modules/production/po/[id]` | PO detail — stage advance, status, timeline, comments |
+| `/modules/production/po/[id]/edit` | Edit PO header + line items (add/update/remove) |
+| `/modules/production/kanban` | Kanban board — drag line items across stage columns |
 | `/modules/production/suppliers` | Supplier CRUD |
 | `/settings` | Admin settings, sync status, API health |
 
@@ -74,8 +76,10 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | GET | `/api/production/products` | Flattened active Shopify catalog (variants) — fallback picker source |
 | POST | `/api/production/po` | Create a PO + line items |
 | PATCH | `/api/production/po/[id]` | Update PO fields (status, lock, dates, notes) |
+| PUT | `/api/production/po/[id]` | Full edit — header + reconcile line items (add/update/remove) |
 | POST | `/api/production/po/[id]/advance` | Advance stage — whole PO (locked) or one line item |
 | POST | `/api/production/po/[id]/comments` | Add a comment to a PO |
+| POST | `/api/production/line-items/[id]/stage` | Set a line item's stage (kanban drag); locked POs move together |
 | POST | `/api/production/suppliers` | Create a supplier |
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |
 

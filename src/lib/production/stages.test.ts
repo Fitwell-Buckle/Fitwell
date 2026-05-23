@@ -5,6 +5,7 @@ import {
   isComplete,
   derivePoStage,
   planAdvance,
+  planSetStage,
   type ProductionStage,
 } from "./stages";
 
@@ -115,5 +116,69 @@ describe("planAdvance — broken PO", () => {
       lineItemId: "a",
     });
     expect(plan).toEqual([]);
+  });
+});
+
+describe("planSetStage", () => {
+  const lineItems = [
+    { id: "a", currentStage: "stamping" as ProductionStage },
+    { id: "b", currentStage: "edm" as ProductionStage },
+  ];
+
+  it("locked: moves every item to the target stage", () => {
+    const plan = planSetStage({
+      lockStagesTogether: true,
+      lineItems,
+      lineItemId: "a",
+      toStage: "qc",
+    });
+    expect(plan).toEqual([
+      { lineItemId: "a", from: "stamping", to: "qc" },
+      { lineItemId: "b", from: "edm", to: "qc" },
+    ]);
+  });
+
+  it("broken: moves only the dragged item", () => {
+    const plan = planSetStage({
+      lockStagesTogether: false,
+      lineItems,
+      lineItemId: "b",
+      toStage: "polishing",
+    });
+    expect(plan).toEqual([{ lineItemId: "b", from: "edm", to: "polishing" }]);
+  });
+
+  it("allows moving backward", () => {
+    const plan = planSetStage({
+      lockStagesTogether: false,
+      lineItems: [{ id: "a", currentStage: "qc" }],
+      lineItemId: "a",
+      toStage: "stamping",
+    });
+    expect(plan).toEqual([{ lineItemId: "a", from: "qc", to: "stamping" }]);
+  });
+
+  it("skips items already at the target stage", () => {
+    const plan = planSetStage({
+      lockStagesTogether: true,
+      lineItems: [
+        { id: "a", currentStage: "qc" },
+        { id: "b", currentStage: "edm" },
+      ],
+      lineItemId: "b",
+      toStage: "qc",
+    });
+    expect(plan).toEqual([{ lineItemId: "b", from: "edm", to: "qc" }]);
+  });
+
+  it("throws when the dragged item is not on the PO", () => {
+    expect(() =>
+      planSetStage({
+        lockStagesTogether: false,
+        lineItems,
+        lineItemId: "zzz",
+        toStage: "qc",
+      }),
+    ).toThrow(/not found/);
   });
 });

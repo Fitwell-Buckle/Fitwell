@@ -82,6 +82,9 @@ export default async function ProductionPage({
           <Button variant="outline" asChild>
             <Link href="/modules/production/suppliers">Suppliers</Link>
           </Button>
+          <Button variant="outline" asChild>
+            <Link href="/modules/production/kanban">Board</Link>
+          </Button>
           <Button asChild>
             <Link href="/modules/production/po/new">New PO</Link>
           </Button>

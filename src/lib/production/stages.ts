@@ -97,3 +97,34 @@ export function planAdvance(params: {
   const to = nextStage(li.currentStage);
   return to ? [{ lineItemId: li.id, from: li.currentStage, to }] : [];
 }
+
+/**
+ * Decide transitions when a line item is moved directly to a target stage
+ * (e.g. dragged on the kanban). Unlike planAdvance this allows jumping forward
+ * or backward to any stage.
+ *
+ * - Locked PO: every line item moves to the target stage (kept in lock-step).
+ * - Broken PO: only the dragged line item moves.
+ *
+ * Items already at the target stage produce no transition.
+ */
+export function planSetStage(params: {
+  lockStagesTogether: boolean;
+  lineItems: LineItemStage[];
+  lineItemId: string;
+  toStage: ProductionStage;
+}): AdvanceTransition[] {
+  const { lockStagesTogether, lineItems, lineItemId, toStage } = params;
+
+  if (!lineItems.some((li) => li.id === lineItemId)) {
+    throw new Error(`line item ${lineItemId} not found on this PO`);
+  }
+
+  const moving = lockStagesTogether
+    ? lineItems
+    : lineItems.filter((li) => li.id === lineItemId);
+
+  return moving
+    .filter((li) => li.currentStage !== toStage)
+    .map((li) => ({ lineItemId: li.id, from: li.currentStage, to: toStage }));
+}

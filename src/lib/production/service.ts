@@ -7,7 +7,12 @@ import {
   productionStageEvent,
   productionComment,
 } from "@/lib/schema";
-import { planAdvance, type AdvanceTransition } from "./stages";
+import {
+  planAdvance,
+  planSetStage,
+  type AdvanceTransition,
+  type ProductionStage,
+} from "./stages";
 import { resolveParent } from "./parents";
 
 const dateString = z
@@ -50,6 +55,22 @@ export const updatePoSchema = z
   .partial();
 
 export type UpdatePoInput = z.infer<typeof updatePoSchema>;
+
+// Full edit: a line item with an `id` is existing (update); without, it's new.
+export const editLineItemSchema = lineItemInputSchema.extend({
+  id: z.string().optional(),
+});
+
+export const updatePoFullSchema = z.object({
+  supplierId: z.string().min(1),
+  shopifyPoNumber: z.string().min(1).max(200),
+  issuedDate: dateString,
+  expectedDeliveryDate: dateString.nullable(),
+  notes: z.string().max(5000).nullable(),
+  lineItems: z.array(editLineItemSchema).min(1, "a PO needs at least one line item"),
+});
+
+export type UpdatePoFullInput = z.infer<typeof updatePoFullSchema>;
 
 export const advanceSchema = z.object({
   lineItemId: z.string().min(1).optional(),
@@ -97,6 +118,84 @@ export async function createPo(input: CreatePoInput): Promise<{ poId: string }> 
   );
 
   return { poId: po.id };
+}
+
+/**
+ * Full edit of a PO: updates header fields and reconciles line items —
+ * existing lines (with id) are updated in place (keeping their stage + history),
+ * new lines are inserted with an opening stage event, and any existing line not
+ * in the submission is deleted (cascading its stage events/comments/attachments).
+ * Changing a line's product just rewrites its sku/title/IDs; its stage is kept.
+ */
+export async function updatePoFull(
+  poId: string,
+  input: UpdatePoFullInput,
+): Promise<{ poId: string }> {
+  await db
+    .update(productionPo)
+    .set({
+      supplierId: input.supplierId,
+      shopifyPoNumber: input.shopifyPoNumber,
+      issuedDate: input.issuedDate,
+      expectedDeliveryDate: input.expectedDeliveryDate ?? null,
+      notes: input.notes ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(productionPo.id, poId));
+
+  const existing = await db
+    .select({ id: productionPoLineItem.id })
+    .from(productionPoLineItem)
+    .where(eq(productionPoLineItem.poId, poId));
+  const existingIds = new Set(existing.map((e) => e.id));
+  const submittedIds = new Set(
+    input.lineItems.map((li) => li.id).filter((id): id is string => !!id),
+  );
+
+  // Delete removed lines (cascade clears their events/comments/attachments).
+  for (const e of existing) {
+    if (!submittedIds.has(e.id)) {
+      await db
+        .delete(productionPoLineItem)
+        .where(eq(productionPoLineItem.id, e.id));
+    }
+  }
+
+  const now = new Date();
+  for (const li of input.lineItems) {
+    if (li.id && existingIds.has(li.id)) {
+      await db
+        .update(productionPoLineItem)
+        .set({
+          sku: li.sku,
+          title: li.title,
+          quantity: li.quantity,
+          unitCostCents: li.unitCostCents ?? null,
+          shopifyProductId: li.shopifyProductId ?? null,
+          shopifyVariantId: li.shopifyVariantId ?? null,
+          updatedAt: now,
+        })
+        .where(eq(productionPoLineItem.id, li.id));
+    } else {
+      const [ins] = await db
+        .insert(productionPoLineItem)
+        .values({
+          poId,
+          sku: li.sku,
+          title: li.title,
+          quantity: li.quantity,
+          unitCostCents: li.unitCostCents ?? null,
+          shopifyProductId: li.shopifyProductId ?? null,
+          shopifyVariantId: li.shopifyVariantId ?? null,
+        })
+        .returning({ id: productionPoLineItem.id });
+      await db
+        .insert(productionStageEvent)
+        .values({ lineItemId: ins.id, stage: "supplier_po" as const });
+    }
+  }
+
+  return { poId };
 }
 
 /**
@@ -149,6 +248,70 @@ export async function advance(params: {
         and(
           eq(productionStageEvent.lineItemId, t.lineItemId),
           eq(productionStageEvent.stage, t.from),
+          isNull(productionStageEvent.exitedAt),
+        ),
+      );
+
+    await db.insert(productionStageEvent).values({
+      lineItemId: t.lineItemId,
+      stage: t.to,
+      enteredAt: now,
+      triggeredByUserId: params.userId ?? null,
+    });
+  }
+
+  return transitions;
+}
+
+/**
+ * Move a line item directly to a target stage (kanban drag). Allows forward or
+ * backward jumps. A locked PO moves all its items; a broken PO moves only the
+ * dragged item. Clears actualCompletionDate when moving away from "complete".
+ */
+export async function setStage(params: {
+  lineItemId: string;
+  toStage: ProductionStage;
+  userId?: string;
+}): Promise<AdvanceTransition[]> {
+  const li = await db.query.productionPoLineItem.findFirst({
+    where: eq(productionPoLineItem.id, params.lineItemId),
+    columns: { id: true, poId: true },
+  });
+  if (!li) throw new Error(`line item ${params.lineItemId} not found`);
+
+  const po = await db.query.productionPo.findFirst({
+    where: eq(productionPo.id, li.poId),
+    with: { lineItems: { columns: { id: true, currentStage: true } } },
+  });
+  if (!po) throw new Error(`production PO ${li.poId} not found`);
+
+  const transitions = planSetStage({
+    lockStagesTogether: po.lockStagesTogether,
+    lineItems: po.lineItems,
+    lineItemId: params.lineItemId,
+    toStage: params.toStage,
+  });
+
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+
+  for (const t of transitions) {
+    await db
+      .update(productionPoLineItem)
+      .set({
+        currentStage: t.to,
+        updatedAt: now,
+        actualCompletionDate: t.to === "complete" ? today : null,
+      })
+      .where(eq(productionPoLineItem.id, t.lineItemId));
+
+    // One open event per item, so close whichever is open (handles jumps).
+    await db
+      .update(productionStageEvent)
+      .set({ exitedAt: now })
+      .where(
+        and(
+          eq(productionStageEvent.lineItemId, t.lineItemId),
           isNull(productionStageEvent.exitedAt),
         ),
       );
