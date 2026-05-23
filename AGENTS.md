@@ -37,7 +37,7 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 ## 3. Critical Rules
 
 1. **DO NOT commit or push** unless the user explicitly asks.
-2. **Never push directly to `main`** — create a feature branch and open a pull request. Each contributor has their own Neon database branch, so working on a branch doesn't slow anything down. PRs don't require approval gating — the author can self-merge if they choose — but the PR exists so changes are visible to the team.
+2. **Everyone works directly on `main`** — no feature branches or PRs. There are three contributors (Greg, Tom, Oliver), each with their own Neon database branch. Push when you have changes you're happy with. Pull before starting work (see Session Protocol).
 3. **Read specs before building** — don't reinvent what's already been decided. Start with `specs/current/contributing.md` for new sections.
 4. **Discuss major decisions with Greg before implementing** — new database tables, new external integrations, structural changes, and data model choices that affect multiple sections. See `specs/current/contributing.md` for the full list.
 5. **One shared schema** — all tables live in `src/lib/schema.ts`. Reuse existing entities (`customer`, `order`, `order_line_item`, `campaign`) rather than creating parallel tables. FK into existing tables instead of duplicating data.
@@ -54,9 +54,22 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 ## 4. Session Protocol
 
 ### Start of session
-1. Read `specs/ops/PRIORITIES.md`
-2. Propose a focus area based on current priorities
-3. Load relevant specs from the context-loading table
+1. **Sync with main** — pull the latest changes before doing anything else. If there are uncommitted local changes, stash them first, pull, then reapply:
+   ```bash
+   git stash          # only if there are uncommitted changes
+   git pull --rebase
+   git stash pop      # only if you stashed
+   ```
+   If the stash pop conflicts, help the user resolve before proceeding.
+2. **Check for pending migrations** — compare the migration files on disk against what's been applied to the local dev database:
+   ```bash
+   ls drizzle/migrations/*.sql   # see what migrations exist
+   npm run db:migrate             # apply any unapplied migrations to local dev DB
+   ```
+   If new migration files arrived from the pull, tell the user what changed (e.g. "New migration adds columns X, Y to table Z — applied to your dev database").
+3. Read `specs/ops/PRIORITIES.md`
+4. Propose a focus area based on current priorities
+5. Load relevant specs from the context-loading table
 
 ### End of session
 1. Update `specs/ops/PRIORITIES.md` with dates, progress, and next steps
@@ -107,13 +120,17 @@ Open questions, risks, alternatives considered.
 - **Generated reference**: `specs/generated/schema-reference.md` (when it exists)
 - **Migration output**: `drizzle/migrations/`
 
-### Migration workflow:
+### Migration workflow (for the person making the schema change):
 1. Edit `src/lib/schema.ts`
-2. `npm run db:generate` — creates migration SQL
+2. `npm run db:generate` — creates migration SQL in `drizzle/migrations/`
 3. Review the generated migration file
-4. `npm run db:migrate` — apply locally
+4. `npm run db:migrate` — apply to your local dev DB
 5. Test thoroughly
-6. Push code; apply migration to production before deploy
+6. Commit the schema change + migration file together, push to main
+7. Apply migration to production before Vercel deploys the new code
+
+### Receiving migrations (for everyone else):
+When you pull and see new files in `drizzle/migrations/`, run `npm run db:migrate` to apply them to your local dev DB. The session startup protocol handles this automatically.
 
 **Never run `drizzle-kit push` against production.** Always use the generate/migrate workflow.
 
@@ -125,8 +142,8 @@ The project uses Neon branching to isolate environments. Each developer gets the
 |---|---|---|
 | `production` | `ep-divine-field-aqvgidm6` | Vercel production + preview deploys |
 | `greg-dev` | `ep-solitary-dawn-aqdv9xxi` | Greg's local dev |
-| `tom-dev` | (create when needed) | Tom's local dev |
-| `oliver-dev` | (create when needed) | Oliver's local dev |
+| `tom-dev` | (create before first session) | Tom's local dev |
+| `oliver-dev` | (create before first session) | Oliver's local dev |
 
 - **Neon project ID**: `quiet-cell-94455140`
 - **Neon org ID**: `org-fancy-night-97982234`
@@ -184,8 +201,9 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ## 10. Deployment
 
-- **Platform**: Vercel, auto-deploys from `main` branch.
+- **Platform**: Vercel, auto-deploys from `main` branch on every push.
+- **Workflow**: Everyone works on `main`, pushes when ready. Vercel deploys automatically.
 - **Cron jobs**: Defined in `vercel.json` — health check (every 4h), Shopify extract (every 2h), GA4/Google Ads/GSC extract (daily morning), PostHog extract (every 3h).
 - **Environment variables**: Managed in Vercel dashboard, mirrored in `.env.example` for local dev.
-- **Database migrations**: Applied manually before deploy (never auto-migrated in CI).
+- **Database migrations**: Applied manually to production before deploy. When pushing code with new migrations, apply to production first, then push (Vercel deploys immediately on push).
 - **Speed insights**: `@vercel/speed-insights` included for performance monitoring.

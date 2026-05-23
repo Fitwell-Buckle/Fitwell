@@ -57,6 +57,13 @@
       "when": 1779150327152,
       "tag": "0007_magical_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779495510823,
+      "tag": "0008_productive_ken_ellis",
+      "breakpoints": true
     }
   ]
 }

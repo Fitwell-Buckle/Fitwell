@@ -7,6 +7,14 @@ const ADS_SCOPES = ["https://www.googleapis.com/auth/adwords"];
 
 interface GoogleAdsRow {
   campaign: { name: string; id: string };
+  adGroup: { name: string; id: string };
+  adGroupAd: {
+    ad: {
+      id: string;
+      name: string;
+      finalUrls: string[];
+    };
+  };
   metrics: {
     impressions: string;
     clicks: string;
@@ -14,8 +22,20 @@ interface GoogleAdsRow {
     conversions: number;
     conversionsValue: number;
   };
-  segments: { date: string };
+  segments: {
+    date: string;
+    adNetworkType: string;
+  };
 }
+
+const PLATFORM_MAP: Record<string, string> = {
+  SEARCH: "search",
+  CONTENT: "display",
+  YOUTUBE_WATCH: "youtube",
+  YOUTUBE_SEARCH: "youtube",
+  SHOPPING: "shopping",
+  MIXED: "mixed",
+};
 
 export async function extractGoogleAdsDaily(date: Date): Promise<number> {
   const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID?.replace(/-/g, "");
@@ -30,15 +50,23 @@ export async function extractGoogleAdsDaily(date: Date): Promise<number> {
     SELECT
       campaign.name,
       campaign.id,
+      ad_group.name,
+      ad_group.id,
+      ad_group_ad.ad.id,
+      ad_group_ad.ad.name,
+      ad_group_ad.ad.final_urls,
       segments.date,
+      segments.ad_network_type,
       metrics.impressions,
       metrics.clicks,
       metrics.cost_micros,
       metrics.conversions,
       metrics.conversions_value
-    FROM campaign
+    FROM ad_group_ad
     WHERE segments.date = '${date.toISOString().split("T")[0]}'
       AND campaign.status != 'REMOVED'
+      AND ad_group.status != 'REMOVED'
+      AND ad_group_ad.status != 'REMOVED'
   `;
 
   const headers: Record<string, string> = {
@@ -65,26 +93,46 @@ export async function extractGoogleAdsDaily(date: Date): Promise<number> {
 
   if (rows.length === 0) return 0;
 
-  // Delete existing rows for this date, then insert fresh
   await db
     .delete(googleAdsDaily)
     .where(
       sql`${googleAdsDaily.date}::date = ${date.toISOString().split("T")[0]}::date`,
     );
 
-  const values = rows.map((row) => ({
-    date,
-    campaignName: row.campaign.name,
-    campaignId: row.campaign.id,
-    impressions: parseInt(row.metrics.impressions) || 0,
-    clicks: parseInt(row.metrics.clicks) || 0,
-    cost: Math.round(parseInt(row.metrics.costMicros) / 10000), // micros to cents
-    conversions: row.metrics.conversions || 0,
-    conversionValue: row.metrics.conversionsValue || 0,
-  }));
+  const values = rows.map((row) => {
+    const finalUrls = row.adGroupAd?.ad?.finalUrls ?? [];
+    let landingUrl: string | null = null;
+    if (finalUrls.length > 0) {
+      try {
+        landingUrl = new URL(finalUrls[0]).pathname;
+      } catch {
+        landingUrl = finalUrls[0];
+      }
+    }
 
-  if (values.length > 0) {
-    await db.insert(googleAdsDaily).values(values);
+    const networkType = (row.segments.adNetworkType ?? "").toUpperCase();
+    const platform = PLATFORM_MAP[networkType] ?? networkType.toLowerCase();
+
+    return {
+      date,
+      campaignName: row.campaign.name,
+      campaignId: row.campaign.id,
+      adGroupName: row.adGroup.name,
+      adGroupId: row.adGroup.id,
+      adName: row.adGroupAd.ad.name ?? null,
+      adId: row.adGroupAd.ad.id,
+      platform,
+      landingUrl,
+      impressions: parseInt(row.metrics.impressions) || 0,
+      clicks: parseInt(row.metrics.clicks) || 0,
+      cost: Math.round(parseInt(row.metrics.costMicros) / 10000),
+      conversions: row.metrics.conversions || 0,
+      conversionValue: row.metrics.conversionsValue || 0,
+    };
+  });
+
+  for (let i = 0; i < values.length; i += 500) {
+    await db.insert(googleAdsDaily).values(values.slice(i, i + 500));
   }
 
   return values.length;

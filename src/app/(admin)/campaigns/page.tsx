@@ -92,14 +92,26 @@ export default async function CampaignsPage({
       db
         .select({
           campaignName: googleAdsDaily.campaignName,
+          adGroupName: googleAdsDaily.adGroupName,
+          adName: googleAdsDaily.adName,
+          platform: googleAdsDaily.platform,
+          landingUrl: googleAdsDaily.landingUrl,
           impressions: sum(googleAdsDaily.impressions).mapWith(Number),
           clicks: sum(googleAdsDaily.clicks).mapWith(Number),
           cost: sum(googleAdsDaily.cost).mapWith(Number),
+          conversions: sum(googleAdsDaily.conversions).mapWith(Number),
+          revenue: sum(googleAdsDaily.conversionValue).mapWith(Number),
         })
         .from(googleAdsDaily)
         .where(adsDateRange)
-        .groupBy(googleAdsDaily.campaignName)
-        .orderBy(desc(sum(googleAdsDaily.clicks))),
+        .groupBy(
+          googleAdsDaily.campaignName,
+          googleAdsDaily.adGroupName,
+          googleAdsDaily.adName,
+          googleAdsDaily.platform,
+          googleAdsDaily.landingUrl,
+        )
+        .orderBy(desc(sum(googleAdsDaily.cost))),
 
       db
         .select({
@@ -144,12 +156,15 @@ export default async function CampaignsPage({
     0,
   );
   const totalClicks = totalMetaClicks + totalGoogleClicks;
-  // Meta-reported conversion value (dollars) → cents
   const metaRevenueCents = Math.round(
     metaAds.reduce((s, r) => s + (r.revenue ?? 0), 0) * 100,
   );
+  const googleRevenueCents = Math.round(
+    adCampaigns.reduce((s, r) => s + (r.revenue ?? 0), 0) * 100,
+  );
+  const totalRevenueCents = metaRevenueCents + googleRevenueCents;
   const blendedRoas =
-    totalSpend > 0 ? metaRevenueCents / totalSpend : 0;
+    totalSpend > 0 ? totalRevenueCents / totalSpend : 0;
   const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
 
   // ── Aggregate table totals ────────────────────────────────────────
@@ -166,7 +181,11 @@ export default async function CampaignsPage({
     0,
   );
   const totalImpressions = totalMetaImpressions + totalGoogleImpressions;
-  const totalConversions = totalMetaConversions; // only Meta has pixel data
+  const totalGoogleConversions = adCampaigns.reduce(
+    (s, r) => s + (r.conversions ?? 0),
+    0,
+  );
+  const totalConversions = totalMetaConversions + totalGoogleConversions;
   const totalCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
 
   // ── Build unified rows for sortable table ─────────────────────────
@@ -204,25 +223,29 @@ export default async function CampaignsPage({
       const impressions = row.impressions ?? 0;
       const clicks = row.clicks ?? 0;
       const cost = row.cost ?? 0;
+      const conversions = row.conversions ?? 0;
+      const revenue = row.revenue ?? 0;
+      const revCents = Math.round(revenue * 100);
       const ctr = impressions > 0 ? clicks / impressions : 0;
       const cpc = clicks > 0 ? cost / clicks : 0;
+      const roas = cost > 0 ? revCents / cost : 0;
       return {
-        platform: "google",
+        platform: row.platform ?? "google",
         campaignName: row.campaignName ?? "—",
-        adsetName: null,
-        adName: null,
-        landingUrl: null,
+        adsetName: row.adGroupName ?? null,
+        adName: row.adName ?? null,
+        landingUrl: row.landingUrl ?? null,
         impressions,
         clicks,
         cost,
         ctr,
         cpc,
-        conversions: 0,
-        revenue: 0,
-        roas: 0,
-        classificationBadge: null as React.ReactNode,
-        platformBadge: <PlatformBadge platform="google" />,
-        roasBadge: <span className="text-zinc-300">&mdash;</span> as React.ReactNode,
+        conversions,
+        revenue: revCents,
+        roas,
+        classificationBadge: <ClassificationBadge revenue={revCents} spend={cost} clicks={clicks} />,
+        platformBadge: <PlatformBadge platform={row.platform ?? "google"} />,
+        roasBadge: <RoasBadge revenue={revCents} spend={cost} clicks={clicks} />,
       };
     }),
   ];
@@ -245,6 +268,7 @@ export default async function CampaignsPage({
       .select({
         bucket: sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
         spend: sum(googleAdsDaily.cost).mapWith(Number),
+        revenue: sql<number>`sum(${googleAdsDaily.conversionValue} * 100)::int`.mapWith(Number),
       })
       .from(googleAdsDaily)
       .where(adsDateRange)
@@ -257,7 +281,7 @@ export default async function CampaignsPage({
   type ChannelBucket = { spend: number; revenue: number };
   const fbMap = new Map<string, ChannelBucket>();
   const igMap = new Map<string, ChannelBucket>();
-  const googleMap = new Map<string, number>();
+  const googleMap = new Map<string, ChannelBucket>();
 
   for (const row of metaByPlatformBucket) {
     const key = dateToBucketKey(new Date(row.bucket as string), granularity);
@@ -280,21 +304,26 @@ export default async function CampaignsPage({
   }
   for (const row of googleByBucket) {
     const key = dateToBucketKey(new Date(row.bucket as string), granularity);
-    googleMap.set(key, (googleMap.get(key) ?? 0) + (row.spend ?? 0));
+    const prev = googleMap.get(key) ?? { spend: 0, revenue: 0 };
+    googleMap.set(key, {
+      spend: prev.spend + (row.spend ?? 0),
+      revenue: prev.revenue + (row.revenue ?? 0),
+    });
   }
 
   const adSpendRoasData = bucketKeys.map((key) => {
     const fb = fbMap.get(key) ?? { spend: 0, revenue: 0 };
     const ig = igMap.get(key) ?? { spend: 0, revenue: 0 };
-    const googleSpend = googleMap.get(key) ?? 0;
+    const google = googleMap.get(key) ?? { spend: 0, revenue: 0 };
     return {
       bucket: key,
       label: formatBucketLabel(key, granularity),
       fbSpend: fb.spend,
       igSpend: ig.spend,
-      googleSpend,
+      googleSpend: google.spend,
       fbRoas: fb.spend > 0 ? fb.revenue / fb.spend : 0,
       igRoas: ig.spend > 0 ? ig.revenue / ig.spend : 0,
+      googleRoas: google.spend > 0 ? google.revenue / google.spend : 0,
     };
   });
 
@@ -346,9 +375,9 @@ export default async function CampaignsPage({
                 clicks: totalClicks,
                 cost: totalSpend,
                 conversions: totalConversions,
-                revenue: metaRevenueCents,
+                revenue: totalRevenueCents,
                 roas: blendedRoas,
-                roasBadge: <RoasBadge revenue={metaRevenueCents} spend={totalSpend} clicks={totalClicks} />,
+                roasBadge: <RoasBadge revenue={totalRevenueCents} spend={totalSpend} clicks={totalClicks} />,
               }}
             />
           )}
@@ -420,14 +449,22 @@ function PlatformBadge({ platform }: { platform: string }) {
     audience_network: "bg-blue-400 text-white",
     messenger: "bg-blue-500 text-white",
     google: "bg-amber-500 text-white",
+    search: "bg-amber-500 text-white",
+    display: "bg-amber-600 text-white",
+    youtube: "bg-red-600 text-white",
+    shopping: "bg-green-600 text-white",
   };
   const labels: Record<string, string> = {
     facebook: "FB",
     instagram: "IG",
     threads: "Threads",
-    audience_network: "AN",
-    messenger: "Msgr",
+    audience_network: "Audience Net",
+    messenger: "Messenger",
     google: "Google",
+    search: "Google Search",
+    display: "Google Display",
+    youtube: "YouTube",
+    shopping: "Google Shopping",
     unknown: "Meta",
   };
   const cls = styles[p] ?? "bg-zinc-500 text-white";

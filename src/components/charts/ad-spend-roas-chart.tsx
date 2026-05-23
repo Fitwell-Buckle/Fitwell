@@ -22,6 +22,7 @@ interface DataPoint {
   googleSpend: number;
   fbRoas: number;
   igRoas: number;
+  googleRoas: number;
 }
 
 const SERIES = [
@@ -30,6 +31,7 @@ const SERIES = [
   { key: "googleSpend", label: "Google Spend", color: "#f59e0b" },
   { key: "fbRoas", label: "FB ROAS", color: "#1d4ed8", dashed: true },
   { key: "igRoas", label: "IG ROAS", color: "#a855f7", dashed: true },
+  { key: "googleRoas", label: "Google ROAS", color: "#f59e0b", dashed: true },
 ];
 
 function ChartTooltip({ active, payload, label }: any) {
@@ -57,6 +59,7 @@ function ChartTooltip({ active, payload, label }: any) {
           <p className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-amber-500" />
             Google: {formatCurrency(data.googleSpend)}
+            {data.googleRoas > 0 && <span className="text-zinc-400">({data.googleRoas.toFixed(1)}x)</span>}
           </p>
         )}
       </div>
@@ -97,6 +100,9 @@ export function AdSpendRoasChart({ data }: { data: DataPoint[] }) {
           )}
           {!isHidden("igRoas") && (
             <Line yAxisId="right" type="monotone" dataKey="igRoas" name="IG ROAS" stroke="#a855f7" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+          )}
+          {!isHidden("googleRoas") && (
+            <Line yAxisId="right" type="monotone" dataKey="googleRoas" name="Google ROAS" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
           )}
         </ComposedChart>
       </ResponsiveContainer>
