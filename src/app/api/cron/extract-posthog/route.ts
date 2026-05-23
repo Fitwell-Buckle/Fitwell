@@ -8,15 +8,22 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Extract yesterday (UTC) — today is still accumulating.
-    const yesterday = new Date();
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const days = Math.min(
+      Math.max(parseInt(req.nextUrl.searchParams.get("days") ?? "1"), 1),
+      365,
+    );
+    let totalRows = 0;
 
-    const rows = await extractPostHogDaily(yesterday);
+    for (let i = 1; i <= days; i++) {
+      const date = new Date();
+      date.setUTCDate(date.getUTCDate() - i);
+      totalRows += await extractPostHogDaily(date);
+    }
+
     return NextResponse.json({
       status: "ok",
-      date: yesterday.toISOString().split("T")[0],
-      rows,
+      days,
+      rows: totalRows,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

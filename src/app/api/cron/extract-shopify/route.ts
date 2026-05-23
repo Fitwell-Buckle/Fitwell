@@ -9,8 +9,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 25 hours ago — slightly more than 24h for safety overlap
-    const since = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    const days = Math.min(
+      Math.max(parseInt(req.nextUrl.searchParams.get("days") ?? "1"), 1),
+      365,
+    );
+    const since = new Date(Date.now() - (days * 24 + 1) * 60 * 60 * 1000);
 
     // Sequential, not parallel, to respect Shopify rate limits
     const orderResult = await syncRecentOrders(since);

@@ -41,19 +41,14 @@ export async function extractGoogleAdsDaily(date: Date): Promise<number> {
       AND campaign.status != 'REMOVED'
   `;
 
-  const managerCustomerId = process.env.GOOGLE_ADS_MANAGER_ID?.replace(/-/g, "");
-
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     "developer-token": developerToken,
     "Content-Type": "application/json",
   };
-  if (managerCustomerId) {
-    headers["login-customer-id"] = managerCustomerId;
-  }
 
   const res = await fetch(
-    `https://googleads.googleapis.com/v19/customers/${customerId}/googleAds:searchStream`,
+    `https://googleads.googleapis.com/v20/customers/${customerId}/googleAds:searchStream`,
     {
       method: "POST",
       headers,

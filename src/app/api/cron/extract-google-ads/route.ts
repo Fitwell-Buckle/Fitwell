@@ -8,14 +8,22 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
+    const days = Math.min(
+      Math.max(parseInt(req.nextUrl.searchParams.get("days") ?? "1"), 1),
+      365,
+    );
+    let totalRows = 0;
 
-    const rows = await extractGoogleAdsDaily(yesterday);
+    for (let i = 1; i <= days; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      totalRows += await extractGoogleAdsDaily(date);
+    }
+
     return NextResponse.json({
       status: "ok",
-      date: yesterday.toISOString().split("T")[0],
-      rows,
+      days,
+      rows: totalRows,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
