@@ -97,6 +97,21 @@ export default async function PoDetailPage({
             <div className="text-xs text-zinc-400">Issued</div>
             <div className="mt-1 text-zinc-700">{fmtDate(po.issuedDate)}</div>
           </div>
+          <div>
+            <div className="text-xs text-zinc-400">Company</div>
+            <div className="mt-1 text-zinc-700">
+              {po.company?.name ?? "—"}
+              {po.company?.priceTier && (
+                <span className="ml-2 text-xs text-zinc-400">
+                  {po.company.priceTier.name} ({po.company.priceTier.discountPercent}% off)
+                </span>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-zinc-400">Warehouse</div>
+            <div className="mt-1 text-zinc-700">{po.locationName ?? "—"}</div>
+          </div>
         </div>
         {po.notes && <p className="mt-4 text-sm text-zinc-600">{po.notes}</p>}
       </Card>
@@ -118,6 +133,11 @@ export default async function PoDetailPage({
               null
             : null,
           expectedCompletionDate: li.expectedCompletionDate,
+          // Effective company / warehouse: line override falls back to the PO default.
+          company: li.company?.name ?? po.company?.name ?? null,
+          companyOverridden: !!li.company,
+          warehouse: li.locationName ?? po.locationName ?? null,
+          warehouseOverridden: !!li.locationName,
         }))}
       />
 

@@ -408,6 +408,34 @@ class ShopifyClient {
     return out;
   }
 
+  // ── GraphQL (companies, markets — no REST equivalents) ─────────────
+
+  /** POST a GraphQL query to the Admin API. Throws on transport or GraphQL errors. */
+  async graphql<T>(
+    query: string,
+    variables?: Record<string, unknown>,
+  ): Promise<T> {
+    const res = await this.fetch<{ data?: T; errors?: Array<{ message: string }> }>(
+      "/graphql.json",
+      { method: "POST", body: JSON.stringify({ query, variables }) },
+    );
+    if (res.errors && res.errors.length > 0) {
+      throw new Error(`Shopify GraphQL error: ${res.errors.map((e) => e.message).join("; ")}`);
+    }
+    if (!res.data) throw new Error("Shopify GraphQL returned no data");
+    return res.data;
+  }
+
+  /** Active locations (warehouses). Requires the read_locations scope. */
+  async getLocations(): Promise<{ id: string; name: string }[]> {
+    const { locations } = await this.fetch<{
+      locations: { id: number; name: string; active: boolean }[];
+    }>("/locations.json");
+    return locations
+      .filter((l) => l.active)
+      .map((l) => ({ id: String(l.id), name: l.name }));
+  }
+
   // ── Generic paginator ─────────────────────────────────────────────
 
   /**

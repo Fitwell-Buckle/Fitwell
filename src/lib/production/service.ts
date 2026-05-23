@@ -19,6 +19,14 @@ const dateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "expected a YYYY-MM-DD date");
 
+// Company (our own) + warehouse (Shopify location id + name) tags. Used at the
+// PO header (defaults) and overridable per line item.
+const refFields = {
+  companyId: z.string().max(300).nullish(),
+  shopifyLocationId: z.string().max(300).nullish(),
+  locationName: z.string().max(300).nullish(),
+};
+
 export const lineItemInputSchema = z.object({
   sku: z.string().min(1).max(200),
   title: z.string().min(1).max(500),
@@ -29,6 +37,8 @@ export const lineItemInputSchema = z.object({
   expectedCompletionDate: dateString.nullish(),
   customerId: z.string().max(200).nullish(),
   orderLineItemId: z.string().max(200).nullish(),
+  // Optional per-line overrides of the PO-level company / warehouse.
+  ...refFields,
 });
 
 export const createPoSchema = z.object({
@@ -38,6 +48,7 @@ export const createPoSchema = z.object({
   expectedDeliveryDate: dateString.nullish(),
   lockStagesTogether: z.boolean().optional(),
   notes: z.string().max(5000).nullish(),
+  ...refFields,
   lineItems: z.array(lineItemInputSchema).min(1, "a PO needs at least one line item"),
 });
 
@@ -67,6 +78,7 @@ export const updatePoFullSchema = z.object({
   issuedDate: dateString,
   expectedDeliveryDate: dateString.nullable(),
   notes: z.string().max(5000).nullable(),
+  ...refFields,
   lineItems: z.array(editLineItemSchema).min(1, "a PO needs at least one line item"),
 });
 
@@ -87,6 +99,9 @@ export async function createPo(input: CreatePoInput): Promise<{ poId: string }> 
       expectedDeliveryDate: input.expectedDeliveryDate ?? null,
       lockStagesTogether: input.lockStagesTogether ?? true,
       notes: input.notes ?? null,
+      companyId: input.companyId ?? null,
+      shopifyLocationId: input.shopifyLocationId ?? null,
+      locationName: input.locationName ?? null,
     })
     .returning({ id: productionPo.id });
 
@@ -104,6 +119,9 @@ export async function createPo(input: CreatePoInput): Promise<{ poId: string }> 
         expectedCompletionDate: li.expectedCompletionDate ?? null,
         customerId: li.customerId ?? null,
         orderLineItemId: li.orderLineItemId ?? null,
+        companyId: li.companyId ?? null,
+        shopifyLocationId: li.shopifyLocationId ?? null,
+        locationName: li.locationName ?? null,
       })),
     )
     .returning({ id: productionPoLineItem.id });
@@ -139,6 +157,9 @@ export async function updatePoFull(
       issuedDate: input.issuedDate,
       expectedDeliveryDate: input.expectedDeliveryDate ?? null,
       notes: input.notes ?? null,
+      companyId: input.companyId ?? null,
+      shopifyLocationId: input.shopifyLocationId ?? null,
+      locationName: input.locationName ?? null,
       updatedAt: new Date(),
     })
     .where(eq(productionPo.id, poId));
@@ -173,6 +194,9 @@ export async function updatePoFull(
           unitCostCents: li.unitCostCents ?? null,
           shopifyProductId: li.shopifyProductId ?? null,
           shopifyVariantId: li.shopifyVariantId ?? null,
+          companyId: li.companyId ?? null,
+          shopifyLocationId: li.shopifyLocationId ?? null,
+          locationName: li.locationName ?? null,
           updatedAt: now,
         })
         .where(eq(productionPoLineItem.id, li.id));
@@ -187,6 +211,9 @@ export async function updatePoFull(
           unitCostCents: li.unitCostCents ?? null,
           shopifyProductId: li.shopifyProductId ?? null,
           shopifyVariantId: li.shopifyVariantId ?? null,
+          companyId: li.companyId ?? null,
+          shopifyLocationId: li.shopifyLocationId ?? null,
+          locationName: li.locationName ?? null,
         })
         .returning({ id: productionPoLineItem.id });
       await db
@@ -333,9 +360,14 @@ export async function getPoDetail(poId: string) {
     where: eq(productionPo.id, poId),
     with: {
       supplier: true,
+      company: {
+        columns: { id: true, name: true },
+        with: { priceTier: { columns: { name: true, discountPercent: true } } },
+      },
       lineItems: {
         with: {
           customer: { columns: { id: true, firstName: true, lastName: true } },
+          company: { columns: { id: true, name: true } },
           stageEvents: { orderBy: asc(productionStageEvent.enteredAt) },
         },
       },

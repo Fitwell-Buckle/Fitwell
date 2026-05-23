@@ -315,6 +315,47 @@ export const customerEvent = pgTable(
   ],
 );
 
+// ─── Companies & price tiers (our own, not Shopify) ─────────────────
+
+export const priceTier = pgTable("price_tier", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  // Percentage off the Shopify retail price (e.g. 30 = 30% off).
+  discountPercent: real("discount_percent").notNull().default(0),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+export const company = pgTable(
+  "company",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    contactName: text("contact_name"),
+    contactEmail: text("contact_email"),
+    priceTierId: text("price_tier_id").references(() => priceTier.id),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("company_price_tier_id_idx").on(t.priceTierId)],
+);
+
+export const priceTierRelations = relations(priceTier, ({ many }) => ({
+  companies: many(company),
+}));
+
+export const companyRelations = relations(company, ({ one }) => ({
+  priceTier: one(priceTier, {
+    fields: [company.priceTierId],
+    references: [priceTier.id],
+  }),
+}));
+
 // ─── Production module ──────────────────────────────────────────────
 
 // Fixed, ordered stage progression. Every line item passes through all
@@ -362,6 +403,12 @@ export const productionPo = pgTable(
     status: text("status").notNull().default("active"), // active | on_hold | complete | cancelled
     // Set manually when the user confirms they marked the PO received in Shopify.
     shopifyReceivedAt: timestamp("shopify_received_at", { mode: "date" }),
+    // Default B2B company the batch is for (our own company list; line items can
+    // override). Its price tier drives the discount off retail.
+    companyId: text("company_id").references(() => company.id),
+    // Default receiving warehouse (Shopify location, id + name snapshot).
+    shopifyLocationId: text("shopify_location_id"),
+    locationName: text("location_name"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
@@ -369,6 +416,7 @@ export const productionPo = pgTable(
   (t) => [
     index("production_po_supplier_id_idx").on(t.supplierId),
     index("production_po_status_idx").on(t.status),
+    index("production_po_company_id_idx").on(t.companyId),
   ],
 );
 
@@ -399,6 +447,10 @@ export const productionPoLineItem = pgTable(
     orderLineItemId: text("order_line_item_id").references(
       () => orderLineItem.id,
     ),
+    // Optional overrides of the PO-level company / warehouse for this line.
+    companyId: text("company_id").references(() => company.id),
+    shopifyLocationId: text("shopify_location_id"),
+    locationName: text("location_name"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },
@@ -407,6 +459,7 @@ export const productionPoLineItem = pgTable(
     index("production_li_customer_id_idx").on(t.customerId),
     index("production_li_order_line_item_id_idx").on(t.orderLineItemId),
     index("production_li_current_stage_idx").on(t.currentStage),
+    index("production_li_company_id_idx").on(t.companyId),
   ],
 );
 
@@ -527,6 +580,10 @@ export const productionPoRelations = relations(productionPo, ({ one, many }) => 
     fields: [productionPo.supplierId],
     references: [supplier.id],
   }),
+  company: one(company, {
+    fields: [productionPo.companyId],
+    references: [company.id],
+  }),
   lineItems: many(productionPoLineItem),
   comments: many(productionComment),
   attachments: many(productionAttachment),
@@ -546,6 +603,10 @@ export const productionPoLineItemRelations = relations(
     orderLineItem: one(orderLineItem, {
       fields: [productionPoLineItem.orderLineItemId],
       references: [orderLineItem.id],
+    }),
+    company: one(company, {
+      fields: [productionPoLineItem.companyId],
+      references: [company.id],
     }),
     stageEvents: many(productionStageEvent),
     comments: many(productionComment),

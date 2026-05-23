@@ -4,7 +4,7 @@ import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { supplier } from "@/lib/schema";
+import { supplier, company } from "@/lib/schema";
 import { getPoDetail } from "@/lib/production/service";
 import { skuSize } from "@/lib/production/display";
 import { PageHeader } from "@/components/ui/page-header";
@@ -24,14 +24,26 @@ export default async function EditPoPage({
   if (!session) redirect("/auth/login");
 
   const { id } = await params;
-  const [po, suppliers] = await Promise.all([
+  const [po, suppliers, companies] = await Promise.all([
     getPoDetail(id),
     db.query.supplier.findMany({
       columns: { id: true, name: true },
       orderBy: asc(supplier.name),
     }),
+    db.query.company.findMany({
+      columns: { id: true, name: true },
+      orderBy: asc(company.name),
+      with: { priceTier: { columns: { name: true, discountPercent: true } } },
+    }),
   ]);
   if (!po) notFound();
+
+  const companyOptions = companies.map((c) => ({
+    id: c.id,
+    name: c.name,
+    tierName: c.priceTier?.name ?? null,
+    tierDiscount: c.priceTier?.discountPercent ?? null,
+  }));
 
   const initial: PoFormInitial = {
     supplierId: po.supplierId,
@@ -39,6 +51,9 @@ export default async function EditPoPage({
     issuedDate: po.issuedDate,
     expectedDeliveryDate: po.expectedDeliveryDate ?? "",
     notes: po.notes ?? "",
+    companyId: po.companyId ?? "",
+    shopifyLocationId: po.shopifyLocationId ?? "",
+    locationName: po.locationName ?? "",
     lineItems: [...po.lineItems]
       .sort((a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku))
       .map((li) => ({
@@ -49,6 +64,9 @@ export default async function EditPoPage({
         unitCostCents: li.unitCostCents,
         shopifyProductId: li.shopifyProductId,
         shopifyVariantId: li.shopifyVariantId,
+        companyId: li.companyId,
+        shopifyLocationId: li.shopifyLocationId,
+        locationName: li.locationName,
       })),
   };
 
@@ -66,7 +84,12 @@ export default async function EditPoPage({
         Stage and status are managed on the PO page.
       </p>
 
-      <PoForm suppliers={suppliers} initial={initial} poId={po.id} />
+      <PoForm
+        suppliers={suppliers}
+        companies={companyOptions}
+        initial={initial}
+        poId={po.id}
+      />
     </div>
   );
 }

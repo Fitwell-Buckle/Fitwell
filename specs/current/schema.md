@@ -253,7 +253,21 @@ A master PO tracked against Shopify's built-in PO feature (no Shopify PO API).
 | `lock_stages_together` | boolean | Default true; false = items advance independently |
 | `status` | text | `active` \| `on_hold` \| `complete` \| `cancelled` |
 | `shopify_received_at` | timestamp | Set manually when received in Shopify (Phase 4) |
+| `company_id` | text | Default B2B company (FK → company); line items can override |
+| `shopify_location_id` / `location_name` | text | Default receiving warehouse (Shopify location; needs `read_locations`); line items can override |
 | `notes` | text | |
+
+Line items (`production_po_line_item`) also carry optional `company_id`,
+`shopify_location_id`, `location_name` that **override** the PO defaults.
+
+### `company` / `price_tier`
+
+Our own B2B companies (not Shopify), managed under Customers → Companies.
+
+| Table | Key columns |
+|-------|-------------|
+| `company` | `name`, `contact_name?`, `contact_email?`, `price_tier_id` (FK → price_tier), `notes` |
+| `price_tier` | `name`, `discount_percent` (real, % off retail) |
 | `created_at` / `updated_at` | timestamp | |
 
 ### `production_po_line_item`

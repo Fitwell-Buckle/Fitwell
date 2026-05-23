@@ -30,6 +30,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/dashboard` | Overview — revenue, orders, traffic KPIs |
 | `/customers` | Customer list with search, filter, sort |
 | `/customers/[id]` | Individual customer detail — orders, LTV, attribution |
+| `/customers/companies` | B2B companies + price tiers (CRUD) |
 | `/orders` | Order list with filters |
 | `/campaigns` | Campaign list — performance overview |
 | `/campaigns/[id]` | Campaign detail — spend, conversions, ROAS |
@@ -72,6 +73,11 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 ### Production API (each handler checks `auth()`)
 | Method | Path | Description |
 |--------|------|-------------|
+| GET | `/api/production/shopify-refs` | Warehouses (Shopify locations) for the PO picker; needs `read_locations` |
+| POST | `/api/production/companies` | Create a company |
+| PATCH | `/api/production/companies/[id]` | Update a company |
+| POST | `/api/production/price-tiers` | Create a price tier (% off retail) |
+| PATCH | `/api/production/price-tiers/[id]` | Update a price tier |
 | GET | `/api/production/collections` | Shopify catalog grouped by collection (+ Uncategorized) for the cascading PO picker |
 | GET | `/api/production/products` | Flattened active Shopify catalog (variants) — fallback picker source |
 | POST | `/api/production/po` | Create a PO + line items |

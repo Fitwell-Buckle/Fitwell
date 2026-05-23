@@ -4,7 +4,7 @@ import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { supplier } from "@/lib/schema";
+import { supplier, company } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { PoForm } from "./po-form";
@@ -17,10 +17,24 @@ export default async function NewPoPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
-  const suppliers = await db.query.supplier.findMany({
-    columns: { id: true, name: true },
-    orderBy: asc(supplier.name),
-  });
+  const [suppliers, companies] = await Promise.all([
+    db.query.supplier.findMany({
+      columns: { id: true, name: true },
+      orderBy: asc(supplier.name),
+    }),
+    db.query.company.findMany({
+      columns: { id: true, name: true },
+      orderBy: asc(company.name),
+      with: { priceTier: { columns: { name: true, discountPercent: true } } },
+    }),
+  ]);
+
+  const companyOptions = companies.map((c) => ({
+    id: c.id,
+    name: c.name,
+    tierName: c.priceTier?.name ?? null,
+    tierDiscount: c.priceTier?.discountPercent ?? null,
+  }));
 
   return (
     <div>
@@ -43,7 +57,7 @@ export default async function NewPoPage() {
           page.
         </p>
       ) : (
-        <PoForm suppliers={suppliers} />
+        <PoForm suppliers={suppliers} companies={companyOptions} />
       )}
     </div>
   );

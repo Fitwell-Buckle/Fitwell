@@ -71,6 +71,41 @@
       "when": 1779555546192,
       "tag": "0009_amusing_shinko_yamashiro",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779567319963,
+      "tag": "0010_sticky_agent_zero",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779569227753,
+      "tag": "0011_easy_goliath",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779569479968,
+      "tag": "0012_workable_whirlwind",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1779570438550,
+      "tag": "0013_purple_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1779570477149,
+      "tag": "0014_unique_vertigo",
+      "breakpoints": true
     }
   ]
 }

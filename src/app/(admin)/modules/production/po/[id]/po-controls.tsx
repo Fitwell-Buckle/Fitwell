@@ -31,6 +31,10 @@ interface LineItem {
   currentStage: ProductionStage;
   customerName: string | null;
   expectedCompletionDate: string | null;
+  company: string | null;
+  companyOverridden: boolean;
+  warehouse: string | null;
+  warehouseOverridden: boolean;
 }
 
 export function PoControls({
@@ -144,6 +148,8 @@ export function PoControls({
               <TableHead>Title</TableHead>
               <TableHead>Qty</TableHead>
               <TableHead>Unit cost</TableHead>
+              <TableHead>Company</TableHead>
+              <TableHead>Warehouse</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Stage</TableHead>
               {!lockStagesTogether && <TableHead className="text-right">Action</TableHead>}
@@ -156,6 +162,18 @@ export function PoControls({
                 <TableCell>{li.title}</TableCell>
                 <TableCell className="text-zinc-500">{li.quantity}</TableCell>
                 <TableCell className="text-zinc-500">{li.unitCost}</TableCell>
+                <TableCell className="text-zinc-500">
+                  {li.company ?? "—"}
+                  {li.companyOverridden && (
+                    <span className="ml-1 text-[10px] uppercase text-amber-600">ovr</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-zinc-500">
+                  {li.warehouse ?? "—"}
+                  {li.warehouseOverridden && (
+                    <span className="ml-1 text-[10px] uppercase text-amber-600">ovr</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-zinc-500">{li.customerName ?? "—"}</TableCell>
                 <TableCell>
                   <Badge className={cn(stageBadgeClass(li.currentStage))}>

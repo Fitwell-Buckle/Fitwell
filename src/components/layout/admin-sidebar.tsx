@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -7,36 +8,85 @@ import {
   LayoutDashboard,
   Users,
   ShoppingCart,
-  Megaphone,
-  GitBranch,
   Filter,
   Package,
-  Factory,
+  Megaphone,
   RefreshCw,
   Settings,
   BookOpen,
   LogOut,
+  ChevronDown,
+  type LucideIcon,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+interface NavChild {
+  href: string;
+  label: string;
+}
+
+interface NavLeaf {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+interface NavGroup {
+  label: string;
+  icon: LucideIcon;
+  href?: string; // when set, the header is also a link to its own page
+  children: NavChild[];
+}
+
+type NavItem = NavLeaf | NavGroup;
+
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/customers", label: "Customers", icon: Users },
+  {
+    label: "Customers",
+    icon: Users,
+    href: "/customers",
+    children: [{ href: "/customers/companies", label: "Companies" }],
+  },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
-  { href: "/campaigns", label: "Campaigns", icon: Megaphone },
-  { href: "/attribution", label: "Attribution", icon: GitBranch },
   { href: "/funnel", label: "Funnel", icon: Filter },
-  { href: "/products", label: "Products", icon: Package },
-  { href: "/modules", label: "Modules", icon: Factory },
+  {
+    label: "Products",
+    icon: Package,
+    href: "/products",
+    children: [{ href: "/modules/production", label: "Production" }],
+  },
+  {
+    label: "Marketing",
+    icon: Megaphone,
+    children: [
+      { href: "/attribution", label: "Attribution" },
+      { href: "/campaigns", label: "Campaigns" },
+    ],
+  },
   { href: "/data-sync", label: "Data Sync", icon: RefreshCw },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/docs", label: "Docs", icon: BookOpen },
 ];
 
+const rowBase =
+  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors";
+const activeCls = "bg-zinc-800 text-white";
+const idleCls = "text-zinc-400 hover:bg-zinc-800 hover:text-white";
+
+function isGroup(item: NavItem): item is NavGroup {
+  return "children" in item;
+}
+
 export function AdminSidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+
+  function toggle(label: string, fallback: boolean) {
+    setOpen((o) => ({ ...o, [label]: !(o[label] ?? fallback) }));
+  }
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-900">
@@ -52,21 +102,98 @@ export function AdminSidebar() {
       </div>
       <nav className="flex-1 space-y-1 p-4">
         {navItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          if (!isGroup(item)) {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(rowBase, isActive ? activeCls : idleCls)}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          }
+
+          const childActive = item.children.some((c) =>
+            pathname.startsWith(c.href),
+          );
+          const selfActive = item.href ? pathname.startsWith(item.href) : false;
+          const expanded = open[item.label] ?? childActive;
+
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-400 hover:bg-zinc-800 hover:text-white",
+            <div key={item.label}>
+              {item.href ? (
+                <div className="flex items-center">
+                  <Link
+                    href={item.href}
+                    className={cn(rowBase, "flex-1", selfActive ? activeCls : idleCls)}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => toggle(item.label, childActive)}
+                    aria-label={`Toggle ${item.label}`}
+                    aria-expanded={expanded}
+                    className="ml-1 rounded-md p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        expanded ? "" : "-rotate-90",
+                      )}
+                    />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => toggle(item.label, childActive)}
+                  aria-expanded={expanded}
+                  className={cn(
+                    rowBase,
+                    "w-full justify-between",
+                    childActive ? activeCls : idleCls,
+                  )}
+                >
+                  <span className="flex items-center gap-3">
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      expanded ? "" : "-rotate-90",
+                    )}
+                  />
+                </button>
               )}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
+
+              {expanded && (
+                <div className="mt-1 space-y-1 pl-9">
+                  {item.children.map((child) => {
+                    const active = pathname.startsWith(child.href);
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          "block rounded-md px-3 py-1.5 text-sm transition-colors",
+                          active
+                            ? "bg-zinc-800 text-white"
+                            : "text-zinc-400 hover:bg-zinc-800 hover:text-white",
+                        )}
+                      >
+                        {child.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
