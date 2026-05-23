@@ -13,6 +13,8 @@ import {
   statusBadgeClass,
   stageBadgeClass,
   fmtDate,
+  fmtMoney,
+  skuSize,
 } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 import { PoControls } from "./po-controls";
@@ -20,14 +22,6 @@ import { PoControls } from "./po-controls";
 export const metadata: Metadata = {
   title: "Production PO | Fitwell Admin",
 };
-
-function fmtMoney(cents: number | null | undefined): string {
-  if (cents == null) return "—";
-  return (cents / 100).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-  });
-}
 
 export default async function PoDetailPage({
   params,
@@ -42,6 +36,15 @@ export default async function PoDetailPage({
   if (!po) notFound();
 
   const derivedStage = derivePoStage(po.lineItems.map((li) => li.currentStage));
+
+  // Order line items by buckle size (16, 18, 20, 22…), matching the create form.
+  const sortedLineItems = [...po.lineItems].sort(
+    (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
+  );
+  const totalCents = po.lineItems.reduce(
+    (sum, li) => sum + (li.unitCostCents ?? 0) * li.quantity,
+    0,
+  );
 
   return (
     <div>
@@ -96,7 +99,8 @@ export default async function PoDetailPage({
         poId={po.id}
         status={po.status}
         lockStagesTogether={po.lockStagesTogether}
-        lineItems={po.lineItems.map((li) => ({
+        totalCents={totalCents}
+        lineItems={sortedLineItems.map((li) => ({
           id: li.id,
           title: li.title,
           sku: li.sku,
@@ -114,7 +118,7 @@ export default async function PoDetailPage({
       <Card className="mt-5 p-6">
         <h2 className="text-sm font-semibold text-zinc-900">Stage timeline</h2>
         <div className="mt-4 space-y-4">
-          {po.lineItems.map((li) => (
+          {sortedLineItems.map((li) => (
             <div key={li.id}>
               <div className="text-xs font-medium text-zinc-500">
                 {li.sku} — {li.title}

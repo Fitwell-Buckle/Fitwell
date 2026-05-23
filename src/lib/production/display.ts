@@ -42,3 +42,17 @@ export function fmtDate(value: string | null | undefined): string {
     year: "numeric",
   });
 }
+
+/** Buckle size = trailing digits of the SKU (e.g. FBW001-SS-16 → 16). */
+export function skuSize(sku: string): number {
+  const m = sku.match(/(\d+)\s*$/);
+  return m ? Number(m[1]) : 999999; // unknown sizes sort last
+}
+
+export function fmtMoney(cents: number | null | undefined): string {
+  if (cents == null) return "—";
+  return (cents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+}

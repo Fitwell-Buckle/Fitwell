@@ -14,7 +14,12 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { STAGE_LABELS, isComplete, type ProductionStage } from "@/lib/production/stages";
-import { PO_STATUSES, STATUS_LABELS, stageBadgeClass } from "@/lib/production/display";
+import {
+  PO_STATUSES,
+  STATUS_LABELS,
+  stageBadgeClass,
+  fmtMoney,
+} from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 
 interface LineItem {
@@ -33,11 +38,13 @@ export function PoControls({
   status,
   lockStagesTogether,
   lineItems,
+  totalCents,
 }: {
   poId: string;
   status: string;
   lockStagesTogether: boolean;
   lineItems: LineItem[];
+  totalCents: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -171,6 +178,13 @@ export function PoControls({
             ))}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
+        <span className="text-sm text-zinc-500">Total cost</span>
+        <span className="ml-3 text-base font-semibold text-zinc-900">
+          {fmtMoney(totalCents)}
+        </span>
       </div>
     </Card>
   );

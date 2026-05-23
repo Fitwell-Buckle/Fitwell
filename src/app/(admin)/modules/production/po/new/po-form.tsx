@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import type { CatalogVariant } from "@/app/api/production/products/route";
 import type { CatalogGroup } from "@/app/api/production/collections/route";
+import { fmtMoney, skuSize } from "@/lib/production/display";
 
 interface LineItemRow {
   collectionKey: string; // selected collection group id (grouped mode)
@@ -43,24 +44,11 @@ function variantLabel(v: CatalogVariant): string {
   return v.sku ? `${v.sku} · ${name}` : name;
 }
 
-/** Buckle size = trailing digits of the SKU (e.g. FBW001-SS-16 → 16). */
-function skuSize(sku: string): number {
-  const m = sku.match(/(\d+)\s*$/);
-  return m ? Number(m[1]) : 999999; // unknown sizes sort last
-}
-
 /** Sort variants by buckle size (16, 18, 20, 22…), SKU as tiebreaker. */
 function sortBySize(variants: CatalogVariant[]): CatalogVariant[] {
   return [...variants].sort(
     (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
   );
-}
-
-function fmtMoney(cents: number): string {
-  return (cents / 100).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-  });
 }
 
 export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[] }) {
