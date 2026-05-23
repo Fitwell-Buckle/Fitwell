@@ -369,6 +369,45 @@ class ShopifyClient {
     return { products: body.products, nextPageUrl };
   }
 
+  // ── Collections ───────────────────────────────────────────────────
+
+  /**
+   * All collections (both manual "custom" and rule-based "smart"), flattened
+   * to id + title. Paginates each type via the Link-header paginator.
+   */
+  async getCollections(): Promise<{ id: number; title: string }[]> {
+    const out: { id: number; title: string }[] = [];
+    const sources: Array<["custom_collections" | "smart_collections", string]> = [
+      ["custom_collections", "/custom_collections.json?limit=250"],
+      ["smart_collections", "/smart_collections.json?limit=250"],
+    ];
+    for (const [key, endpoint] of sources) {
+      for await (const page of this.fetchAll<{ id: number; title: string }>(
+        endpoint,
+        key,
+      )) {
+        for (const c of page) out.push({ id: c.id, title: c.title });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Products in a collection. `/collections/{id}/products.json` resolves both
+   * custom and smart collections (unlike the `collects` endpoint, which only
+   * covers manual ones).
+   */
+  async getCollectionProducts(collectionId: number): Promise<ShopifyProduct[]> {
+    const out: ShopifyProduct[] = [];
+    for await (const page of this.fetchAll<ShopifyProduct>(
+      `/collections/${collectionId}/products.json?limit=250`,
+      "products",
+    )) {
+      out.push(...page);
+    }
+    return out;
+  }
+
   // ── Generic paginator ─────────────────────────────────────────────
 
   /**

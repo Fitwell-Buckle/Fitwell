@@ -70,7 +70,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 ### Production API (each handler checks `auth()`)
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/production/products` | Flattened active Shopify catalog (variants) for the PO line-item picker |
+| GET | `/api/production/collections` | Shopify catalog grouped by collection (+ Uncategorized) for the cascading PO picker |
+| GET | `/api/production/products` | Flattened active Shopify catalog (variants) — fallback picker source |
 | POST | `/api/production/po` | Create a PO + line items |
 | PATCH | `/api/production/po/[id]` | Update PO fields (status, lock, dates, notes) |
 | POST | `/api/production/po/[id]/advance` | Advance stage — whole PO (locked) or one line item |

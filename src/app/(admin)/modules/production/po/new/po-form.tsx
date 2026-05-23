@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import type { CatalogVariant } from "@/app/api/production/products/route";
+import type { CatalogGroup } from "@/app/api/production/collections/route";
 
 interface LineItemRow {
-  variantKey: string; // shopifyVariantId when picked from catalog, "" otherwise
+  collectionKey: string; // selected collection group id (grouped mode)
+  variantKey: string; // shopifyVariantId when picked from catalog
   sku: string; // used in manual-entry fallback
   title: string; // used in manual-entry fallback
   quantity: string;
@@ -19,6 +21,7 @@ interface LineItemRow {
 
 function emptyRow(): LineItemRow {
   return {
+    collectionKey: "",
     variantKey: "",
     sku: "",
     title: "",
@@ -28,9 +31,11 @@ function emptyRow(): LineItemRow {
   };
 }
 
+type Mode = "loading" | "grouped" | "flat" | "manual";
+
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
 const inputBase =
-  "flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2";
+  "flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 
 function variantLabel(v: CatalogVariant): string {
   const name = v.variantTitle ? `${v.title} — ${v.variantTitle}` : v.title;
@@ -49,26 +54,37 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // null = loading; [] with catalogError = unavailable -> manual fallback.
-  const [catalog, setCatalog] = useState<CatalogVariant[] | null>(null);
+  // Catalog sources, tried in order: collections (grouped) → products (flat) →
+  // manual entry. null while still loading/unattempted.
+  const [groups, setGroups] = useState<CatalogGroup[] | null>(null);
+  const [flat, setFlat] = useState<CatalogVariant[] | null>(null);
   const [catalogError, setCatalogError] = useState(false);
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
+        const res = await fetch("/api/production/collections");
+        const data = await res.json();
+        if (!active) return;
+        if (res.ok && Array.isArray(data.data) && data.data.length > 0) {
+          setGroups(data.data as CatalogGroup[]);
+          return;
+        }
+      } catch {
+        /* fall through to flat catalog */
+      }
+      try {
         const res = await fetch("/api/production/products");
         const data = await res.json();
         if (!active) return;
-        if (res.ok) setCatalog(data.data as CatalogVariant[]);
-        else {
-          setCatalog([]);
-          setCatalogError(true);
+        if (res.ok && Array.isArray(data.data) && data.data.length > 0) {
+          setFlat(data.data as CatalogVariant[]);
+          return;
         }
-      } catch {
-        if (!active) return;
-        setCatalog([]);
         setCatalogError(true);
+      } catch {
+        if (active) setCatalogError(true);
       }
     })();
     return () => {
@@ -76,8 +92,17 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
     };
   }, []);
 
-  const useCatalog = !!catalog && catalog.length > 0;
-  const variantByKey = new Map((catalog ?? []).map((v) => [v.shopifyVariantId, v]));
+  const mode: Mode =
+    groups && groups.length > 0
+      ? "grouped"
+      : flat && flat.length > 0
+        ? "flat"
+        : catalogError
+          ? "manual"
+          : "loading";
+
+  const groupById = new Map((groups ?? []).map((g) => [g.id, g]));
+  const flatByKey = new Map((flat ?? []).map((v) => [v.shopifyVariantId, v]));
 
   function updateRow(i: number, patch: Partial<LineItemRow>) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -103,8 +128,17 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
       let shopifyProductId: string | null = null;
       let shopifyVariantId: string | null = null;
 
-      if (useCatalog) {
-        const v = variantByKey.get(r.variantKey);
+      if (mode === "grouped") {
+        const group = groupById.get(r.collectionKey);
+        if (!group) return setError(`Line ${i + 1}: pick a collection.`);
+        const v = group.variants.find((x) => x.shopifyVariantId === r.variantKey);
+        if (!v) return setError(`Line ${i + 1}: pick a product.`);
+        sku = v.sku;
+        title = v.title + (v.variantTitle ? ` — ${v.variantTitle}` : "");
+        shopifyProductId = v.shopifyProductId;
+        shopifyVariantId = v.shopifyVariantId;
+      } else if (mode === "flat") {
+        const v = flatByKey.get(r.variantKey);
         if (!v) return setError(`Line ${i + 1}: pick a product.`);
         sku = v.sku;
         title = v.title + (v.variantTitle ? ` — ${v.variantTitle}` : "");
@@ -239,87 +273,123 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
           </Button>
         </div>
 
-        {catalog === null && (
+        {mode === "loading" && (
           <p className="mt-3 text-xs text-zinc-400">Loading Shopify catalog…</p>
         )}
-        {catalogError && (
+        {mode === "manual" && (
           <p className="mt-3 text-xs text-amber-600">
             Couldn’t load the Shopify catalog — enter SKU and title manually.
           </p>
         )}
 
         <div className="mt-4 space-y-3">
-          {rows.map((r, i) => (
-            <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
-              {useCatalog ? (
-                <select
-                  className={`${inputBase} sm:col-span-6`}
-                  value={r.variantKey}
-                  onChange={(e) => updateRow(i, { variantKey: e.target.value })}
-                >
-                  <option value="">Select a product…</option>
-                  {catalog!.map((v) => (
-                    <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
-                      {variantLabel(v)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <>
-                  <Input
-                    className="sm:col-span-2"
-                    placeholder="SKU"
-                    value={r.sku}
-                    onChange={(e) => updateRow(i, { sku: e.target.value })}
-                  />
-                  <Input
-                    className="sm:col-span-4"
-                    placeholder="Title"
-                    value={r.title}
-                    onChange={(e) => updateRow(i, { title: e.target.value })}
-                  />
-                </>
-              )}
-              <Input
-                className="sm:col-span-2"
-                type="number"
-                min="1"
-                placeholder="Qty"
-                value={r.quantity}
-                onChange={(e) => updateRow(i, { quantity: e.target.value })}
-              />
-              <Input
-                className="sm:col-span-2"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Unit cost $"
-                title="Production cost per unit (not the Shopify retail price)"
-                value={r.unitCost}
-                onChange={(e) => updateRow(i, { unitCost: e.target.value })}
-              />
-              <div className="flex items-center gap-1 sm:col-span-2">
+          {rows.map((r, i) => {
+            const selectedGroup =
+              mode === "grouped" ? groupById.get(r.collectionKey) : undefined;
+            return (
+              <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+                {mode === "grouped" ? (
+                  <>
+                    <select
+                      className={`${inputBase} sm:col-span-3`}
+                      value={r.collectionKey}
+                      onChange={(e) =>
+                        updateRow(i, { collectionKey: e.target.value, variantKey: "" })
+                      }
+                    >
+                      <option value="">Collection…</option>
+                      {groups!.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.title}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className={`${inputBase} sm:col-span-3`}
+                      value={r.variantKey}
+                      disabled={!selectedGroup}
+                      onChange={(e) => updateRow(i, { variantKey: e.target.value })}
+                    >
+                      <option value="">
+                        {selectedGroup ? "Product…" : "Pick a collection first"}
+                      </option>
+                      {selectedGroup?.variants.map((v) => (
+                        <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
+                          {variantLabel(v)}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : mode === "flat" ? (
+                  <select
+                    className={`${inputBase} sm:col-span-6`}
+                    value={r.variantKey}
+                    onChange={(e) => updateRow(i, { variantKey: e.target.value })}
+                  >
+                    <option value="">Select a product…</option>
+                    {flat!.map((v) => (
+                      <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
+                        {variantLabel(v)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <>
+                    <Input
+                      className="sm:col-span-2"
+                      placeholder="SKU"
+                      value={r.sku}
+                      onChange={(e) => updateRow(i, { sku: e.target.value })}
+                    />
+                    <Input
+                      className="sm:col-span-4"
+                      placeholder="Title"
+                      value={r.title}
+                      onChange={(e) => updateRow(i, { title: e.target.value })}
+                    />
+                  </>
+                )}
                 <Input
-                  type="date"
-                  title="Expected completion date"
-                  value={r.expectedCompletionDate}
-                  onChange={(e) =>
-                    updateRow(i, { expectedCompletionDate: e.target.value })
-                  }
+                  className="sm:col-span-2"
+                  type="number"
+                  min="1"
+                  placeholder="Qty"
+                  value={r.quantity}
+                  onChange={(e) => updateRow(i, { quantity: e.target.value })}
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeRow(i)}
-                  disabled={rows.length === 1}
-                  aria-label="Remove line"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <Input
+                  className="sm:col-span-2"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Unit cost $"
+                  title="Production cost per unit (not the Shopify retail price)"
+                  value={r.unitCost}
+                  onChange={(e) => updateRow(i, { unitCost: e.target.value })}
+                />
+                <div className="flex items-center gap-1 sm:col-span-2">
+                  <Input
+                    type="date"
+                    title="Expected completion date"
+                    value={r.expectedCompletionDate}
+                    onChange={(e) =>
+                      updateRow(i, { expectedCompletionDate: e.target.value })
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeRow(i)}
+                    disabled={rows.length === 1}
+                    aria-label="Remove line"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
 
