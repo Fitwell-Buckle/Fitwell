@@ -34,10 +34,33 @@ type Mode = "loading" | "grouped" | "flat" | "manual";
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
 const inputBase =
   "flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+// Same as inputBase but without w-full, for selects that flex-grow within a row.
+const selectBase =
+  "flex h-10 rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 
 function variantLabel(v: CatalogVariant): string {
   const name = v.variantTitle ? `${v.title} — ${v.variantTitle}` : v.title;
-  return v.sku ? `${name} (${v.sku})` : name;
+  return v.sku ? `${v.sku} · ${name}` : name;
+}
+
+/** Buckle size = trailing digits of the SKU (e.g. FBW001-SS-16 → 16). */
+function skuSize(sku: string): number {
+  const m = sku.match(/(\d+)\s*$/);
+  return m ? Number(m[1]) : 999999; // unknown sizes sort last
+}
+
+/** Sort variants by buckle size (16, 18, 20, 22…), SKU as tiebreaker. */
+function sortBySize(variants: CatalogVariant[]): CatalogVariant[] {
+  return [...variants].sort(
+    (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
+  );
+}
+
+function fmtMoney(cents: number): string {
+  return (cents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
 }
 
 export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[] }) {
@@ -66,7 +89,19 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
         const data = await res.json();
         if (!active) return;
         if (res.ok && Array.isArray(data.data) && data.data.length > 0) {
-          setGroups(data.data as CatalogGroup[]);
+          const loaded = data.data as CatalogGroup[];
+          setGroups(loaded);
+          // Default any not-yet-set row to the "All Products" collection.
+          const allProducts = loaded.find(
+            (g) => g.title.trim().toLowerCase() === "all products",
+          );
+          if (allProducts) {
+            setRows((rs) =>
+              rs.map((r) =>
+                r.collectionKey ? r : { ...r, collectionKey: allProducts.id },
+              ),
+            );
+          }
           return;
         }
       } catch {
@@ -101,6 +136,14 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
 
   const groupById = new Map((groups ?? []).map((g) => [g.id, g]));
   const flatByKey = new Map((flat ?? []).map((v) => [v.shopifyVariantId, v]));
+
+  const totalCents = rows.reduce((sum, r) => {
+    const qty = Number(r.quantity);
+    const cost = Number(r.unitCost);
+    if (!Number.isFinite(qty) || qty <= 0) return sum;
+    if (!Number.isFinite(cost) || cost < 0) return sum;
+    return sum + Math.round(cost * 100) * qty;
+  }, 0);
 
   function updateRow(i: number, patch: Partial<LineItemRow>) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -287,12 +330,19 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
           {rows.map((r, i) => {
             const selectedGroup =
               mode === "grouped" ? groupById.get(r.collectionKey) : undefined;
+            // Variants already chosen on other rows — hidden so nothing is added twice.
+            const taken = new Set(
+              rows
+                .filter((_, j) => j !== i)
+                .map((x) => x.variantKey)
+                .filter(Boolean),
+            );
             return (
-              <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+              <div key={i} className="flex flex-wrap items-center gap-2">
                 {mode === "grouped" ? (
                   <>
                     <select
-                      className={`${inputBase} sm:col-span-3`}
+                      className={`${selectBase} min-w-[150px] flex-1`}
                       value={r.collectionKey}
                       onChange={(e) =>
                         updateRow(i, { collectionKey: e.target.value, variantKey: "" })
@@ -306,7 +356,7 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
                       ))}
                     </select>
                     <select
-                      className={`${inputBase} sm:col-span-4`}
+                      className={`${selectBase} min-w-[200px] flex-[2]`}
                       value={r.variantKey}
                       disabled={!selectedGroup}
                       onChange={(e) => updateRow(i, { variantKey: e.target.value })}
@@ -314,36 +364,40 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
                       <option value="">
                         {selectedGroup ? "Product…" : "Pick a collection first"}
                       </option>
-                      {selectedGroup?.variants.map((v) => (
-                        <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
-                          {variantLabel(v)}
-                        </option>
-                      ))}
+                      {sortBySize(selectedGroup?.variants ?? [])
+                        .filter((v) => !taken.has(v.shopifyVariantId))
+                        .map((v) => (
+                          <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
+                            {variantLabel(v)}
+                          </option>
+                        ))}
                     </select>
                   </>
                 ) : mode === "flat" ? (
                   <select
-                    className={`${inputBase} sm:col-span-7`}
+                    className={`${selectBase} min-w-[220px] flex-1`}
                     value={r.variantKey}
                     onChange={(e) => updateRow(i, { variantKey: e.target.value })}
                   >
                     <option value="">Select a product…</option>
-                    {flat!.map((v) => (
-                      <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
-                        {variantLabel(v)}
-                      </option>
-                    ))}
+                    {sortBySize(flat!)
+                      .filter((v) => !taken.has(v.shopifyVariantId))
+                      .map((v) => (
+                        <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
+                          {variantLabel(v)}
+                        </option>
+                      ))}
                   </select>
                 ) : (
                   <>
                     <Input
-                      className="sm:col-span-2"
+                      className="w-32"
                       placeholder="SKU"
                       value={r.sku}
                       onChange={(e) => updateRow(i, { sku: e.target.value })}
                     />
                     <Input
-                      className="sm:col-span-5"
+                      className="w-auto min-w-[180px] flex-1"
                       placeholder="Title"
                       value={r.title}
                       onChange={(e) => updateRow(i, { title: e.target.value })}
@@ -351,7 +405,7 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
                   </>
                 )}
                 <Input
-                  className="sm:col-span-2"
+                  className="w-20"
                   type="number"
                   min="1"
                   placeholder="Qty"
@@ -359,30 +413,36 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
                   onChange={(e) => updateRow(i, { quantity: e.target.value })}
                 />
                 <Input
-                  className="sm:col-span-2"
+                  className="w-24"
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="Unit cost $"
+                  placeholder="Unit $"
                   title="Production cost per unit (not the Shopify retail price)"
                   value={r.unitCost}
                   onChange={(e) => updateRow(i, { unitCost: e.target.value })}
                 />
-                <div className="flex items-center justify-end sm:col-span-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeRow(i)}
-                    disabled={rows.length === 1}
-                    aria-label="Remove line"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeRow(i)}
+                  disabled={rows.length === 1}
+                  aria-label="Remove line"
+                  className="shrink-0"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
+          <span className="text-sm text-zinc-500">Total cost</span>
+          <span className="ml-3 text-base font-semibold text-zinc-900">
+            {fmtMoney(totalCents)}
+          </span>
         </div>
       </Card>
 
