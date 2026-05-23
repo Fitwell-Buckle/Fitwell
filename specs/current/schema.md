@@ -286,6 +286,21 @@ Append-on-transition log; powers the timeline and (later) cycle-time estimates.
 | `triggered_by_user_id` | text | FK → user, nullable |
 | `notes` | text | |
 
+### `production_comment` / `production_attachment`
+
+Polymorphic children (Phase 2) — **exactly one** of `po_id` / `line_item_id` is
+set, enforced by a CHECK constraint (`(po_id IS NULL) <> (line_item_id IS NULL)`)
+and by the `resolveParent` validator before insert. Both cascade-delete with their
+parent.
+
+| Table | Key columns |
+|-------|-------------|
+| `production_comment` | `po_id?`, `line_item_id?`, `author_user_id` (FK user), `body`, `created_at` |
+| `production_attachment` | `po_id?`, `line_item_id?`, `blob_url`, `filename`, `content_type`, `size_bytes`, `uploaded_by_user_id` (FK user), `uploaded_at` |
+
+Attachments are stored in **Vercel Blob** (`BLOB_READ_WRITE_TOKEN`); the DB row
+holds the blob URL + metadata.
+
 ### `user.supplier_id`
 
 Nullable text column added to `user`; set for users with `role='supplier'` so the

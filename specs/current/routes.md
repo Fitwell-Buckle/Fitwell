@@ -75,6 +75,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | POST | `/api/production/po` | Create a PO + line items |
 | PATCH | `/api/production/po/[id]` | Update PO fields (status, lock, dates, notes) |
 | POST | `/api/production/po/[id]/advance` | Advance stage — whole PO (locked) or one line item |
+| POST | `/api/production/po/[id]/comments` | Add a comment to a PO |
 | POST | `/api/production/suppliers` | Create a supplier |
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |
 

@@ -5,8 +5,10 @@ import {
   productionPo,
   productionPoLineItem,
   productionStageEvent,
+  productionComment,
 } from "@/lib/schema";
 import { planAdvance, type AdvanceTransition } from "./stages";
+import { resolveParent } from "./parents";
 
 const dateString = z
   .string()
@@ -162,7 +164,7 @@ export async function advance(params: {
   return transitions;
 }
 
-/** PO with supplier, line items (+ customer), and per-item stage events. */
+/** PO with supplier, line items (+ customer), stage events, and comments. */
 export async function getPoDetail(poId: string) {
   return db.query.productionPo.findFirst({
     where: eq(productionPo.id, poId),
@@ -174,6 +176,36 @@ export async function getPoDetail(poId: string) {
           stageEvents: { orderBy: asc(productionStageEvent.enteredAt) },
         },
       },
+      comments: {
+        orderBy: asc(productionComment.createdAt),
+        with: { author: { columns: { name: true, email: true } } },
+      },
     },
   });
+}
+
+export const commentSchema = z.object({
+  body: z.string().min(1).max(5000),
+});
+
+/** Add a comment to a PO or a line item (exactly one parent). */
+export async function addComment(params: {
+  poId?: string | null;
+  lineItemId?: string | null;
+  authorUserId: string;
+  body: string;
+}): Promise<{ id: string }> {
+  const parent = resolveParent(params);
+  if (!parent.ok) throw new Error(parent.error);
+
+  const [row] = await db
+    .insert(productionComment)
+    .values({
+      poId: parent.poId,
+      lineItemId: parent.lineItemId,
+      authorUserId: params.authorUserId,
+      body: params.body,
+    })
+    .returning({ id: productionComment.id });
+  return row;
 }

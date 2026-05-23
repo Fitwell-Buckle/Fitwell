@@ -11,7 +11,9 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
 
@@ -426,6 +428,67 @@ export const productionStageEvent = pgTable(
   (t) => [index("production_stage_event_line_item_id_idx").on(t.lineItemId)],
 );
 
+// Polymorphic attachment — exactly one of poId or lineItemId is set (CHECK).
+export const productionAttachment = pgTable(
+  "production_attachment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id").references(() => productionPo.id, {
+      onDelete: "cascade",
+    }),
+    lineItemId: text("line_item_id").references(
+      () => productionPoLineItem.id,
+      { onDelete: "cascade" },
+    ),
+    blobUrl: text("blob_url").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => user.id),
+    uploadedAt: timestamp("uploaded_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("production_attachment_po_id_idx").on(t.poId),
+    index("production_attachment_line_item_id_idx").on(t.lineItemId),
+    check(
+      "production_attachment_one_parent",
+      sql`(${t.poId} is null) <> (${t.lineItemId} is null)`,
+    ),
+  ],
+);
+
+// Polymorphic comment — exactly one of poId or lineItemId is set (CHECK).
+export const productionComment = pgTable(
+  "production_comment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id").references(() => productionPo.id, {
+      onDelete: "cascade",
+    }),
+    lineItemId: text("line_item_id").references(
+      () => productionPoLineItem.id,
+      { onDelete: "cascade" },
+    ),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => user.id),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("production_comment_po_id_idx").on(t.poId),
+    index("production_comment_line_item_id_idx").on(t.lineItemId),
+    check(
+      "production_comment_one_parent",
+      sql`(${t.poId} is null) <> (${t.lineItemId} is null)`,
+    ),
+  ],
+);
+
 // ─── Relations ──────────────────────────────────────────────────────
 
 export const customerRelations = relations(customer, ({ many }) => ({
@@ -465,6 +528,8 @@ export const productionPoRelations = relations(productionPo, ({ one, many }) => 
     references: [supplier.id],
   }),
   lineItems: many(productionPoLineItem),
+  comments: many(productionComment),
+  attachments: many(productionAttachment),
 }));
 
 export const productionPoLineItemRelations = relations(
@@ -483,6 +548,8 @@ export const productionPoLineItemRelations = relations(
       references: [orderLineItem.id],
     }),
     stageEvents: many(productionStageEvent),
+    comments: many(productionComment),
+    attachments: many(productionAttachment),
   }),
 );
 
@@ -492,6 +559,42 @@ export const productionStageEventRelations = relations(
     lineItem: one(productionPoLineItem, {
       fields: [productionStageEvent.lineItemId],
       references: [productionPoLineItem.id],
+    }),
+  }),
+);
+
+export const productionCommentRelations = relations(
+  productionComment,
+  ({ one }) => ({
+    po: one(productionPo, {
+      fields: [productionComment.poId],
+      references: [productionPo.id],
+    }),
+    lineItem: one(productionPoLineItem, {
+      fields: [productionComment.lineItemId],
+      references: [productionPoLineItem.id],
+    }),
+    author: one(user, {
+      fields: [productionComment.authorUserId],
+      references: [user.id],
+    }),
+  }),
+);
+
+export const productionAttachmentRelations = relations(
+  productionAttachment,
+  ({ one }) => ({
+    po: one(productionPo, {
+      fields: [productionAttachment.poId],
+      references: [productionPo.id],
+    }),
+    lineItem: one(productionPoLineItem, {
+      fields: [productionAttachment.lineItemId],
+      references: [productionPoLineItem.id],
+    }),
+    uploadedBy: one(user, {
+      fields: [productionAttachment.uploadedByUserId],
+      references: [user.id],
     }),
   }),
 );

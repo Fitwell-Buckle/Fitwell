@@ -18,6 +18,7 @@ import {
 } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 import { PoControls } from "./po-controls";
+import { PoComments } from "./po-comments";
 
 export const metadata: Metadata = {
   title: "Production PO | Fitwell Admin",
@@ -145,6 +146,21 @@ export default async function PoDetailPage({
           ))}
         </div>
       </Card>
+
+      <PoComments
+        poId={po.id}
+        comments={po.comments.map((c) => ({
+          id: c.id,
+          body: c.body,
+          author: c.author?.name || c.author?.email || "Unknown",
+          when: c.createdAt.toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+        }))}
+      />
     </div>
   );
 }
