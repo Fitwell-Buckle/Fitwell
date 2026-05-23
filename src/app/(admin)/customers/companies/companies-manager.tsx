@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import type { CustomerMatch } from "@/app/api/production/customer-search/route";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Table,
@@ -27,6 +28,7 @@ export interface Company {
   name: string;
   contactName: string | null;
   contactEmail: string | null;
+  customerId: string | null;
   notes: string | null;
   priceTierId: string | null;
   tierName: string | null;
@@ -100,10 +102,11 @@ export function CompaniesManager({
 
   // ── Companies ──
   const [companyEditing, setCompanyEditing] = useState<string | "new" | null>(null);
-  const [draft, setDraft] = useState({
+  const [draft, setDraft] = useState<CompanyDraft>({
     name: "",
     contactName: "",
     contactEmail: "",
+    customerId: "",
     priceTierId: "",
     notes: "",
   });
@@ -115,6 +118,7 @@ export function CompaniesManager({
       name: c?.name ?? "",
       contactName: c?.contactName ?? "",
       contactEmail: c?.contactEmail ?? "",
+      customerId: c?.customerId ?? "",
       priceTierId: c?.priceTierId ?? "",
       notes: c?.notes ?? "",
     });
@@ -137,6 +141,7 @@ export function CompaniesManager({
             name: draft.name.trim(),
             contactName: draft.contactName.trim() || null,
             contactEmail: draft.contactEmail.trim() || null,
+            customerId: draft.customerId || null,
             priceTierId: draft.priceTierId || null,
             notes: draft.notes.trim() || null,
           }),
@@ -341,8 +346,81 @@ interface CompanyDraft {
   name: string;
   contactName: string;
   contactEmail: string;
+  customerId: string; // linked Shopify (synced) customer
   priceTierId: string;
   notes: string;
+}
+
+/** Contact field that searches the synced Shopify customer list as you type. */
+function CustomerSearchField({
+  label,
+  type,
+  value,
+  onChange,
+  onPick,
+}: {
+  label: string;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+  onPick: (m: CustomerMatch) => void;
+}) {
+  const [results, setResults] = useState<CustomerMatch[]>([]);
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleType(v: string) {
+    onChange(v);
+    setOpen(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      if (v.trim().length < 2) return setResults([]);
+      try {
+        const res = await fetch(
+          `/api/production/customer-search?q=${encodeURIComponent(v.trim())}`,
+        );
+        const d = await res.json();
+        if (res.ok) setResults((d.data ?? []) as CustomerMatch[]);
+      } catch {
+        /* ignore */
+      }
+    }, 250);
+  }
+
+  return (
+    <div className="relative">
+      <label className={fieldLabel}>{label}</label>
+      <Input
+        type={type}
+        value={value}
+        autoComplete="off"
+        onChange={(e) => handleType(e.target.value)}
+        onFocus={() => results.length > 0 && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && results.length > 0 && (
+        <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-zinc-200 bg-white py-1 shadow-md">
+          {results.map((m) => (
+            <li key={m.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onPick(m);
+                  setOpen(false);
+                  setResults([]);
+                }}
+                className="flex w-full flex-col items-start px-3 py-1.5 text-left hover:bg-zinc-50"
+              >
+                <span className="text-sm text-zinc-900">{m.name}</span>
+                {m.email && <span className="text-xs text-zinc-400">{m.email}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function CompanyForm({
@@ -385,21 +463,45 @@ function CompanyForm({
             ))}
           </select>
         </div>
-        <div>
-          <label className={fieldLabel}>Contact name</label>
-          <Input
-            value={draft.contactName}
-            onChange={(e) => setDraft({ ...draft, contactName: e.target.value })}
-          />
-        </div>
-        <div>
-          <label className={fieldLabel}>Contact email</label>
-          <Input
-            type="email"
-            value={draft.contactEmail}
-            onChange={(e) => setDraft({ ...draft, contactEmail: e.target.value })}
-          />
-        </div>
+        <CustomerSearchField
+          label="Contact name (search customers)"
+          value={draft.contactName}
+          onChange={(v) => setDraft({ ...draft, contactName: v, customerId: "" })}
+          onPick={(m) =>
+            setDraft({
+              ...draft,
+              contactName: m.name,
+              contactEmail: m.email ?? "",
+              customerId: m.id,
+            })
+          }
+        />
+        <CustomerSearchField
+          label="Contact email (search customers)"
+          type="email"
+          value={draft.contactEmail}
+          onChange={(v) => setDraft({ ...draft, contactEmail: v, customerId: "" })}
+          onPick={(m) =>
+            setDraft({
+              ...draft,
+              contactName: m.name,
+              contactEmail: m.email ?? "",
+              customerId: m.id,
+            })
+          }
+        />
+        {draft.customerId && (
+          <div className="flex items-center gap-2 text-xs text-emerald-700 sm:col-span-2">
+            <span>✓ Linked to a Shopify customer</span>
+            <button
+              type="button"
+              className="underline"
+              onClick={() => setDraft({ ...draft, customerId: "" })}
+            >
+              unlink
+            </button>
+          </div>
+        )}
         <div className="sm:col-span-2">
           <label className={fieldLabel}>Notes</label>
           <Input value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />

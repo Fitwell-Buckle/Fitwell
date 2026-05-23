@@ -337,12 +337,17 @@ export const company = pgTable(
     name: text("name").notNull(),
     contactName: text("contact_name"),
     contactEmail: text("contact_email"),
+    // Optional link to a synced Shopify customer (the contact person).
+    customerId: text("customer_id").references(() => customer.id),
     priceTierId: text("price_tier_id").references(() => priceTier.id),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },
-  (t) => [index("company_price_tier_id_idx").on(t.priceTierId)],
+  (t) => [
+    index("company_price_tier_id_idx").on(t.priceTierId),
+    index("company_customer_id_idx").on(t.customerId),
+  ],
 );
 
 export const priceTierRelations = relations(priceTier, ({ many }) => ({
@@ -353,6 +358,10 @@ export const companyRelations = relations(company, ({ one }) => ({
   priceTier: one(priceTier, {
     fields: [company.priceTierId],
     references: [priceTier.id],
+  }),
+  customer: one(customer, {
+    fields: [company.customerId],
+    references: [customer.id],
   }),
 }));
 

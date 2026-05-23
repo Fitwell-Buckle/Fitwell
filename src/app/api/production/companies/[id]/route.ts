@@ -45,6 +45,9 @@ export async function PATCH(
         ...(input.contactEmail !== undefined
           ? { contactEmail: input.contactEmail || null }
           : {}),
+        ...(input.customerId !== undefined
+          ? { customerId: input.customerId || null }
+          : {}),
         ...(input.priceTierId !== undefined
           ? { priceTierId: input.priceTierId || null }
           : {}),

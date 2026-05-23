@@ -74,6 +74,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/production/shopify-refs` | Warehouses (Shopify locations) for the PO picker; needs `read_locations` |
+| GET | `/api/production/customer-search` | Typeahead over synced customers (name/email) for linking a company |
 | POST | `/api/production/companies` | Create a company |
 | PATCH | `/api/production/companies/[id]` | Update a company |
 | POST | `/api/production/price-tiers` | Create a price tier (% off retail) |

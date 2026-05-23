@@ -266,7 +266,7 @@ Our own B2B companies (not Shopify), managed under Customers → Companies.
 
 | Table | Key columns |
 |-------|-------------|
-| `company` | `name`, `contact_name?`, `contact_email?`, `price_tier_id` (FK → price_tier), `notes` |
+| `company` | `name`, `contact_name?`, `contact_email?`, `customer_id` (FK → customer, optional link to a synced Shopify customer), `price_tier_id` (FK → price_tier), `notes` |
 | `price_tier` | `name`, `discount_percent` (real, % off retail) |
 | `created_at` / `updated_at` | timestamp | |
 

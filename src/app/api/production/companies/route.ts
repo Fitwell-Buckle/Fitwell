@@ -8,6 +8,7 @@ export const companySchema = z.object({
   name: z.string().min(1).max(200),
   contactName: z.string().max(200).nullish(),
   contactEmail: z.string().email().max(200).nullish().or(z.literal("")),
+  customerId: z.string().max(200).nullish(),
   priceTierId: z.string().max(200).nullish(),
   notes: z.string().max(5000).nullish(),
 });
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
         name: input.name,
         contactName: input.contactName || null,
         contactEmail: input.contactEmail || null,
+        customerId: input.customerId || null,
         priceTierId: input.priceTierId || null,
         notes: input.notes || null,
       })

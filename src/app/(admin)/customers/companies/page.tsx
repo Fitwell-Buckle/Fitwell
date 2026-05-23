@@ -45,6 +45,7 @@ export default async function CompaniesPage() {
           name: c.name,
           contactName: c.contactName,
           contactEmail: c.contactEmail,
+          customerId: c.customerId,
           notes: c.notes,
           priceTierId: c.priceTierId,
           tierName: c.priceTier?.name ?? null,
