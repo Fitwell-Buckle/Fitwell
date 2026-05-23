@@ -16,7 +16,6 @@ interface LineItemRow {
   title: string; // used in manual-entry fallback
   quantity: string;
   unitCost: string; // production cost in dollars, converted to cents on submit
-  expectedCompletionDate: string;
 }
 
 function emptyRow(): LineItemRow {
@@ -27,7 +26,6 @@ function emptyRow(): LineItemRow {
     title: "",
     quantity: "1",
     unitCost: "",
-    expectedCompletionDate: "",
   };
 }
 
@@ -108,7 +106,11 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
   function addRow() {
-    setRows((rs) => [...rs, emptyRow()]);
+    // Carry the previous line's collection forward — most POs stay within one.
+    setRows((rs) => {
+      const collectionKey = rs[rs.length - 1]?.collectionKey ?? "";
+      return [...rs, { ...emptyRow(), collectionKey }];
+    });
   }
   function removeRow(i: number) {
     setRows((rs) => (rs.length === 1 ? rs : rs.filter((_, idx) => idx !== i)));
@@ -164,7 +166,6 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
         unitCostCents,
         shopifyProductId,
         shopifyVariantId,
-        expectedCompletionDate: r.expectedCompletionDate || null,
       });
     }
 
@@ -232,7 +233,7 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
             />
           </div>
           <div>
-            <label className={fieldLabel}>Expected delivery (optional)</label>
+            <label className={fieldLabel}>ETA / expected delivery (optional)</label>
             <Input
               type="date"
               value={expectedDeliveryDate}
@@ -305,7 +306,7 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
                       ))}
                     </select>
                     <select
-                      className={`${inputBase} sm:col-span-3`}
+                      className={`${inputBase} sm:col-span-4`}
                       value={r.variantKey}
                       disabled={!selectedGroup}
                       onChange={(e) => updateRow(i, { variantKey: e.target.value })}
@@ -322,7 +323,7 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
                   </>
                 ) : mode === "flat" ? (
                   <select
-                    className={`${inputBase} sm:col-span-6`}
+                    className={`${inputBase} sm:col-span-7`}
                     value={r.variantKey}
                     onChange={(e) => updateRow(i, { variantKey: e.target.value })}
                   >
@@ -342,7 +343,7 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
                       onChange={(e) => updateRow(i, { sku: e.target.value })}
                     />
                     <Input
-                      className="sm:col-span-4"
+                      className="sm:col-span-5"
                       placeholder="Title"
                       value={r.title}
                       onChange={(e) => updateRow(i, { title: e.target.value })}
@@ -367,15 +368,7 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
                   value={r.unitCost}
                   onChange={(e) => updateRow(i, { unitCost: e.target.value })}
                 />
-                <div className="flex items-center gap-1 sm:col-span-2">
-                  <Input
-                    type="date"
-                    title="Expected completion date"
-                    value={r.expectedCompletionDate}
-                    onChange={(e) =>
-                      updateRow(i, { expectedCompletionDate: e.target.value })
-                    }
-                  />
+                <div className="flex items-center justify-end sm:col-span-1">
                   <Button
                     type="button"
                     variant="ghost"
