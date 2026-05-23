@@ -1,11 +1,13 @@
 import {
   pgTable,
+  pgEnum,
   text,
   integer,
   timestamp,
   boolean,
   jsonb,
   real,
+  date,
   index,
   uniqueIndex,
   primaryKey,
@@ -24,6 +26,9 @@ export const user = pgTable("user", {
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
   role: text("role").default("user"),
+  // Set for users with role='supplier' so the supplier portal can scope queries
+  // to their own POs (production module, Phase 3).
+  supplierId: text("supplier_id"),
 });
 
 export const account = pgTable(
@@ -308,6 +313,119 @@ export const customerEvent = pgTable(
   ],
 );
 
+// ─── Production module ──────────────────────────────────────────────
+
+// Fixed, ordered stage progression. Every line item passes through all
+// stages in this order; "complete" is the terminal stage.
+export const productionStage = pgEnum("production_stage", [
+  "supplier_po",
+  "stamping",
+  "edm",
+  "polishing",
+  "logo",
+  "plating",
+  "qc",
+  "packaging",
+  "complete",
+]);
+
+export const supplier = pgTable("supplier", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  contactEmail: text("contact_email"),
+  contactName: text("contact_name"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+export const productionPo = pgTable(
+  "production_po",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => supplier.id),
+    // User-entered, copied from Shopify's built-in PO feature (no Shopify PO API).
+    shopifyPoNumber: text("shopify_po_number").notNull(),
+    issuedDate: date("issued_date").notNull(),
+    expectedDeliveryDate: date("expected_delivery_date"),
+    // When true the whole PO advances together; when false each line item
+    // moves independently and the PO's displayed stage is "mixed".
+    lockStagesTogether: boolean("lock_stages_together").notNull().default(true),
+    status: text("status").notNull().default("active"), // active | on_hold | complete | cancelled
+    // Set manually when the user confirms they marked the PO received in Shopify.
+    shopifyReceivedAt: timestamp("shopify_received_at", { mode: "date" }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("production_po_supplier_id_idx").on(t.supplierId),
+    index("production_po_status_idx").on(t.status),
+  ],
+);
+
+export const productionPoLineItem = pgTable(
+  "production_po_line_item",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id")
+      .notNull()
+      .references(() => productionPo.id, { onDelete: "cascade" }),
+    // Product identity: no FK yet — line items reference Shopify ids + a
+    // denormalized snapshot until a product/variant table exists.
+    shopifyProductId: text("shopify_product_id"),
+    shopifyVariantId: text("shopify_variant_id"),
+    sku: text("sku").notNull(),
+    title: text("title").notNull(),
+    quantity: integer("quantity").notNull(),
+    unitCostCents: integer("unit_cost_cents"),
+    currentStage: productionStage("current_stage")
+      .notNull()
+      .default("supplier_po"),
+    expectedCompletionDate: date("expected_completion_date"),
+    actualCompletionDate: date("actual_completion_date"),
+    // Optional customer earmark; if orderLineItemId is set, customer derives from it.
+    customerId: text("customer_id").references(() => customer.id),
+    orderLineItemId: text("order_line_item_id").references(
+      () => orderLineItem.id,
+    ),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("production_li_po_id_idx").on(t.poId),
+    index("production_li_customer_id_idx").on(t.customerId),
+    index("production_li_order_line_item_id_idx").on(t.orderLineItemId),
+    index("production_li_current_stage_idx").on(t.currentStage),
+  ],
+);
+
+export const productionStageEvent = pgTable(
+  "production_stage_event",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    lineItemId: text("line_item_id")
+      .notNull()
+      .references(() => productionPoLineItem.id, { onDelete: "cascade" }),
+    stage: productionStage("stage").notNull(),
+    enteredAt: timestamp("entered_at", { mode: "date" }).notNull().defaultNow(),
+    exitedAt: timestamp("exited_at", { mode: "date" }),
+    triggeredByUserId: text("triggered_by_user_id").references(() => user.id),
+    notes: text("notes"),
+  },
+  (t) => [index("production_stage_event_line_item_id_idx").on(t.lineItemId)],
+);
+
 // ─── Relations ──────────────────────────────────────────────────────
 
 export const customerRelations = relations(customer, ({ many }) => ({
@@ -336,3 +454,44 @@ export const customerEventRelations = relations(customerEvent, ({ one }) => ({
     references: [customer.id],
   }),
 }));
+
+export const supplierRelations = relations(supplier, ({ many }) => ({
+  pos: many(productionPo),
+}));
+
+export const productionPoRelations = relations(productionPo, ({ one, many }) => ({
+  supplier: one(supplier, {
+    fields: [productionPo.supplierId],
+    references: [supplier.id],
+  }),
+  lineItems: many(productionPoLineItem),
+}));
+
+export const productionPoLineItemRelations = relations(
+  productionPoLineItem,
+  ({ one, many }) => ({
+    po: one(productionPo, {
+      fields: [productionPoLineItem.poId],
+      references: [productionPo.id],
+    }),
+    customer: one(customer, {
+      fields: [productionPoLineItem.customerId],
+      references: [customer.id],
+    }),
+    orderLineItem: one(orderLineItem, {
+      fields: [productionPoLineItem.orderLineItemId],
+      references: [orderLineItem.id],
+    }),
+    stageEvents: many(productionStageEvent),
+  }),
+);
+
+export const productionStageEventRelations = relations(
+  productionStageEvent,
+  ({ one }) => ({
+    lineItem: one(productionPoLineItem, {
+      fields: [productionStageEvent.lineItemId],
+      references: [productionPoLineItem.id],
+    }),
+  }),
+);

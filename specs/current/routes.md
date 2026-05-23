@@ -1,6 +1,6 @@
 # Routes
 
-Last updated: 2026-05-07
+Last updated: 2026-05-23
 
 ## (marketing) — Public Pages
 
@@ -36,6 +36,11 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/attribution` | UTM attribution analysis |
 | `/funnel` | Funnel visualization (landing → Shopify → purchase) |
 | `/products` | Product performance breakdown |
+| `/modules` | Modules hub (Production; Marketing coming soon) |
+| `/modules/production` | Production PO list with supplier/status/stage filters |
+| `/modules/production/po/new` | Create a PO with line items |
+| `/modules/production/po/[id]` | PO detail — stage advance, status, timeline |
+| `/modules/production/suppliers` | Supplier CRUD |
 | `/settings` | Admin settings, sync status, API health |
 
 ## API Routes
@@ -61,6 +66,16 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | GET | `/api/admin/attribution` | Attribution breakdown |
 | GET | `/api/admin/campaigns` | Campaign performance list |
 | GET | `/api/admin/campaigns/[id]` | Campaign detail with daily metrics |
+
+### Production API (each handler checks `auth()`)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/production/products` | Flattened active Shopify catalog (variants) for the PO line-item picker |
+| POST | `/api/production/po` | Create a PO + line items |
+| PATCH | `/api/production/po/[id]` | Update PO fields (status, lock, dates, notes) |
+| POST | `/api/production/po/[id]/advance` | Advance stage — whole PO (locked) or one line item |
+| POST | `/api/production/suppliers` | Create a supplier |
+| PATCH | `/api/production/suppliers/[id]` | Update a supplier |
 
 ### Cron Jobs (Vercel Cron, protected by `CRON_SECRET`)
 | Method | Path | Schedule | Description |

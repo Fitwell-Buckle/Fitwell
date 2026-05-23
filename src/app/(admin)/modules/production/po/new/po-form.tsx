@@ -1,0 +1,335 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import type { CatalogVariant } from "@/app/api/production/products/route";
+
+interface LineItemRow {
+  variantKey: string; // shopifyVariantId when picked from catalog, "" otherwise
+  sku: string; // used in manual-entry fallback
+  title: string; // used in manual-entry fallback
+  quantity: string;
+  unitCost: string; // production cost in dollars, converted to cents on submit
+  expectedCompletionDate: string;
+}
+
+function emptyRow(): LineItemRow {
+  return {
+    variantKey: "",
+    sku: "",
+    title: "",
+    quantity: "1",
+    unitCost: "",
+    expectedCompletionDate: "",
+  };
+}
+
+const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
+const inputBase =
+  "flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2";
+
+function variantLabel(v: CatalogVariant): string {
+  const name = v.variantTitle ? `${v.title} — ${v.variantTitle}` : v.title;
+  return v.sku ? `${name} (${v.sku})` : name;
+}
+
+export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[] }) {
+  const router = useRouter();
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
+  const [shopifyPoNumber, setShopifyPoNumber] = useState("");
+  const [issuedDate, setIssuedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
+  const [lockStagesTogether, setLockStagesTogether] = useState(true);
+  const [notes, setNotes] = useState("");
+  const [rows, setRows] = useState<LineItemRow[]>([emptyRow()]);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // null = loading; [] with catalogError = unavailable -> manual fallback.
+  const [catalog, setCatalog] = useState<CatalogVariant[] | null>(null);
+  const [catalogError, setCatalogError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/production/products");
+        const data = await res.json();
+        if (!active) return;
+        if (res.ok) setCatalog(data.data as CatalogVariant[]);
+        else {
+          setCatalog([]);
+          setCatalogError(true);
+        }
+      } catch {
+        if (!active) return;
+        setCatalog([]);
+        setCatalogError(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const useCatalog = !!catalog && catalog.length > 0;
+  const variantByKey = new Map((catalog ?? []).map((v) => [v.shopifyVariantId, v]));
+
+  function updateRow(i: number, patch: Partial<LineItemRow>) {
+    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function addRow() {
+    setRows((rs) => [...rs, emptyRow()]);
+  }
+  function removeRow(i: number) {
+    setRows((rs) => (rs.length === 1 ? rs : rs.filter((_, idx) => idx !== i)));
+  }
+
+  async function submit() {
+    setError(null);
+
+    if (!supplierId) return setError("Select a supplier.");
+    if (!shopifyPoNumber.trim()) return setError("Enter the Shopify PO number.");
+    if (!issuedDate) return setError("Enter the issued date.");
+
+    const lineItems = [];
+    for (const [i, r] of rows.entries()) {
+      let sku = r.sku.trim();
+      let title = r.title.trim();
+      let shopifyProductId: string | null = null;
+      let shopifyVariantId: string | null = null;
+
+      if (useCatalog) {
+        const v = variantByKey.get(r.variantKey);
+        if (!v) return setError(`Line ${i + 1}: pick a product.`);
+        sku = v.sku;
+        title = v.title + (v.variantTitle ? ` — ${v.variantTitle}` : "");
+        shopifyProductId = v.shopifyProductId;
+        shopifyVariantId = v.shopifyVariantId;
+      } else if (!sku || !title) {
+        return setError(`Line ${i + 1}: SKU and title are required.`);
+      }
+
+      const quantity = Number(r.quantity);
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        return setError(`Line ${i + 1}: quantity must be a positive whole number.`);
+      }
+      const unitCostCents = r.unitCost.trim() ? Math.round(Number(r.unitCost) * 100) : null;
+      if (unitCostCents !== null && (!Number.isFinite(unitCostCents) || unitCostCents < 0)) {
+        return setError(`Line ${i + 1}: unit cost must be a non-negative amount.`);
+      }
+
+      lineItems.push({
+        sku,
+        title,
+        quantity,
+        unitCostCents,
+        shopifyProductId,
+        shopifyVariantId,
+        expectedCompletionDate: r.expectedCompletionDate || null,
+      });
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/production/po", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          supplierId,
+          shopifyPoNumber: shopifyPoNumber.trim(),
+          issuedDate,
+          expectedDeliveryDate: expectedDeliveryDate || null,
+          lockStagesTogether,
+          notes: notes.trim() || null,
+          lineItems,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to create PO.");
+        setSubmitting(false);
+        return;
+      }
+      router.push(`/modules/production/po/${data.data.id}`);
+      router.refresh();
+    } catch {
+      setError("Network error — please try again.");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="mt-6 space-y-5">
+      <Card className="p-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={fieldLabel}>Supplier</label>
+            <select
+              value={supplierId}
+              onChange={(e) => setSupplierId(e.target.value)}
+              className={inputBase}
+            >
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={fieldLabel}>Shopify PO number</label>
+            <Input
+              value={shopifyPoNumber}
+              onChange={(e) => setShopifyPoNumber(e.target.value)}
+              placeholder="e.g. PO-1042"
+            />
+          </div>
+          <div>
+            <label className={fieldLabel}>Issued date</label>
+            <Input
+              type="date"
+              value={issuedDate}
+              onChange={(e) => setIssuedDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={fieldLabel}>Expected delivery (optional)</label>
+            <Input
+              type="date"
+              value={expectedDeliveryDate}
+              onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2">
+          <input
+            id="lock"
+            type="checkbox"
+            checked={lockStagesTogether}
+            onChange={(e) => setLockStagesTogether(e.target.checked)}
+            className="h-4 w-4 rounded border-zinc-300"
+          />
+          <label htmlFor="lock" className="text-sm text-zinc-700">
+            Advance all line items together (uncheck to move items independently)
+          </label>
+        </div>
+
+        <div className="mt-4">
+          <label className={fieldLabel}>Notes (optional)</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
+          />
+        </div>
+      </Card>
+
+      <Card className="p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-900">Line items</h2>
+          <Button type="button" variant="outline" size="sm" onClick={addRow}>
+            <Plus className="h-4 w-4" /> Add line
+          </Button>
+        </div>
+
+        {catalog === null && (
+          <p className="mt-3 text-xs text-zinc-400">Loading Shopify catalog…</p>
+        )}
+        {catalogError && (
+          <p className="mt-3 text-xs text-amber-600">
+            Couldn’t load the Shopify catalog — enter SKU and title manually.
+          </p>
+        )}
+
+        <div className="mt-4 space-y-3">
+          {rows.map((r, i) => (
+            <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+              {useCatalog ? (
+                <select
+                  className={`${inputBase} sm:col-span-6`}
+                  value={r.variantKey}
+                  onChange={(e) => updateRow(i, { variantKey: e.target.value })}
+                >
+                  <option value="">Select a product…</option>
+                  {catalog!.map((v) => (
+                    <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
+                      {variantLabel(v)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <>
+                  <Input
+                    className="sm:col-span-2"
+                    placeholder="SKU"
+                    value={r.sku}
+                    onChange={(e) => updateRow(i, { sku: e.target.value })}
+                  />
+                  <Input
+                    className="sm:col-span-4"
+                    placeholder="Title"
+                    value={r.title}
+                    onChange={(e) => updateRow(i, { title: e.target.value })}
+                  />
+                </>
+              )}
+              <Input
+                className="sm:col-span-2"
+                type="number"
+                min="1"
+                placeholder="Qty"
+                value={r.quantity}
+                onChange={(e) => updateRow(i, { quantity: e.target.value })}
+              />
+              <Input
+                className="sm:col-span-2"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Unit cost $"
+                title="Production cost per unit (not the Shopify retail price)"
+                value={r.unitCost}
+                onChange={(e) => updateRow(i, { unitCost: e.target.value })}
+              />
+              <div className="flex items-center gap-1 sm:col-span-2">
+                <Input
+                  type="date"
+                  title="Expected completion date"
+                  value={r.expectedCompletionDate}
+                  onChange={(e) =>
+                    updateRow(i, { expectedCompletionDate: e.target.value })
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeRow(i)}
+                  disabled={rows.length === 1}
+                  aria-label="Remove line"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div className="flex justify-end">
+        <Button onClick={submit} disabled={submitting}>
+          {submitting ? "Creating…" : "Create PO"}
+        </Button>
+      </div>
+    </div>
+  );
+}

@@ -14,6 +14,7 @@ export default async function middleware(req: NextRequest) {
     pathname.startsWith("/attribution") ||
     pathname.startsWith("/funnel") ||
     pathname.startsWith("/products") ||
+    pathname.startsWith("/modules") ||
     pathname.startsWith("/settings")
   ) {
     const session = await auth();
@@ -47,6 +48,7 @@ export const config = {
     "/attribution/:path*",
     "/funnel/:path*",
     "/products/:path*",
+    "/modules/:path*",
     "/settings/:path*",
     "/api/admin/:path*",
   ],
