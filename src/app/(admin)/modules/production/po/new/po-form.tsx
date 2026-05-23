@@ -10,11 +10,32 @@ import type { CatalogVariant } from "@/app/api/production/products/route";
 import type { CatalogGroup } from "@/app/api/production/collections/route";
 import { fmtMoney, skuSize } from "@/lib/production/display";
 
+export interface EditableLine {
+  id: string;
+  sku: string;
+  title: string;
+  quantity: number;
+  unitCostCents: number | null;
+  shopifyProductId: string | null;
+  shopifyVariantId: string | null;
+}
+
+export interface PoFormInitial {
+  supplierId: string;
+  shopifyPoNumber: string;
+  issuedDate: string;
+  expectedDeliveryDate: string;
+  notes: string;
+  lineItems: EditableLine[];
+}
+
 interface LineItemRow {
+  id?: string; // present = existing line (edit); absent = new line
   collectionKey: string; // selected collection group id (grouped mode)
-  variantKey: string; // shopifyVariantId when picked from catalog
-  sku: string; // used in manual-entry fallback
-  title: string; // used in manual-entry fallback
+  variantKey: string; // shopifyVariantId when picked from catalog / existing
+  shopifyProductId: string; // preserved for existing lines not re-picked
+  sku: string;
+  title: string;
   quantity: string;
   unitCost: string; // production cost in dollars, converted to cents on submit
 }
@@ -23,10 +44,24 @@ function emptyRow(): LineItemRow {
   return {
     collectionKey: "",
     variantKey: "",
+    shopifyProductId: "",
     sku: "",
     title: "",
     quantity: "1",
     unitCost: "",
+  };
+}
+
+function toRow(line: EditableLine): LineItemRow {
+  return {
+    id: line.id,
+    collectionKey: "",
+    variantKey: line.shopifyVariantId ?? "",
+    shopifyProductId: line.shopifyProductId ?? "",
+    sku: line.sku,
+    title: line.title,
+    quantity: String(line.quantity),
+    unitCost: line.unitCostCents != null ? String(line.unitCostCents / 100) : "",
   };
 }
 
@@ -51,15 +86,35 @@ function sortBySize(variants: CatalogVariant[]): CatalogVariant[] {
   );
 }
 
-export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[] }) {
+export function PoForm({
+  suppliers,
+  initial,
+  poId,
+}: {
+  suppliers: { id: string; name: string }[];
+  initial?: PoFormInitial;
+  poId?: string;
+}) {
   const router = useRouter();
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
-  const [shopifyPoNumber, setShopifyPoNumber] = useState("");
-  const [issuedDate, setIssuedDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
+  const isEdit = !!poId;
+
+  const [supplierId, setSupplierId] = useState(
+    initial?.supplierId ?? suppliers[0]?.id ?? "",
+  );
+  const [shopifyPoNumber, setShopifyPoNumber] = useState(
+    initial?.shopifyPoNumber ?? "",
+  );
+  const [issuedDate, setIssuedDate] = useState(
+    initial?.issuedDate ?? new Date().toISOString().slice(0, 10),
+  );
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(
+    initial?.expectedDeliveryDate ?? "",
+  );
   const [lockStagesTogether, setLockStagesTogether] = useState(true);
-  const [notes, setNotes] = useState("");
-  const [rows, setRows] = useState<LineItemRow[]>([emptyRow()]);
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [rows, setRows] = useState<LineItemRow[]>(
+    initial ? initial.lineItems.map(toRow) : [emptyRow()],
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,17 +134,23 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
         if (res.ok && Array.isArray(data.data) && data.data.length > 0) {
           const loaded = data.data as CatalogGroup[];
           setGroups(loaded);
-          // Default any not-yet-set row to the "All Products" collection.
           const allProducts = loaded.find(
             (g) => g.title.trim().toLowerCase() === "all products",
           );
-          if (allProducts) {
-            setRows((rs) =>
-              rs.map((r) =>
-                r.collectionKey ? r : { ...r, collectionKey: allProducts.id },
-              ),
-            );
-          }
+          // Resolve each row's collection: existing lines map to the group that
+          // contains their variant; blank rows default to "All Products".
+          setRows((rs) =>
+            rs.map((r) => {
+              if (r.collectionKey) return r;
+              if (r.variantKey) {
+                const g = loaded.find((grp) =>
+                  grp.variants.some((v) => v.shopifyVariantId === r.variantKey),
+                );
+                if (g) return { ...r, collectionKey: g.id };
+              }
+              return allProducts ? { ...r, collectionKey: allProducts.id } : r;
+            }),
+          );
           return;
         }
       } catch {
@@ -158,25 +219,25 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
     for (const [i, r] of rows.entries()) {
       let sku = r.sku.trim();
       let title = r.title.trim();
-      let shopifyProductId: string | null = null;
-      let shopifyVariantId: string | null = null;
+      let shopifyProductId: string | null = r.shopifyProductId || null;
+      let shopifyVariantId: string | null = r.variantKey || null;
 
-      if (mode === "grouped") {
-        const group = groupById.get(r.collectionKey);
-        if (!group) return setError(`Line ${i + 1}: pick a collection.`);
-        const v = group.variants.find((x) => x.shopifyVariantId === r.variantKey);
-        if (!v) return setError(`Line ${i + 1}: pick a product.`);
-        sku = v.sku;
-        title = v.title + (v.variantTitle ? ` — ${v.variantTitle}` : "");
-        shopifyProductId = v.shopifyProductId;
-        shopifyVariantId = v.shopifyVariantId;
-      } else if (mode === "flat") {
-        const v = flatByKey.get(r.variantKey);
-        if (!v) return setError(`Line ${i + 1}: pick a product.`);
-        sku = v.sku;
-        title = v.title + (v.variantTitle ? ` — ${v.variantTitle}` : "");
-        shopifyProductId = v.shopifyProductId;
-        shopifyVariantId = v.shopifyVariantId;
+      if (mode === "grouped" || mode === "flat") {
+        const v =
+          mode === "grouped"
+            ? groupById
+                .get(r.collectionKey)
+                ?.variants.find((x) => x.shopifyVariantId === r.variantKey)
+            : flatByKey.get(r.variantKey);
+        if (v) {
+          sku = v.sku;
+          title = v.title + (v.variantTitle ? ` — ${v.variantTitle}` : "");
+          shopifyProductId = v.shopifyProductId;
+          shopifyVariantId = v.shopifyVariantId;
+        } else if (!r.id || !sku) {
+          // New rows must pick from the catalog; existing rows keep their values.
+          return setError(`Line ${i + 1}: pick a product.`);
+        }
       } else if (!sku || !title) {
         return setError(`Line ${i + 1}: SKU and title are required.`);
       }
@@ -191,6 +252,7 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
       }
 
       lineItems.push({
+        ...(r.id ? { id: r.id } : {}),
         sku,
         title,
         quantity,
@@ -202,26 +264,29 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/production/po", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          supplierId,
-          shopifyPoNumber: shopifyPoNumber.trim(),
-          issuedDate,
-          expectedDeliveryDate: expectedDeliveryDate || null,
-          lockStagesTogether,
-          notes: notes.trim() || null,
-          lineItems,
-        }),
-      });
+      const res = await fetch(
+        isEdit ? `/api/production/po/${poId}` : "/api/production/po",
+        {
+          method: isEdit ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            supplierId,
+            shopifyPoNumber: shopifyPoNumber.trim(),
+            issuedDate,
+            expectedDeliveryDate: expectedDeliveryDate || null,
+            notes: notes.trim() || null,
+            ...(isEdit ? {} : { lockStagesTogether }),
+            lineItems,
+          }),
+        },
+      );
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to create PO.");
+        setError(data.error || (isEdit ? "Failed to save changes." : "Failed to create PO."));
         setSubmitting(false);
         return;
       }
-      router.push(`/modules/production/po/${data.data.id}`);
+      router.push(`/modules/production/po/${isEdit ? poId : data.data.id}`);
       router.refresh();
     } catch {
       setError("Network error — please try again.");
@@ -273,18 +338,20 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-2">
-          <input
-            id="lock"
-            type="checkbox"
-            checked={lockStagesTogether}
-            onChange={(e) => setLockStagesTogether(e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300"
-          />
-          <label htmlFor="lock" className="text-sm text-zinc-700">
-            Advance all line items together (uncheck to move items independently)
-          </label>
-        </div>
+        {!isEdit && (
+          <div className="mt-4 flex items-center gap-2">
+            <input
+              id="lock"
+              type="checkbox"
+              checked={lockStagesTogether}
+              onChange={(e) => setLockStagesTogether(e.target.checked)}
+              className="h-4 w-4 rounded border-zinc-300"
+            />
+            <label htmlFor="lock" className="text-sm text-zinc-700">
+              Advance all line items together (uncheck to move items independently)
+            </label>
+          </div>
+        )}
 
         <div className="mt-4">
           <label className={fieldLabel}>Notes (optional)</label>
@@ -314,7 +381,16 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
           </p>
         )}
 
-        <div className="mt-4 space-y-3">
+        {/* Column labels — the compact qty/cost inputs only have placeholders,
+            which disappear once a value is typed. */}
+        <div className="mt-4 hidden items-center gap-2 px-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-400 sm:flex">
+          <span className="flex-1">Product</span>
+          <span className="w-20">Qty</span>
+          <span className="w-24">Unit cost</span>
+          <span className="w-10" />
+        </div>
+
+        <div className="mt-2 space-y-3">
           {rows.map((r, i) => {
             const selectedGroup =
               mode === "grouped" ? groupById.get(r.collectionKey) : undefined;
@@ -326,7 +402,7 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
                 .filter(Boolean),
             );
             return (
-              <div key={i} className="flex flex-wrap items-center gap-2">
+              <div key={r.id ?? `new-${i}`} className="flex flex-wrap items-center gap-2">
                 {mode === "grouped" ? (
                   <>
                     <select
@@ -438,7 +514,13 @@ export function PoForm({ suppliers }: { suppliers: { id: string; name: string }[
 
       <div className="flex justify-end">
         <Button onClick={submit} disabled={submitting}>
-          {submitting ? "Creating…" : "Create PO"}
+          {submitting
+            ? isEdit
+              ? "Saving…"
+              : "Creating…"
+            : isEdit
+              ? "Save changes"
+              : "Create PO"}
         </Button>
       </div>
     </div>

@@ -51,9 +51,14 @@ export default async function PoDetailPage({
     <div>
       <div className="flex items-center justify-between">
         <PageHeader title={`PO ${po.shopifyPoNumber}`} />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/modules/production">Back</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/modules/production/po/${po.id}/edit`}>Edit</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/modules/production">Back</Link>
+          </Button>
+        </div>
       </div>
 
       <Card className="mt-6 p-6">

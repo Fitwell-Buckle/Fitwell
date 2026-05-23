@@ -4,7 +4,11 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { productionPo } from "@/lib/schema";
-import { updatePoSchema } from "@/lib/production/service";
+import {
+  updatePoSchema,
+  updatePoFull,
+  updatePoFullSchema,
+} from "@/lib/production/service";
 
 export async function PATCH(
   req: Request,
@@ -47,6 +51,48 @@ export async function PATCH(
     return NextResponse.json({ data: { id: updated.id } });
   } catch (err) {
     console.error("Update production PO failed:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+// Full edit: replace header + reconcile line items (add/update/remove).
+export async function PUT(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  let input;
+  try {
+    input = updatePoFullSchema.parse(await req.json());
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "Invalid payload",
+        details: err instanceof z.ZodError ? err.issues : undefined,
+      },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const existing = await db
+      .select({ id: productionPo.id })
+      .from(productionPo)
+      .where(eq(productionPo.id, id));
+    if (existing.length === 0) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const result = await updatePoFull(id, input);
+    return NextResponse.json({ data: { id: result.poId } });
+  } catch (err) {
+    console.error("Full PO edit failed:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

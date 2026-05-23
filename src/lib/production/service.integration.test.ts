@@ -114,4 +114,54 @@ describe.skipIf(noDb)("production service (real DB)", () => {
     expect(target.currentStage).toBe("stamping");
     expect(other.currentStage).toBe("supplier_po");
   });
+
+  it("full edit reconciles line items: update, add, remove", async () => {
+    const { poId } = await svc.createPo({
+      supplierId,
+      shopifyPoNumber: `PO-edit-${RUN}`,
+      issuedDate: "2026-05-01",
+      lineItems: [
+        { sku: "KEEP", title: "Keep me", quantity: 1 },
+        { sku: "DROP", title: "Drop me", quantity: 1 },
+      ],
+    });
+
+    const before = await svc.getPoDetail(poId);
+    const keepId = before!.lineItems.find((li) => li.sku === "KEEP")!.id;
+
+    // Advance the kept line so we can verify its stage survives the edit.
+    await svc.advance({ poId, lineItemId: keepId });
+
+    await svc.updatePoFull(poId, {
+      supplierId,
+      shopifyPoNumber: `PO-edit-${RUN}-v2`,
+      issuedDate: "2026-05-02",
+      expectedDeliveryDate: null,
+      notes: "edited",
+      lineItems: [
+        // keep + update qty/cost (no id change → stage preserved)
+        { id: keepId, sku: "KEEP", title: "Keep me", quantity: 9, unitCostCents: 1500 },
+        // new line (no id) → inserted with an opening stage event
+        { sku: "NEW", title: "New line", quantity: 2 },
+        // DROP omitted → deleted
+      ],
+    });
+
+    const after = await svc.getPoDetail(poId);
+    expect(after!.shopifyPoNumber).toBe(`PO-edit-${RUN}-v2`);
+    expect(after!.notes).toBe("edited");
+    expect(after!.lineItems).toHaveLength(2);
+
+    const keep = after!.lineItems.find((li) => li.sku === "KEEP")!;
+    expect(keep.id).toBe(keepId); // same row
+    expect(keep.quantity).toBe(9);
+    expect(keep.unitCostCents).toBe(1500);
+    expect(keep.currentStage).toBe("stamping"); // stage survived the edit
+
+    const added = after!.lineItems.find((li) => li.sku === "NEW")!;
+    expect(added.currentStage).toBe("supplier_po");
+    expect(added.stageEvents).toHaveLength(1);
+
+    expect(after!.lineItems.some((li) => li.sku === "DROP")).toBe(false);
+  });
 });
