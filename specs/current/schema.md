@@ -247,7 +247,7 @@ A master PO tracked against Shopify's built-in PO feature (no Shopify PO API).
 |--------|------|-------|
 | `id` | uuid (text) | PK |
 | `supplier_id` | text | FK → supplier |
-| `shopify_po_number` | text | User-entered, copied from Shopify |
+| `shopify_po_number` | text | Auto-generated from `production_po_number_seq` (starts at 100), zero-padded to ≥5 digits ("00100"); immutable. Stamped onto the Shopify inventory-adjustment reference on receipt |
 | `issued_date` | date | Required |
 | `expected_delivery_date` | date | Nullable |
 | `lock_stages_together` | boolean | Default true; false = items advance independently |

@@ -40,7 +40,6 @@ describe.skipIf(noDb)("receivePo (real DB, mocked Shopify)", () => {
 
     const created = await svc.createPo({
       supplierId,
-      shopifyPoNumber: `PO-recv-${RUN}`,
       issuedDate: "2026-05-01",
       shopifyLocationId: "555", // PO-level warehouse
       lineItems: [

@@ -95,11 +95,11 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | PATCH | `/api/production/price-tiers/[id]` | Update a price tier |
 | GET | `/api/production/collections` | Shopify catalog grouped by collection (+ Uncategorized) for the cascading PO picker |
 | GET | `/api/production/products` | Flattened active Shopify catalog (variants) — fallback picker source |
-| POST | `/api/production/po` | Create a PO + line items |
+| POST | `/api/production/po` | Create a PO + line items (PO number auto-assigned from a sequence, "00100"+) |
 | PATCH | `/api/production/po/[id]` | Update PO fields (status, lock, dates, notes) |
 | PUT | `/api/production/po/[id]` | Full edit — header + reconcile line items (add/update/remove) |
 | POST | `/api/production/po/[id]/advance` | Advance stage — whole PO (locked) or one line item |
-| POST | `/api/production/po/[id]/receive` | Receive into Shopify (C2) — push +qty inventory adjustments per line item; idempotent per line; admin-only; needs `write_inventory` |
+| POST | `/api/production/po/[id]/receive` | Receive into Shopify (C2) — `inventoryAdjustQuantities` +qty per line item, with the PO number stamped on the adjustment reference; idempotent per line; admin-only; needs `write_inventory` |
 | POST | `/api/production/po/[id]/comments` | Add a comment to a PO |
 | POST | `/api/production/po/[id]/attachments` | Upload a file to a PO (Vercel Blob; multipart) |
 | DELETE | `/api/production/attachments/[id]` | Delete an attachment (blob + row) |

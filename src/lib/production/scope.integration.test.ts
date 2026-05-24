@@ -38,7 +38,6 @@ describe.skipIf(noDb)("supplier scope isolation (real DB)", () => {
 
     const created = await svc.createPo({
       supplierId: supplierA,
-      shopifyPoNumber: `PO-scope-${RUN}`,
       issuedDate: "2026-05-01",
       lineItems: [{ sku: "A", title: "Buckle A", quantity: 1 }],
     });

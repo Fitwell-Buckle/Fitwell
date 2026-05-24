@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   productionPo,
@@ -44,7 +44,7 @@ export const lineItemInputSchema = z.object({
 
 export const createPoSchema = z.object({
   supplierId: z.string().min(1),
-  shopifyPoNumber: z.string().min(1).max(200),
+  // PO number is auto-generated server-side (see createPo); not accepted as input.
   issuedDate: dateString,
   expectedDeliveryDate: dateString.nullish(),
   lockStagesTogether: z.boolean().optional(),
@@ -75,7 +75,7 @@ export const editLineItemSchema = lineItemInputSchema.extend({
 
 export const updatePoFullSchema = z.object({
   supplierId: z.string().min(1),
-  shopifyPoNumber: z.string().min(1).max(200),
+  // PO number is system-assigned and immutable — not editable.
   issuedDate: dateString,
   expectedDeliveryDate: dateString.nullable(),
   notes: z.string().max(5000).nullable(),
@@ -89,13 +89,25 @@ export const advanceSchema = z.object({
   lineItemId: z.string().min(1).optional(),
 });
 
-/** Insert a PO with its line items and seed an initial stage event per item. */
-export async function createPo(input: CreatePoInput): Promise<{ poId: string }> {
+/**
+ * Insert a PO with its line items and seed an initial stage event per item.
+ * The PO number is assigned here from production_po_number_seq (this system
+ * owns numbering), zero-padded to ≥5 digits, e.g. "00100".
+ */
+export async function createPo(
+  input: CreatePoInput,
+): Promise<{ poId: string; poNumber: string }> {
+  const seq = await db.execute(
+    sql`SELECT nextval('production_po_number_seq')::int AS n`,
+  );
+  const n = Number((seq.rows[0] as { n: number }).n);
+  const poNumber = String(n).padStart(5, "0");
+
   const [po] = await db
     .insert(productionPo)
     .values({
       supplierId: input.supplierId,
-      shopifyPoNumber: input.shopifyPoNumber,
+      shopifyPoNumber: poNumber,
       issuedDate: input.issuedDate,
       expectedDeliveryDate: input.expectedDeliveryDate ?? null,
       lockStagesTogether: input.lockStagesTogether ?? true,
@@ -136,7 +148,7 @@ export async function createPo(input: CreatePoInput): Promise<{ poId: string }> 
     })),
   );
 
-  return { poId: po.id };
+  return { poId: po.id, poNumber };
 }
 
 /**
@@ -154,7 +166,6 @@ export async function updatePoFull(
     .update(productionPo)
     .set({
       supplierId: input.supplierId,
-      shopifyPoNumber: input.shopifyPoNumber,
       issuedDate: input.issuedDate,
       expectedDeliveryDate: input.expectedDeliveryDate ?? null,
       notes: input.notes ?? null,

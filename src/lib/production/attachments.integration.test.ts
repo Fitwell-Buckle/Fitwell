@@ -30,7 +30,6 @@ describe.skipIf(skip)("production attachments (real Blob + DB)", () => {
     supplierId = s.id;
     ({ poId } = await svc.createPo({
       supplierId,
-      shopifyPoNumber: `PO-att-${RUN}`,
       issuedDate: "2026-05-01",
       lineItems: [{ sku: "A", title: "Buckle A", quantity: 1 }],
     }));

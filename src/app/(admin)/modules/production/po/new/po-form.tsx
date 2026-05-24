@@ -167,7 +167,6 @@ export function PoForm({
   const [supplierId, setSupplierId] = useState(
     initial?.supplierId ?? suppliers[0]?.id ?? "",
   );
-  const [shopifyPoNumber, setShopifyPoNumber] = useState(initial?.shopifyPoNumber ?? "");
   const [issuedDate, setIssuedDate] = useState(
     initial?.issuedDate ?? new Date().toISOString().slice(0, 10),
   );
@@ -289,7 +288,6 @@ export function PoForm({
   async function submit() {
     setError(null);
     if (!supplierId) return setError("Select a supplier.");
-    if (!shopifyPoNumber.trim()) return setError("Enter the Shopify PO number.");
     if (!issuedDate) return setError("Enter the issued date.");
 
     const lineItems = [];
@@ -350,7 +348,6 @@ export function PoForm({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             supplierId,
-            shopifyPoNumber: shopifyPoNumber.trim(),
             issuedDate,
             expectedDeliveryDate: expectedDeliveryDate || null,
             notes: notes.trim() || null,
@@ -395,11 +392,11 @@ export function PoForm({
             </select>
           </div>
           <div>
-            <label className={fieldLabel}>Shopify PO number</label>
+            <label className={fieldLabel}>PO number</label>
             <Input
-              value={shopifyPoNumber}
-              onChange={(e) => setShopifyPoNumber(e.target.value)}
-              placeholder="e.g. PO-1042"
+              value={isEdit ? (initial?.shopifyPoNumber ?? "") : ""}
+              placeholder="Assigned automatically"
+              disabled
             />
           </div>
           <div>

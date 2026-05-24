@@ -41,9 +41,8 @@ describe.skipIf(noDb)("production service (real DB)", () => {
   });
 
   it("creates a PO with line items and seeds opening stage events", async () => {
-    const { poId } = await svc.createPo({
+    const { poId, poNumber } = await svc.createPo({
       supplierId,
-      shopifyPoNumber: `PO-${RUN}`,
       issuedDate: "2026-05-01",
       lineItems: [
         { sku: "A", title: "Buckle A", quantity: 10 },
@@ -51,7 +50,11 @@ describe.skipIf(noDb)("production service (real DB)", () => {
       ],
     });
 
+    // System-assigned, zero-padded to at least 5 digits (e.g. "00100").
+    expect(poNumber).toMatch(/^\d{5,}$/);
+
     const po = await svc.getPoDetail(poId);
+    expect(po!.shopifyPoNumber).toBe(poNumber);
     expect(po?.lineItems).toHaveLength(2);
     for (const li of po!.lineItems) {
       expect(li.currentStage).toBe("supplier_po");
@@ -63,7 +66,6 @@ describe.skipIf(noDb)("production service (real DB)", () => {
   it("advances a locked PO: all line items move together", async () => {
     const { poId } = await svc.createPo({
       supplierId,
-      shopifyPoNumber: `PO-locked-${RUN}`,
       issuedDate: "2026-05-01",
       lineItems: [
         { sku: "A", title: "Buckle A", quantity: 1 },
@@ -88,7 +90,6 @@ describe.skipIf(noDb)("production service (real DB)", () => {
   it("advances only the targeted item once the PO is broken", async () => {
     const { poId } = await svc.createPo({
       supplierId,
-      shopifyPoNumber: `PO-broken-${RUN}`,
       issuedDate: "2026-05-01",
       lineItems: [
         { sku: "A", title: "Buckle A", quantity: 1 },
@@ -118,7 +119,6 @@ describe.skipIf(noDb)("production service (real DB)", () => {
   it("full edit reconciles line items: update, add, remove", async () => {
     const { poId } = await svc.createPo({
       supplierId,
-      shopifyPoNumber: `PO-edit-${RUN}`,
       issuedDate: "2026-05-01",
       lineItems: [
         { sku: "KEEP", title: "Keep me", quantity: 1 },
@@ -128,13 +128,13 @@ describe.skipIf(noDb)("production service (real DB)", () => {
 
     const before = await svc.getPoDetail(poId);
     const keepId = before!.lineItems.find((li) => li.sku === "KEEP")!.id;
+    const originalNumber = before!.shopifyPoNumber; // system-assigned, immutable
 
     // Advance the kept line so we can verify its stage survives the edit.
     await svc.advance({ poId, lineItemId: keepId });
 
     await svc.updatePoFull(poId, {
       supplierId,
-      shopifyPoNumber: `PO-edit-${RUN}-v2`,
       issuedDate: "2026-05-02",
       expectedDeliveryDate: null,
       notes: "edited",
@@ -148,7 +148,7 @@ describe.skipIf(noDb)("production service (real DB)", () => {
     });
 
     const after = await svc.getPoDetail(poId);
-    expect(after!.shopifyPoNumber).toBe(`PO-edit-${RUN}-v2`);
+    expect(after!.shopifyPoNumber).toBe(originalNumber); // immutable across edits
     expect(after!.notes).toBe("edited");
     expect(after!.lineItems).toHaveLength(2);
 

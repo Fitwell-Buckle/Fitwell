@@ -529,28 +529,62 @@ class ShopifyClient {
 
   /**
    * Adjust a variant's available stock at a location (C2 receiving). Resolves
-   * the variant's inventory_item_id, then posts an inventory adjustment.
-   * Requires the write_inventory scope — until it's granted in the Shopify Dev
-   * Dashboard (store re-auth), Shopify returns 403 and this throws; the receive
+   * the variant's inventory_item_id, then runs the GraphQL
+   * inventoryAdjustQuantities mutation with reason "received" and an optional
+   * `reference` (we pass the PO number's URL) recorded as the adjustment's
+   * referenceDocumentUri — so the receipt is traceable in Shopify's inventory
+   * history. Requires the write_inventory scope — until it's granted (store
+   * re-auth), Shopify returns "access denied" and this throws; the receive
    * route surfaces that as a clear "scope not granted" message.
    */
   async adjustInventory(params: {
     variantId: string | number;
     locationId: string | number;
     delta: number;
-  }): Promise<{ available: number }> {
+    reference?: string;
+  }): Promise<{ available: number | null }> {
     const inventoryItemId = await this.getVariantInventoryItemId(params.variantId);
-    const { inventory_level } = await this.fetch<{
-      inventory_level: { available: number };
-    }>("/inventory_levels/adjust.json", {
-      method: "POST",
-      body: JSON.stringify({
-        location_id: Number(params.locationId),
-        inventory_item_id: inventoryItemId,
-        available_adjustment: params.delta,
-      }),
-    });
-    return { available: inventory_level.available };
+
+    const data = await this.graphql<{
+      inventoryAdjustQuantities: {
+        userErrors: { field: string[] | null; message: string }[];
+        inventoryAdjustmentGroup: {
+          changes: { name: string; quantityAfterChange: number | null }[];
+        } | null;
+      };
+    }>(
+      `mutation FitwellReceive($input: InventoryAdjustQuantitiesInput!) {
+        inventoryAdjustQuantities(input: $input) {
+          userErrors { field message }
+          inventoryAdjustmentGroup { changes { name quantityAfterChange } }
+        }
+      }`,
+      {
+        input: {
+          reason: "received",
+          name: "available",
+          referenceDocumentUri: params.reference,
+          changes: [
+            {
+              delta: params.delta,
+              inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`,
+              locationId: `gid://shopify/Location/${params.locationId}`,
+            },
+          ],
+        },
+      },
+    );
+
+    const errs = data.inventoryAdjustQuantities.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(
+        `Inventory adjust failed: ${errs.map((e) => e.message).join("; ")}`,
+      );
+    }
+    const change = data.inventoryAdjustQuantities.inventoryAdjustmentGroup?.changes?.find(
+      (c) => c.name === "available",
+    );
+    return { available: change?.quantityAfterChange ?? null };
   }
 
   // ── Generic paginator ─────────────────────────────────────────────

@@ -127,6 +127,13 @@
       "when": 1779641188946,
       "tag": "0017_absurd_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779646106779,
+      "tag": "0018_flimsy_luckman",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,7 @@ export interface ReceiveResult {
   poId: string;
   /** True once every line item is received (PO-level shopify_received_at set). */
   poFullyReceived: boolean;
-  received: { lineItemId: string; sku: string; available?: number }[];
+  received: { lineItemId: string; sku: string; available?: number | null }[];
   skipped: { lineItemId: string; sku: string; status: ReceiveLineStatus }[];
   failed: { lineItemId: string; sku: string; error: string }[];
 }
@@ -62,6 +62,8 @@ export async function receivePo(poId: string): Promise<ReceiveResult> {
         variantId: plan.variantId!,
         locationId: plan.locationId!,
         delta: plan.quantity,
+        // Stamp the PO number onto the Shopify adjustment (referenceDocumentUri).
+        reference: `https://admin.fitwellbuckle.co/po/${po.shopifyPoNumber}`,
       });
       await db
         .update(productionPoLineItem)
