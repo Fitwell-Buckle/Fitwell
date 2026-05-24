@@ -19,6 +19,7 @@ export default async function SuppliersPage() {
 
   const suppliers = await db.query.supplier.findMany({
     orderBy: asc(supplier.name),
+    with: { contacts: { columns: { id: true, email: true, name: true } } },
   });
 
   return (
@@ -37,6 +38,11 @@ export default async function SuppliersPage() {
           contactName: s.contactName,
           contactEmail: s.contactEmail,
           notes: s.notes,
+          contacts: s.contacts.map((c) => ({
+            id: c.id,
+            email: c.email,
+            name: c.name,
+          })),
         }))}
       />
     </div>

@@ -94,7 +94,8 @@ Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advanc
 - Nav restructure (Products/Marketing/Customers groups; "Modules" entry removed).
 
 ### Phase 3 — Supplier auth + portal (TODO) — discuss with Greg first (auth change + new route group)
-- [ ] NextAuth magic-link (Resend) provider for `role='supplier'` users; allow these sign-ins in the signIn callback (currently gated by `ADMIN_EMAILS`).
+- [x] **3a — Allowlist (done):** `supplier_contact` table (one supplier per email, unique-indexed; lowercased) + relation (migration `0016`). API: `POST /api/production/suppliers/[id]/contacts`, `DELETE /api/production/supplier-contacts/[id]`. UI: Suppliers → Edit → "Authorized logins" (add/remove emails). This is the per-supplier allowlist that gates magic-link sign-in in 3b.
+- [ ] **3b — Auth (risky, check in first):** NextAuth magic-link (Resend, dev-console fallback) provider; signIn callback allows admin emails OR allowlisted supplier emails → sets `role='supplier'` + `supplier_id`; session exposes `supplierId`.
 - [ ] Middleware: `/supplier/*` requires `role='supplier'`; admin pages require a non-supplier session.
 - [ ] `/supplier/login`, `/supplier/`, `/supplier/po/[id]`.
 - [ ] Centralised `requireSupplierScope` helper; scope all supplier queries by `supplier_id`.

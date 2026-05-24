@@ -393,6 +393,27 @@ export const supplier = pgTable("supplier", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
+// Authorized login emails for a supplier — anyone listed here can magic-link in
+// (Phase 3) and is scoped to this supplier. Lets a whole vendor team have access.
+export const supplierContact = pgTable(
+  "supplier_contact",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => supplier.id, { onDelete: "cascade" }),
+    email: text("email").notNull(), // stored lowercased; one supplier per email
+    name: text("name"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("supplier_contact_email_idx").on(t.email),
+    index("supplier_contact_supplier_id_idx").on(t.supplierId),
+  ],
+);
+
 export const productionPo = pgTable(
   "production_po",
   {
@@ -582,6 +603,14 @@ export const customerEventRelations = relations(customerEvent, ({ one }) => ({
 
 export const supplierRelations = relations(supplier, ({ many }) => ({
   pos: many(productionPo),
+  contacts: many(supplierContact),
+}));
+
+export const supplierContactRelations = relations(supplierContact, ({ one }) => ({
+  supplier: one(supplier, {
+    fields: [supplierContact.supplierId],
+    references: [supplier.id],
+  }),
 }));
 
 export const productionPoRelations = relations(productionPo, ({ one, many }) => ({

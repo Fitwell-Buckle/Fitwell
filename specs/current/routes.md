@@ -92,6 +92,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | POST | `/api/production/line-items/[id]/stage` | Set a line item's stage (kanban drag); locked POs move together |
 | POST | `/api/production/suppliers` | Create a supplier |
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |
+| POST | `/api/production/suppliers/[id]/contacts` | Add an authorized login email to a supplier |
+| DELETE | `/api/production/supplier-contacts/[id]` | Remove a supplier login email |
 
 ### Cron Jobs (Vercel Cron, protected by `CRON_SECRET`)
 | Method | Path | Schedule | Description |
