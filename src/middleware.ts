@@ -11,6 +11,7 @@ const ADMIN_PAGE_PREFIXES = [
   "/attribution",
   "/funnel",
   "/products",
+  "/inventory",
   "/modules",
   "/settings",
 ];
@@ -85,6 +86,7 @@ export const config = {
     "/attribution/:path*",
     "/funnel/:path*",
     "/products/:path*",
+    "/inventory/:path*",
     "/modules/:path*",
     "/settings/:path*",
     "/supplier/:path*",

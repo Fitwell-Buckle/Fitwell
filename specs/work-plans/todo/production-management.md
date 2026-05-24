@@ -3,7 +3,11 @@
 > **Status (reconciled 2026-05-23):** Phases 1 & 2 are **complete** on branch
 > `production-management` (PR #2), plus a substantial set of changes that landed
 > beyond the original plan (own companies + price tiers, per-line company/warehouse,
-> product picker, PO editing, nav restructure). Phases 3–5 remain. The source of
+> product picker, PO editing, nav restructure). **Phases 3–5 are now complete too**
+> (3: supplier magic-link portal; 4: C2 receiving + deadline alerts; 5: Gantt +
+> incoming-inventory). The remaining work is **deployment**: merge PR #2, apply
+> migrations `0008–0017` to prod, and set env/scopes (`write_inventory`,
+> `RESEND_API_KEY`, `BLOB_READ_WRITE_TOKEN`, `read_locations`). The source of
 > truth for schema/routes is `src/lib/schema.ts` and `specs/current/{schema,routes}.md`;
 > this plan is the narrative + remaining work.
 
@@ -108,17 +112,18 @@ Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advanc
 - [ ] **4c — Deadline alerts:** `GET /api/cron/production-deadline-alerts` (`verifyCronOrAdmin`); pure `lineItemsNeedingAlert` + `posNeedingReceiveNag`; emails owner (+ supplier) via Resend (graceful if no key); add to `vercel.json`. Unit tests for the pure selectors.
 - C1 (manual "mark received" banner + nag) — rejected in favour of C2.
 
-### Phase 5 — Gantt + inventory tie-in (TODO)
-- [ ] `/modules/production/gantt` (timeline per line item, coloured by stage).
-- [ ] Cycle-time service (hardcoded → rolling 30-day average from `production_stage_event`).
-- [ ] `/inventory` page: per-variant incoming qty + stage breakdown + ETA; surface incoming qty/ETA on `/products`.
-- [ ] **Tests**: cycle-time service branches; ETA aggregation; inventory smoke.
+### Phase 5 — Gantt + inventory tie-in ✅ COMPLETE
+- [x] Cycle-time service: pure `cycle-time.ts` (`DEFAULT_STAGE_DAYS` placeholders, `resolveStageEstimate` = rolling 30-day average once ≥10 samples else default, `projectRemainingDays`/`projectEta`) + db-backed `cycle-time-data.ts` (`getStageEstimates` from `production_stage_event` durations).
+- [x] `/modules/production/gantt`: per-line-item timeline, solid actual segments from stage history + faded projected segment to ETA, stage colour legend, today marker. Linked from the production page ("Timeline").
+- [x] `/inventory`: per-SKU incoming (not-yet-received) qty, by-stage breakdown, nearest projected ETA (pure `aggregateIncoming`). Incoming-qty column added to `/products`. "Inventory" added to the Products nav; middleware guards `/inventory`.
+- [x] **Tests**: `cycle-time` branches (defaults vs rolling avg, ETA projection) + `aggregateIncoming` (sum, by-stage, nearest ETA, sort) — unit.
+- ⚠️ `DEFAULT_STAGE_DAYS` are **placeholders** — get Greg's per-stage day estimates and update the constant. The rolling average takes over automatically once a stage has ≥10 completed transitions in the last 30 days.
 
 ## Notes
 
 ### Open questions
 - **✅ C1 vs C2 — receiving strategy: RESOLVED (2026-05-24) → C2.** This system is the single source of truth and pushes a Shopify **inventory adjustment** on receipt. Still needs the `write_inventory` scope granted in the Shopify Dev Dashboard (store re-auth) before live pushes work — until then the receive flow returns a clear "scope not granted" error (same pattern as `read_locations`).
-- **Initial cycle-time numbers per stage** — need Greg's estimates (days) per stage; used until ≥10 completed line items exist per stage.
+- **Initial cycle-time numbers per stage** — placeholders are live in `DEFAULT_STAGE_DAYS` (`src/lib/production/cycle-time.ts`); get Greg's real per-stage day estimates and update the constant. Each stage auto-switches to its rolling 30-day average once ≥10 completed transitions exist.
 - **Shopify admin deep-link pattern** for POs (Phase 4) — confirm exact format; `shopify_po_number` may not equal Shopify's internal ID.
 - **Supplier visibility of customer/company info** (Phase 3) — ✅ resolved: the portal shows production fields only (stage/status/dates/line items/attachments/comments); company, customer, and price-tier are hidden from suppliers.
 - **`read_locations` scope** not yet granted, so the Warehouse picker is empty until it's added in the Shopify Dev Dashboard.

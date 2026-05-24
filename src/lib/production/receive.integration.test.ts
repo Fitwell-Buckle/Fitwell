@@ -7,7 +7,13 @@ import { eq } from "drizzle-orm";
 const noDb = !process.env.TEST_DATABASE_URL;
 const RUN = Date.now();
 
-const adjust = vi.hoisted(() => vi.fn(async () => ({ available: 42 })));
+const adjust = vi.hoisted(() =>
+  vi.fn(
+    async (_p: { variantId: string | number; locationId: string | number; delta: number }) => ({
+      available: 42,
+    }),
+  ),
+);
 vi.mock("@/lib/shopify/client", () => ({
   getShopifyClient: () => ({ adjustInventory: adjust }),
 }));
@@ -68,9 +74,7 @@ describe.skipIf(noDb)("receivePo (real DB, mocked Shopify)", () => {
     expect(adjust).toHaveBeenCalledTimes(2);
 
     // Correct deltas pushed (qty 10 and 5).
-    const deltas = adjust.mock.calls
-      .map((c) => (c[0] as { delta: number }).delta)
-      .sort((a, b) => a - b);
+    const deltas = adjust.mock.calls.map((c) => c[0].delta).sort((a, b) => a - b);
     expect(deltas).toEqual([5, 10]);
 
     const po = await svc.getPoDetail(poId);

@@ -102,9 +102,14 @@ export default async function ProductionPage({
     <div>
       <div className="flex items-center justify-between">
         <PageHeader title="POs and Production" />
-        <Button asChild>
-          <Link href="/modules/production/po/new">New PO</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/modules/production/gantt">Timeline</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/modules/production/po/new">New PO</Link>
+          </Button>
+        </div>
       </div>
 
       <ProductionFilters

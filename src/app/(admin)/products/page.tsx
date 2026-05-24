@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { orderLineItem } from "@/lib/schema";
-import { sql, sum, count } from "drizzle-orm";
+import { orderLineItem, productionPoLineItem, productionPo } from "@/lib/schema";
+import { sql, sum, count, and, eq, isNull, ne } from "drizzle-orm";
 import {
   Table,
   TableHeader,
@@ -42,6 +42,23 @@ export default async function ProductsPage() {
     .groupBy(orderLineItem.sku, orderLineItem.title)
     .orderBy(sql`sum(${orderLineItem.quantity}) desc`);
 
+  // Incoming = produced-but-not-yet-received units, by SKU (excludes cancelled POs).
+  const incomingRows = await db
+    .select({
+      sku: productionPoLineItem.sku,
+      qty: sum(productionPoLineItem.quantity).mapWith(Number),
+    })
+    .from(productionPoLineItem)
+    .innerJoin(productionPo, eq(productionPoLineItem.poId, productionPo.id))
+    .where(
+      and(
+        isNull(productionPoLineItem.shopifyReceivedAt),
+        ne(productionPo.status, "cancelled"),
+      ),
+    )
+    .groupBy(productionPoLineItem.sku);
+  const incomingBySku = new Map(incomingRows.map((r) => [r.sku, r.qty ?? 0]));
+
   return (
     <div>
       <PageHeader title="Products" />
@@ -52,6 +69,7 @@ export default async function ProductsPage() {
             <TableRow>
               <TableHead>Product</TableHead>
               <TableHead>SKU</TableHead>
+              <TableHead className="text-right">Incoming</TableHead>
               <TableHead className="text-right">Units Sold</TableHead>
               <TableHead className="text-right">Orders</TableHead>
               <TableHead className="text-right">Revenue</TableHead>
@@ -61,7 +79,7 @@ export default async function ProductsPage() {
             {products.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="py-8 text-center text-zinc-400"
                 >
                   No product data yet.
@@ -75,6 +93,13 @@ export default async function ProductsPage() {
                   </TableCell>
                   <TableCell>
                     <Muted>{p.sku ?? "—"}</Muted>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {incomingBySku.get(p.sku ?? "") ? (
+                      <Mono>{incomingBySku.get(p.sku ?? "")}</Mono>
+                    ) : (
+                      <Muted>—</Muted>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <Mono>{p.unitsSold ?? 0}</Mono>

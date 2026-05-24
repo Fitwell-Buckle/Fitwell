@@ -31,6 +31,19 @@ export function stageBadgeClass(stage: ProductionStage | "mixed"): string {
   return "bg-zinc-100 text-zinc-600";
 }
 
+/** Solid fill colour per stage for the Gantt timeline bars. */
+export const STAGE_BAR: Record<ProductionStage, string> = {
+  supplier_po: "bg-zinc-400",
+  stamping: "bg-orange-400",
+  edm: "bg-amber-400",
+  polishing: "bg-yellow-400",
+  logo: "bg-lime-500",
+  plating: "bg-sky-400",
+  qc: "bg-indigo-400",
+  packaging: "bg-violet-400",
+  complete: "bg-emerald-500",
+};
+
 /** Format a YYYY-MM-DD date string for display without timezone drift. */
 export function fmtDate(value: string | null | undefined): string {
   if (!value) return "—";
