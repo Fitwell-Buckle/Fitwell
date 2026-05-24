@@ -362,8 +362,11 @@ export async function getPoDetail(poId: string) {
     with: {
       supplier: true,
       company: {
-        columns: { id: true, name: true },
-        with: { priceTier: { columns: { name: true, discountPercent: true } } },
+        columns: { id: true, name: true, contactName: true, contactEmail: true },
+        with: {
+          priceTier: { columns: { name: true, discountPercent: true } },
+          customer: { columns: { email: true, shopifyId: true } },
+        },
       },
       lineItems: {
         with: {

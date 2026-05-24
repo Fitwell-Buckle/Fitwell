@@ -4,7 +4,7 @@ export const PO_STATUSES = ["active", "on_hold", "complete", "cancelled"] as con
 export type PoStatus = (typeof PO_STATUSES)[number];
 
 export const STATUS_LABELS: Record<PoStatus, string> = {
-  active: "Active",
+  active: "Open",
   on_hold: "On hold",
   complete: "Complete",
   cancelled: "Cancelled",

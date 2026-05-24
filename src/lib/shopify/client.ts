@@ -436,6 +436,73 @@ class ShopifyClient {
       .map((l) => ({ id: String(l.id), name: l.name }));
   }
 
+  /** A single location with its address. Requires the read_locations scope. */
+  async getLocation(id: string | number): Promise<{
+    id: string;
+    name: string;
+    address1: string | null;
+    address2: string | null;
+    city: string | null;
+    province: string | null;
+    zip: string | null;
+    country: string | null;
+    phone: string | null;
+  }> {
+    const { location } = await this.fetch<{
+      location: {
+        id: number;
+        name: string;
+        address1: string | null;
+        address2: string | null;
+        city: string | null;
+        province: string | null;
+        zip: string | null;
+        country: string | null;
+        phone: string | null;
+      };
+    }>(`/locations/${id}.json`);
+    return { ...location, id: String(location.id) };
+  }
+
+  /**
+   * The store's name + registered business address (Settings → General →
+   * Business details). Uses Shop.billingAddress, which is the legal address
+   * shown there (can differ from the store/location address).
+   */
+  async getShop(): Promise<{
+    name: string;
+    address1: string | null;
+    address2: string | null;
+    city: string | null;
+    province: string | null;
+    zip: string | null;
+    country: string | null;
+  }> {
+    const data = await this.graphql<{
+      shop: {
+        name: string;
+        billingAddress: {
+          address1: string | null;
+          address2: string | null;
+          city: string | null;
+          province: string | null;
+          zip: string | null;
+          country: string | null;
+        } | null;
+      };
+    }>(`{ shop { name billingAddress { address1 address2 city province zip country } } }`);
+    const b = data.shop.billingAddress;
+    return {
+      name: data.shop.name,
+      address1: b?.address1 ?? null,
+      address2: b?.address2 ?? null,
+      city: b?.city ?? null,
+      province: b?.province ?? null,
+      zip: b?.zip ?? null,
+      country: b?.country ?? null,
+    };
+  }
+
   // ── Generic paginator ─────────────────────────────────────────────
 
   /**

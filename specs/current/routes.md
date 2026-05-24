@@ -38,10 +38,11 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/funnel` | Funnel visualization (landing → Shopify → purchase) |
 | `/products` | Product performance breakdown |
 | `/modules` | Modules hub (Production; Marketing coming soon) |
-| `/modules/production` | Production PO list with supplier/status/stage filters |
+| `/modules/production` | "POs and Production" — PO list (instant filters, defaults to Open) with the kanban board embedded below |
 | `/modules/production/po/new` | Create a PO with line items |
 | `/modules/production/po/[id]` | PO detail — stage advance, status, timeline, comments |
 | `/modules/production/po/[id]/edit` | Edit PO header + line items (add/update/remove) |
+| `/modules/production/po/[id]/send` | Printable PO preview; email it (HTML) to the customer |
 | `/modules/production/kanban` | Kanban board — drag line items across stage columns |
 | `/modules/production/suppliers` | Supplier CRUD |
 | `/settings` | Admin settings, sync status, API health |

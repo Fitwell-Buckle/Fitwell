@@ -17,22 +17,20 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { STAGES, STAGE_LABELS, derivePoStage } from "@/lib/production/stages";
+import { STAGE_LABELS, derivePoStage } from "@/lib/production/stages";
 import {
-  PO_STATUSES,
   STATUS_LABELS,
   statusBadgeClass,
   stageBadgeClass,
   fmtDate,
 } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
+import { ProductionFilters } from "./production-filters";
+import { KanbanBoard, type KanbanCard } from "./kanban/kanban-board";
 
 export const metadata: Metadata = {
-  title: "Production | Fitwell Admin",
+  title: "POs and Production | Fitwell Admin",
 };
-
-const selectClass =
-  "h-9 rounded-lg border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
 
 export default async function ProductionPage({
   searchParams,
@@ -44,13 +42,16 @@ export default async function ProductionPage({
 
   const params = await searchParams;
   const supplierId =
-    typeof params.supplier === "string" ? params.supplier : undefined;
-  const status = typeof params.status === "string" ? params.status : undefined;
-  const stage = typeof params.stage === "string" ? params.stage : undefined;
+    typeof params.supplier === "string" ? params.supplier : "";
+  const stage = typeof params.stage === "string" ? params.stage : "";
+  // Default to Open (active). The "all" sentinel shows every status.
+  const status =
+    typeof params.status === "string" && params.status ? params.status : "active";
+  const statusFilter = status === "all" ? undefined : status;
 
   const conditions = [];
   if (supplierId) conditions.push(eq(productionPo.supplierId, supplierId));
-  if (status) conditions.push(eq(productionPo.status, status));
+  if (statusFilter) conditions.push(eq(productionPo.status, statusFilter));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [pos, suppliers] = await Promise.all([
@@ -59,7 +60,15 @@ export default async function ProductionPage({
       orderBy: desc(productionPo.createdAt),
       with: {
         supplier: { columns: { name: true } },
-        lineItems: { columns: { currentStage: true } },
+        lineItems: {
+          columns: {
+            id: true,
+            sku: true,
+            title: true,
+            quantity: true,
+            currentStage: true,
+          },
+        },
       },
     }),
     db.query.supplier.findMany({ columns: { id: true, name: true } }),
@@ -74,16 +83,28 @@ export default async function ProductionPage({
     // Stage filter is applied on the derived stage (cheap at our scale).
     .filter((po) => !stage || po.derivedStage === stage);
 
+  // Board cards = line items of the POs currently shown in the list.
+  const cards: KanbanCard[] = rows.flatMap((po) =>
+    po.lineItems.map((li) => ({
+      id: li.id,
+      sku: li.sku,
+      title: li.title,
+      quantity: li.quantity,
+      stage: li.currentStage,
+      poId: po.id,
+      poNumber: po.shopifyPoNumber,
+      supplier: po.supplier?.name ?? "—",
+      locked: po.lockStagesTogether,
+    })),
+  );
+
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Production" />
+        <PageHeader title="POs and Production" />
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <Link href="/modules/production/suppliers">Suppliers</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/modules/production/kanban">Board</Link>
           </Button>
           <Button asChild>
             <Link href="/modules/production/po/new">New PO</Link>
@@ -91,40 +112,14 @@ export default async function ProductionPage({
         </div>
       </div>
 
-      <form action="" method="GET" className="mt-6 flex flex-wrap items-center gap-2">
-        <select name="supplier" defaultValue={supplierId ?? ""} className={selectClass}>
-          <option value="">All suppliers</option>
-          {suppliers.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <select name="status" defaultValue={status ?? ""} className={selectClass}>
-          <option value="">All statuses</option>
-          {PO_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <select name="stage" defaultValue={stage ?? ""} className={selectClass}>
-          <option value="">All stages</option>
-          {STAGES.map((s) => (
-            <option key={s} value={s}>
-              {STAGE_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <Button type="submit">Filter</Button>
-        {(supplierId || status || stage) && (
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/modules/production">Clear</Link>
-          </Button>
-        )}
-      </form>
+      <ProductionFilters
+        suppliers={suppliers}
+        supplierId={supplierId}
+        status={status}
+        stage={stage}
+      />
 
-      <DataTable className="mt-6">
+      <DataTable className="mt-4">
         <Table>
           <TableHeader>
             <TableRow>
@@ -141,7 +136,7 @@ export default async function ProductionPage({
             {rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-8 text-center text-zinc-400">
-                  No production POs yet. Create one to start tracking.
+                  No POs match. Create one to start tracking.
                 </TableCell>
               </TableRow>
             ) : (
@@ -186,6 +181,15 @@ export default async function ProductionPage({
           </TableBody>
         </Table>
       </DataTable>
+
+      <div className="mt-8">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-900">Board</h2>
+        {cards.length === 0 ? (
+          <p className="text-sm text-zinc-400">No line items to show.</p>
+        ) : (
+          <KanbanBoard cards={cards} />
+        )}
+      </div>
     </div>
   );
 }

@@ -18,13 +18,17 @@ export default async function AdminLayout({
 
   return (
     <AuthSessionProvider>
-    <div className="flex h-screen">
-      <AdminSidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Suspense>
-          <DateRangePicker />
-        </Suspense>
-        <main className="flex-1 overflow-auto bg-[#fafafa] px-10 py-8">
+    <div className="flex h-screen print:block print:h-auto">
+      <div className="print:hidden">
+        <AdminSidebar />
+      </div>
+      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
+        <div className="print:hidden">
+          <Suspense>
+            <DateRangePicker />
+          </Suspense>
+        </div>
+        <main className="flex-1 overflow-auto bg-[#fafafa] px-10 py-8 print:overflow-visible print:bg-white print:p-0">
           {children}
         </main>
       </div>

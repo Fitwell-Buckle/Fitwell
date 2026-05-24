@@ -7,8 +7,6 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  ShoppingCart,
-  Filter,
   Package,
   Megaphone,
   RefreshCw,
@@ -49,10 +47,9 @@ const navItems: NavItem[] = [
     children: [
       { href: "/customers", label: "Consumers" },
       { href: "/customers/companies", label: "Companies" },
+      { href: "/orders", label: "Orders" },
     ],
   },
-  { href: "/orders", label: "Orders", icon: ShoppingCart },
-  { href: "/funnel", label: "Funnel", icon: Filter },
   {
     label: "Products",
     icon: Package,
@@ -67,6 +64,7 @@ const navItems: NavItem[] = [
     children: [
       { href: "/attribution", label: "Attribution" },
       { href: "/campaigns", label: "Campaigns" },
+      { href: "/funnel", label: "Funnel" },
     ],
   },
   { href: "/data-sync", label: "Data Sync", icon: RefreshCw },
@@ -120,13 +118,17 @@ export function AdminSidebar() {
             );
           }
 
+          // Children render alphabetically by label within their parent.
+          const children = [...item.children].sort((a, b) =>
+            a.label.localeCompare(b.label),
+          );
           // Active child = the longest href that prefixes the current path, so
           // a nested route (/customers/companies) doesn't also light up its
           // parent-list sibling (/customers).
           const matchPath = (href: string) =>
             pathname === href || pathname.startsWith(`${href}/`);
           const activeChildHref =
-            item.children
+            children
               .filter((c) => matchPath(c.href))
               .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
           const childActive = activeChildHref !== null;
@@ -185,7 +187,7 @@ export function AdminSidebar() {
 
               {expanded && (
                 <div className="mt-1 space-y-1 pl-9">
-                  {item.children.map((child) => {
+                  {children.map((child) => {
                     const active = child.href === activeChildHref;
                     return (
                       <Link

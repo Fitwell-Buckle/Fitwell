@@ -61,6 +61,9 @@ export default async function PoDetailPage({
         <PageHeader title={`PO ${po.shopifyPoNumber}`} />
         <div className="flex gap-2">
           <Button variant="outline" size="sm" asChild>
+            <Link href={`/modules/production/po/${po.id}/send`}>Print &amp; Send</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
             <Link href={`/modules/production/po/${po.id}/edit`}>Edit</Link>
           </Button>
           <Button variant="ghost" size="sm" asChild>
