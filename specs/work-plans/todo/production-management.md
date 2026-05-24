@@ -114,7 +114,7 @@ Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advanc
 
 ### Phase 5 — Gantt + inventory tie-in ✅ COMPLETE
 - [x] Cycle-time service: pure `cycle-time.ts` (`DEFAULT_STAGE_DAYS` placeholders, `resolveStageEstimate` = rolling 30-day average once ≥10 samples else default, `projectRemainingDays`/`projectEta`) + db-backed `cycle-time-data.ts` (`getStageEstimates` from `production_stage_event` durations).
-- [x] `/modules/production/gantt`: per-line-item timeline, solid actual segments from stage history + faded projected segment to ETA, stage colour legend, today marker. Linked from the production page ("Timeline").
+- [x] Production timeline (Gantt): per-line-item timeline, solid actual segments from stage history + faded projected segment to ETA, stage colour legend, today marker. Embedded on the POs and Production page below the board (`production-timeline.tsx`); no standalone route. The page reads, top to bottom: PO List → Production (board) → Production timeline.
 - [x] `/inventory`: per-SKU incoming (not-yet-received) qty, by-stage breakdown, nearest projected ETA (pure `aggregateIncoming`). Incoming-qty column added to `/products`. "Inventory" added to the Products nav; middleware guards `/inventory`.
 - [x] **Tests**: `cycle-time` branches (defaults vs rolling avg, ETA projection) + `aggregateIncoming` (sum, by-stage, nearest ETA, sort) — unit.
 - ⚠️ `DEFAULT_STAGE_DAYS` are **placeholders** — get Greg's per-stage day estimates and update the constant. The rolling average takes over automatically once a stage has ≥10 completed transitions in the last 30 days.

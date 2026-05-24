@@ -1,21 +1,12 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { asc, desc, inArray } from "drizzle-orm";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { productionPo, productionStageEvent } from "@/lib/schema";
-import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
 import { STAGE_BAR, fmtDate, skuSize } from "@/lib/production/display";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
 import { projectEta } from "@/lib/production/cycle-time";
-
-export const metadata: Metadata = {
-  title: "Production timeline | Fitwell Admin",
-};
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -28,10 +19,12 @@ interface Segment {
   projected: boolean;
 }
 
-export default async function GanttPage() {
-  const session = await auth();
-  if (!session) redirect("/auth/login");
-
+/**
+ * Per-line-item production Gantt: solid segments from actual stage history plus
+ * a faded segment projected to ETA. A self-contained async server component so
+ * it can be embedded below the board on the POs and Production page.
+ */
+export async function ProductionTimeline() {
   const [estimates, pos] = await Promise.all([
     getStageEstimates(),
     db.query.productionPo.findMany({
@@ -65,7 +58,6 @@ export default async function GanttPage() {
             };
           });
 
-          // Projected remaining work, from today to the projected ETA.
           let etaMs: number | null = null;
           if (li.currentStage !== "complete") {
             etaMs = utcMidnight(projectEta(li.currentStage, todayIso, estimates));
@@ -103,21 +95,14 @@ export default async function GanttPage() {
   const todayPct = pct(todayMs);
 
   return (
-    <div>
-      <div className="flex items-center justify-between">
-        <PageHeader title="Production timeline" />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/modules/production">Back</Link>
-        </Button>
-      </div>
-
-      <p className="mt-1 text-sm text-zinc-500">
-        Each row is a line item across its production stages. Solid = actual
-        (from stage history); faded = projected to ETA using cycle-time estimates.
+    <div className="mt-8">
+      <h2 className="text-sm font-semibold text-zinc-900">Production timeline</h2>
+      <p className="mt-1 text-xs text-zinc-500">
+        Each row is a line item across its stages. Solid = actual (from stage
+        history); faded = projected to ETA using cycle-time estimates.
       </p>
 
-      {/* Stage legend */}
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
         {STAGES.map((s) => (
           <span key={s} className="flex items-center gap-1.5 text-xs text-zinc-500">
             <span className={`inline-block h-3 w-3 rounded-sm ${STAGE_BAR[s]}`} />
@@ -127,11 +112,11 @@ export default async function GanttPage() {
       </div>
 
       {tracks.length === 0 ? (
-        <Card className="mt-6 p-8 text-center text-sm text-zinc-400">
+        <Card className="mt-4 p-8 text-center text-sm text-zinc-400">
           No open line items to chart.
         </Card>
       ) : (
-        <Card className="mt-6 overflow-hidden p-0">
+        <Card className="mt-4 overflow-hidden p-0">
           <div className="divide-y divide-zinc-100">
             {tracks.map((t) => (
               <div key={t.key} className="flex items-center gap-3 px-4 py-2.5">
@@ -149,7 +134,6 @@ export default async function GanttPage() {
                 </div>
 
                 <div className="relative h-6 flex-1 rounded bg-zinc-50">
-                  {/* today marker */}
                   <div
                     className="absolute top-0 z-10 h-full w-px bg-zinc-300"
                     style={{ left: `${todayPct}%` }}

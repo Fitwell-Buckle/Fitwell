@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ProductionFilters } from "./production-filters";
 import { KanbanBoard, type KanbanCard } from "./kanban/kanban-board";
+import { ProductionTimeline } from "./production-timeline";
 
 export const metadata: Metadata = {
   title: "POs and Production | Fitwell Admin",
@@ -102,15 +103,12 @@ export default async function ProductionPage({
     <div>
       <div className="flex items-center justify-between">
         <PageHeader title="POs and Production" />
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/modules/production/gantt">Timeline</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/modules/production/po/new">New PO</Link>
-          </Button>
-        </div>
+        <Button asChild>
+          <Link href="/modules/production/po/new">New PO</Link>
+        </Button>
       </div>
+
+      <h2 className="mt-6 text-sm font-semibold text-zinc-900">PO List</h2>
 
       <ProductionFilters
         suppliers={suppliers}
@@ -183,13 +181,15 @@ export default async function ProductionPage({
       </DataTable>
 
       <div className="mt-8">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-900">Board</h2>
+        <h2 className="mb-3 text-sm font-semibold text-zinc-900">Production</h2>
         {cards.length === 0 ? (
           <p className="text-sm text-zinc-400">No line items to show.</p>
         ) : (
           <KanbanBoard cards={cards} />
         )}
       </div>
+
+      <ProductionTimeline />
     </div>
   );
 }

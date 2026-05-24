@@ -40,13 +40,12 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/products` | Product performance breakdown (+ incoming production qty per SKU) |
 | `/inventory` | Incoming inventory — per-SKU units in production, stage breakdown, projected ETA |
 | `/modules` | Modules hub (Production; Marketing coming soon) |
-| `/modules/production` | "POs and Production" — PO list (instant filters, defaults to Open) with the kanban board embedded below |
+| `/modules/production` | "POs and Production" — PO list (instant filters, defaults to Open), then the "Production" board, then the production timeline (Gantt), all embedded |
 | `/modules/production/po/new` | Create a PO with line items |
 | `/modules/production/po/[id]` | PO detail — stage advance, status, timeline, comments |
 | `/modules/production/po/[id]/edit` | Edit PO header + line items (add/update/remove) |
 | `/modules/production/po/[id]/send` | Printable PO preview; email it (HTML) to the customer |
 | `/modules/production/kanban` | Kanban board — drag line items across stage columns |
-| `/modules/production/gantt` | Production timeline — per-line-item Gantt (actual stage history + projected ETA) |
 | `/modules/production/suppliers` | Supplier CRUD |
 | `/settings` | Admin settings, sync status, API health |
 
