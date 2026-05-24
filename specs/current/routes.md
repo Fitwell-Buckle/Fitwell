@@ -20,6 +20,7 @@ All marketing pages include PostHog tracking and UTM parameter capture.
 | Path | Description | Auth |
 |------|-------------|------|
 | `/auth/login` | Admin login page (Google OAuth) | None |
+| `/supplier/login` | Supplier login (email magic link) | None |
 
 ## (admin) — Protected Dashboard
 
@@ -47,6 +48,15 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/modules/production/suppliers` | Supplier CRUD |
 | `/settings` | Admin settings, sync status, API health |
 
+## supplier — Supplier Portal
+
+Magic-link auth; middleware requires an authenticated session with `role='supplier'` (else → `/supplier/login`). Signed-in admins are redirected to `/dashboard`; suppliers who hit admin routes are sent here. Every page is scoped to the signed-in supplier's `supplier_id` and shows production fields only (no company / customer / price-tier).
+
+| Path | Description |
+|------|-------------|
+| `/supplier` | The supplier's own POs (list) |
+| `/supplier/po/[id]` | PO detail — advance stages, comment, upload attachments (no edit/delete); 404 if not their PO |
+
 ## API Routes
 
 ### Auth
@@ -72,6 +82,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | GET | `/api/admin/campaigns/[id]` | Campaign detail with daily metrics |
 
 ### Production API (each handler checks `auth()`)
+
+Supplier scoping: when the session `role='supplier'`, write endpoints are restricted to the supplier's own POs — `advance`, `comments`, `attachments` (upload), and `line-items/[id]/stage` are owner-checked (403 otherwise); PO edit (`PATCH`/`PUT po/[id]`), attachment delete, and supplier-contact management are admin-only (403 for suppliers). Admins are unaffected.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/production/shopify-refs` | Warehouses (Shopify locations) for the PO picker; needs `read_locations` |

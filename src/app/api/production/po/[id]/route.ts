@@ -18,6 +18,10 @@ export async function PATCH(
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Editing PO header/status is admin-only; suppliers can advance/comment/upload.
+  if (session.user.role === "supplier") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
 
@@ -63,6 +67,10 @@ export async function PUT(
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Full edit is admin-only; suppliers can advance/comment/upload, not edit.
+  if (session.user.role === "supplier") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;

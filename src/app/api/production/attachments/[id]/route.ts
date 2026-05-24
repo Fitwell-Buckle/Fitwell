@@ -15,6 +15,10 @@ export async function DELETE(
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Deleting attachments is admin-only; suppliers upload/view but don't remove.
+  if (session.user.role === "supplier") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { setStage } from "@/lib/production/service";
 import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { ensureSupplierMayActOnLineItem } from "@/lib/production/scope";
 
 const bodySchema = z.object({ stage: z.string() });
 
@@ -16,6 +17,12 @@ export async function POST(
   }
 
   const { id } = await params;
+
+  // Suppliers may move only line items on their own PO; admins pass.
+  const denied = await ensureSupplierMayActOnLineItem(session, id);
+  if (denied) {
+    return NextResponse.json({ error: denied.error }, { status: denied.status });
+  }
 
   let input;
   try {

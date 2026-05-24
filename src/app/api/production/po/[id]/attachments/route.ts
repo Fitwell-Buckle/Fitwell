@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { addAttachment } from "@/lib/production/service";
+import { ensureSupplierMayActOnPo } from "@/lib/production/scope";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,12 @@ export async function POST(
   }
 
   const { id } = await params;
+
+  // Suppliers may upload only to their own PO; admins pass.
+  const denied = await ensureSupplierMayActOnPo(session, id);
+  if (denied) {
+    return NextResponse.json({ error: denied.error }, { status: denied.status });
+  }
 
   let file: File | null = null;
   try {

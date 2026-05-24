@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { advance, advanceSchema } from "@/lib/production/service";
+import { ensureSupplierMayActOnPo } from "@/lib/production/scope";
 
 export async function POST(
   req: Request,
@@ -13,6 +14,12 @@ export async function POST(
   }
 
   const { id } = await params;
+
+  // Suppliers may advance only their own PO; admins pass.
+  const denied = await ensureSupplierMayActOnPo(session, id);
+  if (denied) {
+    return NextResponse.json({ error: denied.error }, { status: denied.status });
+  }
 
   // Body is optional; a locked PO advances without a lineItemId.
   let input: z.infer<typeof advanceSchema> = {};

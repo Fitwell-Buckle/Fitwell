@@ -93,14 +93,14 @@ Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advanc
 - Full PO editing (`/po/[id]/edit`, PUT reconcile).
 - Nav restructure (Products/Marketing/Customers groups; "Modules" entry removed).
 
-### Phase 3 — Supplier auth + portal (TODO) — discuss with Greg first (auth change + new route group)
+### Phase 3 — Supplier auth + portal ✅ COMPLETE
 - [x] **3a — Allowlist (done):** `supplier_contact` table (one supplier per email, unique-indexed; lowercased) + relation (migration `0016`). API: `POST /api/production/suppliers/[id]/contacts`, `DELETE /api/production/supplier-contacts/[id]`. UI: Suppliers → Edit → "Authorized logins" (add/remove emails). This is the per-supplier allowlist that gates magic-link sign-in in 3b.
 - [x] **3b — Auth (done):** custom magic-link email provider (`id: "email"`, modeled on @auth/core's Resend provider, delivered via `sendMagicLinkEmail` with a console fallback when `RESEND_API_KEY` is unset). signIn callback: Google → admin (unchanged); email → allowed only if the address resolves to a supplier (`supplier_contact`) OR is an allowed admin, then stamps `role='supplier'` + `supplier_id` on the link-click step. Session exposes `supplierId`. Pure policy `canMagicLinkSignIn` + unit tests.
 - [x] **3b — Middleware (done):** `/supplier/*` requires `role='supplier'` (else → `/supplier/login`); signed-in non-suppliers on `/supplier/*` → `/dashboard`; suppliers hitting admin pages → `/supplier`; `/api/admin/*` rejects suppliers. `/supplier/login` is public.
-- [ ] `/supplier/login`, `/supplier/`, `/supplier/po/[id]`.
-- [ ] Centralised `requireSupplierScope` helper; scope all supplier queries by `supplier_id`.
-- [ ] Suppliers can view their POs, advance stages, comment, upload (not edit qty/dates).
-- [ ] **Tests**: scoping helper unit test; integration test that supplier A can't see supplier B's PO.
+- [x] **3c — Portal (done):** `/supplier/login` (magic-link form), `/supplier` (their POs), `/supplier/po/[id]` (404 unless theirs). Supplier layout + top bar; production fields only (no company/customer/price-tier).
+- [x] **3c — Scoping (done):** `scope.ts` (`poSupplierId`, `lineItemPoSupplierId`, `ensureSupplierMayActOnPo/LineItem`) — no `auth` import so it's testable under vitest; `getSupplierScope` (session→supplier) lives in `supplier-session.ts`. Write endpoints owner-check suppliers; edit/delete/contact-mgmt are admin-only.
+- [x] **3c — Suppliers can** view their POs, advance stages, comment, upload — not edit qty/dates, not delete.
+- [x] **3c — Tests (done):** `canSupplierAccessPo` unit tests (in `supplier-access.test.ts`); `scope.integration.test.ts` proves supplier B is forbidden from supplier A's PO (5/5 pass on the dev branch).
 
 ### Phase 4 — Deadline alerts + receiving (TODO) — gated on the C1/C2 decision
 - [ ] `GET /api/cron/production-deadline-alerts` — emails owner (and supplier) for line items due within N days; add cron to `vercel.json`; Resend templates.
@@ -120,7 +120,7 @@ Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advanc
 - **⚠️ C1 vs C2 — receiving strategy (DECISION PENDING, raised 2026-05-23, revisit after testing C1).** Reconsidering manual receive (C1) in favour of **C2**: this system becomes the single source of truth and pushes a Shopify **inventory adjustment** on receipt. Pivot is cheap: `shopify_received_at` serves both; the receive flow (Phase 4) isn't built yet; line items already capture `shopify_variant_id` **and** a warehouse. C2 needs: `write_inventory` scope, a client inventory-adjust method (variant → `inventory_item_id` + location), idempotency, and a PO-numbering tweak (`shopify_po_number` nullable or a generated number). If chosen, flip the "Receiving" decision and move C2/D out of *Alternatives considered*.
 - **Initial cycle-time numbers per stage** — need Greg's estimates (days) per stage; used until ≥10 completed line items exist per stage.
 - **Shopify admin deep-link pattern** for POs (Phase 4) — confirm exact format; `shopify_po_number` may not equal Shopify's internal ID.
-- **Supplier visibility of customer/company info** (Phase 3) — default internal-only.
+- **Supplier visibility of customer/company info** (Phase 3) — ✅ resolved: the portal shows production fields only (stage/status/dates/line items/attachments/comments); company, customer, and price-tier are hidden from suppliers.
 - **`read_locations` scope** not yet granted, so the Warehouse picker is empty until it's added in the Shopify Dev Dashboard.
 
 ### Risks

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { addComment, commentSchema } from "@/lib/production/service";
+import { ensureSupplierMayActOnPo } from "@/lib/production/scope";
 
 export async function POST(
   req: Request,
@@ -13,6 +14,12 @@ export async function POST(
   }
 
   const { id } = await params;
+
+  // Suppliers may comment only on their own PO; admins pass.
+  const denied = await ensureSupplierMayActOnPo(session, id);
+  if (denied) {
+    return NextResponse.json({ error: denied.error }, { status: denied.status });
+  }
 
   let input;
   try {
