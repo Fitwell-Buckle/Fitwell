@@ -503,6 +503,18 @@ class ShopifyClient {
     };
   }
 
+  /**
+   * The store's brand logo URL (Settings → Brand). Requires the brand field to
+   * be available to the app (an extra scope, e.g. read_content). Returns null
+   * when unset; throws if the field isn't in the app's schema.
+   */
+  async getBrandLogoUrl(): Promise<string | null> {
+    const data = await this.graphql<{
+      shop: { brand: { logo: { image: { url: string } | null } | null } | null };
+    }>(`{ shop { brand { logo { image { url } } } } }`);
+    return data.shop.brand?.logo?.image?.url ?? null;
+  }
+
   // ── Generic paginator ─────────────────────────────────────────────
 
   /**

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -56,6 +55,7 @@ const navItems: NavItem[] = [
     children: [
       { href: "/products", label: "Product List" },
       { href: "/modules/production", label: "POs and Production" },
+      { href: "/modules/production/suppliers", label: "Suppliers" },
     ],
   },
   {
@@ -81,7 +81,7 @@ function isGroup(item: NavItem): item is NavGroup {
   return "children" in item;
 }
 
-export function AdminSidebar() {
+export function AdminSidebar({ logoUrl }: { logoUrl?: string }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -94,11 +94,11 @@ export function AdminSidebar() {
     <aside className="flex h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-900">
       <div className="flex h-16 items-center border-b border-zinc-800 px-6">
         <Link href="/dashboard">
-          <Image
-            src="/images/fitwell-logo.png"
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logoUrl ?? "/images/fitwell-logo.png"}
             alt="Fitwell Admin"
-            width={120}
-            height={29}
+            className="h-[29px] w-auto"
           />
         </Link>
       </div>

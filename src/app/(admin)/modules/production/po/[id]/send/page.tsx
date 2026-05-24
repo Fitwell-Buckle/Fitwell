@@ -4,6 +4,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getPoDetail } from "@/lib/production/service";
 import { getShopifyClient } from "@/lib/shopify/client";
+import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { fmtMoney, fmtDate, STATUS_LABELS, skuSize } from "@/lib/production/display";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ export default async function SendPoPage({
 
   // The PO is sent to the vendor (supplier).
   const defaultTo = po.supplier?.contactEmail ?? "";
+  const logoUrl = await getStoreLogoUrl();
 
   // Ship To = warehouse contact info; needs read_locations, falls back to name.
   let warehouseName = po.locationName ?? null;
@@ -86,10 +88,18 @@ export default async function SendPoPage({
 
       {/* Printable document */}
       <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-8 print:border-0 print:p-0">
-        <h1 className="text-lg font-semibold text-zinc-900">
-          Purchase Order {po.shopifyPoNumber}
-        </h1>
-        <p className="text-sm text-zinc-500">Fitwell Buckle Co.</p>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-lg font-semibold text-zinc-900">
+            Purchase Order {po.shopifyPoNumber}
+          </h1>
+          {/* brightness-0 renders any logo (incl. the dynamic Shopify one) as solid black */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logoUrl}
+            alt="Fitwell"
+            className="h-8 w-auto shrink-0 [filter:brightness(0)]"
+          />
+        </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-3">
           <div>

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { AdminSidebar } from "@/components/layout/admin-sidebar";
 import { DateRangePicker } from "@/components/layout/date-range-picker";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { getStoreLogoUrl } from "@/lib/shopify/brand";
 
 export default async function AdminLayout({
   children,
@@ -16,11 +17,13 @@ export default async function AdminLayout({
     redirect("/auth/login");
   }
 
+  const logoUrl = await getStoreLogoUrl();
+
   return (
     <AuthSessionProvider>
     <div className="flex h-screen print:block print:h-auto">
       <div className="print:hidden">
-        <AdminSidebar />
+        <AdminSidebar logoUrl={logoUrl} />
       </div>
       <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
         <div className="print:hidden">
