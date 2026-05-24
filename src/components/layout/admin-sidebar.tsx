@@ -46,16 +46,20 @@ const navItems: NavItem[] = [
   {
     label: "Customers",
     icon: Users,
-    href: "/customers",
-    children: [{ href: "/customers/companies", label: "Companies" }],
+    children: [
+      { href: "/customers", label: "Consumers" },
+      { href: "/customers/companies", label: "Companies" },
+    ],
   },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/funnel", label: "Funnel", icon: Filter },
   {
     label: "Products",
     icon: Package,
-    href: "/products",
-    children: [{ href: "/modules/production", label: "Production" }],
+    children: [
+      { href: "/products", label: "Product List" },
+      { href: "/modules/production", label: "POs and Production" },
+    ],
   },
   {
     label: "Marketing",
@@ -116,9 +120,16 @@ export function AdminSidebar() {
             );
           }
 
-          const childActive = item.children.some((c) =>
-            pathname.startsWith(c.href),
-          );
+          // Active child = the longest href that prefixes the current path, so
+          // a nested route (/customers/companies) doesn't also light up its
+          // parent-list sibling (/customers).
+          const matchPath = (href: string) =>
+            pathname === href || pathname.startsWith(`${href}/`);
+          const activeChildHref =
+            item.children
+              .filter((c) => matchPath(c.href))
+              .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
+          const childActive = activeChildHref !== null;
           const selfActive = item.href ? pathname.startsWith(item.href) : false;
           const expanded = open[item.label] ?? childActive;
 
@@ -175,7 +186,7 @@ export function AdminSidebar() {
               {expanded && (
                 <div className="mt-1 space-y-1 pl-9">
                   {item.children.map((child) => {
-                    const active = pathname.startsWith(child.href);
+                    const active = child.href === activeChildHref;
                     return (
                       <Link
                         key={child.href}
