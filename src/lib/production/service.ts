@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   productionPo,
   productionPoLineItem,
   productionStageEvent,
   productionComment,
+  productionAttachment,
 } from "@/lib/schema";
 import {
   planAdvance,
@@ -375,8 +376,37 @@ export async function getPoDetail(poId: string) {
         orderBy: asc(productionComment.createdAt),
         with: { author: { columns: { name: true, email: true } } },
       },
+      attachments: { orderBy: desc(productionAttachment.uploadedAt) },
     },
   });
+}
+
+/** Record an uploaded attachment (blob already stored). Exactly one parent. */
+export async function addAttachment(params: {
+  poId?: string | null;
+  lineItemId?: string | null;
+  blobUrl: string;
+  filename: string;
+  contentType?: string | null;
+  sizeBytes?: number | null;
+  uploadedByUserId?: string | null;
+}): Promise<{ id: string }> {
+  const parent = resolveParent(params);
+  if (!parent.ok) throw new Error(parent.error);
+
+  const [row] = await db
+    .insert(productionAttachment)
+    .values({
+      poId: parent.poId,
+      lineItemId: parent.lineItemId,
+      blobUrl: params.blobUrl,
+      filename: params.filename,
+      contentType: params.contentType ?? null,
+      sizeBytes: params.sizeBytes ?? null,
+      uploadedByUserId: params.uploadedByUserId ?? null,
+    })
+    .returning({ id: productionAttachment.id });
+  return row;
 }
 
 export const commentSchema = z.object({

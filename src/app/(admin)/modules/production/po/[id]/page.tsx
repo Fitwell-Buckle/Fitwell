@@ -19,6 +19,14 @@ import {
 import { cn } from "@/lib/utils";
 import { PoControls } from "./po-controls";
 import { PoComments } from "./po-comments";
+import { PoAttachments } from "./po-attachments";
+
+function fmtBytes(n: number | null): string {
+  if (!n) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
 
 export const metadata: Metadata = {
   title: "Production PO | Fitwell Admin",
@@ -171,6 +179,16 @@ export default async function PoDetailPage({
           ))}
         </div>
       </Card>
+
+      <PoAttachments
+        poId={po.id}
+        attachments={po.attachments.map((a) => ({
+          id: a.id,
+          filename: a.filename,
+          url: a.blobUrl,
+          size: fmtBytes(a.sizeBytes),
+        }))}
+      />
 
       <PoComments
         poId={po.id}

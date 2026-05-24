@@ -86,6 +86,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | PUT | `/api/production/po/[id]` | Full edit — header + reconcile line items (add/update/remove) |
 | POST | `/api/production/po/[id]/advance` | Advance stage — whole PO (locked) or one line item |
 | POST | `/api/production/po/[id]/comments` | Add a comment to a PO |
+| POST | `/api/production/po/[id]/attachments` | Upload a file to a PO (Vercel Blob; multipart) |
+| DELETE | `/api/production/attachments/[id]` | Delete an attachment (blob + row) |
 | POST | `/api/production/line-items/[id]/stage` | Set a line item's stage (kanban drag); locked POs move together |
 | POST | `/api/production/suppliers` | Create a supplier |
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |
