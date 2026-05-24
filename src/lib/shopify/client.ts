@@ -515,6 +515,44 @@ class ShopifyClient {
     return data.shop.brand?.logo?.image?.url ?? null;
   }
 
+  // ── Inventory (C2 receiving) ──────────────────────────────────────
+
+  /** The inventory_item_id backing a variant — needed to adjust its stock. */
+  async getVariantInventoryItemId(variantId: string | number): Promise<number> {
+    // Tolerate a GraphQL gid as well as a bare REST id.
+    const id = String(variantId).split("/").pop();
+    const { variant } = await this.fetch<{
+      variant: { id: number; inventory_item_id: number };
+    }>(`/variants/${id}.json`);
+    return variant.inventory_item_id;
+  }
+
+  /**
+   * Adjust a variant's available stock at a location (C2 receiving). Resolves
+   * the variant's inventory_item_id, then posts an inventory adjustment.
+   * Requires the write_inventory scope — until it's granted in the Shopify Dev
+   * Dashboard (store re-auth), Shopify returns 403 and this throws; the receive
+   * route surfaces that as a clear "scope not granted" message.
+   */
+  async adjustInventory(params: {
+    variantId: string | number;
+    locationId: string | number;
+    delta: number;
+  }): Promise<{ available: number }> {
+    const inventoryItemId = await this.getVariantInventoryItemId(params.variantId);
+    const { inventory_level } = await this.fetch<{
+      inventory_level: { available: number };
+    }>("/inventory_levels/adjust.json", {
+      method: "POST",
+      body: JSON.stringify({
+        location_id: Number(params.locationId),
+        inventory_item_id: inventoryItemId,
+        available_adjustment: params.delta,
+      }),
+    });
+    return { available: inventory_level.available };
+  }
+
   // ── Generic paginator ─────────────────────────────────────────────
 
   /**

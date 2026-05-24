@@ -98,6 +98,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | PATCH | `/api/production/po/[id]` | Update PO fields (status, lock, dates, notes) |
 | PUT | `/api/production/po/[id]` | Full edit — header + reconcile line items (add/update/remove) |
 | POST | `/api/production/po/[id]/advance` | Advance stage — whole PO (locked) or one line item |
+| POST | `/api/production/po/[id]/receive` | Receive into Shopify (C2) — push +qty inventory adjustments per line item; idempotent per line; admin-only; needs `write_inventory` |
 | POST | `/api/production/po/[id]/comments` | Add a comment to a PO |
 | POST | `/api/production/po/[id]/attachments` | Upload a file to a PO (Vercel Blob; multipart) |
 | DELETE | `/api/production/attachments/[id]` | Delete an attachment (blob + row) |
@@ -115,6 +116,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | GET | `/api/cron/extract-google-ads` | `45 6 * * *` | Daily Google Ads spend/conversions |
 | GET | `/api/cron/extract-gsc` | `0 7 * * *` | Daily Search Console data |
 | GET | `/api/cron/extract-posthog` | `0 */3 * * *` | PostHog event aggregation |
+| GET | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Email owner + suppliers about line items due soon / overdue, and complete POs ready to receive |
 | GET | `/api/cron/health` | `0 */4 * * *` | Infrastructure health check |
 
 ### Webhooks

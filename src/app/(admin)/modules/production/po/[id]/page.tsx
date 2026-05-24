@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { PoControls } from "./po-controls";
 import { PoComments } from "./po-comments";
 import { PoAttachments } from "./po-attachments";
+import { PoReceive } from "./po-receive";
 
 function fmtBytes(n: number | null): string {
   if (!n) return "";
@@ -126,6 +127,22 @@ export default async function PoDetailPage({
         </div>
         {po.notes && <p className="mt-4 text-sm text-zinc-600">{po.notes}</p>}
       </Card>
+
+      {/* C2 receiving: show once the PO is complete, or after it's been received. */}
+      {(derivedStage === "complete" || po.shopifyReceivedAt) && (
+        <PoReceive
+          poId={po.id}
+          receivedAt={
+            po.shopifyReceivedAt
+              ? po.shopifyReceivedAt.toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : null
+          }
+        />
+      )}
 
       <PoControls
         poId={po.id}

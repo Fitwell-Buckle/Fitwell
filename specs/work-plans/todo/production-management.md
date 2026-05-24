@@ -49,7 +49,7 @@ Production lives under **Products → Production** in the admin nav (pages at `/
 - **Warehouse**: Shopify location (id + name snapshot) on the PO header, overridable per line; needs `read_locations`.
 - **Customer link on company**: optional `company.customer_id` → synced `customer`; the contact name/email fields are a typeahead over synced customers.
 - **PO numbering**: user enters the **Shopify PO number** (no Shopify PO API). Stored as `shopify_po_number`.
-- **Receiving back to Shopify**: **manual (Option C1)** — ⚠️ **UNDER REVIEW (see Open questions; may switch to C2).** Phase 4 not yet built.
+- **Receiving back to Shopify**: **Option C2 — push a Shopify inventory adjustment on receipt** (decided 2026-05-24). This system is the single source of truth; when a complete PO is received, each line item posts an inventory adjustment (+qty) to its effective warehouse. Needs the `write_inventory` scope (not yet granted). Idempotency: a per-line `shopify_received_at` (migration `0017`) means each line is received exactly once; the PO-level `shopify_received_at` marks "fully received." C1 (manual mark-received) was rejected.
 - **Attachments**: Vercel Blob, server-side `put()`, **public** (unguessable) URLs, 10MB cap. PO-level UI today (schema supports line-item).
 - **PO statuses**: `active | on_hold | complete | cancelled`.
 - **Cycle times for ETA** (Phase 5): hardcode initial per-stage estimates, switch to rolling 30-day average once ≥10 completed line items exist per stage.
@@ -102,11 +102,11 @@ Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advanc
 - [x] **3c — Suppliers can** view their POs, advance stages, comment, upload — not edit qty/dates, not delete.
 - [x] **3c — Tests (done):** `canSupplierAccessPo` unit tests (in `supplier-access.test.ts`); `scope.integration.test.ts` proves supplier B is forbidden from supplier A's PO (5/5 pass on the dev branch).
 
-### Phase 4 — Deadline alerts + receiving (TODO) — gated on the C1/C2 decision
-- [ ] `GET /api/cron/production-deadline-alerts` — emails owner (and supplier) for line items due within N days; add cron to `vercel.json`; Resend templates.
-- [ ] **C1**: "Mark received in Shopify" banner + deep link on complete POs; `POST .../mark-shopify-received` sets `shopify_received_at`; daily nag until set.
-- [ ] **C2 (if chosen)**: a "Receive" action that pushes a Shopify **inventory adjustment** to the line/PO warehouse (`write_inventory` scope + a client method); idempotency via `shopify_received_at`. Per-line warehouse already exists.
-- [ ] **Tests**: which lines need alerts; which complete POs need the nag; cron endpoint.
+### Phase 4 — Deadline alerts + receiving (C2) — IN PROGRESS
+- [ ] **4a — Receive (C2):** per-line `shopify_received_at` (migration `0017`); Shopify client `adjustInventory` (variant → `inventory_item_id`, then `POST /inventory_levels/adjust.json`; needs `write_inventory`); pure `planReceiveLine` (ready / not_ready / no_variant / no_warehouse / already_received); `receivePo` service (idempotent per line, sets PO flag when all lines received); `POST /api/production/po/[id]/receive` (admin-only). Unit tests for `planReceiveLine`.
+- [ ] **4b — Receive UI:** "Receive into Shopify" banner/button on the admin PO detail for complete, not-yet-received POs; shows received timestamp; surfaces per-line skips + a clear `write_inventory`-not-granted message.
+- [ ] **4c — Deadline alerts:** `GET /api/cron/production-deadline-alerts` (`verifyCronOrAdmin`); pure `lineItemsNeedingAlert` + `posNeedingReceiveNag`; emails owner (+ supplier) via Resend (graceful if no key); add to `vercel.json`. Unit tests for the pure selectors.
+- C1 (manual "mark received" banner + nag) — rejected in favour of C2.
 
 ### Phase 5 — Gantt + inventory tie-in (TODO)
 - [ ] `/modules/production/gantt` (timeline per line item, coloured by stage).
@@ -117,7 +117,7 @@ Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advanc
 ## Notes
 
 ### Open questions
-- **⚠️ C1 vs C2 — receiving strategy (DECISION PENDING, raised 2026-05-23, revisit after testing C1).** Reconsidering manual receive (C1) in favour of **C2**: this system becomes the single source of truth and pushes a Shopify **inventory adjustment** on receipt. Pivot is cheap: `shopify_received_at` serves both; the receive flow (Phase 4) isn't built yet; line items already capture `shopify_variant_id` **and** a warehouse. C2 needs: `write_inventory` scope, a client inventory-adjust method (variant → `inventory_item_id` + location), idempotency, and a PO-numbering tweak (`shopify_po_number` nullable or a generated number). If chosen, flip the "Receiving" decision and move C2/D out of *Alternatives considered*.
+- **✅ C1 vs C2 — receiving strategy: RESOLVED (2026-05-24) → C2.** This system is the single source of truth and pushes a Shopify **inventory adjustment** on receipt. Still needs the `write_inventory` scope granted in the Shopify Dev Dashboard (store re-auth) before live pushes work — until then the receive flow returns a clear "scope not granted" error (same pattern as `read_locations`).
 - **Initial cycle-time numbers per stage** — need Greg's estimates (days) per stage; used until ≥10 completed line items exist per stage.
 - **Shopify admin deep-link pattern** for POs (Phase 4) — confirm exact format; `shopify_po_number` may not equal Shopify's internal ID.
 - **Supplier visibility of customer/company info** (Phase 3) — ✅ resolved: the portal shows production fields only (stage/status/dates/line items/attachments/comments); company, customer, and price-tier are hidden from suppliers.
@@ -134,6 +134,7 @@ Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advanc
 - **monday.com via their API** — rejected; want integration with existing data + avoid per-seat cost.
 - **Shopify B2B Companies (read from Admin GraphQL)** — explored and works on read, but **rejected** in favour of our own `company` table so we control price tiers and customer linkage (not a Plus dependency).
 - **Shopify Markets as a PO tag** — built then **removed**; replaced by price tiers on companies.
-- **Option C2 (push inventory adjustment on completion)** / **Option D (replace Shopify POs entirely)** — under active reconsideration (see Open questions).
+- **Option C2 (push inventory adjustment on receipt)** — **chosen** (now the Receiving decision, see above; moved out of alternatives).
+- **Option D (replace Shopify POs entirely)** — rejected; we keep Shopify orders/inventory as the storefront source and only write inventory adjustments on receipt.
 - **Polymorphic `attachable_type` pattern** — rejected as overkill for two parent types.
 - **PO-level stage column** — rejected; stage lives on line items with a PO lock flag; PO stage is derived ("Mixed" when they differ).

@@ -472,6 +472,10 @@ export const productionPoLineItem = pgTable(
       .default("supplier_po"),
     expectedCompletionDate: date("expected_completion_date"),
     actualCompletionDate: date("actual_completion_date"),
+    // C2 receiving: set when this line's quantity has been pushed to Shopify as
+    // an inventory adjustment. Per-line so a retry never double-counts; the
+    // PO-level shopify_received_at marks "all lines received".
+    shopifyReceivedAt: timestamp("shopify_received_at", { mode: "date" }),
     // Optional customer earmark; if orderLineItemId is set, customer derives from it.
     customerId: text("customer_id").references(() => customer.id),
     orderLineItemId: text("order_line_item_id").references(
