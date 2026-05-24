@@ -84,7 +84,7 @@ Magic-link auth; middleware requires an authenticated session with `role='suppli
 
 ### Production API (each handler checks `auth()`)
 
-Supplier scoping: when the session `role='supplier'`, write endpoints are restricted to the supplier's own POs — `advance`, `comments`, `attachments` (upload), and `line-items/[id]/stage` are owner-checked (403 otherwise); PO edit (`PATCH`/`PUT po/[id]`), attachment delete, and supplier-contact management are admin-only (403 for suppliers). Admins are unaffected.
+Supplier scoping: when the session `role='supplier'`, write endpoints are restricted to the supplier's own POs — `advance`, `comments`, `attachments` (upload), and `line-items/[id]/stage` are owner-checked (403 otherwise); PO edit (`PATCH`/`PUT po/[id]`), receive, stage-event date edits, attachment delete, and supplier-contact management are admin-only (403 for suppliers). Admins are unaffected.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/production/shopify-refs` | Warehouses (Shopify locations) for the PO picker; needs `read_locations` |
@@ -104,6 +104,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/production/po/[id]/attachments` | Upload a file to a PO (Vercel Blob; multipart) |
 | DELETE | `/api/production/attachments/[id]` | Delete an attachment (blob + row) |
 | POST | `/api/production/line-items/[id]/stage` | Set a line item's stage (kanban drag); locked POs move together |
+| PATCH | `/api/production/stage-events/[id]` | Edit a stage transition date (entered_at, day-granularity); syncs the previous stage's exited_at; chronological bounds; admin-only |
 | POST | `/api/production/suppliers` | Create a supplier |
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |
 | POST | `/api/production/suppliers/[id]/contacts` | Add an authorized login email to a supplier |

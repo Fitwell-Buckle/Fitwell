@@ -15,6 +15,7 @@ import {
   type ProductionStage,
 } from "./stages";
 import { resolveParent } from "./parents";
+import { validateStageEventDate, dateToNoonUtc } from "./stage-dates";
 
 const dateString = z
   .string()
@@ -426,6 +427,60 @@ export async function addAttachment(params: {
 export const commentSchema = z.object({
   body: z.string().min(1).max(5000),
 });
+
+export type UpdateStageDateResult =
+  | { ok: true; enteredAt: string }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Edit a stage event's transition date (day-granularity, anchored to noon UTC).
+ * Sets the event's entered_at and syncs the previous event's exited_at to the
+ * same moment — they're the same transition — so the Gantt and cycle-time stay
+ * consistent. Validates the new date stays between its timeline neighbours.
+ */
+export async function updateStageEventDate(
+  eventId: string,
+  enteredDate: string,
+): Promise<UpdateStageDateResult> {
+  const target = await db.query.productionStageEvent.findFirst({
+    where: eq(productionStageEvent.id, eventId),
+    columns: { id: true, lineItemId: true },
+  });
+  if (!target) return { ok: false, status: 404, error: "Not found" };
+
+  // The line item's timeline as displayed; neighbours bound the edit.
+  const chain = await db
+    .select({ id: productionStageEvent.id, enteredAt: productionStageEvent.enteredAt })
+    .from(productionStageEvent)
+    .where(eq(productionStageEvent.lineItemId, target.lineItemId))
+    .orderBy(asc(productionStageEvent.enteredAt));
+
+  const idx = chain.findIndex((e) => e.id === eventId);
+  const prev = idx > 0 ? chain[idx - 1] : null;
+  const next = idx < chain.length - 1 ? chain[idx + 1] : null;
+
+  const newEntered = dateToNoonUtc(enteredDate);
+  const check = validateStageEventDate({
+    newEnteredMs: newEntered.getTime(),
+    prevEnteredMs: prev ? prev.enteredAt.getTime() : null,
+    nextEnteredMs: next ? next.enteredAt.getTime() : null,
+  });
+  if (!check.ok) return { ok: false, status: 400, error: check.error };
+
+  // neon-http has no multi-statement transaction; two sequential updates.
+  await db
+    .update(productionStageEvent)
+    .set({ enteredAt: newEntered })
+    .where(eq(productionStageEvent.id, eventId));
+  if (prev) {
+    await db
+      .update(productionStageEvent)
+      .set({ exitedAt: newEntered })
+      .where(eq(productionStageEvent.id, prev.id));
+  }
+
+  return { ok: true, enteredAt: newEntered.toISOString() };
+}
 
 /** Add a comment to a PO or a line item (exactly one parent). */
 export async function addComment(params: {

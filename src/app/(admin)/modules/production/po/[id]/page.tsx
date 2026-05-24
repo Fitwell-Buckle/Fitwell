@@ -21,6 +21,7 @@ import { PoControls } from "./po-controls";
 import { PoComments } from "./po-comments";
 import { PoAttachments } from "./po-attachments";
 import { PoReceive } from "./po-receive";
+import { PoStageTimeline } from "./po-stage-timeline";
 
 function fmtBytes(n: number | null): string {
   if (!n) return "";
@@ -169,36 +170,18 @@ export default async function PoDetailPage({
         }))}
       />
 
-      <Card className="mt-5 p-6">
-        <h2 className="text-sm font-semibold text-zinc-900">Stage timeline</h2>
-        <div className="mt-4 space-y-4">
-          {sortedLineItems.map((li) => (
-            <div key={li.id}>
-              <div className="text-xs font-medium text-zinc-500">
-                {li.sku} — {li.title}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                {li.stageEvents.map((ev) => (
-                  <span
-                    key={ev.id}
-                    className="text-xs text-zinc-500"
-                    title={ev.enteredAt?.toLocaleString("en-US")}
-                  >
-                    {STAGE_LABELS[ev.stage]}
-                    <span className="ml-1 text-zinc-400">
-                      {ev.enteredAt?.toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </span>
-                    {" ›"}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+      <PoStageTimeline
+        lines={sortedLineItems.map((li) => ({
+          id: li.id,
+          sku: li.sku,
+          title: li.title,
+          events: li.stageEvents.map((ev) => ({
+            id: ev.id,
+            stage: ev.stage,
+            date: ev.enteredAt.toISOString().slice(0, 10),
+          })),
+        }))}
+      />
 
       <PoAttachments
         poId={po.id}
