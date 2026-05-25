@@ -3,7 +3,14 @@ import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import { user as userTable, supplierContact, companyContact } from "./schema";
+import {
+  user as userTable,
+  account as accountTable,
+  session as sessionTable,
+  verificationToken as verificationTokenTable,
+  supplierContact,
+  companyContact,
+} from "./schema";
 import { isAllowedAdmin } from "./admin-access";
 import { canMagicLinkSignIn } from "./supplier-access";
 import { sendMagicLinkEmail } from "./email/magic-link";
@@ -52,7 +59,18 @@ const magicLink = {
 };
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: DrizzleAdapter(db),
+  // Pass the real schema tables so the adapter selects our custom user columns
+  // (role / supplier_id / company_id). Without this, DrizzleAdapter falls back
+  // to its built-in default `user` table, those columns are never read, and the
+  // session callback always sees role="user" — silently breaking supplier/
+  // company role-gating (their portals become unreachable; they're treated as
+  // admins).
+  adapter: DrizzleAdapter(db, {
+    usersTable: userTable,
+    accountsTable: accountTable,
+    sessionsTable: sessionTable,
+    verificationTokensTable: verificationTokenTable,
+  }),
   providers: [Google, magicLink],
   pages: {
     signIn: "/auth/login",
