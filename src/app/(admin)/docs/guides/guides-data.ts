@@ -64,7 +64,7 @@ export const guides: Guide[] = [
         shot: "The supplier dropdown showing the Add new supplier option.",
       },
       {
-        text: "Set the Issued date and (optionally) an ETA, a Brand (the B2B buyer), and a Warehouse. A brand can also be added inline with “Add new brand”.",
+        text: "Set the Issued date and (optionally) an ETA, a Brand (the B2B buyer), and a Warehouse. A brand can also be added inline with “Add new brand”. In the Stage owners section you can assign each production stage to a different supplier (leave one as “PO supplier” to keep the default) — each supplier then sees only their stages in their portal.",
       },
       {
         text: "Add line items: click the product field, then type to search, or narrow by Collection and the size/colour chips. Pick a product, set the quantity and unit cost.",
@@ -189,8 +189,11 @@ export const guides: Guide[] = [
         shot: "The supplier login screen.",
       },
       {
-        text: "After signing in they see only their own purchase orders — no pricing, customers, or brand info.",
-        shot: "The supplier portal PO list.",
+        text: "After signing in they land on their production board — a kanban that shows only the stages they own (assigned per PO) with their line items in those stages, above the list of their POs. They never see pricing, customers, or other suppliers' work.",
+        shot: "The supplier's production board — their assigned stages only.",
+      },
+      {
+        text: "When a supplier finishes their stage, they drag the card into the next team's column to hand it off — that advances the line and notifies Fitwell (an in-app alert on the Notifications page plus an email).",
       },
       {
         text: "Opening a PO, a supplier can advance its stages, add comments, and upload attachments (e.g. photos, certs). They can't edit quantities or delete anything.",
