@@ -1,5 +1,7 @@
 # Fitwell Buckle Co. — Agent Playbook
 
+> **Editing this file?** Read `how-agents-md-works.md` first — it covers the `@` import mechanism and when to hard-load a doc vs. link it via the context-loading table.
+
 ## 1. Project Overview
 
 Fitwell Buckle Co. makes precision micro-adjust watch buckles. The Shopify store at fitwellbuckle.co handles e-commerce (catalog, cart, checkout, fulfillment). This repository handles everything around it:
@@ -13,7 +15,25 @@ Tech stack: Next.js 15 (App Router), TypeScript, Drizzle ORM, NeonDB, Vercel, Po
 
 ---
 
-## 2. Context-Loading Table
+## 2. Commands
+
+```bash
+npm run dev          # Dev server on port 30100 (Turbopack)
+npm run build        # Production build
+npm run check        # tsc --noEmit && vitest run (~2s)
+npm run test         # vitest run
+npm run test:e2e     # Playwright (e2e/playwright.config.ts)
+npm run db:generate  # Generate Drizzle migrations
+npm run db:migrate   # Apply migrations
+npm run db:studio    # Drizzle Studio (browser UI)
+npm run vc           # Vercel CLI (uses ~/.vercel-fitwell config)
+```
+
+Path alias: `@/*` maps to `./src/*`.
+
+---
+
+## 3. Context-Loading Table
 
 Before starting work, read the relevant specs. This prevents re-inventing decisions that have already been made.
 
@@ -34,7 +54,7 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 
 ---
 
-## 3. Critical Rules
+## 4. Critical Rules
 
 1. **DO NOT commit or push** unless the user explicitly asks.
 2. **Everyone works directly on `main`** — no feature branches or PRs. There are three contributors (Greg, Tom, Oliver), each with their own Neon database branch. Push when you have changes you're happy with. Pull before starting work (see Session Protocol).
@@ -51,7 +71,7 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 
 ---
 
-## 4. Session Protocol
+## 5. Session Protocol
 
 ### Start of session
 1. **Sync with main** — pull the latest changes before doing anything else. If there are uncommitted local changes, stash them first, pull, then reapply:
@@ -77,7 +97,7 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 
 ---
 
-## 5. Work Plan Lifecycle
+## 6. Work Plan Lifecycle
 
 Work plans live in `specs/work-plans/` and follow this structure:
 
@@ -113,7 +133,7 @@ Open questions, risks, alternatives considered.
 
 ---
 
-## 6. Database Rules
+## 7. Database Rules
 
 - **ORM**: Drizzle ORM for all queries — no raw SQL unless Drizzle cannot express it.
 - **Schema source of truth**: `src/lib/schema.ts`
@@ -154,7 +174,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ---
 
-## 7. Shopify Integration Rules
+## 8. Shopify Integration Rules
 
 - **Webhook verification**: All incoming webhooks verified via HMAC-SHA256 using `SHOPIFY_WEBHOOK_SECRET`.
 - **Sync is additive**: Never delete Shopify-sourced records. Update existing or soft-delete (set a `deleted_at` timestamp).
@@ -165,9 +185,8 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ---
 
-## 8. Code Conventions
+## 9. Code Conventions
 
-- **Path alias**: `@/*` maps to `./src/*`
 - **API responses**: Return `{ data }` on success or `{ error }` on failure with appropriate HTTP status codes.
 - **Input validation**: Zod for all external input (API request bodies, query params, webhook payloads).
 - **Components**: Server components by default; add `'use client'` only when the component needs browser APIs or interactivity.
@@ -182,7 +201,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ---
 
-## 9. Testing
+## 10. Testing
 
 ### Tiers
 - **Tier 1 (fast, ~2s)**: `npm run check` — TypeScript compilation + Vitest unit tests
@@ -199,9 +218,12 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ---
 
-## 10. Deployment
+## 11. Deployment
 
 - **Platform**: Vercel, auto-deploys from `main` branch on every push.
+- **Project**: https://vercel.com/fitwellbuckle/fitwell
+- **Production URL**: https://admin.fitwellbuckle.co (fallback: https://fitwell-ashy.vercel.app)
+- **Vercel CLI**: uses a separate config dir (`~/.vercel-fitwell`) for the greg@fitwellbuckle.co account. All `vercel` commands in this repo must use `npm run vc` or `vercel --global-config ~/.vercel-fitwell`.
 - **Workflow**: Everyone works on `main`, pushes when ready. Vercel deploys automatically.
 - **Cron jobs**: Defined in `vercel.json` — health check (every 4h), Shopify extract (every 2h), GA4/Google Ads/GSC extract (daily morning), PostHog extract (every 3h).
 - **Environment variables**: Managed in Vercel dashboard, mirrored in `.env.example` for local dev.
