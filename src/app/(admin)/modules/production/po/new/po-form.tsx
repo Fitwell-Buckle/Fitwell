@@ -136,11 +136,13 @@ function WarehouseSelect({
 export function PoForm({
   suppliers,
   companies,
+  priceTiers = [],
   initial,
   poId,
 }: {
   suppliers: { id: string; name: string }[];
   companies: CompanyOption[];
+  priceTiers?: { id: string; name: string; discountPercent: number }[];
   initial?: PoFormInitial;
   poId?: string;
 }) {
@@ -161,6 +163,8 @@ export function PoForm({
   const [lockStagesTogether, setLockStagesTogether] = useState(true);
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [companyId, setCompanyId] = useState(initial?.companyId ?? "");
+  // Local, appendable copy so a newly-added company shows + selects inline.
+  const [companyList, setCompanyList] = useState(companies);
   const [locationId, setLocationId] = useState(initial?.shopifyLocationId ?? "");
   const [locationName, setLocationName] = useState(initial?.locationName ?? "");
   const [refs, setRefs] = useState<ShopifyRefs | null>(null);
@@ -189,7 +193,7 @@ export function PoForm({
     useCatalog();
   const variantByKey = new Map(variants.map((v) => [v.shopifyVariantId, v]));
   const locations = refs?.locations ?? [];
-  const selectedCompany = companies.find((c) => c.id === companyId);
+  const selectedCompany = companyList.find((c) => c.id === companyId);
 
   const totalCents = rows.reduce((sum, r) => {
     const qty = Number(r.quantity);
@@ -302,7 +306,7 @@ export function PoForm({
               value={supplierId}
               onChange={setSupplierId}
               options={supplierList.map((s) => ({ value: s.id, label: s.name }))}
-              addLabel="+ Add new supplier…"
+              addLabel="Add new supplier"
               fields={[
                 { key: "name", label: "Supplier name", required: true },
                 { key: "contactEmail", label: "Contact email", type: "email" },
@@ -363,30 +367,64 @@ export function PoForm({
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={fieldLabel}>Company (optional)</label>
-            <select
-              className={inputBase}
+            <QuickAddSelect
               value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
-            >
-              <option value="">— none —</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.tierName ? ` — ${c.tierName}` : ""}
-                </option>
-              ))}
-            </select>
+              onChange={setCompanyId}
+              options={[
+                { value: "", label: "— none —" },
+                ...companyList.map((c) => ({
+                  value: c.id,
+                  label: c.tierName ? `${c.name} — ${c.tierName}` : c.name,
+                })),
+              ]}
+              addLabel="Add new company"
+              fields={[
+                { key: "name", label: "Company name", required: true },
+                { key: "contactEmail", label: "Contact email", type: "email" },
+                {
+                  key: "priceTierId",
+                  label: "Price tier",
+                  type: "select",
+                  options: [
+                    { value: "", label: "— No tier —" },
+                    ...priceTiers.map((t) => ({
+                      value: t.id,
+                      label: `${t.name} (${t.discountPercent}% off)`,
+                    })),
+                  ],
+                },
+              ]}
+              onCreate={async (vals) => {
+                const res = await fetch("/api/production/companies", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: vals.name?.trim(),
+                    contactEmail: vals.contactEmail?.trim() || null,
+                    priceTierId: vals.priceTierId || null,
+                  }),
+                });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) return { error: d.error || "Couldn't add company." };
+                const tier = priceTiers.find((t) => t.id === vals.priceTierId);
+                setCompanyList((list) => [
+                  ...list,
+                  {
+                    id: d.data.id,
+                    name: vals.name.trim(),
+                    tierName: tier?.name ?? null,
+                    tierDiscount: tier?.discountPercent ?? 0,
+                  },
+                ]);
+                return { id: d.data.id };
+              }}
+            />
             {selectedCompany?.tierName && (
               <p className="mt-1 text-xs text-zinc-500">
                 Price tier:{" "}
                 <Badge className="bg-emerald-50 text-emerald-700">
                   {selectedCompany.tierName} ({selectedCompany.tierDiscount}% off retail)
                 </Badge>
-              </p>
-            )}
-            {companies.length === 0 && (
-              <p className="mt-1 text-xs text-amber-600">
-                No companies yet — add them under Customers → Companies.
               </p>
             )}
           </div>
@@ -530,7 +568,7 @@ export function PoForm({
                     onChange={(e) => updateRow(i, { companyId: e.target.value })}
                   >
                     <option value="">Company: PO default</option>
-                    {companies.map((c) => (
+                    {companyList.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>

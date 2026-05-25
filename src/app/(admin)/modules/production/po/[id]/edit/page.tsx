@@ -4,7 +4,7 @@ import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { supplier, company } from "@/lib/schema";
+import { supplier, company, priceTier } from "@/lib/schema";
 import { getPoDetail } from "@/lib/production/service";
 import { skuSize } from "@/lib/production/display";
 import { PageHeader } from "@/components/ui/page-header";
@@ -24,7 +24,7 @@ export default async function EditPoPage({
   if (!session) redirect("/auth/login");
 
   const { id } = await params;
-  const [po, suppliers, companies] = await Promise.all([
+  const [po, suppliers, companies, tiers] = await Promise.all([
     getPoDetail(id),
     db.query.supplier.findMany({
       columns: { id: true, name: true },
@@ -34,6 +34,10 @@ export default async function EditPoPage({
       columns: { id: true, name: true },
       orderBy: asc(company.name),
       with: { priceTier: { columns: { name: true, discountPercent: true } } },
+    }),
+    db.query.priceTier.findMany({
+      columns: { id: true, name: true, discountPercent: true },
+      orderBy: asc(priceTier.name),
     }),
   ]);
   if (!po) notFound();
@@ -87,6 +91,7 @@ export default async function EditPoPage({
       <PoForm
         suppliers={suppliers}
         companies={companyOptions}
+        priceTiers={tiers}
         initial={initial}
         poId={po.id}
       />

@@ -205,7 +205,7 @@ export function InvoiceForm({
                   value: c.id,
                   label: c.tierName ? `${c.name} — ${c.tierName}` : c.name,
                 }))}
-                addLabel="+ Add new company…"
+                addLabel="Add new company"
                 fields={[
                   { key: "name", label: "Company name", required: true },
                   { key: "contactEmail", label: "Contact email", type: "email" },

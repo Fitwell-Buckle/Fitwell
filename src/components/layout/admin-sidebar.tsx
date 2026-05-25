@@ -56,7 +56,8 @@ const navItems: NavItem[] = [
     children: [
       { href: "/products", label: "Product List" },
       { href: "/inventory", label: "Inventory" },
-      { href: "/modules/production", label: "POs and Production" },
+      { href: "/modules/production", label: "Purchase Orders" },
+      { href: "/modules/production/summary", label: "Production Summary" },
       { href: "/modules/production/suppliers", label: "Suppliers" },
     ],
   },
