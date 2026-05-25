@@ -1,15 +1,20 @@
 import {
   pgTable,
+  pgEnum,
   text,
   integer,
   timestamp,
   boolean,
   jsonb,
   real,
+  date,
   index,
   uniqueIndex,
   primaryKey,
+  check,
+  pgSequence,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
 
@@ -24,6 +29,12 @@ export const user = pgTable("user", {
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
   role: text("role").default("user"),
+  // Set for users with role='supplier' so the supplier portal can scope queries
+  // to their own POs (production module, Phase 3).
+  supplierId: text("supplier_id"),
+  // Set for users with role='company' so the B2B portal can scope to their
+  // company + apply their price tier (Phase 7).
+  companyId: text("company_id"),
 });
 
 export const account = pgTable(
@@ -362,6 +373,303 @@ export const customerEvent = pgTable(
   ],
 );
 
+// ─── Companies & price tiers (our own, not Shopify) ─────────────────
+
+export const priceTier = pgTable("price_tier", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  // Percentage off the Shopify retail price (e.g. 30 = 30% off).
+  discountPercent: real("discount_percent").notNull().default(0),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+export const company = pgTable(
+  "company",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    contactName: text("contact_name"),
+    contactEmail: text("contact_email"),
+    // Optional link to a synced Shopify customer (the contact person).
+    customerId: text("customer_id").references(() => customer.id),
+    priceTierId: text("price_tier_id").references(() => priceTier.id),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("company_price_tier_id_idx").on(t.priceTierId),
+    index("company_customer_id_idx").on(t.customerId),
+  ],
+);
+
+// Allowlist of emails that may sign in to the B2B company portal (Phase 7).
+export const companyContact = pgTable(
+  "company_contact",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    companyId: text("company_id")
+      .notNull()
+      .references(() => company.id, { onDelete: "cascade" }),
+    email: text("email").notNull(), // stored lowercased; one company per email
+    name: text("name"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("company_contact_email_idx").on(t.email),
+    index("company_contact_company_id_idx").on(t.companyId),
+  ],
+);
+
+export const priceTierRelations = relations(priceTier, ({ many }) => ({
+  companies: many(company),
+}));
+
+export const companyRelations = relations(company, ({ one, many }) => ({
+  priceTier: one(priceTier, {
+    fields: [company.priceTierId],
+    references: [priceTier.id],
+  }),
+  customer: one(customer, {
+    fields: [company.customerId],
+    references: [customer.id],
+  }),
+  contacts: many(companyContact),
+}));
+
+export const companyContactRelations = relations(companyContact, ({ one }) => ({
+  company: one(company, {
+    fields: [companyContact.companyId],
+    references: [company.id],
+  }),
+}));
+
+// ─── Production module ──────────────────────────────────────────────
+
+// Fixed, ordered stage progression. Every line item passes through all
+// stages in this order; "complete" is the terminal stage.
+export const productionStage = pgEnum("production_stage", [
+  "supplier_po",
+  "stamping",
+  "edm",
+  "polishing",
+  "logo",
+  "plating",
+  "qc",
+  "packaging",
+  "complete",
+]);
+
+// Auto-incrementing PO number source (this system owns PO numbering). First
+// value is 100 → formatted "00100". Read via nextval() when creating a PO.
+export const productionPoNumberSeq = pgSequence("production_po_number_seq", {
+  startWith: 100,
+});
+
+export const supplier = pgTable("supplier", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  contactEmail: text("contact_email"),
+  contactName: text("contact_name"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Authorized login emails for a supplier — anyone listed here can magic-link in
+// (Phase 3) and is scoped to this supplier. Lets a whole vendor team have access.
+export const supplierContact = pgTable(
+  "supplier_contact",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => supplier.id, { onDelete: "cascade" }),
+    email: text("email").notNull(), // stored lowercased; one supplier per email
+    name: text("name"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("supplier_contact_email_idx").on(t.email),
+    index("supplier_contact_supplier_id_idx").on(t.supplierId),
+  ],
+);
+
+export const productionPo = pgTable(
+  "production_po",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => supplier.id),
+    // Auto-generated by this system (the source of truth) from
+    // production_po_number_seq, zero-padded to 5 digits ("00100", "00101", …).
+    // Also stamped onto the Shopify inventory adjustment reference on receipt.
+    shopifyPoNumber: text("shopify_po_number").notNull(),
+    issuedDate: date("issued_date").notNull(),
+    expectedDeliveryDate: date("expected_delivery_date"),
+    // When true the whole PO advances together; when false each line item
+    // moves independently and the PO's displayed stage is "mixed".
+    lockStagesTogether: boolean("lock_stages_together").notNull().default(true),
+    status: text("status").notNull().default("active"), // active | on_hold | complete | cancelled
+    // Set manually when the user confirms they marked the PO received in Shopify.
+    shopifyReceivedAt: timestamp("shopify_received_at", { mode: "date" }),
+    // Default B2B company the batch is for (our own company list; line items can
+    // override). Its price tier drives the discount off retail.
+    companyId: text("company_id").references(() => company.id),
+    // Default receiving warehouse (Shopify location, id + name snapshot).
+    shopifyLocationId: text("shopify_location_id"),
+    locationName: text("location_name"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("production_po_supplier_id_idx").on(t.supplierId),
+    index("production_po_status_idx").on(t.status),
+    index("production_po_company_id_idx").on(t.companyId),
+  ],
+);
+
+export const productionPoLineItem = pgTable(
+  "production_po_line_item",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id")
+      .notNull()
+      .references(() => productionPo.id, { onDelete: "cascade" }),
+    // Product identity: no FK yet — line items reference Shopify ids + a
+    // denormalized snapshot until a product/variant table exists.
+    shopifyProductId: text("shopify_product_id"),
+    shopifyVariantId: text("shopify_variant_id"),
+    sku: text("sku").notNull(),
+    title: text("title").notNull(),
+    quantity: integer("quantity").notNull(),
+    unitCostCents: integer("unit_cost_cents"),
+    currentStage: productionStage("current_stage")
+      .notNull()
+      .default("supplier_po"),
+    expectedCompletionDate: date("expected_completion_date"),
+    actualCompletionDate: date("actual_completion_date"),
+    // C2 receiving: set when this line's quantity has been pushed to Shopify as
+    // an inventory adjustment. Per-line so a retry never double-counts; the
+    // PO-level shopify_received_at marks "all lines received".
+    shopifyReceivedAt: timestamp("shopify_received_at", { mode: "date" }),
+    // Optional customer earmark; if orderLineItemId is set, customer derives from it.
+    customerId: text("customer_id").references(() => customer.id),
+    orderLineItemId: text("order_line_item_id").references(
+      () => orderLineItem.id,
+    ),
+    // Optional overrides of the PO-level company / warehouse for this line.
+    companyId: text("company_id").references(() => company.id),
+    shopifyLocationId: text("shopify_location_id"),
+    locationName: text("location_name"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("production_li_po_id_idx").on(t.poId),
+    index("production_li_customer_id_idx").on(t.customerId),
+    index("production_li_order_line_item_id_idx").on(t.orderLineItemId),
+    index("production_li_current_stage_idx").on(t.currentStage),
+    index("production_li_company_id_idx").on(t.companyId),
+  ],
+);
+
+export const productionStageEvent = pgTable(
+  "production_stage_event",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    lineItemId: text("line_item_id")
+      .notNull()
+      .references(() => productionPoLineItem.id, { onDelete: "cascade" }),
+    stage: productionStage("stage").notNull(),
+    enteredAt: timestamp("entered_at", { mode: "date" }).notNull().defaultNow(),
+    exitedAt: timestamp("exited_at", { mode: "date" }),
+    triggeredByUserId: text("triggered_by_user_id").references(() => user.id),
+    notes: text("notes"),
+  },
+  (t) => [index("production_stage_event_line_item_id_idx").on(t.lineItemId)],
+);
+
+// Polymorphic attachment — exactly one of poId or lineItemId is set (CHECK).
+export const productionAttachment = pgTable(
+  "production_attachment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id").references(() => productionPo.id, {
+      onDelete: "cascade",
+    }),
+    lineItemId: text("line_item_id").references(
+      () => productionPoLineItem.id,
+      { onDelete: "cascade" },
+    ),
+    blobUrl: text("blob_url").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => user.id),
+    uploadedAt: timestamp("uploaded_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("production_attachment_po_id_idx").on(t.poId),
+    index("production_attachment_line_item_id_idx").on(t.lineItemId),
+    check(
+      "production_attachment_one_parent",
+      sql`(${t.poId} is null) <> (${t.lineItemId} is null)`,
+    ),
+  ],
+);
+
+// Polymorphic comment — exactly one of poId or lineItemId is set (CHECK).
+export const productionComment = pgTable(
+  "production_comment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id").references(() => productionPo.id, {
+      onDelete: "cascade",
+    }),
+    lineItemId: text("line_item_id").references(
+      () => productionPoLineItem.id,
+      { onDelete: "cascade" },
+    ),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => user.id),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("production_comment_po_id_idx").on(t.poId),
+    index("production_comment_line_item_id_idx").on(t.lineItemId),
+    check(
+      "production_comment_one_parent",
+      sql`(${t.poId} is null) <> (${t.lineItemId} is null)`,
+    ),
+  ],
+);
+
 // ─── Relations ──────────────────────────────────────────────────────
 
 export const customerRelations = relations(customer, ({ many }) => ({
@@ -390,3 +698,267 @@ export const customerEventRelations = relations(customerEvent, ({ one }) => ({
     references: [customer.id],
   }),
 }));
+
+export const supplierRelations = relations(supplier, ({ many }) => ({
+  pos: many(productionPo),
+  contacts: many(supplierContact),
+}));
+
+export const supplierContactRelations = relations(supplierContact, ({ one }) => ({
+  supplier: one(supplier, {
+    fields: [supplierContact.supplierId],
+    references: [supplier.id],
+  }),
+}));
+
+// Per-PO stage ownership: which supplier is responsible for each production
+// stage. A stage with no row defaults to the PO's primary supplier — so an
+// existing PO behaves unchanged. Lets different vendors own different steps
+// (e.g. one supplier stamps, another finishes).
+export const productionStageAssignment = pgTable(
+  "production_stage_assignment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id")
+      .notNull()
+      .references(() => productionPo.id, { onDelete: "cascade" }),
+    stage: productionStage("stage").notNull(),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => supplier.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("stage_assignment_po_stage_idx").on(t.poId, t.stage),
+    index("stage_assignment_supplier_idx").on(t.supplierId),
+  ],
+);
+
+// In-app admin notifications (e.g. a supplier handed off a stage). Unread =
+// read_at is null.
+export const adminNotification = pgTable(
+  "admin_notification",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    poId: text("po_id").references(() => productionPo.id, { onDelete: "cascade" }),
+    lineItemId: text("line_item_id"),
+    supplierId: text("supplier_id"),
+    readAt: timestamp("read_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("admin_notification_read_at_idx").on(t.readAt)],
+);
+
+export const productionPoRelations = relations(productionPo, ({ one, many }) => ({
+  supplier: one(supplier, {
+    fields: [productionPo.supplierId],
+    references: [supplier.id],
+  }),
+  company: one(company, {
+    fields: [productionPo.companyId],
+    references: [company.id],
+  }),
+  lineItems: many(productionPoLineItem),
+  comments: many(productionComment),
+  attachments: many(productionAttachment),
+  stageAssignments: many(productionStageAssignment),
+}));
+
+export const productionStageAssignmentRelations = relations(
+  productionStageAssignment,
+  ({ one }) => ({
+    po: one(productionPo, {
+      fields: [productionStageAssignment.poId],
+      references: [productionPo.id],
+    }),
+    supplier: one(supplier, {
+      fields: [productionStageAssignment.supplierId],
+      references: [supplier.id],
+    }),
+  }),
+);
+
+export const productionPoLineItemRelations = relations(
+  productionPoLineItem,
+  ({ one, many }) => ({
+    po: one(productionPo, {
+      fields: [productionPoLineItem.poId],
+      references: [productionPo.id],
+    }),
+    customer: one(customer, {
+      fields: [productionPoLineItem.customerId],
+      references: [customer.id],
+    }),
+    orderLineItem: one(orderLineItem, {
+      fields: [productionPoLineItem.orderLineItemId],
+      references: [orderLineItem.id],
+    }),
+    company: one(company, {
+      fields: [productionPoLineItem.companyId],
+      references: [company.id],
+    }),
+    stageEvents: many(productionStageEvent),
+    comments: many(productionComment),
+    attachments: many(productionAttachment),
+  }),
+);
+
+export const productionStageEventRelations = relations(
+  productionStageEvent,
+  ({ one }) => ({
+    lineItem: one(productionPoLineItem, {
+      fields: [productionStageEvent.lineItemId],
+      references: [productionPoLineItem.id],
+    }),
+  }),
+);
+
+export const productionCommentRelations = relations(
+  productionComment,
+  ({ one }) => ({
+    po: one(productionPo, {
+      fields: [productionComment.poId],
+      references: [productionPo.id],
+    }),
+    lineItem: one(productionPoLineItem, {
+      fields: [productionComment.lineItemId],
+      references: [productionPoLineItem.id],
+    }),
+    author: one(user, {
+      fields: [productionComment.authorUserId],
+      references: [user.id],
+    }),
+  }),
+);
+
+export const productionAttachmentRelations = relations(
+  productionAttachment,
+  ({ one }) => ({
+    po: one(productionPo, {
+      fields: [productionAttachment.poId],
+      references: [productionPo.id],
+    }),
+    lineItem: one(productionPoLineItem, {
+      fields: [productionAttachment.lineItemId],
+      references: [productionPoLineItem.id],
+    }),
+    uploadedBy: one(user, {
+      fields: [productionAttachment.uploadedByUserId],
+      references: [user.id],
+    }),
+  }),
+);
+
+// ─── B2B Invoicing (Phase 6) ────────────────────────────────────────
+
+// Auto-incrementing invoice number source (formatted "INV-00100").
+export const invoiceNumberSeq = pgSequence("invoice_number_seq", {
+  startWith: 100,
+});
+
+export const invoice = pgTable(
+  "invoice",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Auto-generated from invoice_number_seq, e.g. "INV-00100".
+    invoiceNumber: text("invoice_number").notNull(),
+    // Bill-to company (our B2B customer).
+    companyId: text("company_id")
+      .notNull()
+      .references(() => company.id),
+    status: text("status").notNull().default("draft"), // draft | sent | paid | void
+    issuedDate: date("issued_date").notNull(),
+    dueDate: date("due_date"),
+    notes: text("notes"),
+    // Money in cents. subtotal = Σ(qty × unit retail); discount from the
+    // company's price-tier snapshot; total = subtotal − discount.
+    subtotalCents: integer("subtotal_cents").notNull().default(0),
+    discountPercent: real("discount_percent"),
+    discountCents: integer("discount_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull().default(0),
+    currency: text("currency").notNull().default("USD"),
+    // Provenance + hybrid links.
+    sourcePoId: text("source_po_id").references(() => productionPo.id, {
+      onDelete: "set null",
+    }),
+    shopifyDraftOrderId: text("shopify_draft_order_id"),
+    shopifyInvoiceUrl: text("shopify_invoice_url"),
+    sentAt: timestamp("sent_at", { mode: "date" }),
+    paidAt: timestamp("paid_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("invoice_company_id_idx").on(t.companyId),
+    index("invoice_status_idx").on(t.status),
+    index("invoice_source_po_id_idx").on(t.sourcePoId),
+  ],
+);
+
+export const invoiceLineItem = pgTable(
+  "invoice_line_item",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => invoice.id, { onDelete: "cascade" }),
+    sku: text("sku").notNull(),
+    title: text("title").notNull(),
+    quantity: integer("quantity").notNull(),
+    // Retail unit price (pre-discount); the invoice-level tier % applies.
+    unitPriceCents: integer("unit_price_cents").notNull().default(0),
+    shopifyProductId: text("shopify_product_id"),
+    shopifyVariantId: text("shopify_variant_id"),
+    // Optional provenance back to the production line it was billed from.
+    sourceLineItemId: text("source_line_item_id").references(
+      () => productionPoLineItem.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("invoice_line_item_invoice_id_idx").on(t.invoiceId)],
+);
+
+export const invoiceRelations = relations(invoice, ({ one, many }) => ({
+  company: one(company, {
+    fields: [invoice.companyId],
+    references: [company.id],
+  }),
+  sourcePo: one(productionPo, {
+    fields: [invoice.sourcePoId],
+    references: [productionPo.id],
+  }),
+  lineItems: many(invoiceLineItem),
+}));
+
+export const invoiceLineItemRelations = relations(invoiceLineItem, ({ one }) => ({
+  invoice: one(invoice, {
+    fields: [invoiceLineItem.invoiceId],
+    references: [invoice.id],
+  }),
+}));
+
+// Single-row remittance / bank-wire details shown on invoices (id is always
+// "default"). Editable in admin Settings.
+export const billingSettings = pgTable("billing_settings", {
+  id: text("id").primaryKey().default("default"),
+  bankName: text("bank_name"),
+  accountName: text("account_name"),
+  accountNumber: text("account_number"),
+  routingNumber: text("routing_number"),
+  swiftBic: text("swift_bic"),
+  iban: text("iban"),
+  instructions: text("instructions"),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});

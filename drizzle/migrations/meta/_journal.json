@@ -71,6 +71,13 @@
       "when": 1779515291830,
       "tag": "0009_spicy_toro",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779748954211,
+      "tag": "0010_dark_leper_queen",
+      "breakpoints": true
     }
   ]
 }

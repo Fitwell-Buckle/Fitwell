@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Granularity } from "@/lib/date-range";
 
 const PRESETS = [
@@ -63,6 +63,7 @@ const PICKER_PATHS = [
   "/attribution",
   "/funnel",
   "/orders",
+  "/invoices",
 ];
 
 export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
@@ -76,8 +77,9 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
   const activeGranularity = (searchParams.get("g") as Granularity | null) ?? null;
 
   // Compute the effective granularity for highlighting
-  const effectiveGranularity: Granularity = activeGranularity
-    ?? (activeDays !== null ? defaultGranularity(Math.abs(activeDays)) : "day");
+  const effectiveGranularity: Granularity =
+    activeGranularity ??
+    (activeDays !== null ? defaultGranularity(Math.abs(activeDays)) : "day");
 
   const setRange = useCallback(
     (days: number) => {
@@ -108,12 +110,36 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
     [router, pathname, searchParams],
   );
 
+  // Manual date-range inputs (kept in sync with the URL).
+  const [mFrom, setMFrom] = useState(from ?? "");
+  const [mTo, setMTo] = useState(to ?? "");
+  useEffect(() => {
+    setMFrom(from ?? "");
+    setMTo(to ?? "");
+  }, [from, to]);
+
+  const applyManual = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (mFrom) params.set("from", mFrom);
+    else params.delete("from");
+    if (mTo) params.set("to", mTo);
+    else params.delete("to");
+    params.delete("page");
+    params.delete("g");
+    router.push(`${pathname}?${params.toString()}`);
+  }, [router, pathname, searchParams, mFrom, mTo]);
+
   if (!PICKER_PATHS.some((p) => pathname.startsWith(p))) {
-    return embedded ? null : <div className="h-12 shrink-0 border-b border-zinc-200/80 bg-white" />;
+    return embedded ? null : (
+      <div className="h-12 shrink-0 border-b border-zinc-200/80 bg-white" />
+    );
   }
 
+  const dateInputCls =
+    "h-7 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
+
   const content = (
-    <div className="flex items-center gap-1">
+    <div className="flex flex-wrap items-center justify-end gap-1">
       {PRESETS.map((preset) => (
         <button
           key={preset.label}
@@ -143,6 +169,30 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
           {g.label}
         </button>
       ))}
+
+      <span className="mx-1.5 h-4 w-px bg-zinc-200" />
+
+      <input
+        type="date"
+        value={mFrom}
+        onChange={(e) => setMFrom(e.target.value)}
+        className={dateInputCls}
+        aria-label="From date"
+      />
+      <span className="text-xs text-zinc-400">–</span>
+      <input
+        type="date"
+        value={mTo}
+        onChange={(e) => setMTo(e.target.value)}
+        className={dateInputCls}
+        aria-label="To date"
+      />
+      <button
+        onClick={applyManual}
+        className="rounded-md px-2.5 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+      >
+        Apply
+      </button>
     </div>
   );
 

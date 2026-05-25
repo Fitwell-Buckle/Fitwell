@@ -1,0 +1,121 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { auth } from "@/lib/auth";
+import { getPoDetail } from "@/lib/production/service";
+import { fmtMoney, fmtDate, STATUS_LABELS } from "@/lib/production/display";
+import { STAGE_LABELS } from "@/lib/production/stages";
+import { sendEmail } from "@/lib/email/resend";
+
+const bodySchema = z.object({
+  to: z.string().email(),
+  additional: z.array(z.string().email()).max(20).optional(),
+});
+
+type Po = NonNullable<Awaited<ReturnType<typeof getPoDetail>>>;
+
+function esc(s: string): string {
+  return s.replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string,
+  );
+}
+
+function buildPoEmailHtml(po: Po): string {
+  const cell = "padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;";
+  const th = "padding:6px 10px;border-bottom:2px solid #ddd;font-size:11px;text-transform:uppercase;color:#888;text-align:left;";
+  const rows = po.lineItems
+    .map((li) => {
+      const lineTotal = li.unitCostCents != null ? li.unitCostCents * li.quantity : null;
+      return `<tr>
+        <td style="${cell}font-family:monospace;">${esc(li.sku)}</td>
+        <td style="${cell}">${esc(li.title)}</td>
+        <td style="${cell}text-align:right;">${li.quantity}</td>
+        <td style="${cell}text-align:right;">${fmtMoney(li.unitCostCents)}</td>
+        <td style="${cell}text-align:right;">${fmtMoney(lineTotal)}</td>
+      </tr>`;
+    })
+    .join("");
+  const total = po.lineItems.reduce(
+    (s, li) => s + (li.unitCostCents ?? 0) * li.quantity,
+    0,
+  );
+
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:680px;">
+    <h2 style="margin:0 0 4px;">Purchase Order ${esc(po.shopifyPoNumber)}</h2>
+    <p style="margin:0 0 16px;color:#666;font-size:13px;">Fitwell Buckle Co.</p>
+    <table style="font-size:13px;color:#333;margin-bottom:16px;">
+      <tr><td style="padding:2px 16px 2px 0;color:#888;">Supplier</td><td>${esc(po.supplier?.name ?? "—")}</td></tr>
+      <tr><td style="padding:2px 16px 2px 0;color:#888;">Brand</td><td>${esc(po.company?.name ?? "—")}</td></tr>
+      <tr><td style="padding:2px 16px 2px 0;color:#888;">Status</td><td>${esc(STATUS_LABELS[po.status as keyof typeof STATUS_LABELS] ?? po.status)}</td></tr>
+      <tr><td style="padding:2px 16px 2px 0;color:#888;">Issued</td><td>${esc(fmtDate(po.issuedDate))}</td></tr>
+      <tr><td style="padding:2px 16px 2px 0;color:#888;">ETA</td><td>${esc(fmtDate(po.expectedDeliveryDate))}</td></tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="${th}">SKU</th><th style="${th}">Product</th>
+        <th style="${th}text-align:right;">Qty</th>
+        <th style="${th}text-align:right;">Unit cost</th>
+        <th style="${th}text-align:right;">Line total</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td colspan="4" style="${cell}text-align:right;font-weight:bold;">Total</td>
+        <td style="${cell}text-align:right;font-weight:bold;">${fmtMoney(total)}</td>
+      </tr></tfoot>
+    </table>
+    ${po.notes ? `<p style="margin-top:16px;font-size:13px;color:#444;">${esc(po.notes)}</p>` : ""}
+    <p style="margin-top:20px;font-size:11px;color:#aaa;">Stages: ${Object.values(STAGE_LABELS).slice(0, 8).join(" → ")}</p>
+  </div>`;
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  let input;
+  try {
+    input = bodySchema.parse(await req.json());
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "Invalid payload",
+        details: err instanceof z.ZodError ? err.issues : undefined,
+      },
+      { status: 400 },
+    );
+  }
+
+  const po = await getPoDetail(id);
+  if (!po) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const to = [input.to, ...(input.additional ?? [])];
+  const cc = session.user.email ?? undefined; // CC the logged-in user
+
+  try {
+    await sendEmail({
+      to,
+      cc,
+      subject: `Purchase Order ${po.shopifyPoNumber} — Fitwell Buckle Co.`,
+      html: buildPoEmailHtml(po),
+    });
+    return NextResponse.json({ data: { sentTo: to, cc } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Send failed";
+    if (message.includes("RESEND_API_KEY")) {
+      return NextResponse.json(
+        { error: "Email not configured — set RESEND_API_KEY." },
+        { status: 503 },
+      );
+    }
+    console.error("PO send failed:", err);
+    return NextResponse.json({ error: "Send failed" }, { status: 500 });
+  }
+}

@@ -16,7 +16,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 
 export const metadata: Metadata = {
-  title: "Customers | Fitwell Admin",
+  title: "Consumer List | Fitwell Admin",
 };
 
 function fmt(cents: number) {
@@ -45,7 +45,7 @@ export default async function CustomersPage({
 
   return (
     <div>
-      <PageHeader title="Customers" />
+      <PageHeader title="Consumer List" />
 
       <form action="" method="GET" className="mt-6 flex gap-2">
         <input

@@ -1,6 +1,6 @@
 # Components
 
-Last updated: 2026-05-07
+Last updated: 2026-05-23
 
 ## UI Primitives (`components/ui/`)
 
@@ -45,6 +45,19 @@ Built with Recharts. Used in admin dashboard.
 | `line-chart` | Time series (revenue, traffic, etc.) |
 | `bar-chart` | Category comparison (channels, products) |
 | `funnel-chart` | Conversion funnel visualization |
+
+## Production Module (`app/(admin)/modules/production/`)
+
+Client components colocated with their routes. Server pages fetch with Drizzle
+and pass plain props; client components mutate via the Production API then call
+`router.refresh()`. Stage rules live in `lib/production/stages.ts` (pure,
+unit-tested); display helpers in `lib/production/display.ts`.
+
+| Component | Usage |
+|-----------|-------|
+| `po/new/po-form` | Create-PO form with dynamic line-item rows |
+| `po/[id]/po-controls` | Line-item table, stage advance, status + lock toggles |
+| `suppliers/supplier-manager` | Supplier list with inline create/edit forms |
 
 ## SEO (`components/seo/`)
 

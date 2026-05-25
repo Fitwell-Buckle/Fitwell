@@ -369,6 +369,322 @@ class ShopifyClient {
     return { products: body.products, nextPageUrl };
   }
 
+  // ── Collections ───────────────────────────────────────────────────
+
+  /**
+   * All collections (both manual "custom" and rule-based "smart"), flattened
+   * to id + title. Paginates each type via the Link-header paginator.
+   */
+  async getCollections(): Promise<{ id: number; title: string }[]> {
+    const out: { id: number; title: string }[] = [];
+    const sources: Array<["custom_collections" | "smart_collections", string]> = [
+      ["custom_collections", "/custom_collections.json?limit=250"],
+      ["smart_collections", "/smart_collections.json?limit=250"],
+    ];
+    for (const [key, endpoint] of sources) {
+      for await (const page of this.fetchAll<{ id: number; title: string }>(
+        endpoint,
+        key,
+      )) {
+        for (const c of page) out.push({ id: c.id, title: c.title });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Products in a collection. `/collections/{id}/products.json` resolves both
+   * custom and smart collections (unlike the `collects` endpoint, which only
+   * covers manual ones).
+   */
+  async getCollectionProducts(collectionId: number): Promise<ShopifyProduct[]> {
+    const out: ShopifyProduct[] = [];
+    for await (const page of this.fetchAll<ShopifyProduct>(
+      `/collections/${collectionId}/products.json?limit=250`,
+      "products",
+    )) {
+      out.push(...page);
+    }
+    return out;
+  }
+
+  // ── GraphQL (companies, markets — no REST equivalents) ─────────────
+
+  /** POST a GraphQL query to the Admin API. Throws on transport or GraphQL errors. */
+  async graphql<T>(
+    query: string,
+    variables?: Record<string, unknown>,
+  ): Promise<T> {
+    const res = await this.fetch<{ data?: T; errors?: Array<{ message: string }> }>(
+      "/graphql.json",
+      { method: "POST", body: JSON.stringify({ query, variables }) },
+    );
+    if (res.errors && res.errors.length > 0) {
+      throw new Error(`Shopify GraphQL error: ${res.errors.map((e) => e.message).join("; ")}`);
+    }
+    if (!res.data) throw new Error("Shopify GraphQL returned no data");
+    return res.data;
+  }
+
+  /** Active locations (warehouses). Requires the read_locations scope. */
+  async getLocations(): Promise<{ id: string; name: string }[]> {
+    const { locations } = await this.fetch<{
+      locations: { id: number; name: string; active: boolean }[];
+    }>("/locations.json");
+    return locations
+      .filter((l) => l.active)
+      .map((l) => ({ id: String(l.id), name: l.name }));
+  }
+
+  /** A single location with its address. Requires the read_locations scope. */
+  async getLocation(id: string | number): Promise<{
+    id: string;
+    name: string;
+    address1: string | null;
+    address2: string | null;
+    city: string | null;
+    province: string | null;
+    zip: string | null;
+    country: string | null;
+    phone: string | null;
+  }> {
+    const { location } = await this.fetch<{
+      location: {
+        id: number;
+        name: string;
+        address1: string | null;
+        address2: string | null;
+        city: string | null;
+        province: string | null;
+        zip: string | null;
+        country: string | null;
+        phone: string | null;
+      };
+    }>(`/locations/${id}.json`);
+    return { ...location, id: String(location.id) };
+  }
+
+  /**
+   * The store's name + registered business address (Settings → General →
+   * Business details). Uses Shop.billingAddress, which is the legal address
+   * shown there (can differ from the store/location address).
+   */
+  async getShop(): Promise<{
+    name: string;
+    address1: string | null;
+    address2: string | null;
+    city: string | null;
+    province: string | null;
+    zip: string | null;
+    country: string | null;
+  }> {
+    const data = await this.graphql<{
+      shop: {
+        name: string;
+        billingAddress: {
+          address1: string | null;
+          address2: string | null;
+          city: string | null;
+          province: string | null;
+          zip: string | null;
+          country: string | null;
+        } | null;
+      };
+    }>(`{ shop { name billingAddress { address1 address2 city province zip country } } }`);
+    const b = data.shop.billingAddress;
+    return {
+      name: data.shop.name,
+      address1: b?.address1 ?? null,
+      address2: b?.address2 ?? null,
+      city: b?.city ?? null,
+      province: b?.province ?? null,
+      zip: b?.zip ?? null,
+      country: b?.country ?? null,
+    };
+  }
+
+  /**
+   * The store's brand logo URL (Settings → Brand). Requires the brand field to
+   * be available to the app (an extra scope, e.g. read_content). Returns null
+   * when unset; throws if the field isn't in the app's schema.
+   */
+  async getBrandLogoUrl(): Promise<string | null> {
+    const data = await this.graphql<{
+      shop: { brand: { logo: { image: { url: string } | null } | null } | null };
+    }>(`{ shop { brand { logo { image { url } } } } }`);
+    return data.shop.brand?.logo?.image?.url ?? null;
+  }
+
+  // ── Inventory (C2 receiving) ──────────────────────────────────────
+
+  /** The inventory_item_id backing a variant — needed to adjust its stock. */
+  async getVariantInventoryItemId(variantId: string | number): Promise<number> {
+    // Tolerate a GraphQL gid as well as a bare REST id.
+    const id = String(variantId).split("/").pop();
+    const { variant } = await this.fetch<{
+      variant: { id: number; inventory_item_id: number };
+    }>(`/variants/${id}.json`);
+    return variant.inventory_item_id;
+  }
+
+  /** A variant's retail price in cents — the basis for B2B invoice pricing. */
+  async getVariantPriceCents(variantId: string | number): Promise<number> {
+    const id = String(variantId).split("/").pop();
+    const { variant } = await this.fetch<{
+      variant: { id: number; price: string | null };
+    }>(`/variants/${id}.json`);
+    return toCents(variant.price);
+  }
+
+  /**
+   * Adjust a variant's available stock at a location (C2 receiving). Resolves
+   * the variant's inventory_item_id, then runs the GraphQL
+   * inventoryAdjustQuantities mutation with reason "received" and an optional
+   * `reference` (we pass the PO number's URL) recorded as the adjustment's
+   * referenceDocumentUri — so the receipt is traceable in Shopify's inventory
+   * history. Requires the write_inventory scope — until it's granted (store
+   * re-auth), Shopify returns "access denied" and this throws; the receive
+   * route surfaces that as a clear "scope not granted" message.
+   */
+  async adjustInventory(params: {
+    variantId: string | number;
+    locationId: string | number;
+    delta: number;
+    reference?: string;
+  }): Promise<{ available: number | null }> {
+    const inventoryItemId = await this.getVariantInventoryItemId(params.variantId);
+
+    const data = await this.graphql<{
+      inventoryAdjustQuantities: {
+        userErrors: { field: string[] | null; message: string }[];
+        inventoryAdjustmentGroup: {
+          changes: { name: string; quantityAfterChange: number | null }[];
+        } | null;
+      };
+    }>(
+      `mutation FitwellReceive($input: InventoryAdjustQuantitiesInput!) {
+        inventoryAdjustQuantities(input: $input) {
+          userErrors { field message }
+          inventoryAdjustmentGroup { changes { name quantityAfterChange } }
+        }
+      }`,
+      {
+        input: {
+          reason: "received",
+          name: "available",
+          referenceDocumentUri: params.reference,
+          changes: [
+            {
+              delta: params.delta,
+              inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`,
+              locationId: `gid://shopify/Location/${params.locationId}`,
+            },
+          ],
+        },
+      },
+    );
+
+    const errs = data.inventoryAdjustQuantities.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(
+        `Inventory adjust failed: ${errs.map((e) => e.message).join("; ")}`,
+      );
+    }
+    const change = data.inventoryAdjustQuantities.inventoryAdjustmentGroup?.changes?.find(
+      (c) => c.name === "available",
+    );
+    return { available: change?.quantityAfterChange ?? null };
+  }
+
+  // ── B2B invoicing (draft orders) ──────────────────────────────────
+
+  /**
+   * Create a Shopify draft order for a B2B invoice and send its invoice email
+   * (which carries a checkout/payment link). Lines with a variant use Shopify's
+   * retail price; lines without fall back to a custom price. The company's tier
+   * is applied as an order-level percentage discount. Requires the
+   * write_draft_orders scope — without it Shopify returns "access denied" and
+   * this throws; the send route surfaces that as a skip note. Returns the draft
+   * order id + invoice (payment) URL.
+   */
+  async createDraftOrderInvoice(params: {
+    email: string | null;
+    shopifyCustomerId?: string | null;
+    discountPercent: number;
+    note?: string;
+    lines: {
+      variantId: string | null;
+      title: string;
+      quantity: number;
+      unitPriceCents: number;
+    }[];
+  }): Promise<{ draftOrderId: string; invoiceUrl: string | null }> {
+    const lineItems = params.lines.map((l) =>
+      l.variantId
+        ? {
+            variantId: `gid://shopify/ProductVariant/${String(l.variantId).split("/").pop()}`,
+            quantity: l.quantity,
+          }
+        : {
+            title: l.title,
+            originalUnitPrice: (l.unitPriceCents / 100).toFixed(2),
+            quantity: l.quantity,
+          },
+    );
+
+    const input: Record<string, unknown> = { lineItems };
+    if (params.email) input.email = params.email;
+    if (params.note) input.note = params.note;
+    if (params.discountPercent > 0) {
+      input.appliedDiscount = {
+        valueType: "PERCENTAGE",
+        value: params.discountPercent,
+        title: "B2B price tier",
+      };
+    }
+    if (params.shopifyCustomerId) {
+      input.purchasingEntity = {
+        customerId: `gid://shopify/Customer/${String(params.shopifyCustomerId).split("/").pop()}`,
+      };
+    }
+
+    const created = await this.graphql<{
+      draftOrderCreate: {
+        draftOrder: { id: string; invoiceUrl: string | null } | null;
+        userErrors: { field: string[] | null; message: string }[];
+      };
+    }>(
+      `mutation FitwellDraftCreate($input: DraftOrderInput!) {
+        draftOrderCreate(input: $input) {
+          draftOrder { id invoiceUrl }
+          userErrors { field message }
+        }
+      }`,
+      { input },
+    );
+
+    const errs = created.draftOrderCreate.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(`Draft order failed: ${errs.map((e) => e.message).join("; ")}`);
+    }
+    const draftOrder = created.draftOrderCreate.draftOrder;
+    if (!draftOrder) throw new Error("Draft order was not created");
+
+    // Send Shopify's invoice email (best-effort; the invoiceUrl already works).
+    try {
+      await this.graphql(
+        `mutation FitwellDraftSend($id: ID!) {
+          draftOrderInvoiceSend(id: $id) { draftOrder { id } userErrors { field message } }
+        }`,
+        { id: draftOrder.id },
+      );
+    } catch (err) {
+      console.error("draftOrderInvoiceSend failed (continuing):", err);
+    }
+
+    return { draftOrderId: draftOrder.id, invoiceUrl: draftOrder.invoiceUrl };
+  }
+
   // ── Generic paginator ─────────────────────────────────────────────
 
   /**

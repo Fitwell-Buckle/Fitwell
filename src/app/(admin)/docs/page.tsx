@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  GraduationCap,
   Rocket,
   Layers,
   Database,
@@ -17,6 +18,13 @@ export const metadata: Metadata = {
 };
 
 const sections = [
+  {
+    href: "/docs/guides",
+    title: "Guides",
+    description:
+      "Step-by-step how-tos for using the admin: purchase orders, production, inventory, invoicing, and the supplier & B2B portals.",
+    icon: GraduationCap,
+  },
   {
     href: "/docs/onboarding",
     title: "Getting Started",
@@ -60,7 +68,7 @@ export default async function DocsIndexPage() {
 
   return (
     <div>
-      <PageHeader title="Developer Documentation" />
+      <PageHeader title="Docs" />
       <p className="mt-2 text-sm text-zinc-500">
         Reference documentation for the Fitwell admin platform. These pages
         render directly from the spec files in the repository — the same

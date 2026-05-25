@@ -2,9 +2,18 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { order, customer } from "@/lib/schema";
-import { desc, eq, and, gte, lte, count } from "drizzle-orm";
+import { order, customer, orderLineItem } from "@/lib/schema";
+import { desc, eq, and, gte, lte, count, exists, inArray, sql } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import {
+  getCatalogCached,
+  getCatalogGroupsCached,
+  catalogSkusMatching,
+  makeCollectionLookup,
+  type CatalogVariant,
+  type CatalogCollectionGroup,
+} from "@/lib/catalog/load";
+import { CatalogFilters } from "@/components/catalog/catalog-filters";
 import {
   Table,
   TableHeader,
@@ -20,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 
 export const metadata: Metadata = {
-  title: "Orders | Fitwell Admin",
+  title: "Consumer Orders | Fitwell Admin",
 };
 
 function fmt(cents: number) {
@@ -44,6 +53,36 @@ export default async function OrdersPage({
   const offset = (page - 1) * limit;
   const status = typeof params.status === "string" ? params.status : undefined;
   const { from, to } = parseDateRange(params);
+  const collectionParam = typeof params.collection === "string" ? params.collection : "";
+  const sizeParam = typeof params.size === "string" ? params.size : "";
+  const colorParam = typeof params.color === "string" ? params.color : "";
+  const materialParam = typeof params.material === "string" ? params.material : "";
+
+  // Standardized catalog filter → resolve to a set of SKUs, then keep orders
+  // that contain a matching line item (preserves SQL pagination). Cached.
+  let catalog: CatalogVariant[] = [];
+  let groups: CatalogCollectionGroup[] = [];
+  try {
+    [catalog, groups] = await Promise.all([getCatalogCached(), getCatalogGroupsCached()]);
+  } catch {
+    /* filters degrade gracefully when Shopify is unavailable */
+  }
+  const { options: collectionOptions } = makeCollectionLookup(groups);
+  const sizeOptions = [
+    ...new Set(catalog.map((v) => v.sizeMm).filter((s): s is number => s != null)),
+  ].sort((a, b) => a - b);
+  const colorOptions = [
+    ...new Set(catalog.map((v) => v.color).filter((c): c is string => !!c)),
+  ].sort((a, b) => a.localeCompare(b));
+  const materialOptions = [
+    ...new Set(catalog.map((v) => v.material).filter((m): m is string => !!m)),
+  ].sort((a, b) => a.localeCompare(b));
+  const matchingSkus = catalogSkusMatching(catalog, groups, {
+    collection: collectionParam,
+    size: sizeParam,
+    color: colorParam,
+    material: materialParam,
+  });
 
   const conditions = [];
   if (status) {
@@ -51,6 +90,23 @@ export default async function OrdersPage({
   }
   conditions.push(gte(order.processedAt, from));
   conditions.push(lte(order.processedAt, to));
+  if (matchingSkus) {
+    conditions.push(
+      matchingSkus.length === 0
+        ? sql`false`
+        : exists(
+            db
+              .select({ one: orderLineItem.id })
+              .from(orderLineItem)
+              .where(
+                and(
+                  eq(orderLineItem.orderId, order.id),
+                  inArray(orderLineItem.sku, matchingSkus),
+                ),
+              ),
+          ),
+    );
+  }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -82,9 +138,20 @@ export default async function OrdersPage({
 
   return (
     <div>
-      <PageHeader title="Orders" />
+      <PageHeader title="Consumer Orders" />
 
-      <form action="" method="GET" className="mt-6 flex gap-2 items-center">
+      <CatalogFilters
+        collections={collectionOptions}
+        collection={collectionParam}
+        sizeOptions={sizeOptions}
+        size={sizeParam}
+        colorOptions={colorOptions}
+        color={colorParam}
+        materialOptions={materialOptions}
+        material={materialParam}
+      />
+
+      <form action="" method="GET" className="mt-4 flex gap-2 items-center">
         <select
           name="status"
           defaultValue={status ?? ""}
@@ -97,6 +164,12 @@ export default async function OrdersPage({
           <option value="partially_refunded">Partially Refunded</option>
           <option value="voided">Voided</option>
         </select>
+        {/* Preserve the date range + catalog filters when filtering by status. */}
+        {Object.entries(params).map(([k, v]) =>
+          typeof v === "string" && k !== "status" && k !== "page" ? (
+            <input key={k} type="hidden" name={k} value={v} />
+          ) : null,
+        )}
         <Button type="submit">Filter</Button>
         {status && (
           <Button variant="ghost" size="sm" asChild>

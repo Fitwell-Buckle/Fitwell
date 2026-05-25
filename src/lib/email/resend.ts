@@ -19,6 +19,8 @@ interface SendEmailOptions {
   html: string;
   from?: string;
   replyTo?: string;
+  cc?: string | string[];
+  bcc?: string | string[];
 }
 
 export async function sendEmail(options: SendEmailOptions) {
@@ -31,5 +33,7 @@ export async function sendEmail(options: SendEmailOptions) {
     subject: options.subject,
     html: options.html,
     replyTo: options.replyTo,
+    cc: options.cc,
+    bcc: options.bcc,
   });
 }
