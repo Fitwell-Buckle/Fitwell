@@ -49,7 +49,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "No bill-to company on this PO. Set a company on the PO (or its line items) first.",
+            "No bill-to brand on this PO. Set a brand on the PO (or its line items) first.",
         },
         { status: 409 },
       );

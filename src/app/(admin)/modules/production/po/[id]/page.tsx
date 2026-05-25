@@ -113,7 +113,7 @@ export default async function PoDetailPage({
             <div className="mt-1 text-zinc-700">{fmtDate(po.issuedDate)}</div>
           </div>
           <div>
-            <div className="text-xs text-zinc-400">Company</div>
+            <div className="text-xs text-zinc-400">Brand</div>
             <div className="mt-1 text-zinc-700">
               {po.company?.name ?? "—"}
               {po.company?.priceTier && (

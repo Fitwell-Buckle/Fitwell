@@ -148,7 +148,7 @@ export function PoControls({
               <TableHead>Title</TableHead>
               <TableHead>Qty</TableHead>
               <TableHead>Unit cost</TableHead>
-              <TableHead>Company</TableHead>
+              <TableHead>Brand</TableHead>
               <TableHead>Warehouse</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Stage</TableHead>

@@ -10,10 +10,10 @@ import { Button } from "@/components/ui/button";
 import { CompaniesManager } from "./companies-manager";
 
 export const metadata: Metadata = {
-  title: "Companies | Fitwell Admin",
+  title: "B2B Brand List | Fitwell Admin",
 };
 
-export default async function CompaniesPage() {
+export default async function BrandsPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
@@ -31,7 +31,7 @@ export default async function CompaniesPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Companies" />
+        <PageHeader title="B2B Brand List" />
         <Button variant="ghost" size="sm" asChild>
           <Link href="/customers">Back to Customers</Link>
         </Button>

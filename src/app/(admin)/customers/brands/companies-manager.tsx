@@ -133,7 +133,7 @@ export function CompaniesManager({
 
   async function saveCompany() {
     setError(null);
-    if (!draft.name.trim()) return setError("Company name is required.");
+    if (!draft.name.trim()) return setError("Brand name is required.");
     setBusy(true);
     const isNew = companyEditing === "new";
     try {
@@ -189,7 +189,7 @@ export function CompaniesManager({
           )}
         </div>
         <p className="mt-1 text-xs text-zinc-500">
-          A discount off the Shopify retail price, assigned to companies.
+          A discount off the Shopify retail price, assigned to brands.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -239,13 +239,13 @@ export function CompaniesManager({
       {/* Companies */}
       <div className="flex justify-end">
         {companyEditing !== "new" && (
-          <Button onClick={() => openCompany("new")}>Add company</Button>
+          <Button onClick={() => openCompany("new")}>Add brand</Button>
         )}
       </div>
 
       {companyEditing === "new" && (
         <CompanyForm
-          title="New company"
+          title="New brand"
           draft={draft}
           setDraft={setDraft}
           priceTiers={priceTiers}
@@ -259,7 +259,7 @@ export function CompaniesManager({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Company</TableHead>
+              <TableHead>Brand</TableHead>
               <TableHead>Price tier</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead className="text-right">Edit</TableHead>
@@ -269,7 +269,7 @@ export function CompaniesManager({
             {companies.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="py-8 text-center text-zinc-400">
-                  No companies yet.
+                  No brands yet.
                 </TableCell>
               </TableRow>
             ) : (
@@ -297,7 +297,7 @@ export function CompaniesManager({
       {editingCompany && (
         <>
           <CompanyForm
-            title="Edit company"
+            title="Edit brand"
             draft={draft}
             setDraft={setDraft}
             priceTiers={priceTiers}
@@ -596,7 +596,7 @@ function CompanyLogins({
       <h2 className="text-sm font-semibold text-zinc-900">Portal logins</h2>
       <p className="mt-1 text-xs text-zinc-500">
         Anyone on this list can sign in (magic link) to the B2B portal and order
-        at this company’s pricing.
+        at this brand’s pricing.
       </p>
       <div className="mt-3 space-y-2">
         {contacts.length === 0 ? (

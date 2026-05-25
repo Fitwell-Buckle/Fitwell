@@ -28,7 +28,7 @@ export default async function PortalLayout({
         columns: { name: true },
       }),
     ]);
-    topBar = <PortalTopBar logoUrl={logoUrl} companyName={comp?.name ?? "Your company"} />;
+    topBar = <PortalTopBar logoUrl={logoUrl} companyName={comp?.name ?? "Your brand"} />;
   }
 
   return (

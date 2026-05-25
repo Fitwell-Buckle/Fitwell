@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       customer: { columns: { shopifyId: true } },
     },
   });
-  if (!comp) return NextResponse.json({ error: "Company not found" }, { status: 404 });
+  if (!comp) return NextResponse.json({ error: "Brand not found" }, { status: 404 });
 
   // Resolve each cart variant against the catalog (price, sku, title).
   let catalog;

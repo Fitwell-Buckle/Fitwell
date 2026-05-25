@@ -33,7 +33,7 @@ export default async function PortalHomePage() {
     <div>
       <PageHeader title="Place an order" />
       <p className="mt-1 text-sm text-zinc-500">
-        Ordering for <span className="font-medium text-zinc-700">{comp?.name ?? "your company"}</span>
+        Ordering for <span className="font-medium text-zinc-700">{comp?.name ?? "your brand"}</span>
         {discount > 0 ? (
           <>
             {" "}

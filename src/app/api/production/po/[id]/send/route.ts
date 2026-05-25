@@ -44,7 +44,7 @@ function buildPoEmailHtml(po: Po): string {
     <p style="margin:0 0 16px;color:#666;font-size:13px;">Fitwell Buckle Co.</p>
     <table style="font-size:13px;color:#333;margin-bottom:16px;">
       <tr><td style="padding:2px 16px 2px 0;color:#888;">Supplier</td><td>${esc(po.supplier?.name ?? "—")}</td></tr>
-      <tr><td style="padding:2px 16px 2px 0;color:#888;">Company</td><td>${esc(po.company?.name ?? "—")}</td></tr>
+      <tr><td style="padding:2px 16px 2px 0;color:#888;">Brand</td><td>${esc(po.company?.name ?? "—")}</td></tr>
       <tr><td style="padding:2px 16px 2px 0;color:#888;">Status</td><td>${esc(STATUS_LABELS[po.status as keyof typeof STATUS_LABELS] ?? po.status)}</td></tr>
       <tr><td style="padding:2px 16px 2px 0;color:#888;">Issued</td><td>${esc(fmtDate(po.issuedDate))}</td></tr>
       <tr><td style="padding:2px 16px 2px 0;color:#888;">ETA</td><td>${esc(fmtDate(po.expectedDeliveryDate))}</td></tr>
