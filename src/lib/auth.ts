@@ -3,7 +3,7 @@ import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import { user as userTable, supplierContact } from "./schema";
+import { user as userTable, supplierContact, companyContact } from "./schema";
 import { isAllowedAdmin } from "./admin-access";
 import { canMagicLinkSignIn } from "./supplier-access";
 import { sendMagicLinkEmail } from "./email/magic-link";
@@ -19,6 +19,16 @@ async function supplierIdForEmail(email: string): Promise<string | null> {
     columns: { supplierId: true },
   });
   return row?.supplierId ?? null;
+}
+
+// Which company (if any) an email may sign in to the B2B portal as.
+async function companyIdForEmail(email: string): Promise<string | null> {
+  if (!email) return null;
+  const row = await db.query.companyContact.findFirst({
+    where: eq(companyContact.email, email),
+    columns: { companyId: true },
+  });
+  return row?.companyId ?? null;
 }
 
 // Custom email magic-link provider. Modeled on @auth/core's Resend provider
@@ -54,23 +64,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return isAllowedAdmin(user.email, ADMIN_EMAILS);
       }
 
-      // Suppliers (and, optionally, admins) sign in with the magic link.
+      // Suppliers, companies (and, optionally, admins) sign in with the link.
       if (account?.provider === "email") {
         const addr = user.email?.toLowerCase() ?? "";
         const supplierId = await supplierIdForEmail(addr);
+        const companyId = supplierId ? null : await companyIdForEmail(addr);
         const adminAllowed = isAllowedAdmin(addr, ADMIN_EMAILS);
-        if (!canMagicLinkSignIn(supplierId, adminAllowed)) {
+        if (!canMagicLinkSignIn(supplierId, companyId, adminAllowed)) {
           return false; // not allowlisted → no link is sent / sign-in is denied
         }
 
-        // Stamp role + supplier_id on the real sign-in step (the link click),
-        // not the "send link" step where the user row may not exist yet.
+        // Stamp role on the real sign-in step (the link click), not the "send
+        // link" step where the user row may not exist yet. Supplier wins if an
+        // address is somehow on both allowlists.
         const isLinkClick = !email?.verificationRequest;
-        if (isLinkClick && supplierId && user.id) {
-          await db
-            .update(userTable)
-            .set({ role: "supplier", supplierId })
-            .where(eq(userTable.id, user.id));
+        if (isLinkClick && user.id) {
+          if (supplierId) {
+            await db
+              .update(userTable)
+              .set({ role: "supplier", supplierId })
+              .where(eq(userTable.id, user.id));
+          } else if (companyId) {
+            await db
+              .update(userTable)
+              .set({ role: "company", companyId })
+              .where(eq(userTable.id, user.id));
+          }
         }
         return true;
       }
@@ -79,10 +98,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, user }) {
       if (session.user) {
-        const u = user as { id: string; role?: string; supplierId?: string | null };
+        const u = user as {
+          id: string;
+          role?: string;
+          supplierId?: string | null;
+          companyId?: string | null;
+        };
         session.user.id = u.id;
         session.user.role = u.role ?? "user";
         session.user.supplierId = u.supplierId ?? null;
+        session.user.companyId = u.companyId ?? null;
       }
       return session;
     },

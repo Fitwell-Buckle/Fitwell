@@ -3,22 +3,26 @@ import { canMagicLinkSignIn, canSupplierAccessPo } from "@/lib/supplier-access";
 
 describe("canMagicLinkSignIn", () => {
   it("allows an email that resolves to a supplier", () => {
-    expect(canMagicLinkSignIn("supplier-123", false)).toBe(true);
+    expect(canMagicLinkSignIn("supplier-123", null, false)).toBe(true);
   });
 
-  it("allows an allowed admin even without a supplier match", () => {
-    expect(canMagicLinkSignIn(null, true)).toBe(true);
-    expect(canMagicLinkSignIn(undefined, true)).toBe(true);
+  it("allows an email that resolves to a company", () => {
+    expect(canMagicLinkSignIn(null, "company-123", false)).toBe(true);
   });
 
-  it("denies an email that is neither a supplier nor an allowed admin", () => {
-    expect(canMagicLinkSignIn(null, false)).toBe(false);
-    expect(canMagicLinkSignIn(undefined, false)).toBe(false);
-    expect(canMagicLinkSignIn("", false)).toBe(false);
+  it("allows an allowed admin even without a supplier/company match", () => {
+    expect(canMagicLinkSignIn(null, null, true)).toBe(true);
+    expect(canMagicLinkSignIn(undefined, undefined, true)).toBe(true);
   });
 
-  it("allows when both conditions are true", () => {
-    expect(canMagicLinkSignIn("supplier-123", true)).toBe(true);
+  it("denies an email that is none of supplier, company, or admin", () => {
+    expect(canMagicLinkSignIn(null, null, false)).toBe(false);
+    expect(canMagicLinkSignIn(undefined, undefined, false)).toBe(false);
+    expect(canMagicLinkSignIn("", "", false)).toBe(false);
+  });
+
+  it("allows when multiple conditions are true", () => {
+    expect(canMagicLinkSignIn("supplier-123", "company-123", true)).toBe(true);
   });
 });
 

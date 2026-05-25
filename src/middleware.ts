@@ -20,19 +20,23 @@ const ADMIN_PAGE_PREFIXES = [
 export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // The supplier login page is public so unauthenticated suppliers can request
-  // a magic link.
+  // The portal login pages are public so unauthenticated users can request a
+  // magic link.
   if (pathname === "/supplier/login" || pathname.startsWith("/supplier/login/")) {
+    return NextResponse.next();
+  }
+  if (pathname === "/portal/login" || pathname.startsWith("/portal/login/")) {
     return NextResponse.next();
   }
 
   const isSupplierRoute = pathname.startsWith("/supplier");
+  const isPortalRoute = pathname.startsWith("/portal");
   const isAdminPage = ADMIN_PAGE_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
   const isAdminApi = pathname.startsWith("/api/admin");
 
-  if (!isSupplierRoute && !isAdminPage && !isAdminApi) {
+  if (!isSupplierRoute && !isPortalRoute && !isAdminPage && !isAdminApi) {
     return NextResponse.next();
   }
 
@@ -47,13 +51,25 @@ export default async function middleware(req: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
     if (role !== "supplier") {
-      // A signed-in admin landing on the portal goes back to the dashboard.
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     return NextResponse.next();
   }
 
-  // Admin pages: must be signed in; suppliers are bounced to their portal.
+  // Company B2B portal: must be signed in AND have the company role.
+  if (isPortalRoute) {
+    if (!session?.user) {
+      const loginUrl = new URL("/portal/login", req.url);
+      loginUrl.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    if (role !== "company") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+    return NextResponse.next();
+  }
+
+  // Admin pages: must be signed in; suppliers + companies go to their portals.
   if (isAdminPage) {
     if (!session?.user) {
       const loginUrl = new URL("/auth/login", req.url);
@@ -63,11 +79,14 @@ export default async function middleware(req: NextRequest) {
     if (role === "supplier") {
       return NextResponse.redirect(new URL("/supplier", req.url));
     }
+    if (role === "company") {
+      return NextResponse.redirect(new URL("/portal", req.url));
+    }
   }
 
-  // Admin API: must be signed in (and not a supplier).
+  // Admin API: must be signed in (and not a portal user).
   if (isAdminApi) {
-    if (!session?.user || role === "supplier") {
+    if (!session?.user || role === "supplier" || role === "company") {
       return NextResponse.json(
         { error: "Unauthorized", success: false },
         { status: 401 },
@@ -92,6 +111,7 @@ export const config = {
     "/modules/:path*",
     "/settings/:path*",
     "/supplier/:path*",
+    "/portal/:path*",
     "/api/admin/:path*",
   ],
 };
