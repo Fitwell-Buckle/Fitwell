@@ -122,4 +122,16 @@ describe.skipIf(noDb)("invoice service (real DB)", () => {
     expect(po!.lineItems[0].quantity).toBe(7);
     expect(po!.notes).toContain(made.invoiceNumber);
   });
+
+  it("lists only a company's own orders (portal scoping)", async () => {
+    const aOrders = await inv.listInvoicesForCompany(companyA);
+    const bOrders = await inv.listInvoicesForCompany(companyB);
+
+    expect(aOrders.length).toBeGreaterThan(0);
+    expect(bOrders.length).toBeGreaterThan(0);
+    expect(aOrders.every((o) => o.companyId === companyA)).toBe(true);
+    expect(bOrders.every((o) => o.companyId === companyB)).toBe(true);
+    // Company B can never see company A's orders.
+    expect(bOrders.some((o) => o.companyId === companyA)).toBe(false);
+  });
 });

@@ -21,6 +21,7 @@ All marketing pages include PostHog tracking and UTM parameter capture.
 |------|-------------|------|
 | `/auth/login` | Admin login page (Google OAuth) | None |
 | `/supplier/login` | Supplier login (email magic link) | None |
+| `/portal/login` | Company B2B portal login (email magic link) | None |
 
 ## (admin) — Protected Dashboard
 
@@ -63,6 +64,15 @@ Magic-link auth; middleware requires an authenticated session with `role='suppli
 |------|-------------|
 | `/supplier` | The supplier's own POs (list) |
 | `/supplier/po/[id]` | PO detail — advance stages, comment, upload attachments (no edit/delete); 404 if not their PO |
+
+## portal — Company B2B Portal
+
+Magic-link auth; middleware requires `role='company'` (else → `/portal/login`). Companies are kept out of admin/supplier areas, and admins/suppliers out of the portal. Scoped to the signed-in user's `company_id`; prices reflect the company's price tier.
+
+| Path | Description |
+|------|-------------|
+| `/portal` | Browse the catalog at the company's tier price; build a cart and check out |
+| `/portal/orders` | The company's own order history (paid/sent invoices) with Shopify pay links |
 
 ## API Routes
 
@@ -128,6 +138,11 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/invoices/[id]/send` | Email the invoice (Resend) + push a Shopify draft order with a payment link when the company is linked to a Shopify customer (`write_draft_orders`); marks "sent" |
 | POST | `/api/invoices/[id]/create-po` | Create a draft production PO from the invoice (pick supplier) |
 | PATCH | `/api/settings/billing` | Update remittance / bank-wire details shown on invoices |
+
+### Portal API (B2B; company-scoped via `role='company'`)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/portal/checkout` | Instant self-checkout: create a Shopify draft order at the company's tier discount + record the order as an invoice; returns the Shopify pay link. Needs `write_draft_orders` |
 
 ### Cron Jobs (Vercel Cron, protected by `CRON_SECRET`)
 | Method | Path | Schedule | Description |

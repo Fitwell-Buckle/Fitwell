@@ -286,3 +286,40 @@ export async function listInvoices() {
     with: { company: { columns: { name: true } } },
   });
 }
+
+/** A single company's invoices/orders, newest first (B2B portal order history). */
+export async function listInvoicesForCompany(companyId: string) {
+  return db.query.invoice.findMany({
+    where: eq(invoice.companyId, companyId),
+    orderBy: desc(invoice.createdAt),
+  });
+}
+
+/**
+ * Record a self-serve company portal order: create the invoice (tier snapshot)
+ * and mark it "sent" with the Shopify draft-order id + payment link. Called by
+ * the portal checkout after the Shopify draft order is created.
+ */
+export async function recordCompanyOrder(params: {
+  companyId: string;
+  lineItems: CreateInvoiceInput["lineItems"];
+  shopifyDraftOrderId: string;
+  shopifyInvoiceUrl: string | null;
+}): Promise<{ id: string; invoiceNumber: string }> {
+  const created = await createInvoice({
+    companyId: params.companyId,
+    issuedDate: today(),
+    lineItems: params.lineItems,
+  });
+  await db
+    .update(invoice)
+    .set({
+      status: "sent",
+      sentAt: new Date(),
+      shopifyDraftOrderId: params.shopifyDraftOrderId,
+      shopifyInvoiceUrl: params.shopifyInvoiceUrl,
+      updatedAt: new Date(),
+    })
+    .where(eq(invoice.id, created.id));
+  return created;
+}

@@ -5,11 +5,11 @@
 > beyond the original plan (own companies + price tiers, per-line company/warehouse,
 > product picker, PO editing, nav restructure). **Phases 3–5 are now complete too**
 > (3: supplier magic-link portal; 4: C2 receiving + deadline alerts; 5: Gantt +
-> incoming-inventory; 6: B2B invoicing with PO↔invoice creation). The remaining
-> work is **deployment**: merge PR #2, apply migrations `0008–0020` to prod, and
-> set env/scopes (`write_inventory`, `write_draft_orders`, `RESEND_API_KEY`,
-> `BLOB_READ_WRITE_TOKEN`, `read_locations`). A company B2B portal (Phase 7,
-> instant self-checkout) is planned next. The source of
+> incoming-inventory; 6: B2B invoicing with PO↔invoice creation; 7: company B2B
+> portal with instant self-checkout). The remaining work is **deployment**:
+> merge PR #2, apply migrations `0008–0021` to prod, and set env/scopes
+> (`write_inventory`, `write_draft_orders`, `RESEND_API_KEY`,
+> `BLOB_READ_WRITE_TOKEN`, `read_locations`). The source of
 > truth for schema/routes is `src/lib/schema.ts` and `specs/current/{schema,routes}.md`;
 > this plan is the narrative + remaining work.
 
@@ -132,6 +132,13 @@ Bills **companies** (the revenue side) for produced goods, with bidirectional cr
 - [x] **Tests:** pricing/grouping/format (unit); integration for one-invoice-per-company (retail−tier) + create-PO-from-invoice.
 - [x] **Payments (decided 2026-05-24 → Shopify checkout):** the draft-order checkout link is the pay path — Apple Pay / Shop Pay / PayPal / cards come from Shopify Payments. Surfaced as a prominent "Pay online" button on the invoice detail, the printable doc, and the email. Needs `write_draft_orders` + those wallets enabled in Shopify.
 - [x] **Bank-wire / remittance:** editable in admin Settings (`billing_settings`, single row, migration `0020`); rendered on the invoice detail, the printable `/invoices/[id]/print` doc, and the email for buyers paying by wire/ACH.
+
+### Phase 7 — Company B2B portal ✅ COMPLETE
+Self-serve portal where company buyers sign in and order at their tier pricing.
+- [x] **7a — Allowlist:** `company_contact` table (one company per email) + `user.company_id` (migration `0021`); admin-only `POST /api/production/companies/[id]/contacts` + `DELETE /api/production/company-contacts/[id]`; managed under Customers → Companies → Edit → "Portal logins".
+- [x] **7b — Auth:** magic-link sign-in extended to allowlisted company emails → `role='company'` + `company_id` (supplier wins if on both lists); session exposes `companyId`. Middleware gates `/portal/*` to companies, bounces them off admin/supplier routes (and `/api/admin` 401). `canMagicLinkSignIn(supplierId, companyId, adminAllowed)`.
+- [x] **7c — Portal:** `/portal/login`, `/portal` (catalog at tier price via the shared ProductCombobox + cart + **instant Shopify checkout**), `/portal/orders` (their order history with pay links). `getCompanyScope` server helper; `POST /api/portal/checkout` creates a Shopify draft order at the tier discount and records an invoice (`recordCompanyOrder`), returning the pay link. Needs `write_draft_orders` (graceful "checkout not enabled" otherwise).
+- [x] **Tests:** company sign-in policy (unit); company-scoped order listing isolation (integration).
 
 ## Notes
 
