@@ -5,13 +5,13 @@ import { auth } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoicing/service";
 import { Button } from "@/components/ui/button";
 import { InvoiceDocument } from "../invoice-document";
-import { PrintButton } from "./print-button";
+import { InvoiceSendForm } from "./send-form";
 
 export const metadata: Metadata = {
-  title: "Invoice document | Fitwell Admin",
+  title: "Send invoice | Fitwell Admin",
 };
 
-export default async function InvoicePrintPage({
+export default async function InvoiceSendPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -26,15 +26,21 @@ export default async function InvoicePrintPage({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between print:hidden">
-        <PrintButton />
         <Button variant="ghost" size="sm" asChild>
-          <Link href={`/invoices/${inv.id}`}>Back</Link>
+          <Link href={`/invoices/${inv.id}`}>Back to invoice</Link>
         </Button>
       </div>
 
       <div className="mt-6">
         <InvoiceDocument inv={inv} />
       </div>
+
+      <InvoiceSendForm
+        invoiceId={inv.id}
+        invoiceNumber={inv.invoiceNumber}
+        defaultTo={inv.company?.contactEmail ?? ""}
+        ccEmail={session.user.email ?? null}
+      />
     </div>
   );
 }

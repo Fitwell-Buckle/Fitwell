@@ -23,6 +23,8 @@ interface InvoiceEmailData {
   lineItems: { sku: string; title: string; quantity: number; unitPriceCents: number }[];
   payUrl?: string | null;
   remittance?: InvoiceRemittance | null;
+  /** Optional personal note from the sender, shown above the line items. */
+  message?: string | null;
 }
 
 /** Render the bank-wire block (shared by email + printable doc). */
@@ -80,6 +82,8 @@ export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
     <p style="font-size:13px;color:#71717a;margin:2px 0 0">
       Issued ${fmtDate(inv.issuedDate)}${inv.dueDate ? ` · Due ${fmtDate(inv.dueDate)}` : ""}
     </p>
+
+    ${inv.message ? `<p style="font-size:14px;color:#3f3f46;margin:18px 0 0;white-space:pre-wrap">${inv.message}</p>` : ""}
 
     <table style="width:100%;border-collapse:collapse;margin-top:20px">
       <thead>

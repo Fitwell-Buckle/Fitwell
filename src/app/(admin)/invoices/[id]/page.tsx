@@ -60,7 +60,7 @@ export default async function InvoiceDetailPage({
         <PageHeader title={`Invoice ${inv.invoiceNumber}`} />
         <div className="flex gap-2">
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/invoices/${inv.id}/print`}>Print</Link>
+            <Link href={`/invoices/${inv.id}/send`}>Print &amp; Send</Link>
           </Button>
           {editable && (
             <Button variant="outline" size="sm" asChild>
@@ -183,7 +183,8 @@ export default async function InvoiceDetailPage({
             </Button>
           ) : (
             <p className="text-sm text-zinc-400">
-              Use “Send invoice” below to generate an online payment link.
+              Use “Print &amp; Send” (top right) to email this invoice with an
+              online payment link.
             </p>
           )}
         </div>

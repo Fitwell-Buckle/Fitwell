@@ -29,12 +29,10 @@ export function InvoiceActions({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
 
   async function setStatus(next: string) {
     setError(null);
-    setInfo(null);
     setBusy(true);
     try {
       const res = await fetch(`/api/invoices/${invoiceId}`, {
@@ -58,7 +56,6 @@ export function InvoiceActions({
   async function createPo() {
     if (!supplierId) return setError("Pick a supplier.");
     setError(null);
-    setInfo(null);
     setBusy(true);
     try {
       const res = await fetch(`/api/invoices/${invoiceId}/create-po`, {
@@ -76,26 +73,6 @@ export function InvoiceActions({
       router.refresh();
     } catch {
       setError("Network error — please try again.");
-      setBusy(false);
-    }
-  }
-
-  async function send() {
-    setError(null);
-    setInfo(null);
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/invoices/${invoiceId}/send`, { method: "POST" });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(d.error || "Couldn't send the invoice.");
-      } else {
-        setInfo(d.message || "Invoice sent.");
-        router.refresh();
-      }
-    } catch {
-      setError("Network error — please try again.");
-    } finally {
       setBusy(false);
     }
   }
@@ -148,17 +125,11 @@ export function InvoiceActions({
           </div>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-zinc-500">Send to company</span>
-          <Button size="sm" disabled={busy} onClick={send}>
-            {busy ? "Working…" : "Send invoice"}
-          </Button>
-        </div>
       </div>
 
       {!canPushShopify && (
         <p className="mt-3 text-xs text-zinc-400">
-          Link this company to a Shopify customer (Customers → Companies) to also
+          Link this brand to a Shopify customer (Customers → B2B Brand List) to also
           create a Shopify draft order with a payment link when sending.
         </p>
       )}
@@ -175,7 +146,6 @@ export function InvoiceActions({
           </a>
         </p>
       )}
-      {info && <p className="mt-3 text-sm text-emerald-700">{info}</p>}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </Card>
   );
