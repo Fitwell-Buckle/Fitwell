@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { SupplierManager } from "./supplier-manager";
 
 export const metadata: Metadata = {
-  title: "Suppliers | Fitwell Admin",
+  title: "Supplier List | Fitwell Admin",
 };
 
 export default async function SuppliersPage() {
@@ -25,7 +25,7 @@ export default async function SuppliersPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Suppliers" />
+        <PageHeader title="Supplier List" />
         <Button variant="ghost" size="sm" asChild>
           <Link href="/modules/production">Back</Link>
         </Button>

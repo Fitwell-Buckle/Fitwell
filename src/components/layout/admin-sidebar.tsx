@@ -55,9 +55,9 @@ const navItems: NavItem[] = [
     icon: Package,
     children: [
       { href: "/products", label: "Product List" },
-      { href: "/modules/production", label: "Purchase Orders" },
+      { href: "/modules/production", label: "Supplier POs" },
       { href: "/modules/production/summary", label: "Production Summary" },
-      { href: "/modules/production/suppliers", label: "Suppliers" },
+      { href: "/modules/production/suppliers", label: "Supplier List" },
     ],
   },
   {

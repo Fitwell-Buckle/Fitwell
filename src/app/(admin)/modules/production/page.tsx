@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { CatalogFilters } from "@/components/catalog/catalog-filters";
 
 export const metadata: Metadata = {
-  title: "Purchase Orders | Fitwell Admin",
+  title: "Supplier POs | Fitwell Admin",
 };
 
 export default async function ProductionPage({
@@ -132,7 +132,7 @@ export default async function ProductionPage({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Purchase Orders" />
+        <PageHeader title="Supplier POs" />
         <Button asChild>
           <Link href="/modules/production/po/new">New PO</Link>
         </Button>
