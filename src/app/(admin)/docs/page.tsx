@@ -68,7 +68,7 @@ export default async function DocsIndexPage() {
 
   return (
     <div>
-      <PageHeader title="Developer Documentation" />
+      <PageHeader title="Docs" />
       <p className="mt-2 text-sm text-zinc-500">
         Reference documentation for the Fitwell admin platform. These pages
         render directly from the spec files in the repository — the same

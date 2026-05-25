@@ -44,7 +44,7 @@ export const guides: Guide[] = [
         shot: "The dashboard with the left sidebar expanded.",
       },
       {
-        text: "Under Customers you'll find Consumers, B2B Companies, Invoices, and Orders. Under Products you'll find the Product List, Inventory, Purchase Orders, Production Summary, and Suppliers.",
+        text: "Under Customers you'll find Consumer List, B2B Brand List, B2B Orders, and Consumer Orders. Under Products you'll find the Product List, Purchase Orders, Production Summary, and Suppliers. (Incoming inventory now lives inside Production Summary.)",
         shot: "The Products group expanded in the sidebar.",
       },
     ],
@@ -64,7 +64,7 @@ export const guides: Guide[] = [
         shot: "The supplier dropdown showing the Add new supplier option.",
       },
       {
-        text: "Set the Issued date and (optionally) an ETA, a Company (the B2B buyer), and a Warehouse. Company can also be added inline with “Add new company”.",
+        text: "Set the Issued date and (optionally) an ETA, a Brand (the B2B buyer), and a Warehouse. A brand can also be added inline with “Add new brand”.",
       },
       {
         text: "Add line items: click the product field, then type to search, or narrow by Collection and the size/colour chips. Pick a product, set the quantity and unit cost.",
@@ -72,7 +72,7 @@ export const guides: Guide[] = [
         video: true,
       },
       {
-        text: "Add more lines with “Add line”. Each line can override the PO's company/warehouse. Review the total, then click “Create PO”.",
+        text: "Add more lines with “Add line”. Each line can override the PO's brand/warehouse. Review the total, then click “Create PO”.",
         shot: "A PO with two line items and the running total.",
       },
     ],
@@ -84,8 +84,8 @@ export const guides: Guide[] = [
     category: "Production",
     steps: [
       {
-        text: "Go to Products → Production Summary. The board shows every in-progress line item as a card, in columns for each stage (Supplier PO → … → Complete).",
-        shot: "The Production Summary board with cards across stage columns.",
+        text: "Go to Products → Production Summary, then use the toggle in the top-right to switch to Production Board. It shows every in-progress line item as a card, in columns for each stage (Supplier PO → … → Complete).",
+        shot: "The Production Board view with cards across stage columns.",
       },
       {
         text: "Drag a card to a different column to set its stage. If the PO is set to “advance together”, all its items move as one.",
@@ -93,12 +93,12 @@ export const guides: Guide[] = [
         video: true,
       },
       {
-        text: "Use the filters at the top (supplier, status, stage, size, colour) to focus the board and the timeline below it.",
+        text: "Use the filters above the board (supplier, status, stage, size, colour) to focus the Board and Timeline views.",
         shot: "The filter bar with a size and colour filter applied.",
       },
       {
-        text: "Below the board, the Production timeline shows each line item's actual stage history plus a projected finish (ETA) based on cycle-time estimates.",
-        shot: "The production timeline with coloured stage bars and ETA labels.",
+        text: "Switch the toggle to Production Timeline to see each line item's actual stage history plus a projected finish (ETA) based on cycle-time estimates.",
+        shot: "The Production Timeline view with coloured stage bars and ETA labels.",
       },
       {
         text: "To advance one PO precisely, open it from Purchase Orders → click the PO number, and use the Advance controls on its detail page.",
@@ -150,8 +150,8 @@ export const guides: Guide[] = [
     category: "Production",
     steps: [
       {
-        text: "Go to Products → Inventory. It lists, per SKU, how many units are in production (not yet received), broken down by stage, with the soonest projected ETA.",
-        shot: "The Incoming inventory table.",
+        text: "Go to Products → Production Summary — it opens on the Incoming Inventory view, which lists, per SKU, how many units are in production (not yet received), broken down by stage, with the soonest projected ETA.",
+        shot: "The Production Summary page on its Incoming Inventory view.",
       },
       {
         text: "The Product List page also shows an “Incoming” column per SKU, alongside units sold and revenue.",
@@ -189,7 +189,7 @@ export const guides: Guide[] = [
         shot: "The supplier login screen.",
       },
       {
-        text: "After signing in they see only their own purchase orders — no pricing, customers, or company info.",
+        text: "After signing in they see only their own purchase orders — no pricing, customers, or brand info.",
         shot: "The supplier portal PO list.",
       },
       {
@@ -200,43 +200,43 @@ export const guides: Guide[] = [
   },
   {
     slug: "companies",
-    title: "Set up B2B companies & price tiers",
-    summary: "Create companies and the discounts they get off retail.",
+    title: "Set up B2B brands & price tiers",
+    summary: "Create brands and the discounts they get off retail.",
     category: "B2B & invoicing",
     steps: [
       {
-        text: "Go to Customers → Companies. First, create a Price tier (a name + a % off retail) in the Price tiers card — e.g. “Wholesale — 30% off”.",
+        text: "Go to Customers → B2B Brand List. First, create a Price tier (a name + a % off retail) in the Price tiers card — e.g. “Wholesale — 30% off”.",
         shot: "The Price tiers card with a tier being added.",
       },
       {
-        text: "Click “Add company”. Enter the name, assign a price tier, and (optionally) link a Shopify customer by searching their name/email.",
-        shot: "The company form with the price-tier dropdown and customer search.",
+        text: "Click “Add brand”. Enter the name, assign a price tier, and (optionally) link a Shopify customer by searching their name/email.",
+        shot: "The brand form with the price-tier dropdown and customer search.",
       },
       {
-        text: "The price tier you assign drives the pricing on that company's invoices and in their B2B portal.",
+        text: "The price tier you assign drives the pricing on that brand's invoices and in their B2B portal.",
       },
     ],
   },
   {
     slug: "invoicing",
-    title: "Invoice a company & take payment",
+    title: "Invoice a brand & take payment",
     summary: "Create or generate an invoice, send it, and get paid.",
     category: "B2B & invoicing",
     steps: [
       {
-        text: "Go to Customers → Invoices → “New invoice”. Pick the company (the tier discount applies automatically), add line items with the product search, and Create.",
+        text: "Go to Customers → B2B Orders → “New order”. Pick the brand (the tier discount applies automatically), add line items with the product search, and Create. The B2B Orders list also shows each order's due date and a Production ETA (green if production finishes on time, red if late).",
         shot: "The new invoice form with line items and the discounted total.",
       },
       {
-        text: "Or generate one from production: open a PO and click “Create invoice”. It makes one invoice per bill-to company on the PO, priced at retail minus that company's tier.",
+        text: "Or generate one from production: open a PO and click “Create invoice”. It makes one invoice per bill-to brand on the PO, priced at retail minus that brand's tier.",
         shot: "The Create invoice button on a PO.",
       },
       {
-        text: "On the invoice, click “Send invoice”. It emails the company a branded invoice (with a Pay online button) and, when the company is linked to a Shopify customer, creates a Shopify payment link for Apple Pay / PayPal / card.",
-        shot: "The invoice detail with the Send + Pay online actions.",
+        text: "On the invoice, click “Print & Send” (top right). On the preview you can add a personal message, then Send — it emails the brand a branded invoice (with a Pay online button) and, when the brand is linked to a Shopify customer, creates a Shopify payment link for Apple Pay / PayPal / card.",
+        shot: "The Print & Send preview with the invoice document and message field.",
       },
       {
-        text: "Use Print for a printable invoice document (it includes the bank-wire details for ACH payers). Mark the invoice Paid / Void from the Status dropdown.",
+        text: "The same Print & Send screen prints a copy (the document includes the bank-wire details for ACH payers). Mark the invoice Paid / Void from the Status dropdown in the Actions card.",
         shot: "The printable invoice document.",
       },
       {
@@ -246,13 +246,13 @@ export const guides: Guide[] = [
   },
   {
     slug: "company-portal",
-    title: "Let a company order themselves",
+    title: "Let a brand order themselves",
     summary: "Invite a buyer to self-serve at their pricing.",
     category: "B2B & invoicing",
     steps: [
       {
-        text: "Go to Customers → Companies → Edit the company. In the “Portal logins” card, add the buyer's email.",
-        shot: "The Portal logins card on a company.",
+        text: "Go to Customers → B2B Brand List → Edit the brand. In the “Portal logins” card, add the buyer's email.",
+        shot: "The Portal logins card on a brand.",
       },
       {
         text: "The buyer signs in at /portal/login with a magic link, then browses the catalog at their tier price, builds a cart, and checks out.",
@@ -260,7 +260,7 @@ export const guides: Guide[] = [
         video: true,
       },
       {
-        text: "Checkout sends them to Shopify to pay (Apple Pay / PayPal / card) at their discount; the order also appears for you under Invoices. The buyer can see their own order history under Orders in the portal.",
+        text: "Checkout sends them to Shopify to pay (Apple Pay / PayPal / card) at their discount; the order also appears for you under B2B Orders. The buyer can see their own order history under Orders in the portal.",
         shot: "The portal Orders page with pay links.",
       },
     ],

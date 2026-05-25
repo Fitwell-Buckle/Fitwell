@@ -306,7 +306,7 @@ export default async function CampaignsPage({
 
   return (
     <div>
-      <PageHeader title="Campaigns & Traffic" />
+      <PageHeader title="Campaigns" />
 
       {/* ── Charts ───────────────────────────────────────────────── */}
       <Card className="mt-6">
