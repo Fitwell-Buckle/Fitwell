@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  GraduationCap,
   Rocket,
   Layers,
   Database,
@@ -17,6 +18,13 @@ export const metadata: Metadata = {
 };
 
 const sections = [
+  {
+    href: "/docs/guides",
+    title: "Guides",
+    description:
+      "Step-by-step how-tos for using the admin: purchase orders, production, inventory, invoicing, and the supplier & B2B portals.",
+    icon: GraduationCap,
+  },
   {
     href: "/docs/onboarding",
     title: "Getting Started",

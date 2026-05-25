@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
+  GraduationCap,
   Rocket,
   Layers,
   Database,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 const docsNavItems = [
   { href: "/docs", label: "Overview", icon: BookOpen, exact: true },
+  { href: "/docs/guides", label: "Guides", icon: GraduationCap },
   { href: "/docs/onboarding", label: "Getting Started", icon: Rocket },
   { href: "/docs/architecture", label: "Architecture", icon: Layers },
   { href: "/docs/schema", label: "Schema & Data Model", icon: Database },
