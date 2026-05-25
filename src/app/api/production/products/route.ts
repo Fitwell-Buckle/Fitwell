@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getShopifyClient } from "@/lib/shopify/client";
+import { getShopifyClient, toCents } from "@/lib/shopify/client";
 
 export interface CatalogVariant {
   shopifyProductId: string;
@@ -8,6 +8,8 @@ export interface CatalogVariant {
   sku: string;
   title: string;
   variantTitle: string | null;
+  /** Shopify retail price in cents (basis for B2B invoice pricing). */
+  priceCents: number;
 }
 
 // Flattened Shopify catalog (active products only) for the PO line-item picker.
@@ -38,6 +40,7 @@ export async function GET() {
             sku: v.sku ?? "",
             title: p.title,
             variantTitle: v.title && v.title !== "Default Title" ? v.title : null,
+            priceCents: toCents(v.price),
           });
         }
       }

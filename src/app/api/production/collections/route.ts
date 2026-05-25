@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getShopifyClient } from "@/lib/shopify/client";
+import { getShopifyClient, toCents } from "@/lib/shopify/client";
 import type { ShopifyProduct } from "@/types/shopify";
 import type { CatalogVariant } from "../products/route";
 
@@ -20,6 +20,7 @@ function variantsOf(p: ShopifyProduct): CatalogVariant[] {
     sku: v.sku ?? "",
     title: p.title,
     variantTitle: v.title && v.title !== "Default Title" ? v.title : null,
+    priceCents: toCents(v.price),
   }));
 }
 

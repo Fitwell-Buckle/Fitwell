@@ -98,8 +98,8 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | PATCH | `/api/production/companies/[id]` | Update a company |
 | POST | `/api/production/price-tiers` | Create a price tier (% off retail) |
 | PATCH | `/api/production/price-tiers/[id]` | Update a price tier |
-| GET | `/api/production/collections` | Shopify catalog grouped by collection (+ Uncategorized) for the cascading PO picker |
-| GET | `/api/production/products` | Flattened active Shopify catalog (variants) — fallback picker source |
+| GET | `/api/production/collections` | Shopify catalog grouped by collection (+ Uncategorized). (Legacy — the picker now uses the flat searchable chooser below.) |
+| GET | `/api/production/products` | Flattened active Shopify catalog (variants + `priceCents`). Source for the shared searchable product chooser (`ProductCombobox` / `useCatalog`) used by the PO form, invoice form, and future inventory page |
 | POST | `/api/production/po` | Create a PO + line items (PO number auto-assigned from a sequence, "00100"+) |
 | PATCH | `/api/production/po/[id]` | Update PO fields (status, lock, dates, notes) |
 | PUT | `/api/production/po/[id]` | Full edit — header + reconcile line items (add/update/remove) |

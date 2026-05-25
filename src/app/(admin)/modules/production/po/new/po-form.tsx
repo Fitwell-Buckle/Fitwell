@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { CatalogVariant } from "@/app/api/production/products/route";
-import type { CatalogGroup } from "@/app/api/production/collections/route";
 import type { ShopifyRef, ShopifyRefs } from "@/app/api/production/shopify-refs/route";
-import { fmtMoney, skuSize } from "@/lib/production/display";
+import { fmtMoney } from "@/lib/production/display";
+import { ProductCombobox } from "@/components/catalog/product-combobox";
+import { useCatalog } from "@/components/catalog/use-catalog";
 
 export interface CompanyOption {
   id: string;
@@ -46,7 +46,6 @@ export interface PoFormInitial {
 
 interface LineItemRow {
   id?: string; // present = existing line (edit); absent = new line
-  collectionKey: string;
   variantKey: string;
   shopifyProductId: string;
   sku: string;
@@ -60,7 +59,6 @@ interface LineItemRow {
 
 function emptyRow(): LineItemRow {
   return {
-    collectionKey: "",
     variantKey: "",
     shopifyProductId: "",
     sku: "",
@@ -76,7 +74,6 @@ function emptyRow(): LineItemRow {
 function toRow(line: EditableLine): LineItemRow {
   return {
     id: line.id,
-    collectionKey: "",
     variantKey: line.shopifyVariantId ?? "",
     shopifyProductId: line.shopifyProductId ?? "",
     sku: line.sku,
@@ -89,26 +86,11 @@ function toRow(line: EditableLine): LineItemRow {
   };
 }
 
-type Mode = "loading" | "grouped" | "flat" | "manual";
-
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
 const inputBase =
   "flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
-const selectBase =
-  "flex h-10 rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 const selectSm =
   "h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
-
-function variantLabel(v: CatalogVariant): string {
-  const name = v.variantTitle ? `${v.title} — ${v.variantTitle}` : v.title;
-  return v.sku ? `${v.sku} · ${name}` : name;
-}
-
-function sortBySize(variants: CatalogVariant[]): CatalogVariant[] {
-  return [...variants].sort(
-    (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
-  );
-}
 
 /** Warehouse picker (Shopify location); keeps a stored value visible if the
  *  list couldn't load (missing scope). */
@@ -198,69 +180,10 @@ export function PoForm({
     };
   }, []);
 
-  const [groups, setGroups] = useState<CatalogGroup[] | null>(null);
-  const [flat, setFlat] = useState<CatalogVariant[] | null>(null);
-  const [catalogError, setCatalogError] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/production/collections");
-        const data = await res.json();
-        if (!active) return;
-        if (res.ok && Array.isArray(data.data) && data.data.length > 0) {
-          const loaded = data.data as CatalogGroup[];
-          setGroups(loaded);
-          const allProducts = loaded.find(
-            (g) => g.title.trim().toLowerCase() === "all products",
-          );
-          setRows((rs) =>
-            rs.map((r) => {
-              if (r.collectionKey) return r;
-              if (r.variantKey) {
-                const g = loaded.find((grp) =>
-                  grp.variants.some((v) => v.shopifyVariantId === r.variantKey),
-                );
-                if (g) return { ...r, collectionKey: g.id };
-              }
-              return allProducts ? { ...r, collectionKey: allProducts.id } : r;
-            }),
-          );
-          return;
-        }
-      } catch {
-        /* fall through */
-      }
-      try {
-        const res = await fetch("/api/production/products");
-        const data = await res.json();
-        if (!active) return;
-        if (res.ok && Array.isArray(data.data) && data.data.length > 0) {
-          setFlat(data.data as CatalogVariant[]);
-          return;
-        }
-        setCatalogError(true);
-      } catch {
-        if (active) setCatalogError(true);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const mode: Mode =
-    groups && groups.length > 0
-      ? "grouped"
-      : flat && flat.length > 0
-        ? "flat"
-        : catalogError
-          ? "manual"
-          : "loading";
-
-  const groupById = new Map((groups ?? []).map((g) => [g.id, g]));
-  const flatByKey = new Map((flat ?? []).map((v) => [v.shopifyVariantId, v]));
+  // Shared catalog for the searchable product chooser (same component used on
+  // the invoice form). On error we fall back to manual SKU/title entry.
+  const { variants, loading: catalogLoading, error: catalogError } = useCatalog();
+  const variantByKey = new Map(variants.map((v) => [v.shopifyVariantId, v]));
   const locations = refs?.locations ?? [];
   const selectedCompany = companies.find((c) => c.id === companyId);
 
@@ -276,10 +199,7 @@ export function PoForm({
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
   function addRow() {
-    setRows((rs) => {
-      const collectionKey = rs[rs.length - 1]?.collectionKey ?? "";
-      return [...rs, { ...emptyRow(), collectionKey }];
-    });
+    setRows((rs) => [...rs, emptyRow()]);
   }
   function removeRow(i: number) {
     setRows((rs) => (rs.length === 1 ? rs : rs.filter((_, idx) => idx !== i)));
@@ -297,13 +217,8 @@ export function PoForm({
       let shopifyProductId: string | null = r.shopifyProductId || null;
       let shopifyVariantId: string | null = r.variantKey || null;
 
-      if (mode === "grouped" || mode === "flat") {
-        const v =
-          mode === "grouped"
-            ? groupById
-                .get(r.collectionKey)
-                ?.variants.find((x) => x.shopifyVariantId === r.variantKey)
-            : flatByKey.get(r.variantKey);
+      if (!catalogError) {
+        const v = variantByKey.get(r.variantKey);
         if (v) {
           sku = v.sku;
           title = v.title + (v.variantTitle ? ` — ${v.variantTitle}` : "");
@@ -494,10 +409,10 @@ export function PoForm({
           </Button>
         </div>
 
-        {mode === "loading" && (
+        {catalogLoading && (
           <p className="mt-3 text-xs text-zinc-400">Loading Shopify catalog…</p>
         )}
-        {mode === "manual" && (
+        {catalogError && (
           <p className="mt-3 text-xs text-amber-600">
             Couldn’t load the Shopify catalog — enter SKU and title manually.
           </p>
@@ -512,8 +427,6 @@ export function PoForm({
 
         <div className="mt-2 space-y-4">
           {rows.map((r, i) => {
-            const selectedGroup =
-              mode === "grouped" ? groupById.get(r.collectionKey) : undefined;
             const taken = new Set(
               rows.filter((_, j) => j !== i).map((x) => x.variantKey).filter(Boolean),
             );
@@ -525,56 +438,7 @@ export function PoForm({
             return (
               <div key={r.id ?? `new-${i}`} className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  {mode === "grouped" ? (
-                    <>
-                      <select
-                        className={`${selectBase} min-w-[150px] flex-1`}
-                        value={r.collectionKey}
-                        onChange={(e) =>
-                          updateRow(i, { collectionKey: e.target.value, variantKey: "" })
-                        }
-                      >
-                        <option value="">Collection…</option>
-                        {groups!.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.title}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className={`${selectBase} min-w-[200px] flex-[2]`}
-                        value={r.variantKey}
-                        disabled={!selectedGroup}
-                        onChange={(e) => updateRow(i, { variantKey: e.target.value })}
-                      >
-                        <option value="">
-                          {selectedGroup ? "Product…" : "Pick a collection first"}
-                        </option>
-                        {sortBySize(selectedGroup?.variants ?? [])
-                          .filter((v) => !taken.has(v.shopifyVariantId))
-                          .map((v) => (
-                            <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
-                              {variantLabel(v)}
-                            </option>
-                          ))}
-                      </select>
-                    </>
-                  ) : mode === "flat" ? (
-                    <select
-                      className={`${selectBase} min-w-[220px] flex-1`}
-                      value={r.variantKey}
-                      onChange={(e) => updateRow(i, { variantKey: e.target.value })}
-                    >
-                      <option value="">Select a product…</option>
-                      {sortBySize(flat!)
-                        .filter((v) => !taken.has(v.shopifyVariantId))
-                        .map((v) => (
-                          <option key={v.shopifyVariantId} value={v.shopifyVariantId}>
-                            {variantLabel(v)}
-                          </option>
-                        ))}
-                    </select>
-                  ) : (
+                  {catalogError ? (
                     <>
                       <Input
                         className="w-32"
@@ -589,6 +453,22 @@ export function PoForm({
                         onChange={(e) => updateRow(i, { title: e.target.value })}
                       />
                     </>
+                  ) : (
+                    <ProductCombobox
+                      variants={variants}
+                      value={r.variantKey}
+                      exclude={taken}
+                      disabled={catalogLoading}
+                      placeholder={catalogLoading ? "Loading catalog…" : "Search products…"}
+                      onSelect={(v) =>
+                        updateRow(i, {
+                          variantKey: v.shopifyVariantId,
+                          shopifyProductId: v.shopifyProductId,
+                          sku: v.sku,
+                          title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
+                        })
+                      }
+                    />
                   )}
                   <Input
                     className="w-20"

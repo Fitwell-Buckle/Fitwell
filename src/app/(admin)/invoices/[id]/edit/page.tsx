@@ -36,6 +36,8 @@ export default async function EditInvoicePage({
       title: l.title,
       quantity: l.quantity,
       unitPriceCents: l.unitPriceCents,
+      shopifyProductId: l.shopifyProductId,
+      shopifyVariantId: l.shopifyVariantId,
     })),
   };
 

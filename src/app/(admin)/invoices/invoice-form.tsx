@@ -9,6 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fmtMoney } from "@/lib/production/display";
 import { computeInvoiceTotals } from "@/lib/invoicing/invoicing";
+import { ProductCombobox } from "@/components/catalog/product-combobox";
+import { useCatalog } from "@/components/catalog/use-catalog";
 
 export interface InvoiceCompanyOption {
   id: string;
@@ -24,10 +26,20 @@ export interface InvoiceFormInitial {
   issuedDate: string;
   dueDate: string;
   notes: string;
-  lineItems: { id: string; sku: string; title: string; quantity: number; unitPriceCents: number }[];
+  lineItems: {
+    id: string;
+    sku: string;
+    title: string;
+    quantity: number;
+    unitPriceCents: number;
+    shopifyProductId: string | null;
+    shopifyVariantId: string | null;
+  }[];
 }
 
 interface Row {
+  variantKey: string;
+  shopifyProductId: string;
   sku: string;
   title: string;
   quantity: string;
@@ -37,7 +49,7 @@ interface Row {
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
 
 function emptyRow(): Row {
-  return { sku: "", title: "", quantity: "1", unitPrice: "" };
+  return { variantKey: "", shopifyProductId: "", sku: "", title: "", quantity: "1", unitPrice: "" };
 }
 
 export function InvoiceForm({
@@ -61,6 +73,8 @@ export function InvoiceForm({
   const [rows, setRows] = useState<Row[]>(
     initial
       ? initial.lineItems.map((l) => ({
+          variantKey: l.shopifyVariantId ?? "",
+          shopifyProductId: l.shopifyProductId ?? "",
           sku: l.sku,
           title: l.title,
           quantity: String(l.quantity),
@@ -70,6 +84,10 @@ export function InvoiceForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Shared searchable product chooser (same component as the PO form).
+  const { variants, loading: catalogLoading, error: catalogError } = useCatalog();
+  const variantByKey = new Map(variants.map((v) => [v.shopifyVariantId, v]));
 
   // Effective tier discount (immutable company on edit).
   const discount = isEdit
@@ -101,9 +119,23 @@ export function InvoiceForm({
 
     const lineItems = [];
     for (const [i, r] of rows.entries()) {
-      const sku = r.sku.trim();
-      const title = r.title.trim();
-      if (!sku || !title) return setError(`Line ${i + 1}: SKU and title are required.`);
+      let sku = r.sku.trim();
+      let title = r.title.trim();
+      let shopifyProductId: string | null = r.shopifyProductId || null;
+      let shopifyVariantId: string | null = r.variantKey || null;
+      if (!catalogError) {
+        const v = variantByKey.get(r.variantKey);
+        if (v) {
+          sku = v.sku;
+          title = v.title + (v.variantTitle ? ` — ${v.variantTitle}` : "");
+          shopifyProductId = v.shopifyProductId;
+          shopifyVariantId = v.shopifyVariantId;
+        } else if (!sku) {
+          return setError(`Line ${i + 1}: pick a product.`);
+        }
+      } else if (!sku || !title) {
+        return setError(`Line ${i + 1}: SKU and title are required.`);
+      }
       const quantity = Number(r.quantity);
       if (!Number.isInteger(quantity) || quantity <= 0) {
         return setError(`Line ${i + 1}: quantity must be a positive whole number.`);
@@ -112,7 +144,7 @@ export function InvoiceForm({
       if (!Number.isFinite(unitPriceCents) || unitPriceCents < 0) {
         return setError(`Line ${i + 1}: unit price must be a non-negative amount.`);
       }
-      lineItems.push({ sku, title, quantity, unitPriceCents });
+      lineItems.push({ sku, title, quantity, unitPriceCents, shopifyProductId, shopifyVariantId });
     }
 
     setSubmitting(true);
@@ -206,51 +238,83 @@ export function InvoiceForm({
           </Button>
         </div>
 
+        {catalogError && (
+          <p className="mt-3 text-xs text-amber-600">
+            Couldn’t load the Shopify catalog — enter SKU and title manually.
+          </p>
+        )}
+
         <div className="mt-4 space-y-2">
-          {rows.map((r, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2">
-              <Input
-                className="w-32"
-                placeholder="SKU"
-                value={r.sku}
-                onChange={(e) => updateRow(i, { sku: e.target.value })}
-              />
-              <Input
-                className="w-auto min-w-[180px] flex-1"
-                placeholder="Title"
-                value={r.title}
-                onChange={(e) => updateRow(i, { title: e.target.value })}
-              />
-              <Input
-                className="w-20"
-                type="number"
-                min="1"
-                placeholder="Qty"
-                value={r.quantity}
-                onChange={(e) => updateRow(i, { quantity: e.target.value })}
-              />
-              <Input
-                className="w-28"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Unit $ (retail)"
-                value={r.unitPrice}
-                onChange={(e) => updateRow(i, { unitPrice: e.target.value })}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => removeRow(i)}
-                disabled={rows.length === 1}
-                aria-label="Remove line"
-                className="shrink-0"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
+          {rows.map((r, i) => {
+            const taken = new Set(
+              rows.filter((_, j) => j !== i).map((x) => x.variantKey).filter(Boolean),
+            );
+            return (
+              <div key={i} className="flex flex-wrap items-center gap-2">
+                {catalogError ? (
+                  <>
+                    <Input
+                      className="w-32"
+                      placeholder="SKU"
+                      value={r.sku}
+                      onChange={(e) => updateRow(i, { sku: e.target.value })}
+                    />
+                    <Input
+                      className="w-auto min-w-[180px] flex-1"
+                      placeholder="Title"
+                      value={r.title}
+                      onChange={(e) => updateRow(i, { title: e.target.value })}
+                    />
+                  </>
+                ) : (
+                  <ProductCombobox
+                    variants={variants}
+                    value={r.variantKey}
+                    exclude={taken}
+                    disabled={catalogLoading}
+                    placeholder={catalogLoading ? "Loading catalog…" : "Search products…"}
+                    onSelect={(v) =>
+                      updateRow(i, {
+                        variantKey: v.shopifyVariantId,
+                        shopifyProductId: v.shopifyProductId,
+                        sku: v.sku,
+                        title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
+                        unitPrice: (v.priceCents / 100).toString(),
+                      })
+                    }
+                  />
+                )}
+                <Input
+                  className="w-20"
+                  type="number"
+                  min="1"
+                  placeholder="Qty"
+                  value={r.quantity}
+                  onChange={(e) => updateRow(i, { quantity: e.target.value })}
+                />
+                <Input
+                  className="w-28"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Unit $ (retail)"
+                  value={r.unitPrice}
+                  onChange={(e) => updateRow(i, { unitPrice: e.target.value })}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeRow(i)}
+                  disabled={rows.length === 1}
+                  aria-label="Remove line"
+                  className="shrink-0"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            );
+          })}
         </div>
 
         <div className="mt-4 space-y-1 border-t border-zinc-100 pt-3 text-sm">
