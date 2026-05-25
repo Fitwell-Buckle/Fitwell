@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
-import { companySchema } from "../route";
+import { companySchema } from "../_schema";
 
 export async function PATCH(
   req: Request,

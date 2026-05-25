@@ -3,11 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { priceTier } from "@/lib/schema";
-
-export const priceTierSchema = z.object({
-  name: z.string().min(1).max(200),
-  discountPercent: z.number().min(0).max(100),
-});
+import { priceTierSchema } from "./_schema";
 
 export async function POST(req: Request) {
   const session = await auth();
