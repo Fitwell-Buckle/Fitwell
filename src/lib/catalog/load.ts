@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { getShopifyClient, toCents } from "@/lib/shopify/client";
+import { skuSize } from "@/lib/production/display";
 import { deriveAttrs } from "./attrs";
 
 export interface CatalogVariant {
@@ -61,3 +62,28 @@ export async function loadCatalog(): Promise<CatalogVariant[]> {
 export const getCatalogCached = unstable_cache(loadCatalog, ["production-catalog"], {
   revalidate: 3600,
 });
+
+export interface LineAttrInput {
+  sku: string;
+  shopifyVariantId: string | null;
+}
+
+/**
+ * Resolve a stored production/invoice line's size + colour from the catalog (by
+ * variant id), falling back to the SKU's trailing digits for size. Shared by
+ * the Purchase Orders and Production Summary filters so they stay in sync.
+ */
+export function makeLineAttrs(catalog: CatalogVariant[]) {
+  const byVariant = new Map(
+    catalog.map((v) => [v.shopifyVariantId, { sizeMm: v.sizeMm, color: v.color }]),
+  );
+  const sizeOf = (li: LineAttrInput): number | null => {
+    const a = li.shopifyVariantId ? byVariant.get(li.shopifyVariantId) : null;
+    if (a?.sizeMm != null) return a.sizeMm;
+    const s = skuSize(li.sku);
+    return s === 999999 ? null : s;
+  };
+  const colorOf = (li: LineAttrInput): string | null =>
+    (li.shopifyVariantId ? byVariant.get(li.shopifyVariantId)?.color : null) ?? null;
+  return { sizeOf, colorOf };
+}

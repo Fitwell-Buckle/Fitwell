@@ -23,9 +23,8 @@ import {
   statusBadgeClass,
   stageBadgeClass,
   fmtDate,
-  skuSize,
 } from "@/lib/production/display";
-import { getCatalogCached, type CatalogVariant } from "@/lib/catalog/load";
+import { getCatalogCached, makeLineAttrs, type CatalogVariant } from "@/lib/catalog/load";
 import { cn } from "@/lib/utils";
 import { ProductionFilters } from "./production-filters";
 
@@ -85,18 +84,7 @@ export default async function ProductionPage({
   } catch {
     /* size falls back to the SKU; colour is unavailable without the catalog */
   }
-  const attrsByVariant = new Map(
-    catalog.map((v) => [v.shopifyVariantId, { sizeMm: v.sizeMm, color: v.color }]),
-  );
-  type LineLike = { sku: string; shopifyVariantId: string | null };
-  const lineSize = (li: LineLike): number | null => {
-    const a = li.shopifyVariantId ? attrsByVariant.get(li.shopifyVariantId) : null;
-    if (a?.sizeMm != null) return a.sizeMm;
-    const s = skuSize(li.sku);
-    return s === 999999 ? null : s;
-  };
-  const lineColor = (li: LineLike): string | null =>
-    (li.shopifyVariantId ? attrsByVariant.get(li.shopifyVariantId)?.color : null) ?? null;
+  const { sizeOf: lineSize, colorOf: lineColor } = makeLineAttrs(catalog);
 
   // Filter options from the line items currently in view.
   const allLines = pos.flatMap((po) => po.lineItems);

@@ -1,11 +1,7 @@
 import Link from "next/link";
-import { asc, desc, inArray } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { productionPo, productionStageEvent } from "@/lib/schema";
 import { Card } from "@/components/ui/card";
 import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
 import { STAGE_BAR, fmtDate, skuSize } from "@/lib/production/display";
-import { getStageEstimates } from "@/lib/production/cycle-time-data";
 import { projectEta } from "@/lib/production/cycle-time";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -19,26 +15,36 @@ interface Segment {
   projected: boolean;
 }
 
+export interface TimelinePo {
+  id: string;
+  shopifyPoNumber: string;
+  supplier: { name: string } | null;
+  lineItems: {
+    id: string;
+    sku: string;
+    title: string;
+    currentStage: ProductionStage;
+    stageEvents: {
+      id: string;
+      stage: ProductionStage;
+      enteredAt: Date;
+      exitedAt: Date | null;
+    }[];
+  }[];
+}
+
 /**
  * Per-line-item production Gantt: solid segments from actual stage history plus
- * a faded segment projected to ETA. A self-contained async server component so
- * it can be embedded below the board on the POs and Production page.
+ * a faded segment projected to ETA. Data (the filtered POs + cycle-time
+ * estimates) is supplied by the Production Summary page.
  */
-export async function ProductionTimeline() {
-  const [estimates, pos] = await Promise.all([
-    getStageEstimates(),
-    db.query.productionPo.findMany({
-      where: inArray(productionPo.status, ["active", "on_hold"]),
-      orderBy: desc(productionPo.createdAt),
-      with: {
-        supplier: { columns: { name: true } },
-        lineItems: {
-          with: { stageEvents: { orderBy: asc(productionStageEvent.enteredAt) } },
-        },
-      },
-    }),
-  ]);
-
+export function ProductionTimeline({
+  pos,
+  estimates,
+}: {
+  pos: TimelinePo[];
+  estimates: Record<ProductionStage, number>;
+}) {
   const todayIso = isoDay(new Date());
   const todayMs = utcMidnight(todayIso);
 
