@@ -5,7 +5,12 @@
 
 ## Context
 
-CVR is climbing, AOV is falling, repeat rate is half what it should be. We're acquiring trial buyers, not collectors. This campaign is designed to convert trial buyers into collectors from the first touch — by reshaping the offer, the destination pages, and the email follow-up before adding more ad spend on top.
+Two problems, not one:
+
+1. **Volume.** We're acquiring 5–8 customers/day. We need 30–40 to hit the business plan. That's a 4–6× lift in raw acquisition — not something offer-stack work alone can deliver. Top-of-funnel volume has to grow through cold paid acquisition, organic creator reach, and SEO-relevant landing pages.
+2. **Quality.** Of those we do acquire, too many are trial buyers and not enough become collectors — CVR is climbing, AOV is falling, repeat rate is half what it should be.
+
+This campaign attacks both. The offer stack, landing page variants, and email segmentation push trial buyers into collectors (quality). The creator pipeline + paid acquisition + new landing pages push the funnel wider (volume). Either lever alone is insufficient.
 
 **Roles:**
 - **Tom** — marketing (strategy, creative, channels, brand)
@@ -24,11 +29,12 @@ Every page, ad, email, and offer ladders to this. First purchase is the entry po
 These are the things to settle in the room. Everything downstream depends on them.
 
 1. **Anchor framing.** Recommendation: "$300–500 to swap your bracelet vs. $40 to keep the strap you love." (Reframes against the *cost of bracelet replacement*, not against a hypothetical $300 deployant clasp that doesn't really exist on the market. The cheapest aftermarket micro-adjust deployants are ~$85; the "$300–500" anchor only holds for premium aftermarket bracelet upgrades, which is what we should name explicitly in copy.)
-2. **Budget split at launch.** Recommendation: 70% retargeting / 30% awareness for the first 30 days, flip the ratio after retargeting ROAS is established. (The original 40/40/20 split spends on cold traffic before retargeting creative is proven.)
+2. **Budget split at launch.** Given the volume goal (5–8/day → 30–40/day), retargeting can't dominate — at current site visitor volume, the retargeting pool is too small to absorb a 70% share without saturation. The earlier "70% retargeting / 30% awareness" recommendation only fits if quality were the only goal. With volume on the table too, the split needs to weight cold acquisition. Updated recommendation: **50% awareness / 30% retargeting / 20% consideration** at launch. Retargeting still ships first (cheapest creative validation), but its share grows as the visitor pool grows, not the other way around.
 3. **Landing page variants — pick 2 of 3** (see "Landing page architecture" below). Existing landing page stays as the control.
 4. **One artifact or two?** This doc currently bundles marketing strategy + engineering scope. Greg's call whether to keep it as one work plan in `specs/work-plans/todo/` or split into a marketing plan + a separate `shopify-content-publishing` engineering work plan.
 5. **Klaviyo + Google Ads — light or heavy automation?** Greg's call (see "Engineering scope" below).
 6. **Collector's Promise loyalty app.** Recommendation: **cut**. Adds a vendor (~$50–200/mo), an attribution surface the admin pipeline doesn't ingest, and complexity. In-box card already covers the "reason to come back" job.
+7. **Creator program sequencing.** The campaign depends on the creator pipeline being usable in week 3–4 (UGC for retargeting creative, organic top-of-funnel reach, per-creator attribution). The detailed build is in `specs/work-plans/todo/creator-management-system.md` (6 phases). Greg's call: **compress** Phases 1+2+4 of that plan into ~3 weeks to unblock this campaign, or **run on existing cadence** and let the campaign use manual creator tracking (spreadsheets) until the system catches up.
 
 ---
 
@@ -134,7 +140,56 @@ Three destinations live in this campaign:
 
 ---
 
-## Phase 3 — Content sprint (2–3 shooting sessions, solo, ~5 hours total)
+## Phase 3 — Creator program (parallel to Phases 1–2)
+
+Creators are a major top-of-funnel + UGC channel for this campaign. The infrastructure for managing them is its own engineering work plan: see [`specs/work-plans/todo/creator-management-system.md`](./creator-management-system.md). That plan covers schema, outreach pipeline, sample shipment tracking, per-creator discount codes, post detection, asset capture, and stats refresh.
+
+This campaign needs the creator program for three things:
+
+1. **UGC at scale** for ad creative rotation (especially Meta retargeting) — Tom's solo shoots are foundational; creator deliverables are the volume layer. The campaign cannot rely on Tom-only content beyond the first 4 weeks.
+2. **Top-of-funnel awareness** via creator-posted organic content — independent of paid Meta. Doesn't require buying impressions.
+3. **Per-creator attribution** via Shopify discount codes — closes the loop from creator post → site visit → order, in the same attribution surface as landing page variants and paid channels.
+
+### What this campaign needs from the creator work plan
+
+| Creator work plan phase | Required for this campaign? | When |
+|---|---|---|
+| Phase 1 — Schema & data import (735-creator CSV → DB) | **Required** | Week 1 |
+| Phase 2 — Admin UI read views | **Required** | Week 2 |
+| Phase 3 — Outreach pipeline (status, followups, burned list) | Helpful, not blocking | Week 4+ |
+| Phase 4 — Shopify sample integration + discount code generation | **Required** for attribution | Week 3 |
+| Phase 5 — Post detection (YT polling + IG via Apify) | **Required** for measurement | Week 4 |
+| Phase 6 — Asset capture, stats refresh, polish | Helpful, not blocking | Month 2+ |
+
+If Decision #7 = compress, these required phases ship in 3 weeks. If Decision #7 = existing cadence, the campaign uses manual creator tracking (the existing CSV in a spreadsheet) for the first 6–8 weeks.
+
+### Campaign-side outreach plan (Tom-driven, regardless of Decision #7)
+
+- **Wave 1 (week 1):** top 50 creators by cross_platform_fit_score, prioritizing IG+YT multi-platform (104 candidates in the existing dataset)
+- **Sample bundle:** product + auto-generated 15% discount code (single-use-per-customer) + in-box card
+- **Brief:** "Fix the fit on the watch you've been talking about." One piece of content (Reel/Short or feed post). Fitwell handle in mention + code in caption. **Rights tier: paid_30d** so we can repurpose in Meta retargeting.
+- **Cadence:** 10 outreach DMs/emails per week, Tom-managed (the system logs responses; sends from Tom's accounts in v1)
+- **Burn rule** from the underlying work plan applies (12-month exclusion after ghost or decline)
+- **First UGC expected by week 3**, ready for retargeting creative rotation by week 4
+
+### Creator program → ads loop
+
+- Detected creator posts feed `creator_post` table
+- Posts with `rights_tier ∈ (paid_30d, paid_90d, perpetual)` become eligible Meta retargeting assets
+- Per-creator discount codes attribute revenue back through `discount_code.attributed_revenue_cents` (no UTM dependency — direct attribution surface)
+- Top-performing creators by attributed revenue → larger samples + extended rights renegotiation
+
+### Out-of-scope for this campaign (handled by the creator work plan if/when shipped)
+
+- AI-generated outreach copy (manual Tom-written DMs in v1)
+- Sending DMs/emails from inside the app (log responses only in v1)
+- Asset rights enforcement beyond display warnings
+- TikTok auto-detection (manual entry only in v1)
+- Carrier delivery confirmation (manual "mark delivered" toggle)
+
+---
+
+## Phase 4 — Content sprint (2–3 shooting sessions, solo, ~5 hours total)
 
 ### Session 1: Problem + Mechanism (2 hours, solo)
 Phone on tripod, macro, window light, clean surface.
@@ -166,7 +221,7 @@ Clean background, eye level.
 
 ---
 
-## Phase 4 — Klaviyo flows (~1 week, light automation)
+## Phase 5 — Klaviyo flows (~1 week, light automation)
 
 Klaviyo is live. Two flows already exist; the work below is 2 rewrites + 3 new flows.
 
@@ -199,9 +254,9 @@ Klaviyo is live. Two flows already exist; the work below is 2 rewrites + 3 new f
 
 ---
 
-## Phase 5 — Meta + Google campaign architecture (Month 1–2)
+## Phase 6 — Meta + Google campaign architecture (Month 1–2)
 
-Meta token and Google Ads API access are both approved as of this meeting. Phase 5 can launch alongside Phase 1, not after.
+Meta token and Google Ads API access are both approved as of this meeting. Phase 6 can launch alongside Phase 1, not after.
 
 > **Greg to update `specs/ops/PRIORITIES.md`** — both items still show as pending under "Analytics Extraction Pipeline." Mark Meta token approved and Google Ads API approved when you take ownership of this plan.
 
@@ -210,8 +265,9 @@ Meta token and Google Ads API access are both approved as of this meeting. Phase
 **Retargeting (70% of Meta budget at launch)**
 - Audience: site visitors 30 days, video viewers 50%+, page engagers. Suppress existing customers.
 - Objective: Conversions.
-- Creative rotation: guarantee ad, bundle offer, size finder CTA for product-page visitors, UGC repurposed.
+- Creative rotation: guarantee ad, bundle offer, size finder CTA for product-page visitors, **creator UGC** (rights_tier ∈ paid_30d/paid_90d/perpetual — sourced from Phase 3).
 - KPI: 3:1+ ROAS.
+- **Creative volume strategy:** Tom's solo shoots seed the first 2 weeks. Creator UGC takes over as primary volume from week 4 onward — without it, retargeting will hit creative fatigue inside 30 days.
 
 **Awareness (30% of Meta budget at launch)**
 - Audience: broad interest — watches, luxury accessories, EDC, whiskey, cars, high-end leather. 30–50, HHI $100K+, US.
@@ -245,6 +301,15 @@ Marketing depends on this work landing. Some of it is mandatory; some is Greg's 
 2. **Shopify Pages write client.** Admin API GraphQL client that creates and updates Shopify Pages from this repo. Idempotent on a `repo_page_id` metafield, draft vs. published state, dry-run mode, no destructive writes. Lets Claude Code author and version landing pages here, push to Shopify on merge.
 3. **Admin dashboard cohort comparison view.** New view (or extension to Campaigns page) that compares variant cohorts side-by-side on the metrics that matter (CVR, AOV, 30-day repeat, 90-day LTV). Closes the loop from publication → traffic → conversion → repeat purchase.
 
+### Referenced work plan — creator-management-system.md
+
+The creator program (Phase 3) depends on a separate engineering work plan: `specs/work-plans/todo/creator-management-system.md`. For this campaign, Phases 1+2+4+5 of that plan are required (schema + import + read views + Shopify samples + discount codes + post detection). See Decision #7 for whether Greg compresses that work or runs it on the existing cadence.
+
+**Greg-decision dependencies from the creator work plan that this campaign forces a decision on:**
+- Shopify Admin **write** scope (currently read-only) — required for auto-generating per-creator discount codes
+- Apify account for IG stats refresh + post polling (~$1–2/month at expected volume)
+- YouTube API key rotation (current key exposed in research transcripts)
+
 ### Greg's call — Decision #5
 
 **Light (recommended for v1):** Claude Code drafts Klaviyo flow JSON, email copy, Google Ads RSAs, keyword/audience definitions. Tom or Greg pastes into the platform UIs. Ships fast (~2–3 weeks total for the whole campaign). Future automation is additive.
@@ -262,13 +327,18 @@ Marketing depends on this work landing. Some of it is mandatory; some is Greg's 
 | Meta retargeting ROAS | Weekly | 3:1+ | Tom |
 | Meta awareness CPM | Weekly | Under $12 | Tom |
 | Blended ROAS | Monthly | 2.5:1+ moving to 3:1 | Tom |
-| Site sessions | Weekly | 20K/month by month 2 | Tom |
+| Site sessions | Weekly | 45K+/month by month 3 (to support 30–40 orders/day at 2%+ CVR) | Tom |
 | Email list growth | Weekly | +300/month | Tom |
 | CVR (by landing page variant) | Weekly | 2%+ by month 2 | Tom |
 | AOV (by landing page variant) | Monthly | Back to $75+ | Tom |
 | 30-day repeat rate (by acquisition variant) | Monthly | 30%+ by month 3 | Tom |
 | 90-day LTV (by acquisition variant) | Monthly | Baseline → grow | Tom |
-| Daily orders | Weekly | 15–20 by month 3 | Tom |
+| **Daily orders** | Weekly | **5–8 (baseline) → 30–40 by month 3** | Tom |
+| **Daily new customers** | Weekly | Same trajectory as above | Tom |
+| Creator outreach sent | Weekly | 10/week sustained | Tom |
+| Creator posts detected | Weekly | 5+/week by week 4 | Tom |
+| Creator-attributed revenue | Monthly | Establish baseline → grow | Tom |
+| Code redemption rate (per creator) | Monthly | Target 5%+ of post reach | Tom |
 | Shopify Pages publishing health | Continuous | 0 failed writes | Greg |
 | UTM capture coverage | Weekly | >98% of orders | Greg |
 
@@ -285,6 +355,8 @@ Marketing depends on this work landing. Some of it is mandatory; some is Greg's 
 - [ ] In-box card designed, ordered from Moo.com (Tom)
 - [ ] Engineering Phase 1 kickoff: UTM/attribution + Shopify Pages write client (Greg + Claude Code)
 - [ ] Welcome + abandoned cart rewrites drafted (Claude Code) — paste pending light/heavy decision
+- [ ] **Creator: Phase 1 schema + 735-creator CSV import (Greg + Claude Code, if Decision #7 = compress)**
+- [ ] **Creator: Wave 1 outreach drafted — top 50 creators by fit_score (Tom + Claude Code)**
 
 ### Week 2
 - [ ] Content session 1: problem + mechanism + compatibility + large wrist (Tom)
@@ -292,19 +364,26 @@ Marketing depends on this work landing. Some of it is mandatory; some is Greg's 
 - [ ] Landing page variants A + B (or whichever 2 selected) published as drafts
 - [ ] Klaviyo welcome + abandoned cart live (paste or deploy depending on Decision #5)
 - [ ] Customer list uploaded to Meta + Google
+- [ ] **Creator: Phase 2 read views live in admin (`/admin/creators`)**
+- [ ] **Creator: Wave 1 outreach sent (10 DMs/emails); first samples shipped**
 
 ### Week 3
-- [ ] Meta retargeting launches (70% budget)
-- [ ] Meta awareness launches (30% budget)
+- [ ] Meta retargeting launches
+- [ ] Meta awareness launches
 - [ ] Google PMax launches (frozen 3–4 weeks)
 - [ ] Content session 2: lifestyle
 - [ ] Post-purchase Klaviyo flow live
+- [ ] **Creator: Phase 4 Shopify sample + discount code generation live**
+- [ ] **Creator: First posts expected (samples delivered week 2 → 7–14 day turnaround)**
+- [ ] **Creator: Wave 2 outreach sent**
 
 ### Week 4
 - [ ] Content session 3: direct to camera
-- [ ] First retargeting ROAS read; if 3:1+ two weeks running, budget flip toward awareness begins
+- [ ] First retargeting ROAS read; if 3:1+ two weeks running, shift more budget toward awareness
 - [ ] Admin dashboard cohort comparison view complete
 - [ ] First A/B variant decision (running serially — pick winner, retire loser, start next test)
+- [ ] **Creator: Phase 5 post detection live (YT polling + IG via Apify)**
+- [ ] **Creator UGC rotated into Meta retargeting creative (first paid_30d assets)**
 
 ### Month 2
 - [ ] Consideration campaign introduced (if retargeting healthy)
@@ -334,8 +413,11 @@ These touch checked-in project state. Tom should not do these himself — Greg o
 
 ## North Star
 
-We're not running an ad campaign. We're building a collector ecosystem with paid acquisition as the entry point. Every trial buyer who becomes a collector is worth $200–400 over their lifetime versus $40 for a one-and-done.
+Two parallel goals:
 
-The guarantee removes the risk of trying. The bundle makes collecting obvious. The in-box card creates the habit of coming back. The landing page variants test which pitch turns trial buyers into collectors fastest. The email segmentation makes every message relevant to where someone is in their collection journey. The attribution wiring makes all of it measurable.
+1. **5–8 daily orders → 30–40 daily orders.** Volume. Cold paid acquisition, creator-driven organic reach, and new landing pages widen the funnel. Without this, no amount of LTV optimization gets us to the business plan.
+2. **Trial buyer → collector.** Quality. Every trial buyer who becomes a collector is worth $200–400 over their lifetime versus $40 for a one-and-done. The offer stack, landing page variants, and email segmentation are what turn the volume into compounding revenue rather than one-and-dones.
 
-Tom can run this with Claude Code handling copy, creative briefs, email drafts, page authoring, and analysis. Greg builds the integrations that let Claude Code write directly to Shopify and (if Decision #5 lands heavy) to Klaviyo and Google Ads. The constraint is not headcount — it's sequencing. Baselines, then offer stack + pages + Klaviyo, then ads. In that order.
+The guarantee removes the risk of trying. The bundle makes collecting obvious. The in-box card creates the habit of coming back. The landing page variants test which pitch turns trial buyers into collectors fastest. The creator pipeline supplies UGC volume and per-creator-attributed top-of-funnel reach that no solo content plan can match. The email segmentation makes every message relevant to where someone is in their collection journey. The attribution wiring makes all of it measurable — by channel, by variant, by creator, by cohort.
+
+Tom can run this with Claude Code handling copy, creative briefs, email drafts, page authoring, outreach drafts, and analysis. Greg builds the integrations that let Claude Code write directly to Shopify (pages + discount codes + samples) and — if Decision #5 lands heavy — to Klaviyo and Google Ads. The constraint is not headcount; it's sequencing. Baselines, then offer stack + pages + Klaviyo + creator program kickoff, then paid ads. In that order.
