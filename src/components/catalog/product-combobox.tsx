@@ -16,14 +16,23 @@ export function variantLabel(v: CatalogVariant): string {
 
 const MAX_RESULTS = 60;
 
+export interface CatalogCollection {
+  id: string;
+  title: string;
+  variantIds: Set<string>;
+}
+
 /**
- * Shared searchable product picker. Click to open, type to filter the Shopify
- * catalog by SKU / title, click to select. Used by the PO form, the invoice
- * form, and (in future) the inventory page — change it here, it changes
- * everywhere. The catalog is supplied by the caller (see `useCatalog`).
+ * Shared searchable product picker. Click to open, optionally narrow by Shopify
+ * collection, then type to filter by SKU / title (or use the size/colour
+ * chips). Choosing a collection refines the chips + results to that collection.
+ * Used by the PO form, the invoice form, and (in future) the inventory page —
+ * change it here, it changes everywhere. The catalog is supplied by the caller
+ * (see `useCatalog`).
  */
 export function ProductCombobox({
   variants,
+  collections,
   value,
   onSelect,
   exclude,
@@ -31,6 +40,8 @@ export function ProductCombobox({
   disabled = false,
 }: {
   variants: CatalogVariant[];
+  /** Optional Shopify collections for the collection selector. */
+  collections?: CatalogCollection[];
   value: string; // selected shopifyVariantId ("" = none)
   onSelect: (variant: CatalogVariant) => void;
   /** Variant ids to hide (e.g. already chosen on other lines). */
@@ -43,18 +54,33 @@ export function ProductCombobox({
   const [active, setActive] = useState(0);
   const [sizes, setSizes] = useState<Set<number>>(new Set());
   const [colors, setColors] = useState<Set<string>>(new Set());
+  const [collectionId, setCollectionId] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selected = variants.find((v) => v.shopifyVariantId === value) ?? null;
 
-  // Distinct quick-filter values present in the catalog.
+  // Narrow to the chosen collection (if any); chips + results derive from this
+  // pool, so size/colour options refine to what's actually in that collection.
+  const selectedCollection = collections?.find((c) => c.id === collectionId) ?? null;
+  const pool = selectedCollection
+    ? variants.filter((v) => selectedCollection.variantIds.has(v.shopifyVariantId))
+    : variants;
+
   const allSizes = [
-    ...new Set(variants.map((v) => v.sizeMm).filter((s): s is number => s != null)),
+    ...new Set(pool.map((v) => v.sizeMm).filter((s): s is number => s != null)),
   ].sort((a, b) => a - b);
   const allColors = [
-    ...new Set(variants.map((v) => v.color).filter((c): c is string => !!c)),
+    ...new Set(pool.map((v) => v.color).filter((c): c is string => !!c)),
   ].sort((a, b) => a.localeCompare(b));
+
+  function changeCollection(id: string) {
+    // Reset the chip filters so a stale size/colour can't hide the new pool.
+    setCollectionId(id);
+    setSizes(new Set());
+    setColors(new Set());
+    setActive(0);
+  }
 
   function toggleSize(s: number) {
     setActive(0);
@@ -95,7 +121,7 @@ export function ProductCombobox({
   }, [open]);
 
   const q = query.trim().toLowerCase();
-  const results = variants
+  const results = pool
     .filter((v) => !exclude?.has(v.shopifyVariantId) || v.shopifyVariantId === value)
     .filter((v) => sizes.size === 0 || (v.sizeMm != null && sizes.has(v.sizeMm)))
     .filter((v) => colors.size === 0 || (v.color != null && colors.has(v.color)))
@@ -143,6 +169,22 @@ export function ProductCombobox({
 
       {open && (
         <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-md border border-zinc-200 bg-white shadow-lg">
+          {collections && collections.length > 0 && (
+            <div className="border-b border-zinc-100 px-2.5 py-2">
+              <select
+                value={collectionId}
+                onChange={(e) => changeCollection(e.target.value)}
+                className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
+              >
+                <option value="">All collections</option>
+                {collections.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex items-center gap-2 border-b border-zinc-100 px-2.5">
             <Search className="h-4 w-4 shrink-0 text-zinc-400" />
             <input

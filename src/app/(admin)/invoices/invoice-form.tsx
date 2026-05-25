@@ -86,7 +86,8 @@ export function InvoiceForm({
   const [submitting, setSubmitting] = useState(false);
 
   // Shared searchable product chooser (same component as the PO form).
-  const { variants, loading: catalogLoading, error: catalogError } = useCatalog();
+  const { variants, collections, loading: catalogLoading, error: catalogError } =
+    useCatalog();
   const variantByKey = new Map(variants.map((v) => [v.shopifyVariantId, v]));
 
   // Effective tier discount (immutable company on edit).
@@ -269,6 +270,7 @@ export function InvoiceForm({
                 ) : (
                   <ProductCombobox
                     variants={variants}
+                    collections={collections}
                     value={r.variantKey}
                     exclude={taken}
                     disabled={catalogLoading}

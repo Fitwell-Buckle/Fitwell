@@ -182,7 +182,8 @@ export function PoForm({
 
   // Shared catalog for the searchable product chooser (same component used on
   // the invoice form). On error we fall back to manual SKU/title entry.
-  const { variants, loading: catalogLoading, error: catalogError } = useCatalog();
+  const { variants, collections, loading: catalogLoading, error: catalogError } =
+    useCatalog();
   const variantByKey = new Map(variants.map((v) => [v.shopifyVariantId, v]));
   const locations = refs?.locations ?? [];
   const selectedCompany = companies.find((c) => c.id === companyId);
@@ -456,6 +457,7 @@ export function PoForm({
                   ) : (
                     <ProductCombobox
                       variants={variants}
+                      collections={collections}
                       value={r.variantKey}
                       exclude={taken}
                       disabled={catalogLoading}
