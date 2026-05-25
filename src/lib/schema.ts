@@ -710,3 +710,96 @@ export const productionAttachmentRelations = relations(
     }),
   }),
 );
+
+// ─── B2B Invoicing (Phase 6) ────────────────────────────────────────
+
+// Auto-incrementing invoice number source (formatted "INV-00100").
+export const invoiceNumberSeq = pgSequence("invoice_number_seq", {
+  startWith: 100,
+});
+
+export const invoice = pgTable(
+  "invoice",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Auto-generated from invoice_number_seq, e.g. "INV-00100".
+    invoiceNumber: text("invoice_number").notNull(),
+    // Bill-to company (our B2B customer).
+    companyId: text("company_id")
+      .notNull()
+      .references(() => company.id),
+    status: text("status").notNull().default("draft"), // draft | sent | paid | void
+    issuedDate: date("issued_date").notNull(),
+    dueDate: date("due_date"),
+    notes: text("notes"),
+    // Money in cents. subtotal = Σ(qty × unit retail); discount from the
+    // company's price-tier snapshot; total = subtotal − discount.
+    subtotalCents: integer("subtotal_cents").notNull().default(0),
+    discountPercent: real("discount_percent"),
+    discountCents: integer("discount_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull().default(0),
+    currency: text("currency").notNull().default("USD"),
+    // Provenance + hybrid links.
+    sourcePoId: text("source_po_id").references(() => productionPo.id, {
+      onDelete: "set null",
+    }),
+    shopifyDraftOrderId: text("shopify_draft_order_id"),
+    shopifyInvoiceUrl: text("shopify_invoice_url"),
+    sentAt: timestamp("sent_at", { mode: "date" }),
+    paidAt: timestamp("paid_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("invoice_company_id_idx").on(t.companyId),
+    index("invoice_status_idx").on(t.status),
+    index("invoice_source_po_id_idx").on(t.sourcePoId),
+  ],
+);
+
+export const invoiceLineItem = pgTable(
+  "invoice_line_item",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => invoice.id, { onDelete: "cascade" }),
+    sku: text("sku").notNull(),
+    title: text("title").notNull(),
+    quantity: integer("quantity").notNull(),
+    // Retail unit price (pre-discount); the invoice-level tier % applies.
+    unitPriceCents: integer("unit_price_cents").notNull().default(0),
+    shopifyProductId: text("shopify_product_id"),
+    shopifyVariantId: text("shopify_variant_id"),
+    // Optional provenance back to the production line it was billed from.
+    sourceLineItemId: text("source_line_item_id").references(
+      () => productionPoLineItem.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("invoice_line_item_invoice_id_idx").on(t.invoiceId)],
+);
+
+export const invoiceRelations = relations(invoice, ({ one, many }) => ({
+  company: one(company, {
+    fields: [invoice.companyId],
+    references: [company.id],
+  }),
+  sourcePo: one(productionPo, {
+    fields: [invoice.sourcePoId],
+    references: [productionPo.id],
+  }),
+  lineItems: many(invoiceLineItem),
+}));
+
+export const invoiceLineItemRelations = relations(invoiceLineItem, ({ one }) => ({
+  invoice: one(invoice, {
+    fields: [invoiceLineItem.invoiceId],
+    references: [invoice.id],
+  }),
+}));

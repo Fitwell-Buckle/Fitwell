@@ -22,6 +22,7 @@ import { PoComments } from "./po-comments";
 import { PoAttachments } from "./po-attachments";
 import { PoReceive } from "./po-receive";
 import { PoStageTimeline } from "./po-stage-timeline";
+import { PoCreateInvoice } from "./po-create-invoice";
 
 function fmtBytes(n: number | null): string {
   if (!n) return "";
@@ -68,6 +69,7 @@ export default async function PoDetailPage({
           <Button variant="outline" size="sm" asChild>
             <Link href={`/modules/production/po/${po.id}/edit`}>Edit</Link>
           </Button>
+          <PoCreateInvoice poId={po.id} />
           <Button variant="ghost" size="sm" asChild>
             <Link href="/modules/production">Back</Link>
           </Button>

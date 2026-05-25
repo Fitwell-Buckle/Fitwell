@@ -5,9 +5,10 @@
 > beyond the original plan (own companies + price tiers, per-line company/warehouse,
 > product picker, PO editing, nav restructure). **Phases 3–5 are now complete too**
 > (3: supplier magic-link portal; 4: C2 receiving + deadline alerts; 5: Gantt +
-> incoming-inventory). The remaining work is **deployment**: merge PR #2, apply
-> migrations `0008–0017` to prod, and set env/scopes (`write_inventory`,
-> `RESEND_API_KEY`, `BLOB_READ_WRITE_TOKEN`, `read_locations`). The source of
+> incoming-inventory; 6: B2B invoicing with PO↔invoice creation). The remaining
+> work is **deployment**: merge PR #2, apply migrations `0008–0019` to prod, and
+> set env/scopes (`write_inventory`, `write_draft_orders`, `RESEND_API_KEY`,
+> `BLOB_READ_WRITE_TOKEN`, `read_locations`). The source of
 > truth for schema/routes is `src/lib/schema.ts` and `specs/current/{schema,routes}.md`;
 > this plan is the narrative + remaining work.
 
@@ -118,6 +119,16 @@ Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advanc
 - [x] `/inventory`: per-SKU incoming (not-yet-received) qty, by-stage breakdown, nearest projected ETA (pure `aggregateIncoming`). Incoming-qty column added to `/products`. "Inventory" added to the Products nav; middleware guards `/inventory`.
 - [x] **Tests**: `cycle-time` branches (defaults vs rolling avg, ETA projection) + `aggregateIncoming` (sum, by-stage, nearest ETA, sort) — unit.
 - ⚠️ `DEFAULT_STAGE_DAYS` are **placeholders** — get Greg's per-stage day estimates and update the constant. The rolling average takes over automatically once a stage has ≥10 completed transitions in the last 30 days.
+
+### Phase 6 — B2B invoicing ✅ COMPLETE
+Bills **companies** (the revenue side) for produced goods, with bidirectional creation between POs and invoices.
+- [x] **Data model:** `invoice` + `invoice_line_item` (migration `0019`); `invoice_number_seq` → `INV-00100`; status `draft|sent|paid|void`; links `source_po_id`, `source_line_item_id`, `shopify_draft_order_id`, `shopify_invoice_url`. Pure helpers (`computeInvoiceTotals`, `groupByCompany`, `formatInvoiceNumber`) unit-tested.
+- [x] **Pricing:** Shopify retail × (1 − company price-tier %); tier % snapshotted on the invoice at creation. Retail resolved per variant from Shopify in the PO→invoice route; editable on the draft.
+- [x] **PO → invoice:** "Create invoice" on the PO detail → one invoice **per bill-to company** (line override, else PO default), priced retail−tier. `POST /api/production/po/[id]/invoice`.
+- [x] **Invoice → PO:** "Create PO" on the invoice (pick supplier) → a draft production PO carrying the invoice's lines + company (costs blank), referencing the invoice in its notes. `POST /api/invoices/[id]/create-po`.
+- [x] **Send (hybrid):** email the invoice (Resend, graceful w/o key) **and** push a Shopify **draft order** with a payment link when the company is linked to a Shopify customer; stores the draft id + invoice URL; marks "sent". Needs `write_draft_orders` (not yet granted → skipped with a clear note).
+- [x] **UI/nav:** `/invoices` list + detail (status, send, create-PO) + create/edit form; **Invoices** under Customers; middleware-guarded; admin-only APIs (suppliers 403).
+- [x] **Tests:** pricing/grouping/format (unit); integration for one-invoice-per-company (retail−tier) + create-PO-from-invoice.
 
 ## Notes
 

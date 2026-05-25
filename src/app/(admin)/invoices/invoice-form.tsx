@@ -1,0 +1,281 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { fmtMoney } from "@/lib/production/display";
+import { computeInvoiceTotals } from "@/lib/invoicing/invoicing";
+
+export interface InvoiceCompanyOption {
+  id: string;
+  name: string;
+  tierName: string | null;
+  tierDiscount: number; // percent
+}
+
+export interface InvoiceFormInitial {
+  companyId: string;
+  companyName: string;
+  tierDiscount: number;
+  issuedDate: string;
+  dueDate: string;
+  notes: string;
+  lineItems: { id: string; sku: string; title: string; quantity: number; unitPriceCents: number }[];
+}
+
+interface Row {
+  sku: string;
+  title: string;
+  quantity: string;
+  unitPrice: string; // dollars
+}
+
+const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
+
+function emptyRow(): Row {
+  return { sku: "", title: "", quantity: "1", unitPrice: "" };
+}
+
+export function InvoiceForm({
+  companies,
+  initial,
+  invoiceId,
+}: {
+  companies: InvoiceCompanyOption[];
+  initial?: InvoiceFormInitial;
+  invoiceId?: string;
+}) {
+  const router = useRouter();
+  const isEdit = !!invoiceId;
+
+  const [companyId, setCompanyId] = useState(initial?.companyId ?? companies[0]?.id ?? "");
+  const [issuedDate, setIssuedDate] = useState(
+    initial?.issuedDate ?? new Date().toISOString().slice(0, 10),
+  );
+  const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [rows, setRows] = useState<Row[]>(
+    initial
+      ? initial.lineItems.map((l) => ({
+          sku: l.sku,
+          title: l.title,
+          quantity: String(l.quantity),
+          unitPrice: (l.unitPriceCents / 100).toString(),
+        }))
+      : [emptyRow()],
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Effective tier discount (immutable company on edit).
+  const discount = isEdit
+    ? (initial?.tierDiscount ?? 0)
+    : (companies.find((c) => c.id === companyId)?.tierDiscount ?? 0);
+
+  const totals = computeInvoiceTotals(
+    rows.map((r) => ({
+      quantity: Math.max(0, Math.floor(Number(r.quantity) || 0)),
+      unitPriceCents: Math.max(0, Math.round(Number(r.unitPrice) * 100 || 0)),
+    })),
+    discount,
+  );
+
+  function updateRow(i: number, patch: Partial<Row>) {
+    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function addRow() {
+    setRows((rs) => [...rs, emptyRow()]);
+  }
+  function removeRow(i: number) {
+    setRows((rs) => (rs.length === 1 ? rs : rs.filter((_, idx) => idx !== i)));
+  }
+
+  async function submit() {
+    setError(null);
+    if (!companyId) return setError("Select a company.");
+    if (!issuedDate) return setError("Enter the issued date.");
+
+    const lineItems = [];
+    for (const [i, r] of rows.entries()) {
+      const sku = r.sku.trim();
+      const title = r.title.trim();
+      if (!sku || !title) return setError(`Line ${i + 1}: SKU and title are required.`);
+      const quantity = Number(r.quantity);
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        return setError(`Line ${i + 1}: quantity must be a positive whole number.`);
+      }
+      const unitPriceCents = Math.round(Number(r.unitPrice) * 100);
+      if (!Number.isFinite(unitPriceCents) || unitPriceCents < 0) {
+        return setError(`Line ${i + 1}: unit price must be a non-negative amount.`);
+      }
+      lineItems.push({ sku, title, quantity, unitPriceCents });
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(
+        isEdit ? `/api/invoices/${invoiceId}` : "/api/invoices",
+        {
+          method: isEdit ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...(isEdit ? {} : { companyId }),
+            issuedDate,
+            dueDate: dueDate || null,
+            notes: notes.trim() || null,
+            lineItems,
+          }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || (isEdit ? "Failed to save." : "Failed to create invoice."));
+        setSubmitting(false);
+        return;
+      }
+      router.push(`/invoices/${isEdit ? invoiceId : data.data.id}`);
+      router.refresh();
+    } catch {
+      setError("Network error — please try again.");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="mt-6 space-y-5">
+      <Card className="p-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={fieldLabel}>Company</label>
+            {isEdit ? (
+              <Input value={initial?.companyName ?? ""} disabled />
+            ) : (
+              <select
+                value={companyId}
+                onChange={(e) => setCompanyId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
+              >
+                {companies.length === 0 && <option value="">No companies — add one first</option>}
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.tierName ? ` — ${c.tierName}` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="mt-1 text-xs text-zinc-500">
+              {discount > 0 ? (
+                <Badge className="bg-emerald-50 text-emerald-700">{discount}% off retail</Badge>
+              ) : (
+                "No tier discount"
+              )}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={fieldLabel}>Issued date</label>
+              <Input type="date" value={issuedDate} onChange={(e) => setIssuedDate(e.target.value)} />
+            </div>
+            <div>
+              <label className={fieldLabel}>Due date (optional)</label>
+              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className={fieldLabel}>Notes (optional)</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
+          />
+        </div>
+      </Card>
+
+      <Card className="p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-900">Line items</h2>
+          <Button type="button" variant="outline" size="sm" onClick={addRow}>
+            <Plus className="h-4 w-4" /> Add line
+          </Button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {rows.map((r, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <Input
+                className="w-32"
+                placeholder="SKU"
+                value={r.sku}
+                onChange={(e) => updateRow(i, { sku: e.target.value })}
+              />
+              <Input
+                className="w-auto min-w-[180px] flex-1"
+                placeholder="Title"
+                value={r.title}
+                onChange={(e) => updateRow(i, { title: e.target.value })}
+              />
+              <Input
+                className="w-20"
+                type="number"
+                min="1"
+                placeholder="Qty"
+                value={r.quantity}
+                onChange={(e) => updateRow(i, { quantity: e.target.value })}
+              />
+              <Input
+                className="w-28"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Unit $ (retail)"
+                value={r.unitPrice}
+                onChange={(e) => updateRow(i, { unitPrice: e.target.value })}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeRow(i)}
+                disabled={rows.length === 1}
+                aria-label="Remove line"
+                className="shrink-0"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-1 border-t border-zinc-100 pt-3 text-sm">
+          <div className="flex justify-end gap-6 text-zinc-500">
+            <span>Subtotal</span>
+            <span className="w-28 text-right text-zinc-700">{fmtMoney(totals.subtotalCents)}</span>
+          </div>
+          <div className="flex justify-end gap-6 text-zinc-500">
+            <span>Discount ({discount}%)</span>
+            <span className="w-28 text-right text-zinc-700">−{fmtMoney(totals.discountCents)}</span>
+          </div>
+          <div className="flex justify-end gap-6 font-semibold text-zinc-900">
+            <span>Total</span>
+            <span className="w-28 text-right">{fmtMoney(totals.totalCents)}</span>
+          </div>
+        </div>
+      </Card>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div className="flex justify-end">
+        <Button onClick={submit} disabled={submitting || (!isEdit && companies.length === 0)}>
+          {submitting ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save changes" : "Create invoice"}
+        </Button>
+      </div>
+    </div>
+  );
+}

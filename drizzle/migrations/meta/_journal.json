@@ -134,6 +134,13 @@
       "when": 1779646106779,
       "tag": "0018_flimsy_luckman",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779663220042,
+      "tag": "0019_uneven_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

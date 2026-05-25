@@ -527,6 +527,15 @@ class ShopifyClient {
     return variant.inventory_item_id;
   }
 
+  /** A variant's retail price in cents — the basis for B2B invoice pricing. */
+  async getVariantPriceCents(variantId: string | number): Promise<number> {
+    const id = String(variantId).split("/").pop();
+    const { variant } = await this.fetch<{
+      variant: { id: number; price: string | null };
+    }>(`/variants/${id}.json`);
+    return toCents(variant.price);
+  }
+
   /**
    * Adjust a variant's available stock at a location (C2 receiving). Resolves
    * the variant's inventory_item_id, then runs the GraphQL
@@ -585,6 +594,95 @@ class ShopifyClient {
       (c) => c.name === "available",
     );
     return { available: change?.quantityAfterChange ?? null };
+  }
+
+  // ── B2B invoicing (draft orders) ──────────────────────────────────
+
+  /**
+   * Create a Shopify draft order for a B2B invoice and send its invoice email
+   * (which carries a checkout/payment link). Lines with a variant use Shopify's
+   * retail price; lines without fall back to a custom price. The company's tier
+   * is applied as an order-level percentage discount. Requires the
+   * write_draft_orders scope — without it Shopify returns "access denied" and
+   * this throws; the send route surfaces that as a skip note. Returns the draft
+   * order id + invoice (payment) URL.
+   */
+  async createDraftOrderInvoice(params: {
+    email: string | null;
+    shopifyCustomerId?: string | null;
+    discountPercent: number;
+    note?: string;
+    lines: {
+      variantId: string | null;
+      title: string;
+      quantity: number;
+      unitPriceCents: number;
+    }[];
+  }): Promise<{ draftOrderId: string; invoiceUrl: string | null }> {
+    const lineItems = params.lines.map((l) =>
+      l.variantId
+        ? {
+            variantId: `gid://shopify/ProductVariant/${String(l.variantId).split("/").pop()}`,
+            quantity: l.quantity,
+          }
+        : {
+            title: l.title,
+            originalUnitPrice: (l.unitPriceCents / 100).toFixed(2),
+            quantity: l.quantity,
+          },
+    );
+
+    const input: Record<string, unknown> = { lineItems };
+    if (params.email) input.email = params.email;
+    if (params.note) input.note = params.note;
+    if (params.discountPercent > 0) {
+      input.appliedDiscount = {
+        valueType: "PERCENTAGE",
+        value: params.discountPercent,
+        title: "B2B price tier",
+      };
+    }
+    if (params.shopifyCustomerId) {
+      input.purchasingEntity = {
+        customerId: `gid://shopify/Customer/${String(params.shopifyCustomerId).split("/").pop()}`,
+      };
+    }
+
+    const created = await this.graphql<{
+      draftOrderCreate: {
+        draftOrder: { id: string; invoiceUrl: string | null } | null;
+        userErrors: { field: string[] | null; message: string }[];
+      };
+    }>(
+      `mutation FitwellDraftCreate($input: DraftOrderInput!) {
+        draftOrderCreate(input: $input) {
+          draftOrder { id invoiceUrl }
+          userErrors { field message }
+        }
+      }`,
+      { input },
+    );
+
+    const errs = created.draftOrderCreate.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(`Draft order failed: ${errs.map((e) => e.message).join("; ")}`);
+    }
+    const draftOrder = created.draftOrderCreate.draftOrder;
+    if (!draftOrder) throw new Error("Draft order was not created");
+
+    // Send Shopify's invoice email (best-effort; the invoiceUrl already works).
+    try {
+      await this.graphql(
+        `mutation FitwellDraftSend($id: ID!) {
+          draftOrderInvoiceSend(id: $id) { draftOrder { id } userErrors { field message } }
+        }`,
+        { id: draftOrder.id },
+      );
+    } catch (err) {
+      console.error("draftOrderInvoiceSend failed (continuing):", err);
+    }
+
+    return { draftOrderId: draftOrder.id, invoiceUrl: draftOrder.invoiceUrl };
   }
 
   // ── Generic paginator ─────────────────────────────────────────────

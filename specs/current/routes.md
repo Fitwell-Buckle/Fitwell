@@ -32,6 +32,10 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/customers` | Customer list with search, filter, sort |
 | `/customers/[id]` | Individual customer detail — orders, LTV, attribution |
 | `/customers/companies` | B2B companies + price tiers (CRUD) |
+| `/invoices` | B2B invoice list |
+| `/invoices/new` | Create an invoice (company + line items at retail − tier) |
+| `/invoices/[id]` | Invoice detail — status, send, create-PO actions |
+| `/invoices/[id]/edit` | Edit a draft/sent invoice (company is fixed) |
 | `/orders` | Order list with filters |
 | `/campaigns` | Campaign list — performance overview |
 | `/campaigns/[id]` | Campaign detail — spend, conversions, ROAS |
@@ -100,6 +104,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | PUT | `/api/production/po/[id]` | Full edit — header + reconcile line items (add/update/remove) |
 | POST | `/api/production/po/[id]/advance` | Advance stage — whole PO (locked) or one line item |
 | POST | `/api/production/po/[id]/receive` | Receive into Shopify (C2) — `inventoryAdjustQuantities` +qty per line item, with the PO number stamped on the adjustment reference; idempotent per line; admin-only; needs `write_inventory` |
+| POST | `/api/production/po/[id]/invoice` | Create invoice(s) from a PO — one per bill-to company, priced at Shopify retail − tier; admin-only |
 | POST | `/api/production/po/[id]/comments` | Add a comment to a PO |
 | POST | `/api/production/po/[id]/attachments` | Upload a file to a PO (Vercel Blob; multipart) |
 | DELETE | `/api/production/attachments/[id]` | Delete an attachment (blob + row) |
@@ -109,6 +114,15 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |
 | POST | `/api/production/suppliers/[id]/contacts` | Add an authorized login email to a supplier |
 | DELETE | `/api/production/supplier-contacts/[id]` | Remove a supplier login email |
+
+### Invoicing API (B2B; each handler checks `auth()`; admin-only — suppliers 403)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/invoices` | Create an invoice (company tier discount snapshotted) |
+| PATCH | `/api/invoices/[id]` | Change status (draft → sent → paid / void) |
+| PUT | `/api/invoices/[id]` | Full edit — header + line items (blocked once paid/void) |
+| POST | `/api/invoices/[id]/send` | Email the invoice (Resend) + push a Shopify draft order with a payment link when the company is linked to a Shopify customer (`write_draft_orders`); marks "sent" |
+| POST | `/api/invoices/[id]/create-po` | Create a draft production PO from the invoice (pick supplier) |
 
 ### Cron Jobs (Vercel Cron, protected by `CRON_SECRET`)
 | Method | Path | Schedule | Description |
