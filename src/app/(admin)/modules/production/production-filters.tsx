@@ -12,11 +12,19 @@ export function ProductionFilters({
   supplierId,
   status,
   stage,
+  size,
+  color,
+  sizeOptions,
+  colorOptions,
 }: {
   suppliers: { id: string; name: string }[];
   supplierId: string;
   status: string;
   stage: string;
+  size: string;
+  color: string;
+  sizeOptions: number[];
+  colorOptions: string[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -69,6 +77,34 @@ export function ProductionFilters({
           </option>
         ))}
       </select>
+      {sizeOptions.length > 0 && (
+        <select
+          value={size}
+          onChange={(e) => setParam("size", e.target.value)}
+          className={selectClass}
+        >
+          <option value="">All sizes</option>
+          {sizeOptions.map((s) => (
+            <option key={s} value={String(s)}>
+              {s}mm
+            </option>
+          ))}
+        </select>
+      )}
+      {colorOptions.length > 0 && (
+        <select
+          value={color}
+          onChange={(e) => setParam("color", e.target.value)}
+          className={selectClass}
+        >
+          <option value="">All colours</option>
+          {colorOptions.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }

@@ -45,7 +45,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/products` | Product performance breakdown (+ incoming production qty per SKU) |
 | `/inventory` | Incoming inventory — per-SKU units in production, stage breakdown, projected ETA |
 | `/modules` | Modules hub (Production; Marketing coming soon) |
-| `/modules/production` | "POs and Production" — PO list (instant filters, defaults to Open), then the "Production" board, then the production timeline (Gantt), all embedded |
+| `/modules/production` | "POs and Production" — PO list (instant filters: supplier, status, stage, size, colour; defaults to Open), then the "Production" board, then the production timeline (Gantt), all embedded |
 | `/modules/production/po/new` | Create a PO with line items |
 | `/modules/production/po/[id]` | PO detail — stage advance, status, timeline, comments |
 | `/modules/production/po/[id]/edit` | Edit PO header + line items (add/update/remove) |
@@ -99,7 +99,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/production/price-tiers` | Create a price tier (% off retail) |
 | PATCH | `/api/production/price-tiers/[id]` | Update a price tier |
 | GET | `/api/production/collections` | Shopify catalog grouped by collection (+ Uncategorized). (Legacy — the picker now uses the flat searchable chooser below.) |
-| GET | `/api/production/products` | Flattened active Shopify catalog (variants + `priceCents`). Source for the shared searchable product chooser (`ProductCombobox` / `useCatalog`) used by the PO form, invoice form, and future inventory page |
+| GET | `/api/production/products` | Flattened active Shopify catalog (variants + `priceCents` + derived `sizeMm`/`color`). Source for the shared searchable product chooser (`ProductCombobox` / `useCatalog`, with size/colour quick-filters) used by the PO form, invoice form, and future inventory page. Server components use the cached `getCatalogCached` (e.g. the POs page size/colour filter) |
 | POST | `/api/production/po` | Create a PO + line items (PO number auto-assigned from a sequence, "00100"+) |
 | PATCH | `/api/production/po/[id]` | Update PO fields (status, lock, dates, notes) |
 | PUT | `/api/production/po/[id]` | Full edit — header + reconcile line items (add/update/remove) |

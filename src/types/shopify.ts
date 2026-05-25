@@ -70,6 +70,9 @@ export interface ShopifyVariant {
   inventory_quantity: number;
   weight: number;
   weight_unit: string;
+  option1: string | null;
+  option2: string | null;
+  option3: string | null;
 }
 
 export interface ShopifyProduct {
@@ -81,6 +84,7 @@ export interface ShopifyProduct {
   status: string;
   created_at: string;
   updated_at: string;
+  options: Array<{ name: string; values: string[] }>;
   variants: ShopifyVariant[];
   images: Array<{ id: number; src: string; position: number }>;
 }

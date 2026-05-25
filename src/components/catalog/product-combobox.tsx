@@ -41,10 +41,39 @@ export function ProductCombobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const [sizes, setSizes] = useState<Set<number>>(new Set());
+  const [colors, setColors] = useState<Set<string>>(new Set());
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selected = variants.find((v) => v.shopifyVariantId === value) ?? null;
+
+  // Distinct quick-filter values present in the catalog.
+  const allSizes = [
+    ...new Set(variants.map((v) => v.sizeMm).filter((s): s is number => s != null)),
+  ].sort((a, b) => a - b);
+  const allColors = [
+    ...new Set(variants.map((v) => v.color).filter((c): c is string => !!c)),
+  ].sort((a, b) => a.localeCompare(b));
+
+  function toggleSize(s: number) {
+    setActive(0);
+    setSizes((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  }
+  function toggleColor(c: string) {
+    setActive(0);
+    setColors((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
+  }
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -68,6 +97,8 @@ export function ProductCombobox({
   const q = query.trim().toLowerCase();
   const results = variants
     .filter((v) => !exclude?.has(v.shopifyVariantId) || v.shopifyVariantId === value)
+    .filter((v) => sizes.size === 0 || (v.sizeMm != null && sizes.has(v.sizeMm)))
+    .filter((v) => colors.size === 0 || (v.color != null && colors.has(v.color)))
     .filter(
       (v) =>
         !q ||
@@ -126,6 +157,42 @@ export function ProductCombobox({
               className="h-9 w-full bg-transparent text-sm focus:outline-none"
             />
           </div>
+
+          {(allSizes.length > 0 || allColors.length > 0) && (
+            <div className="flex flex-wrap gap-1 border-b border-zinc-100 px-2.5 py-2">
+              {allSizes.map((s) => (
+                <button
+                  key={`size-${s}`}
+                  type="button"
+                  onClick={() => toggleSize(s)}
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-xs transition-colors",
+                    sizes.has(s)
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-200 text-zinc-600 hover:bg-zinc-50",
+                  )}
+                >
+                  {s}mm
+                </button>
+              ))}
+              {allColors.map((c) => (
+                <button
+                  key={`color-${c}`}
+                  type="button"
+                  onClick={() => toggleColor(c)}
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-xs transition-colors",
+                    colors.has(c)
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-200 text-zinc-600 hover:bg-zinc-50",
+                  )}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+
           <ul className="max-h-64 overflow-auto py-1">
             {results.length === 0 ? (
               <li className="px-3 py-2 text-sm text-zinc-400">No matching products.</li>

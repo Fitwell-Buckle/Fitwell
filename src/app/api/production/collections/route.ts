@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getShopifyClient, toCents } from "@/lib/shopify/client";
+import { deriveAttrs } from "@/lib/catalog/attrs";
 import type { ShopifyProduct } from "@/types/shopify";
 import type { CatalogVariant } from "../products/route";
 
@@ -14,14 +15,24 @@ const UNCATEGORIZED_ID = "__uncategorized__";
 
 function variantsOf(p: ShopifyProduct): CatalogVariant[] {
   if (p.status && p.status !== "active") return [];
-  return (p.variants ?? []).map((v) => ({
-    shopifyProductId: String(p.id),
-    shopifyVariantId: String(v.id),
-    sku: v.sku ?? "",
-    title: p.title,
-    variantTitle: v.title && v.title !== "Default Title" ? v.title : null,
-    priceCents: toCents(v.price),
-  }));
+  const optionNames = (p.options ?? []).map((o) => o.name);
+  return (p.variants ?? []).map((v) => {
+    const { sizeMm, color } = deriveAttrs(optionNames, [
+      v.option1,
+      v.option2,
+      v.option3,
+    ]);
+    return {
+      shopifyProductId: String(p.id),
+      shopifyVariantId: String(v.id),
+      sku: v.sku ?? "",
+      title: p.title,
+      variantTitle: v.title && v.title !== "Default Title" ? v.title : null,
+      priceCents: toCents(v.price),
+      sizeMm,
+      color,
+    };
+  });
 }
 
 // Catalog grouped by Shopify collection for the cascading PO line-item picker.

@@ -23,7 +23,9 @@ import {
   statusBadgeClass,
   stageBadgeClass,
   fmtDate,
+  skuSize,
 } from "@/lib/production/display";
+import { getCatalogCached, type CatalogVariant } from "@/lib/catalog/load";
 import { cn } from "@/lib/utils";
 import { ProductionFilters } from "./production-filters";
 import { KanbanBoard, type KanbanCard } from "./kanban/kanban-board";
@@ -45,6 +47,8 @@ export default async function ProductionPage({
   const supplierId =
     typeof params.supplier === "string" ? params.supplier : "";
   const stage = typeof params.stage === "string" ? params.stage : "";
+  const sizeParam = typeof params.size === "string" ? params.size : "";
+  const colorParam = typeof params.color === "string" ? params.color : "";
   // Default to Open (active). The "all" sentinel shows every status.
   const status =
     typeof params.status === "string" && params.status ? params.status : "active";
@@ -68,12 +72,42 @@ export default async function ProductionPage({
             title: true,
             quantity: true,
             currentStage: true,
+            shopifyVariantId: true,
           },
         },
       },
     }),
     db.query.supplier.findMany({ columns: { id: true, name: true } }),
   ]);
+
+  // Catalog gives each line its size/colour (by variant id); optional, cached.
+  let catalog: CatalogVariant[] = [];
+  try {
+    catalog = await getCatalogCached();
+  } catch {
+    /* size falls back to the SKU; colour is unavailable without the catalog */
+  }
+  const attrsByVariant = new Map(
+    catalog.map((v) => [v.shopifyVariantId, { sizeMm: v.sizeMm, color: v.color }]),
+  );
+  type LineLike = { sku: string; shopifyVariantId: string | null };
+  const lineSize = (li: LineLike): number | null => {
+    const a = li.shopifyVariantId ? attrsByVariant.get(li.shopifyVariantId) : null;
+    if (a?.sizeMm != null) return a.sizeMm;
+    const s = skuSize(li.sku);
+    return s === 999999 ? null : s;
+  };
+  const lineColor = (li: LineLike): string | null =>
+    (li.shopifyVariantId ? attrsByVariant.get(li.shopifyVariantId)?.color : null) ?? null;
+
+  // Filter options from the line items currently in view.
+  const allLines = pos.flatMap((po) => po.lineItems);
+  const sizeOptions = [
+    ...new Set(allLines.map(lineSize).filter((s): s is number => s != null)),
+  ].sort((a, b) => a - b);
+  const colorOptions = [
+    ...new Set(allLines.map(lineColor).filter((c): c is string => !!c)),
+  ].sort((a, b) => a.localeCompare(b));
 
   const rows = pos
     .map((po) => ({
@@ -82,7 +116,10 @@ export default async function ProductionPage({
       itemCount: po.lineItems.length,
     }))
     // Stage filter is applied on the derived stage (cheap at our scale).
-    .filter((po) => !stage || po.derivedStage === stage);
+    .filter((po) => !stage || po.derivedStage === stage)
+    // Size/colour: keep POs with at least one matching line item.
+    .filter((po) => !sizeParam || po.lineItems.some((li) => lineSize(li) === Number(sizeParam)))
+    .filter((po) => !colorParam || po.lineItems.some((li) => lineColor(li) === colorParam));
 
   // Board cards = line items of the POs currently shown in the list.
   const cards: KanbanCard[] = rows.flatMap((po) =>
@@ -115,6 +152,10 @@ export default async function ProductionPage({
         supplierId={supplierId}
         status={status}
         stage={stage}
+        size={sizeParam}
+        color={colorParam}
+        sizeOptions={sizeOptions}
+        colorOptions={colorOptions}
       />
 
       <DataTable className="mt-4">
