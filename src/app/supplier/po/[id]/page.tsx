@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { STAGE_LABELS, derivePoStage } from "@/lib/production/stages";
+import { supplierHasAnyStage } from "@/lib/production/stage-owners";
 import {
   STATUS_LABELS,
   statusBadgeClass,
@@ -37,8 +38,15 @@ export default async function SupplierPoDetailPage({
 
   const { id } = await params;
   const po = await getPoDetail(id);
-  // Scope: a supplier may only ever open their own PO.
-  if (!po || po.supplierId !== scope.supplierId) notFound();
+  // Scope: a supplier may open a PO only if they're its primary supplier OR own
+  // at least one of its stages.
+  if (
+    !po ||
+    (po.supplierId !== scope.supplierId &&
+      !supplierHasAnyStage(po.stageAssignments, po.supplierId, scope.supplierId))
+  ) {
+    notFound();
+  }
 
   const derivedStage = derivePoStage(po.lineItems.map((li) => li.currentStage));
   const sortedLineItems = [...po.lineItems].sort(

@@ -20,7 +20,18 @@ export interface KanbanCard {
   locked: boolean;
 }
 
-export function KanbanBoard({ cards }: { cards: KanbanCard[] }) {
+export function KanbanBoard({
+  cards,
+  stages = STAGES,
+  poHrefBase = "/modules/production/po",
+}: {
+  cards: KanbanCard[];
+  /** Columns to render (defaults to every stage). The supplier portal passes a
+   *  scoped subset — their owned stages + the handoff target. */
+  stages?: readonly ProductionStage[];
+  /** Base path for the per-card PO link (suppliers use /supplier/po). */
+  poHrefBase?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +72,7 @@ export function KanbanBoard({ cards }: { cards: KanbanCard[] }) {
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       <div className={cn("flex gap-3 overflow-x-auto pb-4", busy && "opacity-60")}>
-        {STAGES.map((stage) => {
+        {stages.map((stage) => {
           const items = byStage(stage);
           return (
             <div
@@ -123,7 +134,7 @@ export function KanbanBoard({ cards }: { cards: KanbanCard[] }) {
                     </div>
                     <div className="mt-1.5 flex items-center justify-between text-xs text-zinc-400">
                       <Link
-                        href={`/modules/production/po/${c.poId}`}
+                        href={`${poHrefBase}/${c.poId}`}
                         className="underline decoration-zinc-300 underline-offset-2 hover:text-zinc-600"
                         onClick={(e) => e.stopPropagation()}
                       >

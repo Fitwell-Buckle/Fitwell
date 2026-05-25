@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { ShopifyRef, ShopifyRefs } from "@/app/api/production/shopify-refs/route";
 import { fmtMoney } from "@/lib/production/display";
+import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
 import { ProductCombobox } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { QuickAddSelect } from "@/components/forms/quick-add-select";
@@ -43,7 +44,11 @@ export interface PoFormInitial {
   shopifyLocationId: string;
   locationName: string;
   lineItems: EditableLine[];
+  stageAssignments?: { stage: string; supplierId: string }[];
 }
+
+// Stages an admin can assign an owner to (the terminal "complete" is implicit).
+const ASSIGNABLE_STAGES = STAGES.filter((s) => s !== "complete");
 
 interface LineItemRow {
   id?: string; // present = existing line (edit); absent = new line
@@ -174,6 +179,12 @@ export function PoForm({
   // Remember the collection used on the last line, so a newly-added line defaults
   // to the same collection in its product picker.
   const [lastCollectionId, setLastCollectionId] = useState("");
+  // Stage → supplier overrides ("" = falls back to the PO's primary supplier).
+  const [stageOwners, setStageOwners] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const a of initial?.stageAssignments ?? []) m[a.stage] = a.supplierId;
+    return m;
+  });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -291,7 +302,22 @@ export function PoForm({
         setSubmitting(false);
         return;
       }
-      router.push(`/modules/production/po/${isEdit ? poId : data.data.id}`);
+      const savedId = isEdit ? (poId as string) : data.data.id;
+      // Persist stage → supplier assignments (admin-only endpoint, best-effort).
+      try {
+        await fetch(`/api/production/po/${savedId}/stage-assignments`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            assignments: Object.entries(stageOwners)
+              .filter(([, v]) => v)
+              .map(([stage, supplierId]) => ({ stage, supplierId })),
+          }),
+        });
+      } catch {
+        /* non-fatal — the PO itself saved */
+      }
+      router.push(`/modules/production/po/${savedId}`);
       router.refresh();
     } catch {
       setError("Network error — please try again.");
@@ -608,6 +634,40 @@ export function PoForm({
           <span className="ml-3 text-base font-semibold text-zinc-900">
             {fmtMoney(totalCents)}
           </span>
+        </div>
+      </Card>
+
+      <Card className="p-6">
+        <h2 className="text-sm font-semibold text-zinc-900">Stage owners</h2>
+        <p className="mt-1 text-xs text-zinc-500">
+          Assign each production stage to a supplier. Stages left as “PO supplier”
+          default to{" "}
+          {supplierList.find((s) => s.id === supplierId)?.name ?? "the PO supplier"}.
+          Each supplier sees only their own stage(s) in the supplier portal and is
+          notified when they hand off.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {ASSIGNABLE_STAGES.map((stage) => (
+            <div key={stage} className="flex items-center gap-2">
+              <label className="w-36 shrink-0 text-xs text-zinc-600">
+                {STAGE_LABELS[stage as ProductionStage]}
+              </label>
+              <select
+                className={`${selectSm} min-w-0 flex-1`}
+                value={stageOwners[stage] ?? ""}
+                onChange={(e) =>
+                  setStageOwners((o) => ({ ...o, [stage]: e.target.value }))
+                }
+              >
+                <option value="">PO supplier</option>
+                {supplierList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
         </div>
       </Card>
 

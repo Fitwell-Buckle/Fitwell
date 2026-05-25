@@ -7,15 +7,20 @@ import {
   productionStageEvent,
   productionComment,
   productionAttachment,
+  productionStageAssignment,
+  supplier,
 } from "@/lib/schema";
 import {
   planAdvance,
   planSetStage,
+  STAGE_LABELS,
   type AdvanceTransition,
   type ProductionStage,
 } from "./stages";
 import { resolveParent } from "./parents";
 import { validateStageEventDate, dateToNoonUtc } from "./stage-dates";
+import { isHandoff } from "./stage-owners";
+import { notifyStageHandoff } from "./notifications";
 
 const dateString = z
   .string()
@@ -392,8 +397,86 @@ export async function getPoDetail(poId: string) {
         with: { author: { columns: { name: true, email: true } } },
       },
       attachments: { orderBy: desc(productionAttachment.uploadedAt) },
+      stageAssignments: {
+        columns: { stage: true, supplierId: true },
+        with: { supplier: { columns: { name: true } } },
+      },
     },
   });
+}
+
+/**
+ * Replace all stage→supplier assignments for a PO (admin editor). Only stages
+ * with a supplier are stored; unassigned stages fall back to the PO's primary
+ * supplier at read time (see stage-owners.ts).
+ */
+export async function setStageAssignments(
+  poId: string,
+  assignments: { stage: ProductionStage; supplierId: string }[],
+): Promise<void> {
+  await db
+    .delete(productionStageAssignment)
+    .where(eq(productionStageAssignment.poId, poId));
+  const rows = assignments.filter((a) => a.supplierId);
+  if (rows.length > 0) {
+    await db
+      .insert(productionStageAssignment)
+      .values(rows.map((a) => ({ poId, stage: a.stage, supplierId: a.supplierId })));
+  }
+}
+
+export async function getStageAssignments(
+  poId: string,
+): Promise<{ stage: ProductionStage; supplierId: string }[]> {
+  return db.query.productionStageAssignment.findMany({
+    where: eq(productionStageAssignment.poId, poId),
+    columns: { stage: true, supplierId: true },
+  });
+}
+
+/**
+ * After a supplier moves a line item, notify the admins if it left the stages
+ * that supplier owns (a handoff). Best-effort; never throws into the request.
+ */
+export async function notifySupplierHandoff(params: {
+  lineItemId: string;
+  supplierId: string;
+  transitions: AdvanceTransition[];
+}): Promise<void> {
+  try {
+    const t = params.transitions.find((x) => x.lineItemId === params.lineItemId);
+    if (!t) return;
+    const li = await db.query.productionPoLineItem.findFirst({
+      where: eq(productionPoLineItem.id, params.lineItemId),
+      columns: { sku: true, poId: true },
+    });
+    if (!li) return;
+    const po = await db.query.productionPo.findFirst({
+      where: eq(productionPo.id, li.poId),
+      columns: { shopifyPoNumber: true, supplierId: true },
+      with: { stageAssignments: { columns: { stage: true, supplierId: true } } },
+    });
+    if (!po) return;
+    if (!isHandoff(po.stageAssignments, po.supplierId, params.supplierId, t.from, t.to)) {
+      return;
+    }
+    const sup = await db.query.supplier.findFirst({
+      where: eq(supplier.id, params.supplierId),
+      columns: { name: true },
+    });
+    await notifyStageHandoff({
+      poId: li.poId,
+      poNumber: po.shopifyPoNumber,
+      lineItemId: params.lineItemId,
+      sku: li.sku,
+      supplierId: params.supplierId,
+      supplierName: sup?.name ?? "A supplier",
+      fromStageLabel: STAGE_LABELS[t.from],
+      toStageLabel: STAGE_LABELS[t.to],
+    });
+  } catch (err) {
+    console.error("notifySupplierHandoff failed:", err);
+  }
 }
 
 /** Record an uploaded attachment (blob already stored). Exactly one parent. */

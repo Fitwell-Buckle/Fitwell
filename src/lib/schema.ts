@@ -657,6 +657,51 @@ export const supplierContactRelations = relations(supplierContact, ({ one }) => 
   }),
 }));
 
+// Per-PO stage ownership: which supplier is responsible for each production
+// stage. A stage with no row defaults to the PO's primary supplier — so an
+// existing PO behaves unchanged. Lets different vendors own different steps
+// (e.g. one supplier stamps, another finishes).
+export const productionStageAssignment = pgTable(
+  "production_stage_assignment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id")
+      .notNull()
+      .references(() => productionPo.id, { onDelete: "cascade" }),
+    stage: productionStage("stage").notNull(),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => supplier.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("stage_assignment_po_stage_idx").on(t.poId, t.stage),
+    index("stage_assignment_supplier_idx").on(t.supplierId),
+  ],
+);
+
+// In-app admin notifications (e.g. a supplier handed off a stage). Unread =
+// read_at is null.
+export const adminNotification = pgTable(
+  "admin_notification",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    poId: text("po_id").references(() => productionPo.id, { onDelete: "cascade" }),
+    lineItemId: text("line_item_id"),
+    supplierId: text("supplier_id"),
+    readAt: timestamp("read_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("admin_notification_read_at_idx").on(t.readAt)],
+);
+
 export const productionPoRelations = relations(productionPo, ({ one, many }) => ({
   supplier: one(supplier, {
     fields: [productionPo.supplierId],
@@ -669,7 +714,22 @@ export const productionPoRelations = relations(productionPo, ({ one, many }) => 
   lineItems: many(productionPoLineItem),
   comments: many(productionComment),
   attachments: many(productionAttachment),
+  stageAssignments: many(productionStageAssignment),
 }));
+
+export const productionStageAssignmentRelations = relations(
+  productionStageAssignment,
+  ({ one }) => ({
+    po: one(productionPo, {
+      fields: [productionStageAssignment.poId],
+      references: [productionPo.id],
+    }),
+    supplier: one(supplier, {
+      fields: [productionStageAssignment.supplierId],
+      references: [supplier.id],
+    }),
+  }),
+);
 
 export const productionPoLineItemRelations = relations(
   productionPoLineItem,

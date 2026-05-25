@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Settings,
   BookOpen,
+  Bell,
   LogOut,
   ChevronDown,
   type LucideIcon,
@@ -70,6 +71,7 @@ const navItems: NavItem[] = [
     ],
   },
   { href: "/data-sync", label: "Data Sync", icon: RefreshCw },
+  { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/docs", label: "Docs", icon: BookOpen },
 ];
@@ -87,6 +89,21 @@ export function AdminSidebar({ logoUrl }: { logoUrl?: string }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [notifCount, setNotifCount] = useState(0);
+
+  // Unread admin-notification badge; refetch on navigation.
+  useEffect(() => {
+    let active = true;
+    fetch("/api/notifications")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d) setNotifCount(d.count ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
 
   function toggle(label: string, fallback: boolean) {
     setOpen((o) => ({ ...o, [label]: !(o[label] ?? fallback) }));
@@ -116,6 +133,11 @@ export function AdminSidebar({ logoUrl }: { logoUrl?: string }) {
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
+                {item.href === "/notifications" && notifCount > 0 && (
+                  <span className="ml-auto rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {notifCount}
+                  </span>
+                )}
               </Link>
             );
           }

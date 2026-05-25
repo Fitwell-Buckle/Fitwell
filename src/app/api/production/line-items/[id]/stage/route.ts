@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { setStage } from "@/lib/production/service";
+import { setStage, notifySupplierHandoff } from "@/lib/production/service";
 import { STAGES, type ProductionStage } from "@/lib/production/stages";
 import { ensureSupplierMayActOnLineItem } from "@/lib/production/scope";
 
@@ -47,6 +47,15 @@ export async function POST(
       toStage: input.stage as ProductionStage,
       userId: session.user.id,
     });
+    // If a supplier just handed a line off (moved it out of their stages),
+    // notify the admins (in-app + email).
+    if (session.user.role === "supplier" && session.user.supplierId) {
+      await notifySupplierHandoff({
+        lineItemId: id,
+        supplierId: session.user.supplierId,
+        transitions,
+      });
+    }
     return NextResponse.json({ data: { transitions } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
