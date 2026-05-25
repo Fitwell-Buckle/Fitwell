@@ -42,6 +42,7 @@ interface Job {
   status: "active" | "blocked" | "deferred";
   note?: string;
   lastRun?: string;
+  supportsDateRange?: boolean;
 }
 
 const STATUS_STYLES = {
@@ -86,6 +87,7 @@ export default async function DataSyncPage() {
       cron: "15 */2 * * *",
       path: "/api/cron/extract-shopify",
       status: "active",
+      supportsDateRange: true,
       lastRun: timeAgo(shopifyLastRun),
     },
     {
@@ -96,17 +98,19 @@ export default async function DataSyncPage() {
       cron: "30 6 * * *",
       path: "/api/cron/extract-ga4",
       status: "active",
+      supportsDateRange: true,
       lastRun: timeAgo(lastGa4[0]?.latest ?? null),
     },
     {
       id: "extract-google-ads",
       name: "Google Ads",
-      description: "Campaign impressions, clicks, cost, conversions",
+      description:
+        "Campaign impressions, clicks, cost, conversions + ad-group impression share",
       schedule: "Daily at 6:45 AM UTC",
       cron: "45 6 * * *",
       path: "/api/cron/extract-google-ads",
-      status: "blocked",
-      note: "Pending Basic API access approval",
+      status: "active",
+      supportsDateRange: true,
       lastRun: timeAgo(lastGoogleAds[0]?.latest ?? null),
     },
     {
@@ -118,16 +122,19 @@ export default async function DataSyncPage() {
       path: "/api/cron/extract-gsc",
       status: "blocked",
       note: "Blocked by Google service account UI bug",
+      supportsDateRange: true,
       lastRun: timeAgo(lastGsc[0]?.latest ?? null),
     },
     {
       id: "extract-meta-ads",
       name: "Meta Ads",
-      description: "Campaign impressions, clicks, spend, conversions, ROAS",
+      description:
+        "Campaign impressions, clicks, spend, conversions, ROAS + delivery rankings & audience size",
       schedule: "Daily at 7:15 AM UTC",
       cron: "15 7 * * *",
       path: "/api/cron/extract-meta-ads",
       status: "active",
+      supportsDateRange: true,
       lastRun: timeAgo(lastMeta[0]?.latest ?? null),
     },
     {
@@ -138,6 +145,7 @@ export default async function DataSyncPage() {
       cron: "0 */3 * * *",
       path: "/api/cron/extract-posthog",
       status: "deferred",
+      supportsDateRange: true,
       note: "Not configured — deferred until landing pages are built",
     },
     {
@@ -197,6 +205,7 @@ export default async function DataSyncPage() {
                 <SyncJobRunner
                   path={job.path}
                   disabled={job.status !== "active"}
+                  supportsDateRange={job.supportsDateRange}
                 />
               </div>
             ))}

@@ -1,166 +1,250 @@
 # Production Management Module
 
-> **Status (reconciled 2026-05-23):** Phases 1 & 2 are **complete** on branch
-> `production-management` (PR #2), plus a substantial set of changes that landed
-> beyond the original plan (own companies + price tiers, per-line company/warehouse,
-> product picker, PO editing, nav restructure). **Phases 3–5 are now complete too**
-> (3: supplier magic-link portal; 4: C2 receiving + deadline alerts; 5: Gantt +
-> incoming-inventory; 6: B2B invoicing with PO↔invoice creation; 7: company B2B
-> portal with instant self-checkout). The remaining work is **deployment**:
-> merge PR #2, apply migrations `0008–0021` to prod, and set env/scopes
-> (`write_inventory`, `write_draft_orders`, `RESEND_API_KEY`,
-> `BLOB_READ_WRITE_TOKEN`, `read_locations`). The source of
-> truth for schema/routes is `src/lib/schema.ts` and `specs/current/{schema,routes}.md`;
-> this plan is the narrative + remaining work.
-
 ## Context
 
-Fitwell uses multiple suppliers for buckle production, with each batch moving through 8 stages: Supplier PO → Raw Material Stamping → EDM → Polishing → Logo → Plating → QC → Packaging. Greg was evaluating monday.com but wanted an in-house system that integrates with existing customer/order/inventory data, avoids per-seat cost, and is shaped around buckle production.
+Fitwell uses multiple suppliers for buckle production, with each batch moving through 8 stages: Supplier PO → Raw Material Stamping → EDM → Polishing → Logo → Plating → QC → Packaging. Greg is currently evaluating monday.com for this workflow but would prefer an in-house system that integrates with existing customer, order, and inventory data, avoids per-seat cost, and is shaped specifically around buckle production rather than a generic board abstraction.
 
-Production lives under **Products → Production** in the admin nav (pages at `/modules/production/*`). There is no longer a separate "Modules" nav section (an orphaned `/modules` hub page still exists but isn't linked).
+This work introduces a new top-level "Modules" concept in the admin (`/admin/modules`), with **Production** as the first module. Marketing and other modules will follow in future work plans.
 
 ## Dependencies
 
-- Existing tables: `user`, `customer`, `order`, `order_line_item` (`src/lib/schema.ts`) — all use `text` UUID PKs, so production tables do too.
-- NextAuth v5 with Drizzle adapter (`src/lib/auth.ts`) — to be extended for supplier magic-link auth (Phase 3). Note: existing admins have `role` defaulting to `"user"`; admin access is gated by `ADMIN_EMAILS` in the signIn callback, so "admin" currently = any logged-in session.
-- Resend for transactional email (existing) — for Phase 4 alerts.
-- **Vercel Blob** (`@vercel/blob`, installed) for attachments — needs `BLOB_READ_WRITE_TOKEN`.
-- Shopify Admin API (existing client-credentials app) — product catalog + collections (`read_products`), warehouses/locations (`read_locations`, **not yet granted**). A `graphql()` helper was added to the client.
+- Existing tables: `user`, `customer`, `order`, `orderLineItem` (`src/lib/schema.ts`)
+- NextAuth v5 with Drizzle adapter (`src/lib/auth.ts`) — extended for supplier magic-link auth
+- Resend for transactional email (existing integration)
+- New dependency: **Vercel Blob** for file attachments (`@vercel/blob`)
+- New cron job for deadline alerts (added to `vercel.json`)
 
 ## Scope
 
-### Done
-- `/modules/production` PO list (filters: supplier, status, stage); PO detail; create + full edit; kanban board.
-- Suppliers CRUD (`/modules/production/suppliers`).
-- **Companies + price tiers** under **Customers → Companies** (`/customers/companies`) — our own `company` table (not Shopify B2B), each company optionally linked to a synced Shopify customer and assigned a **price tier** (a managed list, % off retail).
-- Stage tracking with `lock_stages_together`; stage-event timeline; comments; attachments (Vercel Blob).
-- Product entry via a **Shopify catalog picker** (grouped by collection, sorted by buckle size, dedupes across lines), with flat-list and manual fallbacks.
-- PO header **Company** + **Warehouse** (Shopify location), overridable per line item.
+### In scope
+- New `/admin/modules` hub page listing available modules
+- Production module under `/admin/modules/production` with PO list, PO detail, kanban, and gantt views
+- Schema: suppliers, master POs, line items, stage events, attachments, comments
+- Stage-grouping behavior: line items advance together by default; PO can be "broken" to allow per-item stages
+- Customer link at line item level (optional FK to `customer` and/or `orderLineItem`)
+- Supplier portal at `/supplier/...` with magic-link auth, scoped to their own POs
+- File uploads via Vercel Blob (PO + line item attachments)
+- Comments on POs and line items (internal users + suppliers)
+- Email deadline alerts (cron-driven, sent via Resend)
+- Inventory tie-in: incoming qty per variant, surfaced on existing Products page and a new Inventory view
+- Tests at each phase (unit + integration; one Playwright spec for the happy path at the end)
 
-### Out of scope (still)
-- Marketing/other modules (separate work plans).
-- A proper `product`/`product_variant` table (line items keep `shopify_product_id`/`shopify_variant_id` text + denormalized snapshot).
-- In-app notifications (email only); supplier-side file approval; cost accounting/margin; auto-advance automations; multi-currency.
+### Out of scope (for this work plan)
+- Marketing or other modules (separate work plans)
+- A proper `product`/`product_variant` table (production line items will reference `shopify_product_id` + `shopify_variant_id` as text with denormalized snapshots; promoting to FK is a separate work plan)
+- In-app notifications (email only for v1)
+- Supplier-side file approval workflows
+- Cost accounting / margin tracking against POs
+- Automations beyond deadline alerts (e.g. auto-advance on QC pass) — design hooks for later but don't build
+- Multi-currency POs (assume USD)
+- Multi-warehouse / location tracking
 
-## Decisions (as built)
+## Decisions Already Made
 
-- **URLs**: pages at `/modules/production/*` and `/customers/companies` (the `(admin)` route group adds no `/admin` prefix). Production-feature APIs under `/api/production/*` (each self-checks `auth()`).
-- **PKs**: `text` UUID (`crypto.randomUUID()`), money in cents, dates as `date` strings — matching existing tables.
-- **Stages**: fixed `production_stage` enum, 9 values incl. `complete`; every line item passes through all.
-- **Stage grouping**: `lock_stages_together` on the PO (default true). Locked = whole PO advances together; broken = per-item; PO display stage is the common stage or "Mixed".
-- **Kanban**: drag a line-item card to **any** stage column (forward or back) → sets that stage and records a stage event. A locked PO moves all its items together.
-- **PO editing**: full reconcile on save — existing lines update in place (keeping stage history), new lines seed an opening stage event, removed lines are deleted.
-- **Company**: our own `company` table. A PO has a default `company_id`; line items can override. (Replaced the earlier idea of pulling Shopify B2B companies.)
-- **Price tier**: managed list (`price_tier`, name + `discount_percent`), assigned to a company = % off Shopify retail. **Replaced "Market"**, which was removed entirely.
-- **Warehouse**: Shopify location (id + name snapshot) on the PO header, overridable per line; needs `read_locations`.
-- **Customer link on company**: optional `company.customer_id` → synced `customer`; the contact name/email fields are a typeahead over synced customers.
-- **PO numbering**: **auto-generated** by this system (the source of truth) from `production_po_number_seq` (migration `0018`, starts at 100), zero-padded to ≥5 digits ("00100", "00101", …), immutable after creation. Stored as `shopify_po_number`. On receipt (C2), the number is stamped onto each Shopify inventory adjustment via `inventoryAdjustQuantities` `referenceDocumentUri` (`https://admin.fitwellbuckle.co/po/<number>`). (Was previously user-entered.)
-- **Receiving back to Shopify**: **Option C2 — push a Shopify inventory adjustment on receipt** (decided 2026-05-24). This system is the single source of truth; when a complete PO is received, each line item posts an inventory adjustment (+qty) to its effective warehouse. Needs the `write_inventory` scope (not yet granted). Idempotency: a per-line `shopify_received_at` (migration `0017`) means each line is received exactly once; the PO-level `shopify_received_at` marks "fully received." C1 (manual mark-received) was rejected.
-- **Attachments**: Vercel Blob, server-side `put()`, **public** (unguessable) URLs, 10MB cap. PO-level UI today (schema supports line-item).
-- **PO statuses**: `active | on_hold | complete | cancelled`.
-- **Cycle times for ETA** (Phase 5): hardcode initial per-stage estimates, switch to rolling 30-day average once ≥10 completed line items exist per stage.
+- **Module URL structure**: `/admin/modules/production` with `/admin/modules` index
+- **Supplier auth**: magic-link email via Resend
+- **File storage**: Vercel Blob (~$0.15/GB/mo)
+- **Stages**: fixed enum, every line item passes through all 8 (no skipping in v1)
+- **Stage grouping**: `lock_stages_together` boolean on PO; default true (whole PO advances together); when false, each line item moves independently and the PO shows "Mixed"
+- **Customer link**: optional FK at line item level (`customer_id` and/or `order_line_item_id`); most production is for stock, some line items earmarked for a specific customer or Shopify order
+- **Notifications**: email only for v1
+- **PO numbering**: we don't generate PO numbers. The user enters the **Shopify PO number** (from Shopify's built-in PO feature) when creating a production-tracking PO. Stored as `shopify_po_number`.
+- **Receiving back to Shopify**: **manual** (Option C1). Shopify's PO feature has no GraphQL Admin API, and Stocky's API is read-only and deprecated. When our system marks a PO complete, we surface a "Mark received in Shopify" reminder with a deep link to the Shopify admin. The user clicks "receive" in Shopify themselves — Shopify then handles the inventory update natively. We do **not** push inventory adjustments to Shopify via API.
+- **Stage cycle times for ETA**: hardcode initial estimates (Greg's numbers) per stage. Once we have ≥10 completed line items, switch to a rolling 30-day average per stage. ETA = sum of remaining stage durations from current stage to packaging.
+- **PO statuses**: `active | on_hold | complete | cancelled`
+- **Inventory view in this plan**: minimal — incoming qty per variant + ETA, derived from in-progress production line items. Surfaced on the existing `/admin/products` page and a new `/admin/inventory` page. Full inventory management (on-hand sync, reorder points, low-stock alerts) is a separate follow-up work plan.
 
-## Schema (built — see `src/lib/schema.ts` / `specs/current/schema.md` for the source of truth)
+## Schema Additions (`src/lib/schema.ts`)
 
-All `text` UUID PKs; inline `created_at`/`updated_at`.
+```ts
+// Stage enum — fixed order, used for indexing and validation
+export const productionStage = pgEnum("production_stage", [
+  "supplier_po",
+  "stamping",
+  "edm",
+  "polishing",
+  "logo",
+  "plating",
+  "qc",
+  "packaging",
+  "complete",
+]);
 
-- `production_stage` enum, `supplier`, `production_po`, `production_po_line_item`, `production_stage_event` (migration `0008`).
-- `production_attachment`, `production_comment` — polymorphic (CHECK: exactly one of `po_id`/`line_item_id`; also enforced by the `resolveParent` validator) (migration `0009`).
-- `company`, `price_tier`; `production_po.company_id` + warehouse columns; line-item `company_id`/warehouse overrides; the earlier Shopify-company/market columns were added then dropped (migrations `0010`–`0014`).
-- `company.customer_id` → `customer` (migration `0015`).
-- `user.supplier_id` added (nullable; for Phase 3). `role` already existed.
+export const supplier = pgTable("supplier", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  contactEmail: text("contact_email"),
+  contactName: text("contact_name"),
+  notes: text("notes"),
+  createdAt, updatedAt,
+});
 
-Migrations `0008`–`0015` are applied to the dev branch.
+export const productionPo = pgTable("production_po", {
+  id: serial("id").primaryKey(),
+  supplierId: integer("supplier_id").notNull().references(() => supplier.id),
+  shopifyPoNumber: text("shopify_po_number").notNull(),  // user-entered, copied from Shopify's built-in PO feature
+  issuedDate: date("issued_date").notNull(),
+  expectedDeliveryDate: date("expected_delivery_date"),
+  lockStagesTogether: boolean("lock_stages_together").notNull().default(true),
+  status: text("status").notNull().default("active"),  // active | on_hold | complete | cancelled
+  shopifyReceivedAt: timestamp("shopify_received_at"),  // set manually when user confirms they marked it received in Shopify
+  notes: text("notes"),
+  createdAt, updatedAt,
+});
 
-## Routes (built)
+export const productionPoLineItem = pgTable("production_po_line_item", {
+  id: serial("id").primaryKey(),
+  poId: integer("po_id").notNull().references(() => productionPo.id, { onDelete: "cascade" }),
 
-**Pages** (under the `(admin)` group): `/modules/production` (list), `/modules/production/po/new`, `/modules/production/po/[id]`, `/modules/production/po/[id]/edit`, `/modules/production/kanban`, `/modules/production/suppliers`, `/customers/companies`.
+  // Product identity (no FK yet — see "Out of scope" above)
+  shopifyProductId: text("shopify_product_id"),
+  shopifyVariantId: text("shopify_variant_id"),
+  sku: text("sku").notNull(),
+  title: text("title").notNull(),
 
-**API** (`/api/production/*`, auth-checked): `po` (POST), `po/[id]` (PATCH partial, PUT full-edit), `po/[id]/advance`, `po/[id]/comments`, `po/[id]/attachments`, `attachments/[id]` (DELETE), `line-items/[id]/stage` (kanban set-stage), `suppliers` (+`[id]`), `companies` (+`[id]`), `price-tiers` (+`[id]`), `customer-search`, `collections`, `products`, `shopify-refs` (warehouses).
+  quantity: integer("quantity").notNull(),
+  unitCostCents: integer("unit_cost_cents"),
 
-**Nav**: Products → Production; Marketing → Attribution/Campaigns; Customers → Companies. (`admin-sidebar.tsx` groups; middleware guards `/modules/*`.)
+  // Stage tracking — current stage lives here even when locked, so "break" is just flipping the PO flag
+  currentStage: productionStage("current_stage").notNull().default("supplier_po"),
+  expectedCompletionDate: date("expected_completion_date"),
+  actualCompletionDate: date("actual_completion_date"),
+
+  // Customer earmark (both optional; if orderLineItemId set, customer derives from it)
+  customerId: integer("customer_id").references(() => customer.id),
+  orderLineItemId: integer("order_line_item_id").references(() => orderLineItem.id),
+
+  createdAt, updatedAt,
+});
+
+export const productionStageEvent = pgTable("production_stage_event", {
+  id: serial("id").primaryKey(),
+  lineItemId: integer("line_item_id").notNull().references(() => productionPoLineItem.id, { onDelete: "cascade" }),
+  stage: productionStage("stage").notNull(),
+  enteredAt: timestamp("entered_at").notNull().defaultNow(),
+  exitedAt: timestamp("exited_at"),
+  triggeredByUserId: text("triggered_by_user_id").references(() => user.id),
+  notes: text("notes"),
+});
+
+// Polymorphic attachment — exactly one of poId or lineItemId set
+export const productionAttachment = pgTable("production_attachment", {
+  id: serial("id").primaryKey(),
+  poId: integer("po_id").references(() => productionPo.id, { onDelete: "cascade" }),
+  lineItemId: integer("line_item_id").references(() => productionPoLineItem.id, { onDelete: "cascade" }),
+  blobUrl: text("blob_url").notNull(),
+  filename: text("filename").notNull(),
+  contentType: text("content_type"),
+  sizeBytes: integer("size_bytes"),
+  uploadedByUserId: text("uploaded_by_user_id").references(() => user.id),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+});
+
+// Polymorphic comment — exactly one of poId or lineItemId set
+export const productionComment = pgTable("production_comment", {
+  id: serial("id").primaryKey(),
+  poId: integer("po_id").references(() => productionPo.id, { onDelete: "cascade" }),
+  lineItemId: integer("line_item_id").references(() => productionPoLineItem.id, { onDelete: "cascade" }),
+  authorUserId: text("author_user_id").notNull().references(() => user.id),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+```
+
+Plus relations blocks and a `role` column on `user` (`'admin' | 'supplier'`) so suppliers can be auth'd via NextAuth but scoped in middleware.
+
+For suppliers: add `supplierId` to the `user` table (nullable; set for users with `role='supplier'`).
+
+## Routes
+
+### Admin
+- `/admin/modules` — module hub (Production card; later Marketing card)
+- `/admin/modules/production` — PO list with filters (supplier, stage, status, deadline)
+- `/admin/modules/production/po/new` — create master PO + line items
+- `/admin/modules/production/po/[id]` — PO detail: line items, stage controls, attachments, comments, timeline
+- `/admin/modules/production/kanban` — kanban view (columns = 9 stages including complete)
+- `/admin/modules/production/gantt` — gantt timeline across POs
+- `/admin/modules/production/suppliers` — supplier CRUD
+- `/admin/inventory` — incoming qty per variant, stage breakdown, ETA impact
+
+### Supplier (new route group)
+- `/supplier/login` — magic-link request
+- `/supplier/` — list of own POs
+- `/supplier/po/[id]` — PO detail (scoped to their supplier_id), stage advance + comments + uploads
+
+### API
+- `POST /api/production/po` — create PO
+- `PATCH /api/production/po/[id]` — update PO (incl. `lockStagesTogether` toggle)
+- `POST /api/production/po/[id]/advance` — advance stage (one item or whole PO depending on lock)
+- `POST /api/production/po/[id]/comments` — add comment
+- `POST /api/production/po/[id]/attachments` — upload (returns signed Vercel Blob URL)
+- `POST /api/production/po/[id]/mark-shopify-received` — sets `shopify_received_at` (user confirmation, not an API call to Shopify)
+- `POST /api/auth/supplier/magic-link` — request magic link (NextAuth magic-link provider; this is the request endpoint)
+- `GET /api/cron/production-deadline-alerts` — daily deadline + receive-in-Shopify reminder scan
 
 ## Implementation Phases
 
-### Phase 1 — Schema + internal CRUD ✅ COMPLETE
-Tables/enum + `user.supplier_id`; `/modules` hub; PO list; create + stage-advance; supplier CRUD; nav + middleware; unit tests (stage logic) + integration test (create/advance); specs updated.
+### Phase 1: Schema + internal CRUD
+- [ ] Add tables and enum to `src/lib/schema.ts`; add `role` and `supplierId` to `user`
+- [ ] Generate + apply migration on dev branch
+- [ ] `/admin/modules` hub page with Production card
+- [ ] `/admin/modules/production` PO list (no kanban yet)
+- [ ] Create/edit PO + line items
+- [ ] Stage advance action (respecting `lockStagesTogether`)
+- [ ] Supplier CRUD page
+- [ ] Add nav entry: "Modules" group in `admin-sidebar.tsx`
+- [ ] **Tests**: unit tests for stage-advance logic (locked vs broken); integration test for PO create + advance; `npm run check` passes
+- [ ] **Update specs**: `specs/current/schema.md`, `specs/current/routes.md`, `specs/current/components.md`
 
-### Phase 2 — Kanban, attachments, comments ✅ COMPLETE
-- Kanban board with drag-to-set-stage (`line-items/[id]/stage`).
-- Attachments: `@vercel/blob`, upload/list/delete on the PO, `BLOB_READ_WRITE_TOKEN`.
-- Comments thread on the PO; stage-event timeline on PO detail.
-- Tests: parent-rule unit tests; create/advance + full-edit integration tests; attachment upload→download integration test (skips without a Blob token + dev DB).
-- Deferred: line-item-level comments/attachments UI (schema supports it); the Playwright happy-path spec (needs an e2e auth fixture + Blob token).
+### Phase 2: Kanban, attachments, comments
+- [ ] Install `@vercel/blob`; add `BLOB_READ_WRITE_TOKEN` to `.env.example`
+- [ ] Kanban view (columns = stages, cards = line items, drag to advance)
+- [ ] Attachment upload + list on PO and line item
+- [ ] Comments thread on PO and line item
+- [ ] PO detail timeline (from `production_stage_event`)
+- [ ] **Tests**: unit tests for attachment polymorphic constraint; integration test for upload + download cycle; Playwright spec for "create PO → upload file → advance stage → comment"
 
-### Beyond the original plan — also shipped
-- Companies + price tiers (`/customers/companies`), company↔customer linking via typeahead.
-- PO header Company + Warehouse with per-line overrides; Market removed.
-- Product picker (Shopify catalog grouped by collection, size sort, dedupe, "All Products" default, live total cost).
-- Full PO editing (`/po/[id]/edit`, PUT reconcile).
-- Nav restructure (Products/Marketing/Customers groups; "Modules" entry removed).
+### Phase 3: Supplier auth + portal
+- [ ] NextAuth magic-link provider for `role='supplier'` users
+- [ ] Middleware: `/supplier/*` requires `role='supplier'`; `/admin/*` requires `role='admin'`
+- [ ] `/supplier/login` + `/supplier/` + `/supplier/po/[id]`
+- [ ] Scope all supplier queries by `supplierId` (centralised helper)
+- [ ] Suppliers can: view their POs, advance stages, comment, upload files (cannot edit qty/dates)
+- [ ] **Tests**: unit tests for supplier scoping helper; integration test that supplier A cannot see supplier B's PO (RLS-equivalent via app layer)
 
-### Phase 3 — Supplier auth + portal ✅ COMPLETE
-- [x] **3a — Allowlist (done):** `supplier_contact` table (one supplier per email, unique-indexed; lowercased) + relation (migration `0016`). API: `POST /api/production/suppliers/[id]/contacts`, `DELETE /api/production/supplier-contacts/[id]`. UI: Suppliers → Edit → "Authorized logins" (add/remove emails). This is the per-supplier allowlist that gates magic-link sign-in in 3b.
-- [x] **3b — Auth (done):** custom magic-link email provider (`id: "email"`, modeled on @auth/core's Resend provider, delivered via `sendMagicLinkEmail` with a console fallback when `RESEND_API_KEY` is unset). signIn callback: Google → admin (unchanged); email → allowed only if the address resolves to a supplier (`supplier_contact`) OR is an allowed admin, then stamps `role='supplier'` + `supplier_id` on the link-click step. Session exposes `supplierId`. Pure policy `canMagicLinkSignIn` + unit tests.
-- [x] **3b — Middleware (done):** `/supplier/*` requires `role='supplier'` (else → `/supplier/login`); signed-in non-suppliers on `/supplier/*` → `/dashboard`; suppliers hitting admin pages → `/supplier`; `/api/admin/*` rejects suppliers. `/supplier/login` is public.
-- [x] **3c — Portal (done):** `/supplier/login` (magic-link form), `/supplier` (their POs), `/supplier/po/[id]` (404 unless theirs). Supplier layout + top bar; production fields only (no company/customer/price-tier).
-- [x] **3c — Scoping (done):** `scope.ts` (`poSupplierId`, `lineItemPoSupplierId`, `ensureSupplierMayActOnPo/LineItem`) — no `auth` import so it's testable under vitest; `getSupplierScope` (session→supplier) lives in `supplier-session.ts`. Write endpoints owner-check suppliers; edit/delete/contact-mgmt are admin-only.
-- [x] **3c — Suppliers can** view their POs, advance stages, comment, upload — not edit qty/dates, not delete.
-- [x] **3c — Tests (done):** `canSupplierAccessPo` unit tests (in `supplier-access.test.ts`); `scope.integration.test.ts` proves supplier B is forbidden from supplier A's PO (5/5 pass on the dev branch).
+### Phase 4: Deadline alerts + receive-in-Shopify reminder
+- [ ] `GET /api/cron/production-deadline-alerts` — scans for line items with `expected_completion_date` within N days and emails owner (and supplier if assigned)
+- [ ] Add cron to `vercel.json` (daily morning)
+- [ ] Email templates via Resend
+- [ ] When a PO reaches stage `complete`, show a persistent "Mark received in Shopify" banner on the PO detail page with a deep link to the Shopify admin PO (URL pattern: `https://admin.shopify.com/store/<store>/inventory/purchase_orders/<shopify_po_number>` — confirm exact pattern during build); user clicks "I've marked it received" to set `shopify_received_at` and dismiss the banner
+- [ ] Daily reminder email if a PO has been `complete` for >24h without `shopify_received_at` set
+- [ ] Hook: log every stage transition (already captured in `production_stage_event` from Phase 1) so future automations can subscribe — no automations built yet
+- [ ] **Tests**: unit test for "which line items need alerts today"; unit test for "which complete POs need the receive-in-Shopify nag"; integration test for the cron endpoint
 
-### Phase 4 — Deadline alerts + receiving (C2) — IN PROGRESS
-- [ ] **4a — Receive (C2):** per-line `shopify_received_at` (migration `0017`); Shopify client `adjustInventory` (variant → `inventory_item_id`, then `POST /inventory_levels/adjust.json`; needs `write_inventory`); pure `planReceiveLine` (ready / not_ready / no_variant / no_warehouse / already_received); `receivePo` service (idempotent per line, sets PO flag when all lines received); `POST /api/production/po/[id]/receive` (admin-only). Unit tests for `planReceiveLine`.
-- [ ] **4b — Receive UI:** "Receive into Shopify" banner/button on the admin PO detail for complete, not-yet-received POs; shows received timestamp; surfaces per-line skips + a clear `write_inventory`-not-granted message.
-- [ ] **4c — Deadline alerts:** `GET /api/cron/production-deadline-alerts` (`verifyCronOrAdmin`); pure `lineItemsNeedingAlert` + `posNeedingReceiveNag`; emails owner (+ supplier) via Resend (graceful if no key); add to `vercel.json`. Unit tests for the pure selectors.
-- C1 (manual "mark received" banner + nag) — rejected in favour of C2.
-
-### Phase 5 — Gantt + inventory tie-in ✅ COMPLETE
-- [x] Cycle-time service: pure `cycle-time.ts` (`DEFAULT_STAGE_DAYS` placeholders, `resolveStageEstimate` = rolling 30-day average once ≥10 samples else default, `projectRemainingDays`/`projectEta`) + db-backed `cycle-time-data.ts` (`getStageEstimates` from `production_stage_event` durations).
-- [x] Production timeline (Gantt): per-line-item timeline, solid actual segments from stage history + faded projected segment to ETA, stage colour legend, today marker. Embedded on the POs and Production page below the board (`production-timeline.tsx`); no standalone route. The page reads, top to bottom: PO List → Production (board) → Production timeline.
-- [x] `/inventory`: per-SKU incoming (not-yet-received) qty, by-stage breakdown, nearest projected ETA (pure `aggregateIncoming`). Incoming-qty column added to `/products`. "Inventory" added to the Products nav; middleware guards `/inventory`.
-- [x] **Tests**: `cycle-time` branches (defaults vs rolling avg, ETA projection) + `aggregateIncoming` (sum, by-stage, nearest ETA, sort) — unit.
-- ⚠️ `DEFAULT_STAGE_DAYS` are **placeholders** — get Greg's per-stage day estimates and update the constant. The rolling average takes over automatically once a stage has ≥10 completed transitions in the last 30 days.
-
-### Phase 6 — B2B invoicing ✅ COMPLETE
-Bills **companies** (the revenue side) for produced goods, with bidirectional creation between POs and invoices.
-- [x] **Data model:** `invoice` + `invoice_line_item` (migration `0019`); `invoice_number_seq` → `INV-00100`; status `draft|sent|paid|void`; links `source_po_id`, `source_line_item_id`, `shopify_draft_order_id`, `shopify_invoice_url`. Pure helpers (`computeInvoiceTotals`, `groupByCompany`, `formatInvoiceNumber`) unit-tested.
-- [x] **Pricing:** Shopify retail × (1 − company price-tier %); tier % snapshotted on the invoice at creation. Retail resolved per variant from Shopify in the PO→invoice route; editable on the draft.
-- [x] **PO → invoice:** "Create invoice" on the PO detail → one invoice **per bill-to company** (line override, else PO default), priced retail−tier. `POST /api/production/po/[id]/invoice`.
-- [x] **Invoice → PO:** "Create PO" on the invoice (pick supplier) → a draft production PO carrying the invoice's lines + company (costs blank), referencing the invoice in its notes. `POST /api/invoices/[id]/create-po`.
-- [x] **Send (hybrid):** email the invoice (Resend, graceful w/o key) **and** push a Shopify **draft order** with a payment link when the company is linked to a Shopify customer; stores the draft id + invoice URL; marks "sent". Needs `write_draft_orders` (not yet granted → skipped with a clear note).
-- [x] **UI/nav:** `/invoices` list + detail (status, send, create-PO) + create/edit form; **Invoices** under Customers; middleware-guarded; admin-only APIs (suppliers 403).
-- [x] **Tests:** pricing/grouping/format (unit); integration for one-invoice-per-company (retail−tier) + create-PO-from-invoice.
-- [x] **Payments (decided 2026-05-24 → Shopify checkout):** the draft-order checkout link is the pay path — Apple Pay / Shop Pay / PayPal / cards come from Shopify Payments. Surfaced as a prominent "Pay online" button on the invoice detail, the printable doc, and the email. Needs `write_draft_orders` + those wallets enabled in Shopify.
-- [x] **Bank-wire / remittance:** editable in admin Settings (`billing_settings`, single row, migration `0020`); rendered on the invoice detail, the printable `/invoices/[id]/print` doc, and the email for buyers paying by wire/ACH.
-
-### Phase 7 — Company B2B portal ✅ COMPLETE
-Self-serve portal where company buyers sign in and order at their tier pricing.
-- [x] **7a — Allowlist:** `company_contact` table (one company per email) + `user.company_id` (migration `0021`); admin-only `POST /api/production/companies/[id]/contacts` + `DELETE /api/production/company-contacts/[id]`; managed under Customers → Companies → Edit → "Portal logins".
-- [x] **7b — Auth:** magic-link sign-in extended to allowlisted company emails → `role='company'` + `company_id` (supplier wins if on both lists); session exposes `companyId`. Middleware gates `/portal/*` to companies, bounces them off admin/supplier routes (and `/api/admin` 401). `canMagicLinkSignIn(supplierId, companyId, adminAllowed)`.
-- [x] **7c — Portal:** `/portal/login`, `/portal` (catalog at tier price via the shared ProductCombobox + cart + **instant Shopify checkout**), `/portal/orders` (their order history with pay links). `getCompanyScope` server helper; `POST /api/portal/checkout` creates a Shopify draft order at the tier discount and records an invoice (`recordCompanyOrder`), returning the pay link. Needs `write_draft_orders` (graceful "checkout not enabled" otherwise).
-- [x] **Tests:** company sign-in policy (unit); company-scoped order listing isolation (integration).
+### Phase 5: Gantt + inventory tie-in (minimal)
+- [ ] `/admin/modules/production/gantt` view (timeline per line item, coloured by stage)
+- [ ] Cycle-time service: returns per-stage duration estimate — hardcoded constants until ≥10 completed line items exist per stage, then rolling 30-day average from `production_stage_event`
+- [ ] `/admin/inventory` page: per-variant incoming qty (sum of in-progress production line items), stage breakdown, ETA from cycle-time service
+- [ ] Surface incoming qty + earliest ETA on existing `/admin/products` page
+- [ ] **Tests**: unit test for cycle-time service (hardcoded vs averaged branches); unit test for ETA aggregation; Playwright smoke for inventory page
 
 ## Notes
 
 ### Open questions
-- **✅ C1 vs C2 — receiving strategy: RESOLVED (2026-05-24) → C2.** This system is the single source of truth and pushes a Shopify **inventory adjustment** on receipt. Still needs the `write_inventory` scope granted in the Shopify Dev Dashboard (store re-auth) before live pushes work — until then the receive flow returns a clear "scope not granted" error (same pattern as `read_locations`).
-- **Initial cycle-time numbers per stage** — placeholders are live in `DEFAULT_STAGE_DAYS` (`src/lib/production/cycle-time.ts`); get Greg's real per-stage day estimates and update the constant. Each stage auto-switches to its rolling 30-day average once ≥10 completed transitions exist.
-- **Shopify admin deep-link pattern** for POs (Phase 4) — confirm exact format; `shopify_po_number` may not equal Shopify's internal ID.
-- **Supplier visibility of customer/company info** (Phase 3) — ✅ resolved: the portal shows production fields only (stage/status/dates/line items/attachments/comments); company, customer, and price-tier are hidden from suppliers.
-- **`read_locations` scope** not yet granted, so the Warehouse picker is empty until it's added in the Shopify Dev Dashboard.
+- **Initial cycle-time numbers per stage** — need Greg's best guess for stamping, EDM, polishing, logo, plating, QC, packaging (in days). Used until ≥10 completed line items exist per stage.
+- **Shopify admin deep-link URL pattern** for POs — confirm exact format during Phase 4 build (likely `https://admin.shopify.com/store/<store>/inventory/purchase_orders/<id>`, but `shopify_po_number` may not match Shopify's internal ID; may need to store the Shopify PO internal ID alongside the number).
+- **Supplier visibility of customer info** — do suppliers see which customer/order a line item is earmarked for, or is that internal-only? Default: internal-only (cleaner separation).
 
 ### Risks
-- **No Shopify PO API** — POs are user-entered; receiving is manual (C1) or via inventory adjustment (C2). Not a true PO sync either way.
-- **Polymorphic attachments/comments** — nullable `po_id`/`line_item_id` + CHECK (exactly one) + `resolveParent`; less type safety, acceptable.
-- **Public blob URLs** — attachments are public (unguessable). Fine for internal docs at our scale; revisit if sensitive.
-- **Supplier auth scoping** (Phase 3) — easy to leak across suppliers; mitigate with a centralised scope helper + a cross-supplier integration test.
-- **Migration churn** — the Shopify-company/market columns were added (`0010`) then dropped (`0014`) as the design moved to our own companies; harmless but visible in history.
+- **No Shopify PO API** — Shopify exposes Purchase Orders in their admin UI but has no GraphQL/REST API for them. Stocky's API is read-only and deprecated. This is why we landed on Option C1 (manual receive in Shopify). If Shopify ships a PO API later, we can revisit auto-receive.
+- **Polymorphic attachments/comments** — using nullable `poId`/`lineItemId` with a check constraint (exactly one set) is simpler than a separate `attachable_type`/`attachable_id` pattern but loses some type safety. Acceptable for v1.
+- **Supplier auth scoping** — easy to miss a query and leak data across suppliers. Mitigation: centralised `requireSupplierScope(query, session)` helper that all supplier routes must use; integration test asserts cross-supplier access fails.
+- **Shopify PO / our PO drift** — if the user forgets to mark received in Shopify, our system says "complete" but Shopify inventory doesn't update. Mitigation: persistent banner + daily nag email until `shopify_received_at` is set.
+- **Vercel Blob cost** — at $0.15/GB/mo, even 100GB is $15/mo, so not a real concern at our scale, but worth noting.
 
 ### Alternatives considered
-- **monday.com via their API** — rejected; want integration with existing data + avoid per-seat cost.
-- **Shopify B2B Companies (read from Admin GraphQL)** — explored and works on read, but **rejected** in favour of our own `company` table so we control price tiers and customer linkage (not a Plus dependency).
-- **Shopify Markets as a PO tag** — built then **removed**; replaced by price tiers on companies.
-- **Option C2 (push inventory adjustment on receipt)** — **chosen** (now the Receiving decision, see above; moved out of alternatives).
-- **Option D (replace Shopify POs entirely)** — rejected; we keep Shopify orders/inventory as the storefront source and only write inventory adjustments on receipt.
-- **Polymorphic `attachable_type` pattern** — rejected as overkill for two parent types.
-- **PO-level stage column** — rejected; stage lives on line items with a PO lock flag; PO stage is derived ("Mixed" when they differ).
+- **Build on top of monday.com via their API** instead of from scratch — rejected because Greg specifically wants the integration with existing customer/order/inventory data and per-seat cost is a real factor as suppliers come online.
+- **Option C2 (push inventory adjustments to Shopify via API on PO completion)** — rejected; bypasses Shopify's PO receive flow and risks Shopify PO state and inventory state diverging. Manual receive (C1) keeps Shopify's PO ledger correct.
+- **Option D (replace Shopify POs entirely)** — rejected; user wants to keep using Shopify's PO feature as the inventory source of truth.
+- **Polymorphic attachable_type pattern** — rejected as overkill for two parent types (PO + line item).
+- **PO-level stage** — rejected; storing stage at line-item level (with a PO-level lock flag) is simpler and more flexible. The PO's displayed stage is derived: common stage if all match, "Mixed" otherwise.

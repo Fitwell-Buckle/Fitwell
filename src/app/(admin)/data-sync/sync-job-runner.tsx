@@ -3,6 +3,15 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
+const DATE_RANGES = [
+  { label: "Yesterday", days: 1 },
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+  { label: "Last 180 days", days: 180 },
+  { label: "Last 365 days", days: 365 },
+];
+
 function summarizeResult(data: Record<string, unknown>): string {
   const parts: string[] = [];
   for (const [key, val] of Object.entries(data)) {
@@ -12,6 +21,8 @@ function summarizeResult(data: Record<string, unknown>): string {
       parts.push(`${s.synced} ${key}${s.errors ? ` (${s.errors} errors)` : ""}`);
     } else if (key === "rows" && typeof val === "number") {
       parts.push(`${val} rows`);
+    } else if (key === "days" && typeof val === "number") {
+      parts.push(`${val}d`);
     } else if (key === "date" && typeof val === "string") {
       parts.push(val);
     }
@@ -22,20 +33,25 @@ function summarizeResult(data: Record<string, unknown>): string {
 export function SyncJobRunner({
   path,
   disabled,
+  supportsDateRange,
 }: {
   path: string;
   disabled: boolean;
+  supportsDateRange?: boolean;
 }) {
   const [state, setState] = useState<"idle" | "running" | "done" | "error">(
     "idle",
   );
   const [result, setResult] = useState<string | null>(null);
+  const [days, setDays] = useState(1);
 
   async function run() {
     setState("running");
     setResult(null);
     try {
-      const res = await fetch(path, {
+      const url =
+        supportsDateRange && days > 1 ? `${path}?days=${days}` : path;
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${getCronSecret()}` },
       });
       const data = await res.json();
@@ -66,6 +82,20 @@ export function SyncJobRunner({
         >
           {state === "done" ? `✓ ${result}` : result}
         </span>
+      )}
+      {supportsDateRange && (
+        <select
+          value={days}
+          onChange={(e) => setDays(Number(e.target.value))}
+          disabled={disabled || state === "running"}
+          className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-700 disabled:opacity-50"
+        >
+          {DATE_RANGES.map((r) => (
+            <option key={r.days} value={r.days}>
+              {r.label}
+            </option>
+          ))}
+        </select>
       )}
       <Button
         size="sm"

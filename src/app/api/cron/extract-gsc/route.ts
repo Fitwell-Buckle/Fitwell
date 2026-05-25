@@ -8,15 +8,23 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // GSC data has 2-3 day lag
-    const date = new Date();
-    date.setDate(date.getDate() - 3);
+    const days = Math.min(
+      Math.max(parseInt(req.nextUrl.searchParams.get("days") ?? "1"), 1),
+      365,
+    );
+    let totalRows = 0;
 
-    const rows = await extractGSCDaily(date);
+    // GSC data has 2-3 day lag, so offset starts at 3
+    for (let i = 0; i < days; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - 3 - i);
+      totalRows += await extractGSCDaily(date);
+    }
+
     return NextResponse.json({
       status: "ok",
-      date: date.toISOString().split("T")[0],
-      rows,
+      days,
+      rows: totalRows,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

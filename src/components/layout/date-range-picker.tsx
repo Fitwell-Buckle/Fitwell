@@ -66,7 +66,7 @@ const PICKER_PATHS = [
   "/invoices",
 ];
 
-export function DateRangePicker() {
+export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -77,8 +77,9 @@ export function DateRangePicker() {
   const activeGranularity = (searchParams.get("g") as Granularity | null) ?? null;
 
   // Compute the effective granularity for highlighting
-  const effectiveGranularity: Granularity = activeGranularity
-    ?? (activeDays !== null ? defaultGranularity(Math.abs(activeDays)) : "day");
+  const effectiveGranularity: Granularity =
+    activeGranularity ??
+    (activeDays !== null ? defaultGranularity(Math.abs(activeDays)) : "day");
 
   const setRange = useCallback(
     (days: number) => {
@@ -128,14 +129,17 @@ export function DateRangePicker() {
     router.push(`${pathname}?${params.toString()}`);
   }, [router, pathname, searchParams, mFrom, mTo]);
 
-  if (!PICKER_PATHS.some((p) => pathname.startsWith(p))) return null;
+  if (!PICKER_PATHS.some((p) => pathname.startsWith(p))) {
+    return embedded ? null : (
+      <div className="h-12 shrink-0 border-b border-zinc-200/80 bg-white" />
+    );
+  }
 
   const dateInputCls =
     "h-7 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
 
-  return (
-    <div className="flex h-12 shrink-0 items-center justify-end border-b border-zinc-200/80 bg-white px-10">
-      <div className="flex items-center gap-1">
+  const content = (
+    <div className="flex flex-wrap items-center justify-end gap-1">
       {PRESETS.map((preset) => (
         <button
           key={preset.label}
@@ -189,7 +193,14 @@ export function DateRangePicker() {
       >
         Apply
       </button>
-      </div>
+    </div>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <div className="flex h-12 shrink-0 items-center justify-end border-b border-zinc-200/80 bg-white px-10">
+      {content}
     </div>
   );
 }

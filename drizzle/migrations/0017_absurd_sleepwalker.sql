@@ -1,1 +1,0 @@
-ALTER TABLE "production_po_line_item" ADD COLUMN "shopify_received_at" timestamp;

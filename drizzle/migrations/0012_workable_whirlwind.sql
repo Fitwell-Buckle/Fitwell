@@ -1,1 +1,0 @@
-ALTER TABLE "price_tier" ADD COLUMN "discount_percent" real DEFAULT 0 NOT NULL;

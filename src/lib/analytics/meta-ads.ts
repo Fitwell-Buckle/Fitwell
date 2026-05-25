@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { metaAdsDaily } from "@/lib/schema";
+import { metaAdsDaily, metaAdsetAudience } from "@/lib/schema";
 import { sql } from "drizzle-orm";
 
 interface MetaInsight {
@@ -19,6 +19,79 @@ interface MetaInsight {
   action_values?: Array<{ action_type: string; value: string }>;
 }
 
+interface MetaRankingInsight {
+  ad_id: string;
+  quality_ranking?: string;
+  engagement_rate_ranking?: string;
+  conversion_rate_ranking?: string;
+}
+
+type AdRankings = {
+  quality: string | null;
+  engagement: string | null;
+  conversion: string | null;
+};
+
+// Pull rolling-7-day rankings ending on `date`. Meta strips these from any
+// insights response that includes breakdowns, so this is a separate call.
+async function fetchMetaAdRankings(
+  adAccountId: string,
+  accessToken: string,
+  date: Date,
+): Promise<Map<string, AdRankings>> {
+  const until = date.toISOString().split("T")[0];
+  const sinceDate = new Date(date);
+  sinceDate.setDate(sinceDate.getDate() - 6);
+  const since = sinceDate.toISOString().split("T")[0];
+
+  const rankings = new Map<string, AdRankings>();
+  let url: string | null =
+    `https://graph.facebook.com/v21.0/act_${adAccountId}/insights?` +
+    new URLSearchParams({
+      access_token: accessToken,
+      fields:
+        "ad_id,quality_ranking,engagement_rate_ranking,conversion_rate_ranking",
+      time_range: JSON.stringify({ since, until }),
+      level: "ad",
+      limit: "500",
+    }).toString();
+
+  while (url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      // Best-effort — keep daily metrics flowing even if rankings fail
+      console.warn(
+        `Meta rankings call failed: ${res.status} ${await res.text()}`,
+      );
+      return rankings;
+    }
+    const page = (await res.json()) as {
+      data: MetaRankingInsight[];
+      paging?: { next?: string };
+    };
+    for (const row of page.data ?? []) {
+      const quality = row.quality_ranking ?? null;
+      // "UNKNOWN" means Meta hasn't computed a ranking (low volume) — treat
+      // it as data ("Unknown" in the UI) rather than null so we don't keep
+      // re-fetching hoping for something different.
+      rankings.set(row.ad_id, {
+        quality: quality && quality !== "" ? quality : null,
+        engagement:
+          row.engagement_rate_ranking && row.engagement_rate_ranking !== ""
+            ? row.engagement_rate_ranking
+            : null,
+        conversion:
+          row.conversion_rate_ranking && row.conversion_rate_ranking !== ""
+            ? row.conversion_rate_ranking
+            : null,
+      });
+    }
+    url = page.paging?.next ?? null;
+  }
+
+  return rankings;
+}
+
 function toCents(value: string): number {
   const n = parseFloat(value);
   return isNaN(n) ? 0 : Math.round(n * 100);
@@ -35,6 +108,18 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
 
   const dateStr = date.toISOString().split("T")[0];
 
+  // Per-ad delivery rankings — Meta calculates these over a rolling 7-day
+  // window and strips them from any response that includes breakdowns, so
+  // we need a separate call without `breakdowns`. Stamp the same value onto
+  // every publisher_platform row for that ad on the synced date.
+  const rankingsByAd = await fetchMetaAdRankings(
+    adAccountId,
+    accessToken,
+    date,
+  );
+
+  // publisher_platform breakdown is required for per-channel splits
+  // (Facebook vs Instagram), but it strips the ranking fields above.
   const allRows: MetaInsight[] = [];
   let url: string | null =
     `https://graph.facebook.com/v21.0/act_${adAccountId}/insights?` +
@@ -127,6 +212,9 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
       conversionValue: revenue ? parseFloat(revenue.value) : 0,
       reach: parseInt(row.reach) || 0,
       frequency: parseFloat(row.frequency) || 0,
+      qualityRanking: rankingsByAd.get(row.ad_id)?.quality ?? null,
+      engagementRanking: rankingsByAd.get(row.ad_id)?.engagement ?? null,
+      conversionRanking: rankingsByAd.get(row.ad_id)?.conversion ?? null,
     };
   });
 
@@ -135,4 +223,104 @@ export async function extractMetaAdsDaily(date: Date): Promise<number> {
   }
 
   return values.length;
+}
+
+// ── Audience-size snapshots ─────────────────────────────────────────
+// Meta's /delivery_estimate gives the addressable monthly active audience
+// for an adset's current targeting. Audience size drifts slowly, so we
+// snapshot once per sync and upsert into a single-row-per-adset table.
+
+interface DeliveryEstimate {
+  estimate_ready: boolean;
+  estimate_mau_lower_bound?: number;
+  estimate_mau_upper_bound?: number;
+}
+
+interface AdsetListItem {
+  id: string;
+  name: string;
+  status: string;
+}
+
+export async function extractMetaAdsetAudience(): Promise<number> {
+  const adAccountId = process.env.META_AD_ACCOUNT_ID;
+  const accessToken = process.env.META_ACCESS_TOKEN;
+  if (!adAccountId || !accessToken) {
+    throw new Error(
+      "Meta Ads credentials not configured (META_AD_ACCOUNT_ID, META_ACCESS_TOKEN)",
+    );
+  }
+
+  // List active adsets — paused/archived adsets won't have a useful estimate
+  const adsets: AdsetListItem[] = [];
+  let url: string | null =
+    `https://graph.facebook.com/v21.0/act_${adAccountId}/adsets?` +
+    new URLSearchParams({
+      access_token: accessToken,
+      fields: "id,name,status",
+      filtering: JSON.stringify([
+        { field: "effective_status", operator: "IN", value: ["ACTIVE"] },
+      ]),
+      limit: "500",
+    }).toString();
+
+  while (url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Meta adsets list error: ${res.status} ${await res.text()}`);
+    }
+    const page = (await res.json()) as {
+      data: AdsetListItem[];
+      paging?: { next?: string };
+    };
+    if (page.data) adsets.push(...page.data);
+    url = page.paging?.next ?? null;
+  }
+
+  if (adsets.length === 0) return 0;
+
+  const now = new Date();
+  let written = 0;
+
+  // Hit /delivery_estimate per adset. We use REACH so the estimate reflects
+  // unique-people reachable rather than conversions-eligible.
+  for (const adset of adsets) {
+    try {
+      const estUrl =
+        `https://graph.facebook.com/v21.0/${adset.id}/delivery_estimate?` +
+        new URLSearchParams({
+          access_token: accessToken,
+          optimization_goal: "REACH",
+        }).toString();
+      const res = await fetch(estUrl);
+      if (!res.ok) continue;
+      const json = (await res.json()) as { data?: DeliveryEstimate[] };
+      const est = json.data?.[0];
+      if (!est?.estimate_ready) continue;
+
+      await db
+        .insert(metaAdsetAudience)
+        .values({
+          adsetId: adset.id,
+          adsetName: adset.name,
+          audienceLowerBound: est.estimate_mau_lower_bound ?? null,
+          audienceUpperBound: est.estimate_mau_upper_bound ?? null,
+          snapshotAt: now,
+        })
+        .onConflictDoUpdate({
+          target: metaAdsetAudience.adsetId,
+          set: {
+            adsetName: adset.name,
+            audienceLowerBound: est.estimate_mau_lower_bound ?? null,
+            audienceUpperBound: est.estimate_mau_upper_bound ?? null,
+            snapshotAt: now,
+          },
+        });
+      written++;
+    } catch {
+      // Skip adsets that fail — audience size is best-effort
+    }
+  }
+
+  return written;
 }

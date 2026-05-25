@@ -1,6 +1,6 @@
 {
-  "id": "8d0a2af0-bf8b-46a2-beef-31e3694bc60a",
-  "prevId": "6d1695e9-4f2c-4ada-85ca-c41da1e7d7e8",
+  "id": "354adc8b-4d19-4672-8cb5-7de6e45316d4",
+  "prevId": "b1d440ff-8967-4060-bd75-79776ae0c5a5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -529,6 +529,129 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.google_ads_adgroup_daily": {
+      "name": "google_ads_adgroup_daily",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "campaign_name": {
+          "name": "campaign_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ad_group_id": {
+          "name": "ad_group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ad_group_name": {
+          "name": "ad_group_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "impressions": {
+          "name": "impressions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "search_impression_share": {
+          "name": "search_impression_share",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "search_budget_lost_is": {
+          "name": "search_budget_lost_is",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "search_rank_lost_is": {
+          "name": "search_rank_lost_is",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "search_absolute_top_is": {
+          "name": "search_absolute_top_is",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "google_ads_adgroup_daily_date_idx": {
+          "name": "google_ads_adgroup_daily_date_idx",
+          "columns": [
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "google_ads_adgroup_daily_lookup_idx": {
+          "name": "google_ads_adgroup_daily_lookup_idx",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ad_group_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.google_ads_daily": {
       "name": "google_ads_daily",
       "schema": "",
@@ -553,6 +676,42 @@
         },
         "campaign_id": {
           "name": "campaign_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ad_group_name": {
+          "name": "ad_group_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ad_group_id": {
+          "name": "ad_group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ad_name": {
+          "name": "ad_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ad_id": {
+          "name": "ad_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "landing_url": {
+          "name": "landing_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -803,6 +962,24 @@
           "type": "real",
           "primaryKey": false,
           "notNull": false
+        },
+        "quality_ranking": {
+          "name": "quality_ranking",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "engagement_ranking": {
+          "name": "engagement_ranking",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "conversion_ranking": {
+          "name": "conversion_ranking",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -822,6 +999,49 @@
           "with": {}
         }
       },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.meta_adset_audience": {
+      "name": "meta_adset_audience",
+      "schema": "",
+      "columns": {
+        "adset_id": {
+          "name": "adset_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "adset_name": {
+          "name": "adset_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "audience_lower_bound": {
+          "name": "audience_lower_bound",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "audience_upper_bound": {
+          "name": "audience_upper_bound",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "snapshot_at": {
+          "name": "snapshot_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -1192,712 +1412,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.production_attachment": {
-      "name": "production_attachment",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "po_id": {
-          "name": "po_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "line_item_id": {
-          "name": "line_item_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "blob_url": {
-          "name": "blob_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "filename": {
-          "name": "filename",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content_type": {
-          "name": "content_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "size_bytes": {
-          "name": "size_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "uploaded_by_user_id": {
-          "name": "uploaded_by_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "uploaded_at": {
-          "name": "uploaded_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "production_attachment_po_id_idx": {
-          "name": "production_attachment_po_id_idx",
-          "columns": [
-            {
-              "expression": "po_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "production_attachment_line_item_id_idx": {
-          "name": "production_attachment_line_item_id_idx",
-          "columns": [
-            {
-              "expression": "line_item_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "production_attachment_po_id_production_po_id_fk": {
-          "name": "production_attachment_po_id_production_po_id_fk",
-          "tableFrom": "production_attachment",
-          "tableTo": "production_po",
-          "columnsFrom": [
-            "po_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "production_attachment_line_item_id_production_po_line_item_id_fk": {
-          "name": "production_attachment_line_item_id_production_po_line_item_id_fk",
-          "tableFrom": "production_attachment",
-          "tableTo": "production_po_line_item",
-          "columnsFrom": [
-            "line_item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "production_attachment_uploaded_by_user_id_user_id_fk": {
-          "name": "production_attachment_uploaded_by_user_id_user_id_fk",
-          "tableFrom": "production_attachment",
-          "tableTo": "user",
-          "columnsFrom": [
-            "uploaded_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "production_attachment_one_parent": {
-          "name": "production_attachment_one_parent",
-          "value": "(\"production_attachment\".\"po_id\" is null) <> (\"production_attachment\".\"line_item_id\" is null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.production_comment": {
-      "name": "production_comment",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "po_id": {
-          "name": "po_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "line_item_id": {
-          "name": "line_item_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "author_user_id": {
-          "name": "author_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "production_comment_po_id_idx": {
-          "name": "production_comment_po_id_idx",
-          "columns": [
-            {
-              "expression": "po_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "production_comment_line_item_id_idx": {
-          "name": "production_comment_line_item_id_idx",
-          "columns": [
-            {
-              "expression": "line_item_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "production_comment_po_id_production_po_id_fk": {
-          "name": "production_comment_po_id_production_po_id_fk",
-          "tableFrom": "production_comment",
-          "tableTo": "production_po",
-          "columnsFrom": [
-            "po_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "production_comment_line_item_id_production_po_line_item_id_fk": {
-          "name": "production_comment_line_item_id_production_po_line_item_id_fk",
-          "tableFrom": "production_comment",
-          "tableTo": "production_po_line_item",
-          "columnsFrom": [
-            "line_item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "production_comment_author_user_id_user_id_fk": {
-          "name": "production_comment_author_user_id_user_id_fk",
-          "tableFrom": "production_comment",
-          "tableTo": "user",
-          "columnsFrom": [
-            "author_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "production_comment_one_parent": {
-          "name": "production_comment_one_parent",
-          "value": "(\"production_comment\".\"po_id\" is null) <> (\"production_comment\".\"line_item_id\" is null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.production_po": {
-      "name": "production_po",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "supplier_id": {
-          "name": "supplier_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shopify_po_number": {
-          "name": "shopify_po_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "issued_date": {
-          "name": "issued_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expected_delivery_date": {
-          "name": "expected_delivery_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lock_stages_together": {
-          "name": "lock_stages_together",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "shopify_received_at": {
-          "name": "shopify_received_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "production_po_supplier_id_idx": {
-          "name": "production_po_supplier_id_idx",
-          "columns": [
-            {
-              "expression": "supplier_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "production_po_status_idx": {
-          "name": "production_po_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "production_po_supplier_id_supplier_id_fk": {
-          "name": "production_po_supplier_id_supplier_id_fk",
-          "tableFrom": "production_po",
-          "tableTo": "supplier",
-          "columnsFrom": [
-            "supplier_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.production_po_line_item": {
-      "name": "production_po_line_item",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "po_id": {
-          "name": "po_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shopify_product_id": {
-          "name": "shopify_product_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shopify_variant_id": {
-          "name": "shopify_variant_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sku": {
-          "name": "sku",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unit_cost_cents": {
-          "name": "unit_cost_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "current_stage": {
-          "name": "current_stage",
-          "type": "production_stage",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'supplier_po'"
-        },
-        "expected_completion_date": {
-          "name": "expected_completion_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "actual_completion_date": {
-          "name": "actual_completion_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "order_line_item_id": {
-          "name": "order_line_item_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "production_li_po_id_idx": {
-          "name": "production_li_po_id_idx",
-          "columns": [
-            {
-              "expression": "po_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "production_li_customer_id_idx": {
-          "name": "production_li_customer_id_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "production_li_order_line_item_id_idx": {
-          "name": "production_li_order_line_item_id_idx",
-          "columns": [
-            {
-              "expression": "order_line_item_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "production_li_current_stage_idx": {
-          "name": "production_li_current_stage_idx",
-          "columns": [
-            {
-              "expression": "current_stage",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "production_po_line_item_po_id_production_po_id_fk": {
-          "name": "production_po_line_item_po_id_production_po_id_fk",
-          "tableFrom": "production_po_line_item",
-          "tableTo": "production_po",
-          "columnsFrom": [
-            "po_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "production_po_line_item_customer_id_customer_id_fk": {
-          "name": "production_po_line_item_customer_id_customer_id_fk",
-          "tableFrom": "production_po_line_item",
-          "tableTo": "customer",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "production_po_line_item_order_line_item_id_order_line_item_id_fk": {
-          "name": "production_po_line_item_order_line_item_id_order_line_item_id_fk",
-          "tableFrom": "production_po_line_item",
-          "tableTo": "order_line_item",
-          "columnsFrom": [
-            "order_line_item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.production_stage_event": {
-      "name": "production_stage_event",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "line_item_id": {
-          "name": "line_item_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stage": {
-          "name": "stage",
-          "type": "production_stage",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "entered_at": {
-          "name": "entered_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "exited_at": {
-          "name": "exited_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "triggered_by_user_id": {
-          "name": "triggered_by_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "production_stage_event_line_item_id_idx": {
-          "name": "production_stage_event_line_item_id_idx",
-          "columns": [
-            {
-              "expression": "line_item_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "production_stage_event_line_item_id_production_po_line_item_id_fk": {
-          "name": "production_stage_event_line_item_id_production_po_line_item_id_fk",
-          "tableFrom": "production_stage_event",
-          "tableTo": "production_po_line_item",
-          "columnsFrom": [
-            "line_item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "production_stage_event_triggered_by_user_id_user_id_fk": {
-          "name": "production_stage_event_triggered_by_user_id_user_id_fk",
-          "tableFrom": "production_stage_event",
-          "tableTo": "user",
-          "columnsFrom": [
-            "triggered_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.session": {
       "name": "session",
       "schema": "",
@@ -1937,63 +1451,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.supplier": {
-      "name": "supplier",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "contact_email": {
-          "name": "contact_email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "contact_name": {
-          "name": "contact_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -2040,12 +1497,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'user'"
-        },
-        "supplier_id": {
-          "name": "supplier_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
@@ -2270,23 +1721,7 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {
-    "public.production_stage": {
-      "name": "production_stage",
-      "schema": "public",
-      "values": [
-        "supplier_po",
-        "stamping",
-        "edm",
-        "polishing",
-        "logo",
-        "plating",
-        "qc",
-        "packaging",
-        "complete"
-      ]
-    }
-  },
+  "enums": {},
   "schemas": {},
   "sequences": {},
   "roles": {},
