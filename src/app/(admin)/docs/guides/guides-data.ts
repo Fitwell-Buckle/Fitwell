@@ -6,10 +6,10 @@
 
 export interface GuideStep {
   text: string;
-  /** If set, a screenshot/video slot is rendered with this caption. */
+  /** If set, a screenshot slot is rendered with this caption. */
   shot?: string;
-  /** Use an .mp4 instead of a .png for this step's asset. */
-  video?: boolean;
+  /** Render this step's asset as an animated .gif instead of a .png. */
+  gif?: boolean;
 }
 
 export interface Guide {
@@ -44,7 +44,7 @@ export const guides: Guide[] = [
         shot: "The dashboard with the left sidebar expanded.",
       },
       {
-        text: "Under Customers you'll find Consumer List, B2B Brand List, B2B Orders, and Consumer Orders. Under Products you'll find the Product List, Purchase Orders, Production Summary, and Suppliers. (Incoming inventory now lives inside Production Summary.)",
+        text: "Under Customers you'll find Consumer List, B2B Brand List, B2B Orders, and Consumer Orders. Under Products you'll find the Product List, Supplier POs, Production Summary, and Supplier List. (Incoming inventory now lives inside Production Summary.)",
         shot: "The Products group expanded in the sidebar.",
       },
     ],
@@ -56,8 +56,8 @@ export const guides: Guide[] = [
     category: "Production",
     steps: [
       {
-        text: "Go to Products → Purchase Orders and click “New PO”.",
-        shot: "The Purchase Orders page with the New PO button.",
+        text: "Go to Products → Supplier POs and click “New PO”.",
+        shot: "The Supplier POs page with the New PO button.",
       },
       {
         text: "Pick the Supplier. If they're not listed, choose “Add new supplier” to create one inline. The PO number is assigned automatically (e.g. 00100).",
@@ -69,7 +69,7 @@ export const guides: Guide[] = [
       {
         text: "Add line items: click the product field, then type to search, or narrow by Collection and the size/colour chips. Pick a product, set the quantity and unit cost.",
         shot: "The product chooser open, showing the search box, collection selector, and size/colour chips.",
-        video: true,
+        gif: true,
       },
       {
         text: "Add more lines with “Add line”. Each line can override the PO's brand/warehouse. Review the total, then click “Create PO”.",
@@ -90,7 +90,7 @@ export const guides: Guide[] = [
       {
         text: "Drag a card to a different column to set its stage. If the PO is set to “advance together”, all its items move as one.",
         shot: "Dragging a card from one stage column to the next.",
-        video: true,
+        gif: true,
       },
       {
         text: "Use the filters above the board (supplier, status, stage, size, colour) to focus the Board and Timeline views.",
@@ -101,7 +101,7 @@ export const guides: Guide[] = [
         shot: "The Production Timeline view with coloured stage bars and ETA labels.",
       },
       {
-        text: "To advance one PO precisely, open it from Purchase Orders → click the PO number, and use the Advance controls on its detail page.",
+        text: "To advance one PO precisely, open it from Supplier POs → click the PO number, and use the Advance controls on its detail page.",
       },
     ],
   },
@@ -112,7 +112,7 @@ export const guides: Guide[] = [
     category: "Production",
     steps: [
       {
-        text: "Open the PO (Purchase Orders → click the PO number) and find the “Stage timeline” card.",
+        text: "Open the PO (Supplier POs → click the PO number) and find the “Stage timeline” card.",
         shot: "The Stage timeline card on the PO detail page.",
       },
       {
@@ -166,7 +166,7 @@ export const guides: Guide[] = [
     category: "Suppliers",
     steps: [
       {
-        text: "Go to Products → Suppliers and click “Add supplier” (name, contact name/email). Save.",
+        text: "Go to Products → Supplier List and click “Add supplier” (name, contact name/email). Save.",
         shot: "The supplier list with the Add supplier form.",
       },
       {
@@ -257,7 +257,7 @@ export const guides: Guide[] = [
       {
         text: "The buyer signs in at /portal/login with a magic link, then browses the catalog at their tier price, builds a cart, and checks out.",
         shot: "The B2B portal order page with the catalog search and cart.",
-        video: true,
+        gif: true,
       },
       {
         text: "Checkout sends them to Shopify to pay (Apple Pay / PayPal / card) at their discount; the order also appears for you under B2B Orders. The buyer can see their own order history under Orders in the portal.",

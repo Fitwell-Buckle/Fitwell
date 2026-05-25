@@ -4,21 +4,15 @@ import { useEffect, useState } from "react";
 import { ImageIcon, X } from "lucide-react";
 
 /**
- * A screenshot/video slot for a guide step. Loads the asset at `src`; until that
- * file exists it shows a dashed placeholder describing the shot + where to drop
- * it. Images render at half width and open full-size in a modal when clicked.
+ * A screenshot slot for a guide step (PNG or animated GIF — both render as an
+ * <img>, so GIFs animate inline). Until the asset exists it shows a dashed
+ * placeholder describing the shot + where to drop it. Renders at half width and
+ * opens full-size in a modal when clicked.
  */
-export function Figure({
-  src,
-  caption,
-  video = false,
-}: {
-  src: string;
-  caption: string;
-  video?: boolean;
-}) {
+export function Figure({ src, caption }: { src: string; caption: string }) {
   const [failed, setFailed] = useState(false);
   const [zoom, setZoom] = useState(false);
+  const isGif = src.endsWith(".gif");
 
   // Close the zoom modal on Escape.
   useEffect(() => {
@@ -33,24 +27,13 @@ export function Figure({
       <figure className="my-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center sm:max-w-[50%]">
         <ImageIcon className="mx-auto h-5 w-5 text-zinc-300" />
         <p className="mt-2 text-xs font-medium uppercase tracking-wide text-zinc-400">
-          {video ? "Video" : "Screenshot"}
+          {isGif ? "Animation" : "Screenshot"}
         </p>
         <p className="mt-1 text-sm text-zinc-500">{caption}</p>
         <p className="mt-2 text-[11px] text-zinc-400">
-          Add a {video ? "video" : "screenshot"} at{" "}
+          Add {isGif ? "an animation" : "a screenshot"} at{" "}
           <code className="rounded bg-zinc-100 px-1 py-0.5">public{src}</code>
         </p>
-      </figure>
-    );
-  }
-
-  if (video) {
-    return (
-      <figure className="my-3 w-full overflow-hidden rounded-lg border border-zinc-200 sm:max-w-[50%]">
-        <video src={src} controls className="w-full" onError={() => setFailed(true)} />
-        <figcaption className="border-t border-zinc-100 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-500">
-          {caption}
-        </figcaption>
       </figure>
     );
   }

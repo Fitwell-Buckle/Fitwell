@@ -9,11 +9,11 @@ automatically — no code change needed.
 
 ```
 public/docs/guides/<guide-slug>/<step-number>.png      # screenshot
-public/docs/guides/<guide-slug>/<step-number>.mp4      # video (steps marked as video)
+public/docs/guides/<guide-slug>/<step-number>.gif      # animation (steps marked gif:true)
 ```
 
 - `<guide-slug>` and `<step-number>` are shown in the placeholder on each guide
-  page (e.g. `public/docs/guides/create-po/4.mp4`).
+  page (e.g. `public/docs/guides/create-po/4.gif`).
 - Steps are numbered from 1, top to bottom.
 
 ## Example

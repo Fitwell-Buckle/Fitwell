@@ -61,9 +61,8 @@ export default async function GuidePage({
                   <p className="text-sm leading-relaxed text-zinc-700">{step.text}</p>
                   {step.shot && (
                     <Figure
-                      src={`/docs/guides/${guide.slug}/${i + 1}.${step.video ? "mp4" : "png"}`}
+                      src={`/docs/guides/${guide.slug}/${i + 1}.${step.gif ? "gif" : "png"}`}
                       caption={step.shot}
-                      video={step.video}
                     />
                   )}
                 </div>
