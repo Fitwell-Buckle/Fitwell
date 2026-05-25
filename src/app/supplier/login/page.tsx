@@ -47,7 +47,9 @@ export default function SupplierLoginPage() {
           alt="Fitwell Buckle Co."
           width={180}
           height={43}
-          className="mx-auto"
+          // The wordmark asset is white (for the dark admin header); render it
+          // black here since the supplier login sits on a light background.
+          className="mx-auto brightness-0"
           priority
         />
         <Card className="mt-8 p-6">

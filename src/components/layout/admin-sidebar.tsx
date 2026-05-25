@@ -44,10 +44,10 @@ const navItems: NavItem[] = [
     label: "Customers",
     icon: Users,
     children: [
-      { href: "/customers", label: "Consumers" },
-      { href: "/customers/companies", label: "Companies" },
-      { href: "/invoices", label: "Invoices" },
-      { href: "/orders", label: "Orders" },
+      { href: "/customers", label: "Consumer List" },
+      { href: "/customers/brands", label: "B2B Brand List" },
+      { href: "/invoices", label: "B2B Orders" },
+      { href: "/orders", label: "Consumer Orders" },
     ],
   },
   {
@@ -55,7 +55,6 @@ const navItems: NavItem[] = [
     icon: Package,
     children: [
       { href: "/products", label: "Product List" },
-      { href: "/inventory", label: "Inventory" },
       { href: "/modules/production", label: "Purchase Orders" },
       { href: "/modules/production/summary", label: "Production Summary" },
       { href: "/modules/production/suppliers", label: "Suppliers" },

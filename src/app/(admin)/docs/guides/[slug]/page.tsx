@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +34,10 @@ export default async function GuidePage({
   const { slug } = await params;
   const guide = getGuide(slug);
   if (!guide) notFound();
+
+  const idx = guides.findIndex((g) => g.slug === guide.slug);
+  const prev = idx > 0 ? guides[idx - 1] : null;
+  const next = idx < guides.length - 1 ? guides[idx + 1] : null;
 
   return (
     <div>
@@ -67,6 +72,35 @@ export default async function GuidePage({
           </ol>
         </CardContent>
       </Card>
+
+      <nav className="mt-6 flex items-stretch justify-between gap-3">
+        {prev ? (
+          <Button variant="outline" className="h-auto max-w-[48%] py-2" asChild>
+            <Link href={`/docs/guides/${prev.slug}`}>
+              <ChevronLeft className="mr-1.5 h-4 w-4 shrink-0" />
+              <span className="flex flex-col items-start text-left">
+                <span className="text-[11px] font-normal text-zinc-400">Previous</span>
+                <span className="truncate">{prev.title}</span>
+              </span>
+            </Link>
+          </Button>
+        ) : (
+          <span />
+        )}
+        {next ? (
+          <Button variant="outline" className="h-auto max-w-[48%] py-2" asChild>
+            <Link href={`/docs/guides/${next.slug}`}>
+              <span className="flex flex-col items-end text-right">
+                <span className="text-[11px] font-normal text-zinc-400">Next</span>
+                <span className="truncate">{next.title}</span>
+              </span>
+              <ChevronRight className="ml-1.5 h-4 w-4 shrink-0" />
+            </Link>
+          </Button>
+        ) : (
+          <span />
+        )}
+      </nav>
     </div>
   );
 }

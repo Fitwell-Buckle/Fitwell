@@ -27,7 +27,7 @@ export default function PortalLoginPage() {
       });
       if (res?.error) {
         setError(
-          "We couldn't send a sign-in link to that address. Make sure it's the email Fitwell set up for your company, or get in touch.",
+          "We couldn't send a sign-in link to that address. Make sure it's the email Fitwell set up for your brand, or get in touch.",
         );
       } else {
         setSent(true);
@@ -47,7 +47,8 @@ export default function PortalLoginPage() {
           alt="Fitwell Buckle Co."
           width={180}
           height={43}
-          className="mx-auto"
+          // White wordmark asset → render black on this light background.
+          className="mx-auto brightness-0"
           priority
         />
         <Card className="mt-8 p-6">
@@ -71,9 +72,9 @@ export default function PortalLoginPage() {
             </div>
           ) : (
             <form onSubmit={submit}>
-              <h1 className="text-sm font-semibold text-zinc-900">Company sign in</h1>
+              <h1 className="text-sm font-semibold text-zinc-900">Brand sign in</h1>
               <p className="mt-1 text-xs text-zinc-500">
-                Order Fitwell buckles at your company&apos;s pricing. Enter your work
+                Order Fitwell buckles at your brand&apos;s pricing. Enter your work
                 email and we&apos;ll send a one-time sign-in link.
               </p>
               <Input
