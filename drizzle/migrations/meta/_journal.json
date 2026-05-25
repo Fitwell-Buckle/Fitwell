@@ -148,6 +148,13 @@
       "when": 1779668559197,
       "tag": "0020_typical_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1779672671203,
+      "tag": "0021_sticky_typhoid_mary",
+      "breakpoints": true
     }
   ]
 }

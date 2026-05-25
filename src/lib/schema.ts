@@ -32,6 +32,9 @@ export const user = pgTable("user", {
   // Set for users with role='supplier' so the supplier portal can scope queries
   // to their own POs (production module, Phase 3).
   supplierId: text("supplier_id"),
+  // Set for users with role='company' so the B2B portal can scope to their
+  // company + apply their price tier (Phase 7).
+  companyId: text("company_id"),
 });
 
 export const account = pgTable(
@@ -351,11 +354,31 @@ export const company = pgTable(
   ],
 );
 
+// Allowlist of emails that may sign in to the B2B company portal (Phase 7).
+export const companyContact = pgTable(
+  "company_contact",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    companyId: text("company_id")
+      .notNull()
+      .references(() => company.id, { onDelete: "cascade" }),
+    email: text("email").notNull(), // stored lowercased; one company per email
+    name: text("name"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("company_contact_email_idx").on(t.email),
+    index("company_contact_company_id_idx").on(t.companyId),
+  ],
+);
+
 export const priceTierRelations = relations(priceTier, ({ many }) => ({
   companies: many(company),
 }));
 
-export const companyRelations = relations(company, ({ one }) => ({
+export const companyRelations = relations(company, ({ one, many }) => ({
   priceTier: one(priceTier, {
     fields: [company.priceTierId],
     references: [priceTier.id],
@@ -363,6 +386,14 @@ export const companyRelations = relations(company, ({ one }) => ({
   customer: one(customer, {
     fields: [company.customerId],
     references: [customer.id],
+  }),
+  contacts: many(companyContact),
+}));
+
+export const companyContactRelations = relations(companyContact, ({ one }) => ({
+  company: one(company, {
+    fields: [companyContact.companyId],
+    references: [company.id],
   }),
 }));
 

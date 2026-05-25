@@ -97,6 +97,8 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | GET | `/api/production/customer-search` | Typeahead over synced customers (name/email) for linking a company |
 | POST | `/api/production/companies` | Create a company |
 | PATCH | `/api/production/companies/[id]` | Update a company |
+| POST | `/api/production/companies/[id]/contacts` | Add a B2B portal login email to a company (Phase 7 allowlist); admin-only |
+| DELETE | `/api/production/company-contacts/[id]` | Remove a company portal login email; admin-only |
 | POST | `/api/production/price-tiers` | Create a price tier (% off retail) |
 | PATCH | `/api/production/price-tiers/[id]` | Update a price tier |
 | GET | `/api/production/collections` | Shopify catalog grouped by collection (+ Uncategorized). Primary source for the chooser's collection selector — `useCatalog` prefers this (and dedupes variants), falling back to the flat endpoint below |

@@ -23,6 +23,12 @@ export interface PriceTier {
   discountPercent: number;
 }
 
+export interface CompanyLogin {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -32,6 +38,7 @@ export interface Company {
   notes: string | null;
   priceTierId: string | null;
   tierName: string | null;
+  contacts: CompanyLogin[];
 }
 
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
@@ -162,6 +169,11 @@ export function CompaniesManager({
     }
   }
 
+  const editingCompany =
+    companyEditing && companyEditing !== "new"
+      ? companies.find((c) => c.id === companyEditing)
+      : undefined;
+
   return (
     <div className="mt-6 space-y-5">
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -282,16 +294,19 @@ export function CompaniesManager({
         </Table>
       </DataTable>
 
-      {companyEditing && companyEditing !== "new" && (
-        <CompanyForm
-          title="Edit company"
-          draft={draft}
-          setDraft={setDraft}
-          priceTiers={priceTiers}
-          onSave={saveCompany}
-          onCancel={() => setCompanyEditing(null)}
-          busy={busy}
-        />
+      {editingCompany && (
+        <>
+          <CompanyForm
+            title="Edit company"
+            draft={draft}
+            setDraft={setDraft}
+            priceTiers={priceTiers}
+            onSave={saveCompany}
+            onCancel={() => setCompanyEditing(null)}
+            busy={busy}
+          />
+          <CompanyLogins companyId={editingCompany.id} contacts={editingCompany.contacts} />
+        </>
       )}
     </div>
   );
@@ -515,6 +530,103 @@ function CompanyForm({
           {busy ? "Saving…" : "Save"}
         </Button>
       </div>
+    </Card>
+  );
+}
+
+function CompanyLogins({
+  companyId,
+  contacts,
+}: {
+  companyId: string;
+  contacts: CompanyLogin[];
+}) {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    const e = email.trim().toLowerCase();
+    if (!e) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/production/companies/${companyId}/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "Failed to add.");
+      } else {
+        setEmail("");
+        router.refresh();
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/production/company-contacts/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "Failed to remove.");
+      } else {
+        router.refresh();
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="p-6">
+      <h2 className="text-sm font-semibold text-zinc-900">Portal logins</h2>
+      <p className="mt-1 text-xs text-zinc-500">
+        Anyone on this list can sign in (magic link) to the B2B portal and order
+        at this company’s pricing.
+      </p>
+      <div className="mt-3 space-y-2">
+        {contacts.length === 0 ? (
+          <p className="text-sm text-zinc-400">No logins yet.</p>
+        ) : (
+          contacts.map((c) => (
+            <div
+              key={c.id}
+              className="flex items-center justify-between rounded-md border border-zinc-100 px-3 py-1.5"
+            >
+              <span className="text-sm text-zinc-700">{c.email}</span>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => remove(c.id)}>
+                Remove
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="mt-3 flex gap-2">
+        <Input
+          type="email"
+          placeholder="buyer@company.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <Button onClick={add} disabled={busy || !email.trim()}>
+          Add
+        </Button>
+      </div>
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </Card>
   );
 }

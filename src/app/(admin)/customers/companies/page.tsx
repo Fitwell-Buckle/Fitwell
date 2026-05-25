@@ -21,7 +21,10 @@ export default async function CompaniesPage() {
     db.query.priceTier.findMany({ orderBy: asc(priceTier.name) }),
     db.query.company.findMany({
       orderBy: asc(company.name),
-      with: { priceTier: { columns: { name: true } } },
+      with: {
+        priceTier: { columns: { name: true } },
+        contacts: { columns: { id: true, email: true, name: true } },
+      },
     }),
   ]);
 
@@ -49,6 +52,11 @@ export default async function CompaniesPage() {
           notes: c.notes,
           priceTierId: c.priceTierId,
           tierName: c.priceTier?.name ?? null,
+          contacts: c.contacts.map((ct) => ({
+            id: ct.id,
+            email: ct.email,
+            name: ct.name,
+          })),
         }))}
       />
     </div>
