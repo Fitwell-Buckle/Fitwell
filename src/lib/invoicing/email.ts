@@ -1,5 +1,15 @@
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 
+export interface InvoiceRemittance {
+  bankName: string | null;
+  accountName: string | null;
+  accountNumber: string | null;
+  routingNumber: string | null;
+  swiftBic: string | null;
+  iban: string | null;
+  instructions: string | null;
+}
+
 interface InvoiceEmailData {
   invoiceNumber: string;
   companyName: string;
@@ -12,6 +22,19 @@ interface InvoiceEmailData {
   notes: string | null;
   lineItems: { sku: string; title: string; quantity: number; unitPriceCents: number }[];
   payUrl?: string | null;
+  remittance?: InvoiceRemittance | null;
+}
+
+/** Render the bank-wire block (shared by email + printable doc). */
+export function remittanceRows(r: InvoiceRemittance): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  if (r.bankName) rows.push({ label: "Bank", value: r.bankName });
+  if (r.accountName) rows.push({ label: "Account name", value: r.accountName });
+  if (r.accountNumber) rows.push({ label: "Account #", value: r.accountNumber });
+  if (r.routingNumber) rows.push({ label: "Routing / ABA", value: r.routingNumber });
+  if (r.swiftBic) rows.push({ label: "SWIFT / BIC", value: r.swiftBic });
+  if (r.iban) rows.push({ label: "IBAN", value: r.iban });
+  return rows;
 }
 
 /** Branded HTML for a B2B invoice email. */
@@ -30,9 +53,23 @@ export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
 
   const payBlock = inv.payUrl
     ? `<p style="margin:20px 0 0">
-         <a href="${inv.payUrl}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:10px 20px;border-radius:6px">Pay invoice</a>
+         <a href="${inv.payUrl}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:10px 20px;border-radius:6px">Pay online (Apple Pay, PayPal, card)</a>
        </p>`
     : "";
+
+  const remittance =
+    inv.remittance && remittanceRows(inv.remittance).length > 0
+      ? `<div style="margin-top:20px;border-top:1px solid #e4e4e7;padding-top:12px">
+           <div style="font-size:11px;color:#a1a1aa;text-transform:uppercase">Pay by bank wire / ACH</div>
+           ${remittanceRows(inv.remittance)
+             .map(
+               (r) =>
+                 `<div style="font-size:13px;color:#52525b"><span style="color:#a1a1aa">${r.label}:</span> ${r.value}</div>`,
+             )
+             .join("")}
+           ${inv.remittance.instructions ? `<div style="font-size:12px;color:#71717a;margin-top:4px">${inv.remittance.instructions}</div>` : ""}
+         </div>`
+      : "";
 
   return `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#18181b">
@@ -64,5 +101,6 @@ export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
 
     ${inv.notes ? `<p style="font-size:13px;color:#52525b;margin-top:16px">${inv.notes}</p>` : ""}
     ${payBlock}
+    ${remittance}
   </div>`;
 }

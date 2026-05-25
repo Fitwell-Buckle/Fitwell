@@ -36,6 +36,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/invoices/new` | Create an invoice (company + line items at retail − tier) |
 | `/invoices/[id]` | Invoice detail — status, send, create-PO actions |
 | `/invoices/[id]/edit` | Edit a draft/sent invoice (company is fixed) |
+| `/invoices/[id]/print` | Printable invoice document (pay link + bank-wire remittance) |
 | `/orders` | Order list with filters |
 | `/campaigns` | Campaign list — performance overview |
 | `/campaigns/[id]` | Campaign detail — spend, conversions, ROAS |
@@ -123,6 +124,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | PUT | `/api/invoices/[id]` | Full edit — header + line items (blocked once paid/void) |
 | POST | `/api/invoices/[id]/send` | Email the invoice (Resend) + push a Shopify draft order with a payment link when the company is linked to a Shopify customer (`write_draft_orders`); marks "sent" |
 | POST | `/api/invoices/[id]/create-po` | Create a draft production PO from the invoice (pick supplier) |
+| PATCH | `/api/settings/billing` | Update remittance / bank-wire details shown on invoices |
 
 ### Cron Jobs (Vercel Cron, protected by `CRON_SECRET`)
 | Method | Path | Schedule | Description |

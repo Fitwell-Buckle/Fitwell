@@ -6,9 +6,10 @@
 > product picker, PO editing, nav restructure). **Phases 3–5 are now complete too**
 > (3: supplier magic-link portal; 4: C2 receiving + deadline alerts; 5: Gantt +
 > incoming-inventory; 6: B2B invoicing with PO↔invoice creation). The remaining
-> work is **deployment**: merge PR #2, apply migrations `0008–0019` to prod, and
+> work is **deployment**: merge PR #2, apply migrations `0008–0020` to prod, and
 > set env/scopes (`write_inventory`, `write_draft_orders`, `RESEND_API_KEY`,
-> `BLOB_READ_WRITE_TOKEN`, `read_locations`). The source of
+> `BLOB_READ_WRITE_TOKEN`, `read_locations`). A company B2B portal (Phase 7,
+> instant self-checkout) is planned next. The source of
 > truth for schema/routes is `src/lib/schema.ts` and `specs/current/{schema,routes}.md`;
 > this plan is the narrative + remaining work.
 
@@ -129,6 +130,8 @@ Bills **companies** (the revenue side) for produced goods, with bidirectional cr
 - [x] **Send (hybrid):** email the invoice (Resend, graceful w/o key) **and** push a Shopify **draft order** with a payment link when the company is linked to a Shopify customer; stores the draft id + invoice URL; marks "sent". Needs `write_draft_orders` (not yet granted → skipped with a clear note).
 - [x] **UI/nav:** `/invoices` list + detail (status, send, create-PO) + create/edit form; **Invoices** under Customers; middleware-guarded; admin-only APIs (suppliers 403).
 - [x] **Tests:** pricing/grouping/format (unit); integration for one-invoice-per-company (retail−tier) + create-PO-from-invoice.
+- [x] **Payments (decided 2026-05-24 → Shopify checkout):** the draft-order checkout link is the pay path — Apple Pay / Shop Pay / PayPal / cards come from Shopify Payments. Surfaced as a prominent "Pay online" button on the invoice detail, the printable doc, and the email. Needs `write_draft_orders` + those wallets enabled in Shopify.
+- [x] **Bank-wire / remittance:** editable in admin Settings (`billing_settings`, single row, migration `0020`); rendered on the invoice detail, the printable `/invoices/[id]/print` doc, and the email for buyers paying by wire/ACH.
 
 ## Notes
 

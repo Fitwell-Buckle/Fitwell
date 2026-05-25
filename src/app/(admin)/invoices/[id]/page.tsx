@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { supplier } from "@/lib/schema";
 import { getInvoiceDetail } from "@/lib/invoicing/service";
+import { getBillingSettings, hasRemittance } from "@/lib/invoicing/billing-settings";
+import { remittanceRows } from "@/lib/invoicing/email";
 import {
   INVOICE_STATUS_LABELS,
   invoiceStatusBadgeClass,
@@ -40,12 +42,13 @@ export default async function InvoiceDetailPage({
   if (!session) redirect("/auth/login");
 
   const { id } = await params;
-  const [inv, suppliers] = await Promise.all([
+  const [inv, suppliers, billing] = await Promise.all([
     getInvoiceDetail(id),
     db.query.supplier.findMany({
       columns: { id: true, name: true },
       orderBy: asc(supplier.name),
     }),
+    getBillingSettings(),
   ]);
   if (!inv) notFound();
 
@@ -56,6 +59,9 @@ export default async function InvoiceDetailPage({
       <div className="flex items-center justify-between">
         <PageHeader title={`Invoice ${inv.invoiceNumber}`} />
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/invoices/${inv.id}/print`}>Print</Link>
+          </Button>
           {editable && (
             <Button variant="outline" size="sm" asChild>
               <Link href={`/invoices/${inv.id}/edit`}>Edit</Link>
@@ -163,6 +169,50 @@ export default async function InvoiceDetailPage({
             <span>Total</span>
             <span className="w-28 text-right">{fmtMoney(inv.totalCents)}</span>
           </div>
+        </div>
+      </Card>
+
+      <Card className="mt-5 p-6">
+        <h2 className="text-sm font-semibold text-zinc-900">Payment</h2>
+        <div className="mt-3">
+          {inv.shopifyInvoiceUrl ? (
+            <Button asChild>
+              <a href={inv.shopifyInvoiceUrl} target="_blank" rel="noreferrer">
+                Pay online (Apple Pay, PayPal, card)
+              </a>
+            </Button>
+          ) : (
+            <p className="text-sm text-zinc-400">
+              Use “Send invoice” below to generate an online payment link.
+            </p>
+          )}
+        </div>
+
+        <div className="mt-5 border-t border-zinc-100 pt-4">
+          <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+            Pay by bank wire / ACH
+          </div>
+          {hasRemittance(billing) ? (
+            <dl className="mt-2 grid grid-cols-1 gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
+              {remittanceRows(billing!).map((r) => (
+                <div key={r.label} className="flex justify-between gap-4">
+                  <dt className="text-zinc-500">{r.label}</dt>
+                  <dd className="text-zinc-800">{r.value}</dd>
+                </div>
+              ))}
+              {billing!.instructions && (
+                <p className="mt-1 text-xs text-zinc-500 sm:col-span-2">{billing!.instructions}</p>
+              )}
+            </dl>
+          ) : (
+            <p className="mt-2 text-sm text-zinc-400">
+              Add bank-wire details in{" "}
+              <Link href="/settings" className="underline underline-offset-2">
+                Settings
+              </Link>{" "}
+              to show them here and on the invoice.
+            </p>
+          )}
         </div>
       </Card>
 

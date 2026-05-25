@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { invoice } from "@/lib/schema";
 import { getInvoiceDetail, updateInvoiceStatus } from "@/lib/invoicing/service";
 import { buildInvoiceEmailHtml } from "@/lib/invoicing/email";
+import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { sendEmail } from "@/lib/email/resend";
 import { getShopifyClient } from "@/lib/shopify/client";
 
@@ -84,6 +85,7 @@ export async function POST(
     notes.push("email skipped (RESEND_API_KEY not set)");
   } else {
     try {
+      const billing = await getBillingSettings();
       await sendEmail({
         to,
         subject: `Invoice ${inv.invoiceNumber} from Fitwell Buckle Co.`,
@@ -104,6 +106,7 @@ export async function POST(
             unitPriceCents: l.unitPriceCents,
           })),
           payUrl,
+          remittance: billing,
         }),
         cc: session.user.email ?? undefined,
       });

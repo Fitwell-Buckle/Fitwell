@@ -803,3 +803,17 @@ export const invoiceLineItemRelations = relations(invoiceLineItem, ({ one }) => 
     references: [invoice.id],
   }),
 }));
+
+// Single-row remittance / bank-wire details shown on invoices (id is always
+// "default"). Editable in admin Settings.
+export const billingSettings = pgTable("billing_settings", {
+  id: text("id").primaryKey().default("default"),
+  bankName: text("bank_name"),
+  accountName: text("account_name"),
+  accountNumber: text("account_number"),
+  routingNumber: text("routing_number"),
+  swiftBic: text("swift_bic"),
+  iban: text("iban"),
+  instructions: text("instructions"),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
