@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { productionPo, productionStageEvent } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
 import { derivePoStage } from "@/lib/production/stages";
 import { getCatalogCached, makeLineAttrs, type CatalogVariant } from "@/lib/catalog/load";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
@@ -97,12 +95,7 @@ export default async function ProductionSummaryPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <PageHeader title="Production Summary" />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/modules/production">Purchase Orders</Link>
-        </Button>
-      </div>
+      <PageHeader title="Production Summary" />
 
       <ProductionFilters
         suppliers={suppliers}
