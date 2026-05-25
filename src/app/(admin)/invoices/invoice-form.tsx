@@ -11,12 +11,19 @@ import { fmtMoney } from "@/lib/production/display";
 import { computeInvoiceTotals } from "@/lib/invoicing/invoicing";
 import { ProductCombobox } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
+import { QuickAddSelect } from "@/components/forms/quick-add-select";
 
 export interface InvoiceCompanyOption {
   id: string;
   name: string;
   tierName: string | null;
   tierDiscount: number; // percent
+}
+
+export interface PriceTierOption {
+  id: string;
+  name: string;
+  discountPercent: number;
 }
 
 export interface InvoiceFormInitial {
@@ -54,10 +61,12 @@ function emptyRow(): Row {
 
 export function InvoiceForm({
   companies,
+  priceTiers = [],
   initial,
   invoiceId,
 }: {
   companies: InvoiceCompanyOption[];
+  priceTiers?: PriceTierOption[];
   initial?: InvoiceFormInitial;
   invoiceId?: string;
 }) {
@@ -65,6 +74,8 @@ export function InvoiceForm({
   const isEdit = !!invoiceId;
 
   const [companyId, setCompanyId] = useState(initial?.companyId ?? companies[0]?.id ?? "");
+  // Local, appendable copy so a newly-added company shows + selects inline.
+  const [companyList, setCompanyList] = useState(companies);
   const [issuedDate, setIssuedDate] = useState(
     initial?.issuedDate ?? new Date().toISOString().slice(0, 10),
   );
@@ -93,7 +104,7 @@ export function InvoiceForm({
   // Effective tier discount (immutable company on edit).
   const discount = isEdit
     ? (initial?.tierDiscount ?? 0)
-    : (companies.find((c) => c.id === companyId)?.tierDiscount ?? 0);
+    : (companyList.find((c) => c.id === companyId)?.tierDiscount ?? 0);
 
   const totals = computeInvoiceTotals(
     rows.map((r) => ({
@@ -187,19 +198,55 @@ export function InvoiceForm({
             {isEdit ? (
               <Input value={initial?.companyName ?? ""} disabled />
             ) : (
-              <select
+              <QuickAddSelect
                 value={companyId}
-                onChange={(e) => setCompanyId(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
-              >
-                {companies.length === 0 && <option value="">No companies — add one first</option>}
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.tierName ? ` — ${c.tierName}` : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={setCompanyId}
+                options={companyList.map((c) => ({
+                  value: c.id,
+                  label: c.tierName ? `${c.name} — ${c.tierName}` : c.name,
+                }))}
+                addLabel="+ Add new company…"
+                fields={[
+                  { key: "name", label: "Company name", required: true },
+                  { key: "contactEmail", label: "Contact email", type: "email" },
+                  {
+                    key: "priceTierId",
+                    label: "Price tier",
+                    type: "select",
+                    options: [
+                      { value: "", label: "— No tier —" },
+                      ...priceTiers.map((t) => ({
+                        value: t.id,
+                        label: `${t.name} (${t.discountPercent}% off)`,
+                      })),
+                    ],
+                  },
+                ]}
+                onCreate={async (vals) => {
+                  const res = await fetch("/api/production/companies", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      name: vals.name?.trim(),
+                      contactEmail: vals.contactEmail?.trim() || null,
+                      priceTierId: vals.priceTierId || null,
+                    }),
+                  });
+                  const d = await res.json().catch(() => ({}));
+                  if (!res.ok) return { error: d.error || "Couldn't add company." };
+                  const tier = priceTiers.find((t) => t.id === vals.priceTierId);
+                  setCompanyList((list) => [
+                    ...list,
+                    {
+                      id: d.data.id,
+                      name: vals.name.trim(),
+                      tierName: tier?.name ?? null,
+                      tierDiscount: tier?.discountPercent ?? 0,
+                    },
+                  ]);
+                  return { id: d.data.id };
+                }}
+              />
             )}
             <p className="mt-1 text-xs text-zinc-500">
               {discount > 0 ? (
@@ -338,7 +385,7 @@ export function InvoiceForm({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex justify-end">
-        <Button onClick={submit} disabled={submitting || (!isEdit && companies.length === 0)}>
+        <Button onClick={submit} disabled={submitting}>
           {submitting ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save changes" : "Create invoice"}
         </Button>
       </div>

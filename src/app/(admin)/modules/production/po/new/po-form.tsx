@@ -11,6 +11,7 @@ import type { ShopifyRef, ShopifyRefs } from "@/app/api/production/shopify-refs/
 import { fmtMoney } from "@/lib/production/display";
 import { ProductCombobox } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
+import { QuickAddSelect } from "@/components/forms/quick-add-select";
 
 export interface CompanyOption {
   id: string;
@@ -149,6 +150,8 @@ export function PoForm({
   const [supplierId, setSupplierId] = useState(
     initial?.supplierId ?? suppliers[0]?.id ?? "",
   );
+  // Local, appendable copy so a newly-added supplier shows + selects inline.
+  const [supplierList, setSupplierList] = useState(suppliers);
   const [issuedDate, setIssuedDate] = useState(
     initial?.issuedDate ?? new Date().toISOString().slice(0, 10),
   );
@@ -295,17 +298,30 @@ export function PoForm({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={fieldLabel}>Supplier</label>
-            <select
+            <QuickAddSelect
               value={supplierId}
-              onChange={(e) => setSupplierId(e.target.value)}
-              className={inputBase}
-            >
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSupplierId}
+              options={supplierList.map((s) => ({ value: s.id, label: s.name }))}
+              addLabel="+ Add new supplier…"
+              fields={[
+                { key: "name", label: "Supplier name", required: true },
+                { key: "contactEmail", label: "Contact email", type: "email" },
+              ]}
+              onCreate={async (vals) => {
+                const res = await fetch("/api/production/suppliers", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: vals.name?.trim(),
+                    contactEmail: vals.contactEmail?.trim() || null,
+                  }),
+                });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) return { error: d.error || "Couldn't add supplier." };
+                setSupplierList((list) => [...list, { id: d.data.id, name: vals.name.trim() }]);
+                return { id: d.data.id };
+              }}
+            />
           </div>
           <div>
             <label className={fieldLabel}>PO number</label>
