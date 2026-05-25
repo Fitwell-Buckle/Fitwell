@@ -24,9 +24,17 @@ import {
   stageBadgeClass,
   fmtDate,
 } from "@/lib/production/display";
-import { getCatalogCached, makeLineAttrs, type CatalogVariant } from "@/lib/catalog/load";
+import {
+  getCatalogCached,
+  getCatalogGroupsCached,
+  makeLineAttrs,
+  makeCollectionLookup,
+  type CatalogVariant,
+  type CatalogCollectionGroup,
+  type LineAttrInput,
+} from "@/lib/catalog/load";
 import { cn } from "@/lib/utils";
-import { ProductionFilters } from "./production-filters";
+import { CatalogFilters } from "@/components/catalog/catalog-filters";
 
 export const metadata: Metadata = {
   title: "Purchase Orders | Fitwell Admin",
@@ -44,8 +52,10 @@ export default async function ProductionPage({
   const supplierId =
     typeof params.supplier === "string" ? params.supplier : "";
   const stage = typeof params.stage === "string" ? params.stage : "";
+  const collectionParam = typeof params.collection === "string" ? params.collection : "";
   const sizeParam = typeof params.size === "string" ? params.size : "";
   const colorParam = typeof params.color === "string" ? params.color : "";
+  const materialParam = typeof params.material === "string" ? params.material : "";
   // Default to Open (active). The "all" sentinel shows every status.
   const status =
     typeof params.status === "string" && params.status ? params.status : "active";
@@ -77,14 +87,18 @@ export default async function ProductionPage({
     db.query.supplier.findMany({ columns: { id: true, name: true } }),
   ]);
 
-  // Catalog gives each line its size/colour (by variant id); optional, cached.
+  // Catalog gives each line its size/colour/material + collection (by variant
+  // id); optional, cached. Powers the standardized filter.
   let catalog: CatalogVariant[] = [];
+  let groups: CatalogCollectionGroup[] = [];
   try {
-    catalog = await getCatalogCached();
+    [catalog, groups] = await Promise.all([getCatalogCached(), getCatalogGroupsCached()]);
   } catch {
-    /* size falls back to the SKU; colour is unavailable without the catalog */
+    /* filters degrade gracefully when Shopify is unavailable */
   }
-  const { sizeOf: lineSize, colorOf: lineColor } = makeLineAttrs(catalog);
+  const { sizeOf: lineSize, colorOf: lineColor, materialOf: lineMaterial } =
+    makeLineAttrs(catalog);
+  const { inCollection, options: collectionOptions } = makeCollectionLookup(groups);
 
   // Filter options from the line items currently in view.
   const allLines = pos.flatMap((po) => po.lineItems);
@@ -94,6 +108,15 @@ export default async function ProductionPage({
   const colorOptions = [
     ...new Set(allLines.map(lineColor).filter((c): c is string => !!c)),
   ].sort((a, b) => a.localeCompare(b));
+  const materialOptions = [
+    ...new Set(allLines.map(lineMaterial).filter((m): m is string => !!m)),
+  ].sort((a, b) => a.localeCompare(b));
+
+  const matchesCatalog = (li: LineAttrInput): boolean =>
+    (!collectionParam || inCollection(li, collectionParam)) &&
+    (!sizeParam || lineSize(li) === Number(sizeParam)) &&
+    (!colorParam || lineColor(li) === colorParam) &&
+    (!materialParam || lineMaterial(li) === materialParam);
 
   const rows = pos
     .map((po) => ({
@@ -103,9 +126,8 @@ export default async function ProductionPage({
     }))
     // Stage filter is applied on the derived stage (cheap at our scale).
     .filter((po) => !stage || po.derivedStage === stage)
-    // Size/colour: keep POs with at least one matching line item.
-    .filter((po) => !sizeParam || po.lineItems.some((li) => lineSize(li) === Number(sizeParam)))
-    .filter((po) => !colorParam || po.lineItems.some((li) => lineColor(li) === colorParam));
+    // Catalog filters: keep POs with at least one matching line item.
+    .filter((po) => po.lineItems.some(matchesCatalog));
 
   return (
     <div>
@@ -116,15 +138,16 @@ export default async function ProductionPage({
         </Button>
       </div>
 
-      <ProductionFilters
-        suppliers={suppliers}
-        supplierId={supplierId}
-        status={status}
-        stage={stage}
-        size={sizeParam}
-        color={colorParam}
+      <CatalogFilters
+        collections={collectionOptions}
+        collection={collectionParam}
         sizeOptions={sizeOptions}
+        size={sizeParam}
         colorOptions={colorOptions}
+        color={colorParam}
+        materialOptions={materialOptions}
+        material={materialParam}
+        production={{ suppliers, supplierId, status, stage }}
       />
 
       <DataTable className="mt-4">

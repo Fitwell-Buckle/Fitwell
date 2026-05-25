@@ -171,6 +171,9 @@ export function PoForm({
   const [rows, setRows] = useState<LineItemRow[]>(
     initial ? initial.lineItems.map(toRow) : [emptyRow()],
   );
+  // Remember the collection used on the last line, so a newly-added line defaults
+  // to the same collection in its product picker.
+  const [lastCollectionId, setLastCollectionId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -366,7 +369,7 @@ export function PoForm({
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={fieldLabel}>Company (optional)</label>
+            <label className={fieldLabel}>Brand (optional)</label>
             <QuickAddSelect
               value={companyId}
               onChange={setCompanyId}
@@ -377,9 +380,9 @@ export function PoForm({
                   label: c.tierName ? `${c.name} — ${c.tierName}` : c.name,
                 })),
               ]}
-              addLabel="Add new company"
+              addLabel="Add new brand"
               fields={[
-                { key: "name", label: "Company name", required: true },
+                { key: "name", label: "Brand name", required: true },
                 { key: "contactEmail", label: "Contact email", type: "email" },
                 {
                   key: "priceTierId",
@@ -516,6 +519,8 @@ export function PoForm({
                       exclude={taken}
                       disabled={catalogLoading}
                       placeholder={catalogLoading ? "Loading catalog…" : "Search products…"}
+                      initialCollectionId={lastCollectionId}
+                      onCollectionChange={setLastCollectionId}
                       onSelect={(v) =>
                         updateRow(i, {
                           variantKey: v.shopifyVariantId,
@@ -567,7 +572,7 @@ export function PoForm({
                     value={r.companyId}
                     onChange={(e) => updateRow(i, { companyId: e.target.value })}
                   >
-                    <option value="">Company: PO default</option>
+                    <option value="">Brand: PO default</option>
                     {companyList.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}

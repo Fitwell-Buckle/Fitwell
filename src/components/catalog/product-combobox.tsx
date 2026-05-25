@@ -38,6 +38,8 @@ export function ProductCombobox({
   exclude,
   placeholder = "Search products…",
   disabled = false,
+  initialCollectionId = "",
+  onCollectionChange,
 }: {
   variants: CatalogVariant[];
   /** Optional Shopify collections for the collection selector. */
@@ -48,13 +50,19 @@ export function ProductCombobox({
   exclude?: Set<string>;
   placeholder?: string;
   disabled?: boolean;
+  /** Collection to pre-select when this picker mounts (e.g. the previous
+   *  line's collection, so adding a line keeps the same collection). */
+  initialCollectionId?: string;
+  /** Called whenever the user changes the collection, so the parent can
+   *  remember it for the next line. */
+  onCollectionChange?: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [sizes, setSizes] = useState<Set<number>>(new Set());
   const [colors, setColors] = useState<Set<string>>(new Set());
-  const [collectionId, setCollectionId] = useState("");
+  const [collectionId, setCollectionId] = useState(initialCollectionId);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -80,6 +88,7 @@ export function ProductCombobox({
     setSizes(new Set());
     setColors(new Set());
     setActive(0);
+    onCollectionChange?.(id);
   }
 
   function toggleSize(s: number) {

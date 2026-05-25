@@ -93,6 +93,8 @@ export function InvoiceForm({
         }))
       : [emptyRow()],
   );
+  // Remember the last line's collection so a newly-added line defaults to it.
+  const [lastCollectionId, setLastCollectionId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -126,7 +128,7 @@ export function InvoiceForm({
 
   async function submit() {
     setError(null);
-    if (!companyId) return setError("Select a company.");
+    if (!companyId) return setError("Select a brand.");
     if (!issuedDate) return setError("Enter the issued date.");
 
     const lineItems = [];
@@ -194,7 +196,7 @@ export function InvoiceForm({
       <Card className="p-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={fieldLabel}>Company</label>
+            <label className={fieldLabel}>Brand</label>
             {isEdit ? (
               <Input value={initial?.companyName ?? ""} disabled />
             ) : (
@@ -205,9 +207,9 @@ export function InvoiceForm({
                   value: c.id,
                   label: c.tierName ? `${c.name} — ${c.tierName}` : c.name,
                 }))}
-                addLabel="Add new company"
+                addLabel="Add new brand"
                 fields={[
-                  { key: "name", label: "Company name", required: true },
+                  { key: "name", label: "Brand name", required: true },
                   { key: "contactEmail", label: "Contact email", type: "email" },
                   {
                     key: "priceTierId",
@@ -322,6 +324,8 @@ export function InvoiceForm({
                     exclude={taken}
                     disabled={catalogLoading}
                     placeholder={catalogLoading ? "Loading catalog…" : "Search products…"}
+                    initialCollectionId={lastCollectionId}
+                    onCollectionChange={setLastCollectionId}
                     onSelect={(v) =>
                       updateRow(i, {
                         variantKey: v.shopifyVariantId,

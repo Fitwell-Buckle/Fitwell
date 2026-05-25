@@ -17,7 +17,7 @@ function variantsOf(p: ShopifyProduct): CatalogVariant[] {
   if (p.status && p.status !== "active") return [];
   const optionNames = (p.options ?? []).map((o) => o.name);
   return (p.variants ?? []).map((v) => {
-    const { sizeMm, color } = deriveAttrs(optionNames, [
+    const { sizeMm, color, material } = deriveAttrs(optionNames, [
       v.option1,
       v.option2,
       v.option3,
@@ -31,6 +31,7 @@ function variantsOf(p: ShopifyProduct): CatalogVariant[] {
       priceCents: toCents(v.price),
       sizeMm,
       color,
+      material,
     };
   });
 }
