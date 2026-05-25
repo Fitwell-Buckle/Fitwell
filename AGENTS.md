@@ -51,6 +51,11 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 | Strategic context | `specs/ops/MISSION.md` + `specs/ops/SCORECARD.md` |
 | Data sync behavior | `specs/invariants/data-sync.md` |
 | Attribution logic | `specs/invariants/attribution.md` |
+| Writing marketing copy or landing pages | `specs/strategy/personas.md` + `specs/strategy/funnel.md` + `specs/strategy/landing-page-goals.md` |
+| Adding/modifying PostHog event tracking | `specs/strategy/event-taxonomy.md` + `specs/strategy/funnel.md` |
+| Designing an A/B test or experiment | `specs/strategy/hypotheses.md` |
+| Persona, positioning, or audience questions | `specs/strategy/personas.md` |
+| Ad campaign creative or targeting | `specs/strategy/personas.md` + `specs/strategy/funnel.md` + `specs/strategy/hypotheses.md` |
 
 ---
 
@@ -68,10 +73,25 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 10. **Update docs with every major change** — when adding pages, tables, routes, or nav items, update the relevant specs (`specs/current/schema.md`, `specs/current/routes.md`, `specs/current/components.md`, etc.) in the same PR. These files render in the admin UI at `/docs` and are the team's shared reference. Don't let them drift.
 11. **Tests ship in the same phase as code** — never defer testing to a later phase.
 12. **Never use auto-memory for project state.** Blockers, follow-ups, decisions, technical context, and anything another team member might need must go into checked-in files (`specs/ops/PRIORITIES.md`, domain files, work plans, `AGENTS.md`). Auto-memory is invisible to other users and other machines. Only use it for genuinely user-personal preferences (collaboration style, not project facts).
+13. **Marketing work runs on the persona × funnel framework.** Every landing page, ad campaign, and PostHog event must declare a target persona and funnel stage. If you can't answer "which persona, which stage" for what you're about to build, read `specs/strategy/` first. Untagged events and unanchored pages create noise we can't analyze later.
 
 ---
 
-## 5. Session Protocol
+## 5. Marketing & Funnel Framework
+
+All marketing work — pages, copy, ads, tracking — sits on a shared persona × funnel matrix. Personas describe *who*; funnel stages describe *where they are in their journey*. Every artifact targets a specific cell.
+
+- **`specs/strategy/personas.md`** — current personas + estimated distribution. Refined as real traffic data comes in.
+- **`specs/strategy/funnel.md`** — canonical funnel stages and their definitions. Used as the vocabulary for all event names and page goals.
+- **`specs/strategy/event-taxonomy.md`** — PostHog event names, each tagged with `(persona_hint, funnel_stage)`. Naming must be consistent across the site.
+- **`specs/strategy/hypotheses.md`** — beliefs we hold vs. claims we want to validate, with test cost and status. Drives where we spend on variation testing.
+- **`specs/strategy/landing-page-goals.md`** — every marketing page declares its target persona, funnel stage, and (if applicable) which hypothesis it's testing.
+
+When in doubt: persona first, then funnel stage, then build.
+
+---
+
+## 6. Session Protocol
 
 ### Start of session
 1. **Sync with main** — pull the latest changes before doing anything else. If there are uncommitted local changes, stash them first, pull, then reapply:
@@ -97,7 +117,7 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 
 ---
 
-## 6. Work Plan Lifecycle
+## 7. Work Plan Lifecycle
 
 Work plans live in `specs/work-plans/` and follow this structure:
 
@@ -133,7 +153,7 @@ Open questions, risks, alternatives considered.
 
 ---
 
-## 7. Database Rules
+## 8. Database Rules
 
 - **ORM**: Drizzle ORM for all queries — no raw SQL unless Drizzle cannot express it.
 - **Schema source of truth**: `src/lib/schema.ts`
@@ -174,7 +194,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ---
 
-## 8. Shopify Integration Rules
+## 9. Shopify Integration Rules
 
 - **Webhook verification**: All incoming webhooks verified via HMAC-SHA256 using `SHOPIFY_WEBHOOK_SECRET`.
 - **Sync is additive**: Never delete Shopify-sourced records. Update existing or soft-delete (set a `deleted_at` timestamp).
@@ -185,7 +205,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ---
 
-## 9. Code Conventions
+## 10. Code Conventions
 
 - **API responses**: Return `{ data }` on success or `{ error }` on failure with appropriate HTTP status codes.
 - **Input validation**: Zod for all external input (API request bodies, query params, webhook payloads).
@@ -201,7 +221,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ---
 
-## 10. Testing
+## 11. Testing
 
 ### Tiers
 - **Tier 1 (fast, ~2s)**: `npm run check` — TypeScript compilation + Vitest unit tests
@@ -218,7 +238,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ---
 
-## 11. Deployment
+## 12. Deployment
 
 - **Platform**: Vercel, auto-deploys from `main` branch on every push.
 - **Project**: https://vercel.com/fitwellbuckle/fitwell

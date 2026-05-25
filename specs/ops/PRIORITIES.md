@@ -1,6 +1,55 @@
 # Priorities
 
-Last updated: 2026-05-13
+Last updated: 2026-05-25
+
+## Current Strategic Focus (2026-05-25)
+
+**The thesis:** Instrument the existing Shopify funnel end-to-end before scaling ad spend. Current state is ~300–400 daily visitors producing ~7 daily sales (~1.5% conversion). Doubling conversion has more leverage than doubling traffic — pouring more spend into a leaky funnel wastes money. See where people actually bail before deciding what to fix.
+
+**The strategic question:** top-of-funnel-first across all channels, isolate-and-perfect one channel, or instrument-first? We're choosing **instrument-first**. Working strategy until evidence suggests otherwise.
+
+**Sequence:**
+1. PostHog instrumentation across the existing storefront funnel (in flight — see workstream 6 below)
+2. Establish baseline conversion at each funnel stage
+3. Identify the largest leak point
+4. Test fixes against the leak (landing variants, content, copy, checkout friction)
+5. Once the funnel converts at target, scale top-of-funnel spend
+
+### Current Numbers (Baseline as of 2026-05-25)
+
+- **Daily visitors:** ~300–400
+- **Daily sales:** 6–9 (median ~7). Never zero post-Black-Friday — the floor looks algorithmic, mechanism unknown
+- **Conversion rate:** ~1.5%
+- **Ad spend mix:** heavily Meta; only Google paid spend is a branded keyword ad on "fitwell" / "fitwell buckles"
+- **Channel attribution:** most sales come from Google, but the mechanism (paid branded search vs. organic vs. post-creator branded search vs. post-Meta-ad branded search) is unknown
+
+### What "Rightness" Looks Like (Initial Targets — Refine with Data)
+
+| Stage | Current | Target | Notes |
+|---|---|---|---|
+| Visitor → product page view | ? | 60%+ | Filter bots first |
+| Product page → add to cart | ? | 8–12% | Industry baseline for considered purchase |
+| Add to cart → checkout start | ? | 50%+ | |
+| Checkout start → checkout complete | ? | 70%+ | Friction here is highest-leverage to fix |
+| **Visitor → purchase (overall)** | **~1.5%** | **3%+** | Doubling is the near-term target |
+
+Each `?` gets a real number once PostHog instrumentation lands. Targets are placeholders based on industry norms — replace with our own once we have baseline.
+
+### Catalog of Unknowns
+
+Captured for systematic attack rather than ambient anxiety. Living index in `specs/strategy/hypotheses.md` (Open Questions section). Highlights:
+
+- **Ad fatigue:** how many people are sick of seeing our ads? What's the optimal frequency cap?
+- **Content type effect:** which formats (installation videos, comparisons, lifestyle) move buyers from `solution_aware` to `considering`?
+- **Creator attribution:** what's the correlation between creator post metrics (engagement, follower count, niche fit) and resulting sales lift?
+- **Creator × ad overlap:** what % of creator-driven sales were already ad-exposed beforehand? Is the creator a closer or an introducer?
+- **Google mechanism:** how is Google traffic actually finding us — branded search post-ad, organic, referral, post-creator?
+- **Funnel bail point:** where exactly does the 1.5% break — top, middle, checkout?
+- **The 6–9 floor:** why is daily sales so tightly bounded? What's the algorithmic mechanism producing this?
+
+Every unknown above is an opportunity. The goal of instrumentation is to convert as many as possible into hypotheses we can test, then into validated answers.
+
+---
 
 ## Active Workstreams
 
@@ -91,12 +140,29 @@ Deferred — Shopify is the primary web property for now. Decision logged in `sp
 
 ---
 
-### 6. 📋 PostHog Integration (deferred)
-**Last worked**: —
-**Source of truth**: `specs/work-plans/todo/posthog-integration.md`
+### 6. 🔨 Conversion Funnel Observability (PostHog)
+**Last worked**: 2026-05-25 (active — promoted from deferred)
+**Source of truth**: `specs/work-plans/todo/posthog-integration.md`, `specs/strategy/event-taxonomy.md`, `specs/strategy/funnel.md`
 **Owner**: Greg
 
-Depends on landing pages. Not needed while Shopify is the only web property.
+**Goal:** end-to-end visibility into the existing Shopify storefront funnel so we know where visitors actually bail. Drives the bottom-up strategy in "Current Strategic Focus" above — we cannot make data-driven calls about ad spend or landing pages until we can see the funnel.
+
+**Done:**
+- [x] Funnel stage vocabulary defined (`specs/strategy/funnel.md`)
+- [x] Event taxonomy and naming conventions defined (`specs/strategy/event-taxonomy.md`)
+- [x] Persona framework defined (`specs/strategy/personas.md`)
+- [x] Initial hypotheses register seeded (`specs/strategy/hypotheses.md`)
+
+**Next:**
+- [ ] Decide PostHog instrumentation architecture: install on Shopify storefront directly, or proxy through this admin app? (Storefront is the funnel, but Shopify theme code is the constraint.)
+- [ ] Instrument required event properties on every page (`page`, `page_goal_stage`, `page_target_persona`, `funnel_stage_inferred`, `referrer_source`)
+- [ ] Instrument stage-progression events (`section_dwelled`, `video_progress`, `cart_item_added`, `checkout_started`)
+- [ ] Capture `checkout_completed` server-side from Shopify webhook (client-side checkout completion is unreliable)
+- [ ] Build baseline funnel report showing actual conversion at each stage
+- [ ] Compare baseline against the "Rightness" targets above — identify the biggest leak
+- [ ] Define next-action criteria based on where the leak is (landing page work, checkout friction, etc.)
+
+**Why this matters now:** every dollar of additional ad spend without instrumentation is a dollar we can't learn from. Until the funnel is observable, scaling top-of-funnel is throwing darts.
 
 ---
 
