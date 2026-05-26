@@ -182,7 +182,14 @@ export default async function SendPoPage({
               {items.map((li) => (
                 <TableRow key={li.id}>
                   <TableCell className="font-mono text-xs">{li.sku}</TableCell>
-                  <TableCell>{li.title}</TableCell>
+                  <TableCell>
+                    {supplierStages.length > 0 && (
+                      <span className="font-semibold text-red-600">
+                        {supplierStages.join(", ")} —{" "}
+                      </span>
+                    )}
+                    {li.title}
+                  </TableCell>
                   <TableCell className="text-right text-zinc-500">{li.quantity}</TableCell>
                   <TableCell className="text-right text-zinc-500">
                     {fmtMoney(li.unitCostCents)}

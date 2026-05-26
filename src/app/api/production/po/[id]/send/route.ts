@@ -3,8 +3,8 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getPoDetail } from "@/lib/production/service";
 import { fmtMoney, fmtDate, STATUS_LABELS } from "@/lib/production/display";
-import { STAGE_LABELS } from "@/lib/production/stages";
-import { formatPoNumber } from "@/lib/production/sub-po";
+import { STAGES, STAGE_LABELS } from "@/lib/production/stages";
+import { formatPoNumber, planSubPos } from "@/lib/production/sub-po";
 import { sendEmail } from "@/lib/email/resend";
 
 const bodySchema = z.object({
@@ -24,15 +24,19 @@ function buildPoEmailHtml(
   po: Po,
   items: Po["lineItems"],
   numberDisplay: string,
+  stagePrefix: string,
 ): string {
   const cell = "padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;";
   const th = "padding:6px 10px;border-bottom:2px solid #ddd;font-size:11px;text-transform:uppercase;color:#888;text-align:left;";
+  const prefixHtml = stagePrefix
+    ? `<span style="color:#dc2626;font-weight:600;">${esc(stagePrefix)} — </span>`
+    : "";
   const rows = items
     .map((li) => {
       const lineTotal = li.unitCostCents != null ? li.unitCostCents * li.quantity : null;
       return `<tr>
         <td style="${cell}font-family:monospace;">${esc(li.sku)}</td>
-        <td style="${cell}">${esc(li.title)}</td>
+        <td style="${cell}">${prefixHtml}${esc(li.title)}</td>
         <td style="${cell}text-align:right;">${li.quantity}</td>
         <td style="${cell}text-align:right;">${fmtMoney(li.unitCostCents)}</td>
         <td style="${cell}text-align:right;">${fmtMoney(lineTotal)}</td>
@@ -101,10 +105,22 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // A sub-PO carries no line items of its own — bill the master's items.
+  // A sub-PO carries no line items of its own — bill the master's items, and
+  // flag the stages this supplier is responsible for (red, per line).
   const master = po.parentPoId ? await getPoDetail(po.parentPoId) : null;
   const items = (master ?? po).lineItems;
   const numberDisplay = formatPoNumber(po.shopifyPoNumber, { suffix: po.poSuffix });
+  let stagePrefix = "";
+  if (master) {
+    const plan = planSubPos(
+      STAGES.filter((s) => s !== "complete"),
+      master.stageAssignments,
+      master.supplierId,
+    );
+    stagePrefix = (plan.find((p) => p.supplierId === po.supplierId)?.stages ?? [])
+      .map((s) => STAGE_LABELS[s])
+      .join(", ");
+  }
 
   const to = [input.to, ...(input.additional ?? [])];
   const cc = session.user.email ?? undefined; // CC the logged-in user
@@ -114,7 +130,7 @@ export async function POST(
       to,
       cc,
       subject: `Purchase Order ${numberDisplay} — Fitwell Buckle Co.`,
-      html: buildPoEmailHtml(po, items, numberDisplay),
+      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix),
     });
     return NextResponse.json({ data: { sentTo: to, cc } });
   } catch (err) {
