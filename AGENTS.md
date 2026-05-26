@@ -60,7 +60,8 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 | Adding or sizing a new acquisition channel | `specs/strategy/funnel.md` (Channel Entry Points) |
 | B2B / wholesale outreach, sales pipeline, or partnership work | `specs/strategy/b2b-pipeline.md` + `specs/strategy/personas.md` (B-section) |
 | Retention sequences, post-purchase email, outfitting campaigns | `specs/strategy/retention-loop.md` + `specs/strategy/personas.md` |
-| Creator program / advocate outreach | `specs/strategy/retention-loop.md` (`advocate` stage) + `specs/strategy/personas.md` (Outfitter-reviewers table) |
+| Creator program / advocate outreach | `specs/strategy/creator-program.md` + `specs/strategy/creator-scoring.md` + `specs/strategy/retention-loop.md` (`advocate` stage) + `specs/strategy/personas.md` (Outfitter-reviewers table) |
+| Anything that touches the current 360 campaign iteration (offer stack, paid channels, landing pages, content sprint, email, creator program — they share a current campaign plan that iterates over time) | `specs/strategy/360-campaign.md` (and the durable framework docs it consumes) |
 
 ---
 
@@ -86,17 +87,26 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 
 All marketing work — pages, copy, ads, tracking — sits on a shared persona × funnel matrix. Personas describe *who*; funnel stages describe *where they are in their journey*. Every artifact targets a specific cell.
 
-The framework now lives in three parallel flow docs (D2C acquisition, B2B sales, post-purchase retention) plus the supporting registries:
+The framework has a **durable conceptual layer** (the flow docs and registries below) plus a **current marketing iteration** (the active 360 campaign). The 360 cycles iterate as marketing plans (v3, v4, v5…); the framework docs evolve incrementally as data lands and outlive any single campaign.
 
+**Current marketing iteration:**
+- **`specs/strategy/360-campaign.md`** — the *active* 360 campaign. Names the current workstreams (offer stack, creator program, destination pages, content sprint, email, paid channels), decisions, sequencing, engineering scope, and measurement framework. Iterates — future versions will replace or restructure this doc. Each iteration consumes the framework docs below; learnings from each iteration feed back into them.
+
+**Durable framework — flow docs:**
 - **`specs/strategy/personas.md`** — current personas (P1–P5 consumer, B1–B6 B2B) + validated segment distribution from the Nov 2025–May 2026 D2C cohort.
 - **`specs/strategy/funnel.md`** — D2C acquisition funnel. Six stages (`unaware`→`converting`), channel entry points as first-class objects with journey roles (introducer/accelerator/closer/all-purpose), per-persona expected paths.
 - **`specs/strategy/b2b-pipeline.md`** — B2B sales pipeline. Sales-CRM stages (`prospect`→`partnership`), B2B-specific entry channels, per-B-persona pipeline paths.
 - **`specs/strategy/retention-loop.md`** — post-purchase outfitting and advocacy. Loop stages (`first_buyer`→`advocate`), retention channels, per-persona outfitting patterns. Closes back into the funnel via advocacy outputs.
+
+**Durable framework — supporting registries and programs:**
 - **`specs/strategy/event-taxonomy.md`** — PostHog event names, each tagged with `(persona_hint, funnel_stage)`. Naming must be consistent across the site.
 - **`specs/strategy/hypotheses.md`** — beliefs we hold vs. claims we want to validate, with test cost and status. Drives where we spend on variation testing.
 - **`specs/strategy/landing-page-goals.md`** — every marketing page declares its target persona, funnel stage, and (if applicable) which hypothesis it's testing.
+- **`specs/strategy/vocabulary-map.md`** — distinctive language per persona from the Judge.me review corpus.
+- **`specs/strategy/creator-program.md`** — creator-management system work plan (schema, outreach pipeline, sample tracking, post detection). Powers Workstream 2 of the 360 campaign.
+- **`specs/strategy/creator-scoring.md`** — scoring methodology (watch_score, fit_score, cross_platform_fit) used by the creator import + stats refresh.
 
-When in doubt: persona first, then which flow (funnel / pipeline / retention loop), then which stage, then build.
+When in doubt: read `360-campaign.md` for the current campaign context, then persona first, then which flow (funnel / pipeline / retention loop), then which stage, then build. The 360 tells you *what we're doing right now*; the framework docs tell you *how everything is supposed to fit together regardless of which iteration we're in*.
 
 ---
 

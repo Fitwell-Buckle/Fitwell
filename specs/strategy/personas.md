@@ -594,11 +594,16 @@ order-sequence position:
   happening but customers are returning via direct/branded search
   rather than Klaviyo links. Worth investigating.
 
-### Outfitter-reviewers — creator-program candidates
+### Outfitter-reviewers — customer advocate / testimonial / referral candidates
 
-Named customers who appear in both the top-spend cohort AND the
-review-leaver cohort. These are the warmest creator-program leads
-identifiable directly from data:
+Named *customers* who appear in both the top-spend cohort AND the
+Judge.me review-leaver cohort. **These are not creators** — they
+have no required reach, audience, or content motion. They're
+existing happy buyers who already advocate organically through
+reviews. Highest-likelihood targets for **customer testimonials,
+case studies, referral-program seeding, and longitudinal customer
+relationships** — distinct from the [[creator-program]] outreach,
+which targets people with audiences.
 
 | Spent | Orders / units | Email | Review |
 |---:|---:|---|---|
