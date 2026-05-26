@@ -64,6 +64,53 @@ above right, not the primary goal.
 - When PostHog cohort data contradicts a path assumption, update
   this doc in the same change as the analysis.
 
+## Targeting Discipline
+
+**Broad-net first; narrow only when conversion data justifies it.**
+
+Most "persona affinity" claims in the Channel Entry Points below are
+working hypotheses, not validated facts. Two channels currently have
+real evidence — `strap_maker_partnership` → P3 (Delugs proven) and
+`branded_search_organic` → anyone with prior awareness (structurally
+true). Everything else is informed guess until cohort data confirms
+it. Treat each channel entry's `evidence` field accordingly:
+
+- `evidence: confirmed` — multiple cohorts of data back the claim
+- `evidence: observed` — early signal in the data, not yet
+  statistically robust
+- `evidence: hypothesis` — believed but not yet measured
+
+**The "broad" envelope is the watch + strap + EDC ecosystem.**
+
+Within that envelope, default to algorithmic-broad audience targeting,
+broad keyword sets, and creator/content exploration in adjacent niches.
+Outside that envelope (general menswear, fashion, beauty, lifestyle
+broadly), exclude — those audiences are not our addressable market.
+
+Practical rules:
+
+- **Paid Meta cold:** broad interest stacks across watches, watch
+  enthusiasts, watch creators' lookalike audiences, strap-content
+  engagers, EDC communities. Don't pre-narrow to "watch enthusiast
+  35–55." Let the algorithm learn from converters.
+- **Search:** broad keyword sets including problem-search terms even
+  when we *think* they're P5 — they might surface P2 in disguise.
+  Negative-keyword over time, don't pre-restrict.
+- **Creators:** test in adjacent niches (strap-content,
+  microbrand-review, value-watch, EDC-watch) — not just dead-center
+  watch-collector creators. The unexpected wins teach us the most.
+- **Landing pages:** designed for a primary persona but defensively
+  for off-target arrivals. See [[landing-page-goals]] design
+  principles.
+- **Tag everything with UTMs.** The whole point of casting broad
+  nets is post-hoc cohort analysis — that requires clean attribution
+  data on every touch.
+
+A `persona affinity` claim in this doc is a working hypothesis until
+at least one full cohort cycle confirms it. Until then, audience
+configuration should remain broad enough within the watch/strap/EDC
+envelope to surface unexpected segments.
+
 ## The Stages (D2C, six stages)
 
 `outfitting` from the prior draft has been moved to
@@ -159,13 +206,27 @@ to exactly one channel below. When you add a new one, add the entry
 ```
 ### <channel_id>
 **Typical entry stage(s):** <stage(s) — where people land when arriving here>
-**Persona affinity:** <which personas this disproportionately reaches>
+**Hypothesized persona affinity:** <which personas we think this reaches; see Targeting Discipline>
+**Evidence:** confirmed | observed | hypothesis
 **Journey role:** introducer | accelerator | closer | all-purpose
 **Measurement:** <how we see touches from this channel>
 **Cost shape:** <paid spend / partnership / organic / unmeasured>
 **Status:** active | paused | experimental | aspirational
 **Notes:** <free text, including any compound-path observations>
 ```
+
+**Note on the persona affinity field.** Per Targeting Discipline above,
+the `Hypothesized persona affinity` field is the persona we *expect*
+the channel to reach disproportionately — but most are hypotheses, not
+facts. Don't use these as exclusion criteria for audience targeting.
+Use them as cohort-analysis prompts ("did this channel actually deliver
+P2 as we expected?") and as creative-direction hints ("if we think P2,
+test P2-targeted creative — but in a broad-net audience configuration,
+not a narrowed one").
+
+**Evidence-field convention.** If `Evidence:` is not specified in a
+channel entry below, treat it as `hypothesis`. Only two channels
+currently warrant `confirmed`; everything else is awaiting cohort data.
 
 ### Journey-role definitions
 
@@ -192,7 +253,7 @@ in the channel's entry.
 
 #### `paid_meta_cold`
 **Typical entry stage(s):** `unaware` → `problem_aware`
-**Persona affinity:** P4 dominant; some P2
+**Hypothesized persona affinity:** P4 dominant; some P2
 **Journey role:** introducer
 **Measurement:** Meta Ads Manager + UTM (`utm_source=meta`); PostHog
 `referrer_source=meta_ads`
@@ -204,7 +265,7 @@ before they can want a solution.
 
 #### `paid_meta_retargeting`
 **Typical entry stage(s):** `considering`
-**Persona affinity:** any prior site visitor
+**Hypothesized persona affinity:** any prior site visitor
 **Journey role:** closer
 **Measurement:** Meta retargeting audience + UTM
 **Cost shape:** paid spend
@@ -214,7 +275,7 @@ floor mechanism (see [[hypotheses]] open question on the floor).
 
 #### `paid_search_branded`
 **Typical entry stage(s):** `brand_aware` → `converting`
-**Persona affinity:** any persona with prior awareness
+**Hypothesized persona affinity:** any persona with prior awareness
 **Journey role:** closer
 **Measurement:** Google Ads brand campaigns; UTM
 **Cost shape:** paid spend (small; brand-only)
@@ -225,7 +286,7 @@ should shortcut to PDP/checkout, not story.
 
 #### `paid_search_category`
 **Typical entry stage(s):** `solution_aware`
-**Persona affinity:** P2, P3, P5
+**Hypothesized persona affinity:** P2, P3, P5
 **Journey role:** accelerator (rarely closer)
 **Measurement:** Google Ads category campaigns; UTM
 **Cost shape:** paid spend
@@ -235,7 +296,7 @@ category may be too niche for category-keyword spend to scale.
 
 #### `paid_search_problem`
 **Typical entry stage(s):** `problem_aware`
-**Persona affinity:** P5 dominant
+**Hypothesized persona affinity:** P5 dominant
 **Journey role:** introducer
 **Measurement:** Google Ads problem-keyword campaigns
 **Cost shape:** paid spend
@@ -245,7 +306,7 @@ P5 Comfort entry. Worth testing as cheap discovery; volume unknown.
 
 #### `organic_meta`
 **Typical entry stage(s):** `unaware` → `problem_aware`
-**Persona affinity:** P4 dominant
+**Hypothesized persona affinity:** P4 dominant
 **Journey role:** introducer
 **Measurement:** Meta insights; PostHog `referrer_source=social`
 **Cost shape:** organic / content
@@ -255,7 +316,7 @@ look-alike audiences.
 
 #### `creator_partnerships`
 **Typical entry stage(s):** `solution_aware` → `brand_aware`
-**Persona affinity:** depends on creator audience; P1, P2 most
+**Hypothesized persona affinity:** depends on creator audience; P1, P2 most
 common
 **Journey role:** introducer for cold audiences, closer for warm
 ones — the creator-vs-closer question in [[hypotheses]] open
@@ -271,7 +332,7 @@ content) drive different audience than P2 watch-collector creators.
 #### `trade_shows`
 **Typical entry stage(s):** `solution_aware` → `brand_aware` →
 `converting` (often single-session)
-**Persona affinity:** P1a, P1b, P2 (consumer side); B1–B6
+**Hypothesized persona affinity:** P1a, P1b, P2 (consumer side); B1–B6
 (B2B side — see [[b2b-pipeline]])
 **Journey role:** introducer + closer in one touch
 **Measurement:** badge scans; show-specific promo codes; geo-fenced
@@ -285,7 +346,7 @@ applies to this channel specifically.
 #### `email_klaviyo_acquisition`
 **Typical entry stage(s):** `problem_aware` → `considering` (depends
 on what they signed up for)
-**Persona affinity:** anyone willing to give email; skews P2
+**Hypothesized persona affinity:** anyone willing to give email; skews P2
 **Journey role:** accelerator
 **Measurement:** Klaviyo signups + UTM on emails
 **Cost shape:** organic + Klaviyo platform cost
@@ -296,7 +357,9 @@ the dominant retention channel — see [[retention-loop]].
 #### `strap_maker_partnership`
 **Typical entry stage(s):** `solution_aware` (they're already buying
 strap-related items)
-**Persona affinity:** P3 dominant
+**Hypothesized persona affinity:** P3 dominant
+**Evidence:** confirmed — Delugs co-purchase volume is meaningful
+([[personas]] Distribution / qualitative section)
 **Journey role:** introducer + closer (co-purchase at strap-maker
 checkout)
 **Measurement:** partnership-specific SKU / promo code; partner
@@ -311,7 +374,7 @@ converting.
 #### `brand_partnership_oem_facing`
 **Typical entry stage(s):** **post-funnel** — they receive a Fitwell
 *as part of* a watch they bought
-**Persona affinity:** depends on which brand
+**Hypothesized persona affinity:** depends on which brand
 **Journey role:** introducer-to-brand at the *retention-loop* entry
 point (customer arrives at `first_buyer` having never been through
 the acquisition funnel)
@@ -325,7 +388,7 @@ contact. Should appear in retention-loop's entry section too.
 
 #### `press_editorial`
 **Typical entry stage(s):** `solution_aware` → `brand_aware`
-**Persona affinity:** P1, P2 (watch-content readers)
+**Hypothesized persona affinity:** P1, P2 (watch-content readers)
 **Journey role:** introducer (first mention) or accelerator (depth
 coverage)
 **Measurement:** referrer URL; ideally outlet-specific UTM
@@ -337,7 +400,7 @@ data). Outsized trust transfer when it happens.
 
 #### `podcast_mentions`
 **Typical entry stage(s):** `problem_aware` → `solution_aware`
-**Persona affinity:** P1, P2
+**Hypothesized persona affinity:** P1, P2
 **Journey role:** accelerator
 **Measurement:** podcast-specific promo codes; hard to track without
 them
@@ -349,7 +412,7 @@ is highly self-selected.
 #### `retailer_walkin`
 **Typical entry stage(s):** `solution_aware` → `converting` (single
 session, hands-on)
-**Persona affinity:** P5 + general public (the boutique customer who
+**Hypothesized persona affinity:** P5 + general public (the boutique customer who
 hits a fitting problem at the counter)
 **Journey role:** introducer + closer
 **Measurement:** retailer-specific SKU sales reporting
@@ -361,7 +424,7 @@ hits a fitting problem at the counter)
 
 #### `tradeshow_afterglow_content`
 **Typical entry stage(s):** `solution_aware` → `brand_aware`
-**Persona affinity:** P1, P2
+**Hypothesized persona affinity:** P1, P2
 **Journey role:** accelerator
 **Measurement:** post-show traffic spikes; creator-tagged content
 attribution
@@ -375,7 +438,10 @@ but it amplifies the show investment.
 
 #### `branded_search_organic`
 **Typical entry stage(s):** `brand_aware` → `converting`
-**Persona affinity:** any persona with prior awareness
+**Hypothesized persona affinity:** any persona with prior awareness
+**Evidence:** confirmed — structurally true (brand search requires
+prior brand exposure); volume visible in PostHog and Shopify
+referrer data
 **Journey role:** closer
 **Measurement:** Google organic search; PostHog
 `referrer_source=organic` + query
@@ -388,7 +454,7 @@ prior touch on Meta or a creator in the past N days?"
 
 #### `category_search_organic`
 **Typical entry stage(s):** `solution_aware`
-**Persona affinity:** P1, P2, P3
+**Hypothesized persona affinity:** P1, P2, P3
 **Journey role:** introducer (no prior brand exposure) or accelerator
 (some prior exposure)
 **Measurement:** organic search referrer + query (where available)
@@ -399,7 +465,7 @@ watch buckle". Real opportunity for content investment.
 
 #### `problem_search_organic`
 **Typical entry stage(s):** `problem_aware`
-**Persona affinity:** P5 dominant
+**Hypothesized persona affinity:** P5 dominant
 **Journey role:** introducer
 **Measurement:** organic search referrer + query
 **Cost shape:** SEO effort
@@ -410,7 +476,7 @@ build content for it.
 
 #### `specific_watch_search_organic`
 **Typical entry stage(s):** `solution_aware`
-**Persona affinity:** P2
+**Hypothesized persona affinity:** P2
 **Journey role:** introducer (we appear in their solution exploration)
 **Measurement:** organic search referrer + query
 **Cost shape:** SEO effort
@@ -421,7 +487,7 @@ strap". The "compatibility/<watch-brand>" page concept in
 
 #### `forum_reddit_organic`
 **Typical entry stage(s):** `solution_aware` → `brand_aware`
-**Persona affinity:** P1a, P1b, P2 (forum-active personas)
+**Hypothesized persona affinity:** P1a, P1b, P2 (forum-active personas)
 **Journey role:** closer (peer trust transfer)
 **Measurement:** referrer URL; promo code if monitored
 **Cost shape:** organic (no direct spend; advocate-driven)
@@ -432,7 +498,7 @@ producing more advocates.
 
 #### `ai_search_recommendation`
 **Typical entry stage(s):** `solution_aware`
-**Persona affinity:** any; trending up
+**Hypothesized persona affinity:** any; trending up
 **Journey role:** introducer / accelerator
 **Measurement:** mostly unmeasured today; "ChatGPT" or similar
 referrer occasionally visible
@@ -446,7 +512,7 @@ aware entries.
 #### `in_person_sighting`
 **Typical entry stage(s):** `solution_aware` (visual proof of
 concept) → `brand_aware` (if conversation happens)
-**Persona affinity:** any; especially P1, P2, P3
+**Hypothesized persona affinity:** any; especially P1, P2, P3
 **Journey role:** introducer with very high trust
 **Measurement:** unmeasured directly; observable only when the
 sighter later branded-searches
@@ -458,7 +524,7 @@ meetup, GTG, or out at dinner. Very high conversion-quality touch.
 
 #### `comparison_listicle_content`
 **Typical entry stage(s):** `solution_aware` → `brand_aware`
-**Persona affinity:** P2
+**Hypothesized persona affinity:** P2
 **Journey role:** accelerator
 **Measurement:** referrer URL
 **Cost shape:** opportunistic / SEO pitch effort
@@ -468,7 +534,7 @@ who writes these.
 
 #### `post_creator_branded_search`
 **Typical entry stage(s):** `brand_aware` → `converting`
-**Persona affinity:** whichever persona the creator addresses
+**Hypothesized persona affinity:** whichever persona the creator addresses
 **Journey role:** closer (for the creator touch)
 **Measurement:** difficult — requires matching branded-search
 timestamps to creator-post dates; partially handled in
@@ -484,7 +550,7 @@ the introducer credit, this is the closing leg.
 #### `gift_recipient`
 **Typical entry stage(s):** **post-funnel** — they own a Fitwell
 they didn't buy
-**Persona affinity:** any; gift-receivers often skew P2 / P4
+**Hypothesized persona affinity:** any; gift-receivers often skew P2 / P4
 archetypes
 **Journey role:** introducer-to-brand at the retention-loop entry —
 just like `brand_partnership_oem_facing`
@@ -506,9 +572,15 @@ channels and shape creative — if you can't point to a path entry
 that explains why your artifact is in this persona's journey, the
 artifact doesn't have a job.
 
-These are educated guesses anchored in current data ([[personas]]
-Distribution section) plus the [[event-taxonomy]] stage-transition
-hypotheses. Update as PostHog cohort data refines them.
+**These paths are working hypotheses.** They're anchored in current
+segment data ([[personas]] Distribution section) plus
+[[event-taxonomy]] stage-transition heuristics, but the
+*channel-to-persona* mapping inside each path is mostly unvalidated.
+Per the Targeting Discipline section above, use these to *prompt*
+creative variations and cohort questions — not to pre-narrow audience
+targeting at the channel level. When PostHog cohort data shows that a
+channel delivers a different persona than predicted here, update the
+path entry in the same change as the analysis.
 
 ### P1a Watch Advocate
 

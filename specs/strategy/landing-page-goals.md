@@ -45,8 +45,19 @@ purpose and either needs one or needs to be removed.
 
 ## Design Principles
 
-- **One target per page.** Pages that try to serve everyone serve
-  no one. Pick one persona and one stage.
+- **One *primary* target per page, with defensive design for
+  off-target arrivals.** Pages should be designed for one persona at
+  one stage — but per [[funnel]] Targeting Discipline, the upstream
+  channel is intentionally cast broad-net early on, so the page will
+  *actually* receive mixed-persona traffic until the channel
+  narrows. Design for the primary persona without actively repelling
+  the rest.
+- **Self-sorting CTAs let off-target visitors find a path that
+  fits them.** A page primarily targeting P2 Curators (deployant-
+  anchor framing) should still offer a clear "Looking for the comfort
+  fix? → /comfort" or "Outfitting a collection? → /collectors" path,
+  rather than bouncing the off-target visitor. Self-sorting is the
+  page-level analogue of broad-net upstream targeting.
 - **The next stage, not the final stage.** A page targeting
   `problem_aware` visitors should aim to move them to
   `solution_aware`, not all the way to `converting`.
@@ -57,6 +68,11 @@ purpose and either needs one or needs to be removed.
 - **Persona language matches the persona.** Collector pages can
   assume vocabulary and tolerate density. Casual-owner pages must
   define terms and prioritize visual demonstration.
+- **Narrow as the channel narrows.** Pages that today serve a broad
+  audience because their upstream channel is broad-net should narrow
+  over time as PostHog cohort data shows which segments actually
+  convert through them. Page narrowing is downstream of channel
+  narrowing, not ahead of it.
 
 ## Page Registry
 
