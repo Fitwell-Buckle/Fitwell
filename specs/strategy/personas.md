@@ -2,12 +2,14 @@
 
 Last updated: 2026-05-26
 
-> **Status: refined draft.** Reflects the Tom/Claude persona deep-dive on
-> 2026-05-26, grounded in 110+ Judge.me reviews, trade-show observation,
-> and current partnership economics. Still pre-instrumentation —
-> persona distribution and LTV claims are hypotheses until PostHog
-> cohort data and 12+ months of repeat-purchase data land. Refine
-> against real traffic continuously.
+> **Status: data-validated draft.** Reflects the Tom/Claude persona
+> deep-dive on 2026-05-26, grounded in 110+ Judge.me reviews,
+> trade-show observation, current partnership economics, AND the
+> Nov 2025 – May 2026 D2C cohort (824 paying customers, $61K revenue)
+> joined to Judge.me reviewer emails on 2026-05-26. Persona
+> distribution and segment behavior are now quantified, not gut-
+> estimated. Mature-cohort LTV (Nov 2025) is one data point; refine as
+> 2026 cohorts mature. PostHog content-tier signals still pending.
 
 ## Why Personas Matter Here
 
@@ -442,34 +444,181 @@ Quick reference (full detail in [[vocabulary-map]]):
 **Notable signal:** Rolex mentioned zero times in the corpus —
 confirms the persona exclusion thesis.
 
-## Distribution
+## Distribution — D2C cohort, Nov 2025 → May 2026
 
-We don't have validated traffic-or-revenue distribution data yet. The
-prior gut-estimate table has been dropped because it was likely
-misleading. **Replace with PostHog cohort data + Shopify customer
-cohorting tagged by acquisition source once those are instrumented.**
+D2C launched November 2025 (with preorders in Nov/Dec); the channel
+ramped in earnest in January 2026. The window below covers the
+entire D2C history to date.
 
-What we *can* observe today, qualitatively:
+**Data source:** Shopify "Orders over time" export joined to Judge.me
+published-reviews export, both pulled 2026-05-26. N = 824 unique
+paying customers, 996 orders, $61,307 in revenue. Wholesale and
+non-D2C orders are excluded by the Shopify report. Methodology in
+`scripts/persona-segments.ts` and `scripts/persona-reviews-join.ts`;
+intermediate datasets in `data/customer-segments.json` and
+`data/customers-with-reviews.json` (gitignored, contains PII).
 
-- **24% month-over-month repeat purchase rate**, growing. Some
-  exchange noise but most is real outfitting behavior. Strongly
-  validates P1b Deep Collector outfitting LTV.
+### Behavioral segments — observed share of customers and revenue
+
+Segments are defined by observable order behavior in the D2C window
+(orders, units, AOV). They are proxies for the persona framework,
+not the personas themselves — a P5 Comfort buyer and a P4
+Algo-Discovered buyer both land in "Single Buyer" until further
+signals separate them.
+
+| Segment (rule) | Customers | % | Avg spend | % of revenue | Avg units | Persona mapping |
+|---|---:|---:|---:|---:|---:|---|
+| **Outfitter** — 3+ orders OR 5+ units | 47 | 5.7% | $242 | 18.7% | 6.3 | P1a Watch Advocate / P1b Deep Collector |
+| **Curator** — multi-unit, $80+ AOV | 137 | 16.6% | $95 | 21.4% | 2.1 | P2 Engaged Curator |
+| **Bulk Single** — 1 order, 3–4 units | 69 | 8.4% | $126 | 14.3% | 3.3 | P1 emerging, Gift Buyer overlay |
+| **Single Repeat** — 2 orders, ≤2 units | 28 | 3.4% | $80 | 3.7% | 2.0 | P2 emerging / P4→P1 transition |
+| **Single Buyer** — 1 order, 1 unit | 543 | 65.9% | $47 | 41.9% | 1.2 | P4 Algo-Discovered, P5 Comfort, Gift recipient |
+| **Total** | **824** | 100% | $74 | 100% | 1.7 | |
+
+**The Pareto is real and steeper than the framework anticipated.**
+The top 30.7% of customers (Outfitter + Curator + Bulk Single) drive
+**54.4% of revenue**. Outfitters alone — 5.7% of customers — drive
+18.7% at $242/head and an average of 6.3 units each. P1b's "highest
+LTV by units" claim from the original framework is now quantified.
+
+**Single Buyer is larger than the framework anticipated.** At 65.9%
+of customers, the one-buckle / one-order archetype is the volume
+base. P2 Curator is the largest *repeat-capable* segment (16.6%), not
+the largest segment overall. This re-frames where to invest: P2 is
+the segment with the most room to grow LTV; Single Buyer is the
+segment with the most room to grow volume.
+
+### 6-month LTV — Nov 2025 cohort (only fully matured cohort)
+
+| Cohort | Customers | Status | Avg LTV | Repeat rate | Units/cust |
+|---|---:|---|---:|---:|---:|
+| Nov 2025 | 20 | matured | $76.50 | 15.0% | 1.15 |
+| Dec 2025 | 29 | near-matured | $97.60 | 17.2% | 1.24 |
+| Jan 2026 | 107 | partial (5mo) | $91.87 | 16.8% | 1.24 |
+
+**Working LTV baseline = $76 per acquired D2C customer at 6 months.**
+Use this as the CAC ceiling for cold-acquisition channels until
+2026-spring cohorts mature. Dec/Jan cohorts are trending higher
+($90+), which suggests acquisition quality improved as the channel
+matured, but those cohorts haven't completed their 6-month windows.
+
+### Review behavior by segment — quantifies the advocate hypothesis
+
+| Segment | Reviewer rate | Avg rating |
+|---|---:|---:|
+| **Outfitter** | **19.1%** (9 / 47) | 4.90 |
+| Single Repeat | 14.3% (4 / 28) | 5.00 |
+| Bulk Single | 4.3% (3 / 69) | 5.00 |
+| Single Buyer | 3.7% (20 / 543) | 4.38 |
+| Curator | 3.6% (5 / 137) | 4.40 |
+
+**Outfitters review at 5× the rate of Single Buyers.** This is the
+quantitative basis for the P1a Watch Advocate framing: they are
+disproportionately the source of social proof. The review pipeline
+is dominated by the heaviest 5–10% of buyers, so any motion that
+converts P_curator → P1_outfitter compounds into more reviews → more
+social proof → more conversions.
+
+Note that **Curators have the *lowest* review rate (3.6%)**. They
+buy, but they don't advocate — consistent with their behavior of
+comparing and evaluating rather than identifying with the brand.
+
+### Vocabulary distinctive to each segment (Judge.me corpus)
+
+Lift over corpus baseline; minimum 2 mentions in segment.
+
+- **Outfitter:** *"always", "comfort", "link", "quick", "clever"* —
+  pragmatic, technical, about fit and convenience. Not status-talk.
+- **Curator:** *"hits/spot", "adjustable", "overpriced"* + Italian/
+  German tokens — actively *evaluating* value against alternatives.
+  Multi-lingual cluster suggests EU concentration in this segment.
+- **Bulk Single:** *"outstanding", "construction", "service",
+  "customer", "company", "truly"* — vocabulary about the *company*
+  and *founder touch*, not just the product. They're being converted
+  by human-touch sales, not the product alone.
+- **Single Repeat:** *"play", "steel", "stainless", "works",
+  "comfortable"* — engineering-functional vocabulary.
+- **Single Buyer:** *"try", "smaller", "tension", "hold", "specific"*
+  — exploratory, problem-solving language. Matches P5 Comfort framing.
+
+### Three concrete findings that change positioning
+
+1. **The "Overpriced" 2-star review is a Curator.** The single
+   negative review in the published corpus came from a P2-class buyer
+   who anchored against a $5 OEM tang buckle rather than against the
+   $80–200 deployant alternative the [pricing-by-anchor framing](#pricing-by-anchor-framing)
+   prescribes. Direct evidence that the deployant-anchor framing must
+   be deployed before more Curators see the price-only view.
+
+2. **Bulk Single buyers' vocabulary suggests founder-touch sales are
+   creating advocates.** They use "outstanding", "service", "company",
+   "truly" — language about the *people*, not the product. The
+   high-touch sales motion is generating disproportionate LTV
+   ($126/customer at 8.4% of the base = 14.3% of revenue). Worth
+   thinking about whether this is repeatable at scale.
+
+3. **EU buyers cluster in Curator + Outfitter segments.** Italian
+   and German vocabulary appear almost exclusively in the higher-end
+   segments. Confirms "NA + EU is the strategic focus" — EU skews
+   higher-value, comparative buyers.
+
+### Acquisition channel by post-purchase LTV
+
+First-order UTM source / referrer / campaign, paid customers only.
+Top channels by total revenue:
+
+| Channel | Customers | $/cust | Units/cust | Read |
+|---|---:|---:|---:|---|
+| Direct / unattributed | 305 | $76 | 1.90 | Mix of brand search, word of mouth, untagged Meta. Largest segment. |
+| Search referrer | 264 | $66 | 1.64 | Organic search. Lower LTV — consistent with P5 Comfort search pattern. |
+| Meta (paid) | 57 | $85 | 1.96 | Solid mid-LTV; this is the working acquisition lever. |
+| Klaviyo (email) | 41 | $96 | 2.44 | **Highest LTV.** Post-purchase retention working — these are existing customers re-activating for outfitting, not new acquisitions. |
+| IG organic | 34 | $68 | 1.53 | P4 Algo-Discovered pattern. |
+
+**Klaviyo email driving the highest LTV is a retention finding, not
+an acquisition finding** — these customers are already in the base,
+being re-activated. The implication: post-purchase email is a real
+outfitting driver, and the email program is doing work.
+
+### Outfitter-reviewers — creator-program candidates
+
+Named customers who appear in both the top-spend cohort AND the
+review-leaver cohort. These are the warmest creator-program leads
+identifiable directly from data:
+
+| Spent | Orders / units | Email | Review |
+|---:|---:|---|---|
+| $443 | 2 / 12 | markus.dinkel@liveramp.com | 5★ "Clever and impressive" (came via Klaviyo + judgeme) |
+| $315 | 2 / 8 | michael.mckelligan@gmail.com | 5★ "16 and 18mm Stainless Buckles" |
+| $242 | 2 / 6 | pascal.glagla@icloud.com | 5★ "Amazing" |
+| $240 | 5 / 6 | andrewdgreer@att.net | 5★ |
+| $230 | 2 / 5 | alanpichardo@gmail.com | 5★ |
+| $176 | 1 / 5 | pete@siggers.co.uk | 5★ "Does exactly what it says!!" |
+| $176 | 1 / 5 | madelong@gmail.com | 4★ "Clever :)" |
+| $121 | 3 / 3 | horloge@collector.org | 5★ "Happy customer" |
+
+These are the natural targets for [[creator-program]] outreach.
+
+### What remains qualitative
+
 - **Delugs co-purchase volume is meaningful.** P3 Strap Hobbyist via
-  partnership channel is proven, not theoretical.
+  partnership channel is proven, but not separately measurable in
+  the D2C Shopify cohort (partnership orders route through Delugs).
 - **Geography:** US largest, UK/EU/Canada strong, UAE producing
-  wholesale orders, Korea/Singapore/Taiwan organic but small.
-  NA + EU is the strategic focus.
+  wholesale orders (excluded from D2C data above),
+  Korea/Singapore/Taiwan small. NA + EU is the strategic focus.
 
 ## Open Questions
 
-| Question | Why it matters | Owner | Target date |
+| Question | Why it matters | Owner | Status |
 |---|---|---|---|
-| What does the 6-month LTV cohort look like by buyer cluster? | Validates whether top-20% outfitters dominate revenue and sets CAC ceiling | Greg | TBD |
-| How does persona shift after first purchase? Do P2 Curators become P1 Outfitters? | Drives retention/email strategy and lifetime value model | Greg | TBD |
-| What signals separate Tier-1 vs. Tier-2 vs. Tier-3 content consumers in PostHog? | Operationalizes the content-tier axis for targeting | Tom/Greg | TBD |
+| ~~What does the 6-month LTV cohort look like by buyer cluster?~~ | ~~Validates whether top-20% outfitters dominate revenue and sets CAC ceiling~~ | — | **Resolved 2026-05-26.** Working baseline: $76 LTV at 6 months for the Nov 2025 cohort. Outfitters (5.7% of customers) drive 18.7% of revenue at $242/head. See Distribution section. |
+| How does persona shift after first purchase? Do P2 Curators become P1 Outfitters? | Drives retention/email strategy and lifetime value model | Tom | Partial — 28 customers visible in "Single Repeat" segment are the leading edge of this transition. Needs more time. |
+| What signals separate Tier-1 vs. Tier-2 vs. Tier-3 content consumers in PostHog? | Operationalizes the content-tier axis for targeting | Tom | TBD — requires PostHog cohort instrumentation. |
 | Is "Watch-curious newcomer" a meaningfully distinct persona, or is it just early P2? | Affects whether we add a 7th consumer persona | Tom | TBD |
+| Can we surface the 36 reviewers whose emails didn't match a customer record? | Recovers ~45% more outfitter-class advocate candidates | Tom | TBD — needs fuzzy email/name match or older Shopify pre-D2C export. |
 | What's driving the Korean and Singapore beachheads? | Could be a low-cost market template if traced | Parked — not a near-term focus | — |
-| What's the trade-show afterglow ROI with geo-targeted retargeting? | Validates the post-show 2-week local-ad investment | Greg | After next trade show |
+| What's the trade-show afterglow ROI with geo-targeted retargeting? | Validates the post-show 2-week local-ad investment | Tom | After next trade show |
 | What does B3/B4 conversion actually look like at trade shows? Where do deals stall? | Sharpens the B2B sales playbook | Tom | Ongoing |
 
 ## Related
