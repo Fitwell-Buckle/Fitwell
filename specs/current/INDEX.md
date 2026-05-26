@@ -10,6 +10,7 @@ Living documentation for the Fitwell admin dashboard, analytics platform, and ma
 | [schema.md](schema.md) | Database tables, relationships, and design rationale |
 | [routes.md](routes.md) | All pages and API routes |
 | [integrations.md](integrations.md) | External services and API connections |
+| [shopify-app-config.md](shopify-app-config.md) | Shopify app config workflow (scopes, embed, deploy/release, merchant re-auth) |
 | [components.md](components.md) | UI component inventory |
 | [scheduled-jobs.md](scheduled-jobs.md) | Cron job schedule and responsibilities |
 | [data-flows.md](data-flows.md) | How data moves through the system |

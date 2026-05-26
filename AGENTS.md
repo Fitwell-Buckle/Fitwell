@@ -43,6 +43,7 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 | Changing database schema | `specs/current/schema.md` + `specs/current/contributing.md` (Schema Rules) |
 | Adding/modifying API routes | `specs/current/routes.md` + `specs/current/contributing.md` (API Routes) |
 | Shopify integration work | `specs/current/integrations.md` (Shopify section) |
+| Changing Shopify scopes, embed flag, or anything in `shopify.app.toml` | `specs/current/shopify-app-config.md` |
 | Analytics or tracking changes | `specs/current/integrations.md` + `specs/current/data-flows.md` |
 | UI components | `specs/current/components.md` + `specs/current/contributing.md` (UI Components) |
 | Adding marketing pages | `specs/current/routes.md` + `(marketing)` route group |
@@ -196,6 +197,8 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ## 9. Shopify Integration Rules
 
+- **App config in code**: Shopify app configuration (scopes, embed flag, app URL, declared webhook topics) lives in `shopify.app.toml` at the repo root. Edit like any other file; Greg deploys via the Shopify CLI from his laptop after merge. Never make app-config changes directly in the Shopify Dev Dashboard — they'll be overwritten on the next deploy. **Full workflow in `specs/current/shopify-app-config.md`** — read it before changing scopes or anything else in the toml.
+- **Not embedded**: The app runs standalone at `admin.fitwellbuckle.co`, not inside the Shopify Admin iframe (`embedded = false` in the toml, `frame-ancestors 'none'` in `next.config.ts`). Flipping either requires wiring App Bridge + Shopify session token auth — discuss with Greg before attempting.
 - **Webhook verification**: All incoming webhooks verified via HMAC-SHA256 using `SHOPIFY_WEBHOOK_SECRET`.
 - **Sync is additive**: Never delete Shopify-sourced records. Update existing or soft-delete (set a `deleted_at` timestamp).
 - **Dedup key**: `shopify_id` fields are unique indexes — use upsert patterns.

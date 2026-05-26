@@ -40,3 +40,6 @@ drizzle/meta
 
 # sentry
 .sentryclirc
+
+# shopify cli
+.shopify
