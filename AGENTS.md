@@ -57,6 +57,10 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 | Designing an A/B test or experiment | `specs/strategy/hypotheses.md` |
 | Persona, positioning, or audience questions | `specs/strategy/personas.md` |
 | Ad campaign creative or targeting | `specs/strategy/personas.md` + `specs/strategy/funnel.md` + `specs/strategy/hypotheses.md` |
+| Adding or sizing a new acquisition channel | `specs/strategy/funnel.md` (Channel Entry Points) |
+| B2B / wholesale outreach, sales pipeline, or partnership work | `specs/strategy/b2b-pipeline.md` + `specs/strategy/personas.md` (B-section) |
+| Retention sequences, post-purchase email, outfitting campaigns | `specs/strategy/retention-loop.md` + `specs/strategy/personas.md` |
+| Creator program / advocate outreach | `specs/strategy/retention-loop.md` (`advocate` stage) + `specs/strategy/personas.md` (Outfitter-reviewers table) |
 
 ---
 
@@ -82,13 +86,17 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 
 All marketing work — pages, copy, ads, tracking — sits on a shared persona × funnel matrix. Personas describe *who*; funnel stages describe *where they are in their journey*. Every artifact targets a specific cell.
 
-- **`specs/strategy/personas.md`** — current personas + estimated distribution. Refined as real traffic data comes in.
-- **`specs/strategy/funnel.md`** — canonical funnel stages and their definitions. Used as the vocabulary for all event names and page goals.
+The framework now lives in three parallel flow docs (D2C acquisition, B2B sales, post-purchase retention) plus the supporting registries:
+
+- **`specs/strategy/personas.md`** — current personas (P1–P5 consumer, B1–B6 B2B) + validated segment distribution from the Nov 2025–May 2026 D2C cohort.
+- **`specs/strategy/funnel.md`** — D2C acquisition funnel. Six stages (`unaware`→`converting`), channel entry points as first-class objects with journey roles (introducer/accelerator/closer/all-purpose), per-persona expected paths.
+- **`specs/strategy/b2b-pipeline.md`** — B2B sales pipeline. Sales-CRM stages (`prospect`→`partnership`), B2B-specific entry channels, per-B-persona pipeline paths.
+- **`specs/strategy/retention-loop.md`** — post-purchase outfitting and advocacy. Loop stages (`first_buyer`→`advocate`), retention channels, per-persona outfitting patterns. Closes back into the funnel via advocacy outputs.
 - **`specs/strategy/event-taxonomy.md`** — PostHog event names, each tagged with `(persona_hint, funnel_stage)`. Naming must be consistent across the site.
 - **`specs/strategy/hypotheses.md`** — beliefs we hold vs. claims we want to validate, with test cost and status. Drives where we spend on variation testing.
 - **`specs/strategy/landing-page-goals.md`** — every marketing page declares its target persona, funnel stage, and (if applicable) which hypothesis it's testing.
 
-When in doubt: persona first, then funnel stage, then build.
+When in doubt: persona first, then which flow (funnel / pipeline / retention loop), then which stage, then build.
 
 ---
 
