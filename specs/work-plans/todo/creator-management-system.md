@@ -14,6 +14,7 @@ Fitwell sends product samples to watch/EDC creators on Instagram, YouTube, and T
 We've already validated the data side: a research pass produced `Fitwell_Creators_CrossPlatform.csv` with 735 unique creators, 104 multi-platform (IG+YT), full bio/stats/engagement/email coverage. That dataset is the seed import for this system.
 
 References:
+- `specs/work-plans/todo/creator-scoring-methodology.md` — formulas for `watch_score`, `fit_score`, `cross_platform_fit`, and `mentioned_us` detection. Phase 1's import script and Phase 6's stats refresh cron both depend on this.
 - `specs/current/integrations.md` — Shopify and platform API patterns
 - `specs/current/contributing.md` — admin section conventions, schema rules
 - `specs/current/schema.md` — existing `customer`, `order`, `order_line_item`, `campaign` tables (reuse, don't duplicate)
