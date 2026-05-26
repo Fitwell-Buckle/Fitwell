@@ -409,32 +409,38 @@ Setting the comparison frame is the highest-leverage copy decision per
 audience. The moment a buyer's mental anchor becomes a $5 OEM tang
 buckle, the sale is lost regardless of product quality.
 
-## Vocabulary Map (first pass)
+## Vocabulary Map
 
-Distinctive language per persona, drawn from the 110+ Judge.me review
-corpus. *Not perfectly exclusive* — "between holes" appears in both P2
-and P5 reviews; vocabulary overlaps in practice. These highlight what
-is most *characteristic* of each persona.
+A systematic extraction of customer language by persona, with
+frequency counts, exemplar quotes, and copy directions, lives in
+[[vocabulary-map]]. That doc is the source of truth for persona-matched
+copy — lift verbatim phrases from it when writing ads, landing pages,
+or product descriptions.
+
+Quick reference (full detail in [[vocabulary-map]]):
 
 - **P1a/P1b Outfitter:** *"I own X already"*, *"ordering more"*, *"for
-  all of my straps"*, *"just bought my 5th"*, *"outfitting"*.
+  all of my straps"*, *"just bought my 5th"*. ~9 reviews use outfitter
+  signals.
 - **P2 Curator:** brand-and-model specificity — *"my Omega Seamaster"*,
-  *"my Sinn EZM2"*, *"my Citizen Mandalorian"*, *"favorite watch"*,
-  *"comfort"*.
+  *"my Sinn EZM2"*, *"my Citizen Mandalorian"*. *"Favorite watch"*
+  appears in 6 reviews.
 - **P3 Strap Hobbyist:** strap construction terms — Baranil, sailcloth,
-  tropic, NATO, perlon; strap brand names; *"stack"*; finish-talk.
+  tropic, NATO; strap brand names; *"stack"*; deployant references
+  (6 mentions).
 - **P4 Algo-Discovered:** *"saw an ad"*, *"social media ad"*, *"found
-  Fitwell through..."*, *"scrolling"*.
-- **P5 Comfort:** *"wrist swelling"*, *"weather"*, *"varies through
-  the day"*, *"uncomfortable"*, *"warmer days"*.
-- **Bracelet-Wearer overlay:** *"Glidelock"*, *"like my bracelet
-  has"*, *"Pelagos clasp"*, *"T-fit"*.
+  Fitwell through..."*.
+- **P5 Comfort:** *"between holes / between sizes"* (7+ reviews, the
+  dominant pain phrase); *"wrist expands and contracts"*; *"warmer
+  days"*; *"smaller wrist"* / *"thick wrists"*.
+- **Bracelet-Wearer overlay:** *"Micro adjust on bracelets... should
+  exist on straps"* (verbatim customer quote — highest-leverage copy
+  source).
 - **OCD-About-Fit overlay:** *"OCD"*, *"particular"*, *"just so"*,
-  *"perfect fit"*.
+  *"precise fit requirements"*.
 
-**Next step:** systematic frequency + exclusivity scoring across the
-review corpus. Approximately a half-day task; outputs should feed
-directly into ad creative briefs and landing-page copy.
+**Notable signal:** Rolex mentioned zero times in the corpus —
+confirms the persona exclusion thesis.
 
 ## Distribution
 
