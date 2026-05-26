@@ -35,6 +35,7 @@ import {
 } from "@/lib/catalog/load";
 import { cn } from "@/lib/utils";
 import { CatalogFilters } from "@/components/catalog/catalog-filters";
+import { parseDateRange } from "@/lib/date-range";
 
 export const metadata: Metadata = {
   title: "Supplier POs | Fitwell Admin",
@@ -49,6 +50,9 @@ export default async function ProductionPage({
   if (!session) redirect("/auth/login");
 
   const params = await searchParams;
+  const { from, to } = parseDateRange(params);
+  const fromStr = from.toISOString().slice(0, 10);
+  const toStr = to.toISOString().slice(0, 10);
   const supplierId =
     typeof params.supplier === "string" ? params.supplier : "";
   const stage = typeof params.stage === "string" ? params.stage : "";
@@ -124,6 +128,8 @@ export default async function ProductionPage({
       derivedStage: derivePoStage(po.lineItems.map((li) => li.currentStage)),
       itemCount: po.lineItems.length,
     }))
+    // Date filter on the PO's issued date (matches the B2B/Influencer lists).
+    .filter((po) => po.issuedDate >= fromStr && po.issuedDate <= toStr)
     // Stage filter is applied on the derived stage (cheap at our scale).
     .filter((po) => !stage || po.derivedStage === stage)
     // Catalog filters: keep POs with at least one matching line item.

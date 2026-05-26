@@ -57,7 +57,8 @@ function defaultGranularity(days: number): Granularity {
   return "month";
 }
 
-const PICKER_PATHS = [
+// Pages whose path (or a subpath) shows the date-range picker.
+const PICKER_PREFIXES = [
   "/dashboard",
   "/campaigns",
   "/attribution",
@@ -66,6 +67,20 @@ const PICKER_PATHS = [
   "/invoices",
   "/influencer-tracking",
 ];
+// Pages that show the picker only on that exact path (not subpaths) — e.g. the
+// PO list, but not /modules/production/summary, /po/new, or /suppliers.
+const PICKER_EXACT = ["/modules/production"];
+// Create/edit forms where a date filter is meaningless — hidden even though a
+// prefix above would otherwise match (e.g. /invoices/new, /influencer-tracking/new).
+const PICKER_EXCLUDE = ["/invoices/new", "/influencer-tracking/new"];
+
+function showsPicker(pathname: string): boolean {
+  if (PICKER_EXCLUDE.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return false;
+  }
+  if (PICKER_EXACT.includes(pathname)) return true;
+  return PICKER_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
   const router = useRouter();
@@ -130,7 +145,7 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
     router.push(`${pathname}?${params.toString()}`);
   }, [router, pathname, searchParams, mFrom, mTo]);
 
-  if (!PICKER_PATHS.some((p) => pathname.startsWith(p))) {
+  if (!showsPicker(pathname)) {
     return embedded ? null : (
       <div className="h-12 shrink-0 border-b border-zinc-200/80 bg-white" />
     );
