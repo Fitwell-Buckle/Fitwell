@@ -7,8 +7,18 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { STAGE_LABELS, STAGES, derivePoStage } from "@/lib/production/stages";
+import { STAGE_LABELS, STAGES, derivePoStage, type ProductionStage } from "@/lib/production/stages";
 import { formatPoNumber, planSubPos } from "@/lib/production/sub-po";
+import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
+import { usesRawBlankSummary, summarizeRawBlanks } from "@/lib/production/raw-blank";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import {
   STATUS_LABELS,
   statusBadgeClass,
@@ -58,6 +68,37 @@ export default async function PoDetailPage({
   const plan = isMaster ? planSubPos(workStages, po.stageAssignments, po.supplierId) : [];
   const stagesBySupplier = new Map(plan.map((p) => [p.supplierId, p.stages]));
 
+  // Sub-PO: load the master so we can show (read-only) what this sub-PO covers —
+  // its own line items are empty by design (the master holds them).
+  const subMaster = isSubPo ? await getPoDetail(po.parentPoId as string) : null;
+  let subStageKeys: ProductionStage[] = [];
+  if (subMaster) {
+    const mplan = planSubPos(workStages, subMaster.stageAssignments, subMaster.supplierId);
+    subStageKeys = mplan.find((p) => p.supplierId === po.supplierId)?.stages ?? [];
+  }
+  const subStages = subStageKeys.map((s) => STAGE_LABELS[s]);
+  const subItems = subMaster
+    ? [...subMaster.lineItems].sort(
+        (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
+      )
+    : [];
+  let subRawBlanks: ReturnType<typeof summarizeRawBlanks> = [];
+  if (subMaster && usesRawBlankSummary(subStageKeys)) {
+    try {
+      const attrs = makeLineAttrs(await getCatalogCached());
+      subRawBlanks = summarizeRawBlanks(
+        subItems.map((li) => ({
+          sku: li.sku,
+          quantity: li.quantity,
+          sizeMm: attrs.sizeOf(li),
+          material: attrs.materialOf(li),
+        })),
+      );
+    } catch {
+      /* catalog unavailable — fall back to per-SKU */
+    }
+  }
+
   const derivedStage = derivePoStage(po.lineItems.map((li) => li.currentStage));
 
   // Order line items by buckle size (16, 18, 20, 22…), matching the create form.
@@ -79,10 +120,14 @@ export default async function PoDetailPage({
           <Button variant="outline" size="sm" asChild>
             <Link href={`/modules/production/po/${po.id}/send`}>Print &amp; Send</Link>
           </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/modules/production/po/${po.id}/edit`}>Edit</Link>
-          </Button>
-          <PoCreateInvoice poId={po.id} />
+          {!isSubPo && (
+            <>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/modules/production/po/${po.id}/edit`}>Edit</Link>
+              </Button>
+              <PoCreateInvoice poId={po.id} />
+            </>
+          )}
           <Button variant="ghost" size="sm" asChild>
             <Link href="/modules/production">Back</Link>
           </Button>
@@ -194,6 +239,94 @@ export default async function PoDetailPage({
         </Card>
       )}
 
+      {isSubPo && (
+        <Card className="mt-5 p-6">
+          <h2 className="text-sm font-semibold text-zinc-900">What this sub-PO covers</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Read-only — line items, stage advancement, receiving, and invoicing are
+            managed on the{" "}
+            <Link
+              href={`/modules/production/po/${po.parentPoId}`}
+              className="underline underline-offset-2"
+            >
+              master PO
+            </Link>
+            .
+          </p>
+          <div className="mt-4">
+            {subRawBlanks.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Raw blank</TableHead>
+                    <TableHead className="text-right">Qty</TableHead>
+                    <TableHead>Covers (finished SKUs)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {subRawBlanks.map((g) => (
+                    <TableRow key={g.label}>
+                      <TableCell>
+                        {subStages.length > 0 && (
+                          <span className="font-semibold text-red-600">
+                            {subStages.join(", ")} —{" "}
+                          </span>
+                        )}
+                        <span className="font-medium text-zinc-900">{g.label}</span>
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-zinc-900">
+                        {g.quantity}
+                      </TableCell>
+                      <TableCell className="text-xs text-zinc-400">
+                        {g.skus.join(", ")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Qty</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {subItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="py-6 text-center text-zinc-400">
+                        No items on the master.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    subItems.map((li) => (
+                      <TableRow key={li.id}>
+                        <TableCell className="font-mono text-xs">{li.sku}</TableCell>
+                        <TableCell>
+                          {subStages.length > 0 && (
+                            <span className="font-semibold text-red-600">
+                              {subStages.join(", ")} —{" "}
+                            </span>
+                          )}
+                          {li.title}
+                        </TableCell>
+                        <TableCell className="text-right text-zinc-500">
+                          {li.quantity}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {!isSubPo && (
+        <>
       {/* C2 receiving: show once the PO is complete, or after it's been received. */}
       {(derivedStage === "complete" || po.shopifyReceivedAt) && (
         <PoReceive
@@ -272,6 +405,8 @@ export default async function PoDetailPage({
           }),
         }))}
       />
+        </>
+      )}
     </div>
   );
 }
