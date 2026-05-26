@@ -263,6 +263,241 @@ a question)
 
 ---
 
+### H8 — P2 Curator follows a long multi-touch journey
+**Claim:** P2 Curator buyers typically have 4–6 touches across 2+
+channels over weeks before converting. The most common compound
+pattern is `paid_meta_cold` (introducer) → educational content or
+podcast (accelerator) → `branded_search_organic` (closer), often
+with `paid_meta_retargeting` between any of these.
+
+**Confidence:** medium
+
+**Why we believe it:** Standard B2C accessory consideration
+dynamics; the [[personas]] Distribution data showing P2 Curator is
+the largest *repeat-capable* segment with comparative behavior;
+the [[funnel]] persona path for P2.
+
+**What would validate:** PostHog session-count distribution for
+converted Curator-segment customers shows median ≥ 3, mode in the
+4–6 range. First-touch `paid_meta_cold` + last-touch
+`branded_search_organic` appears in > 40% of P2 conversions.
+
+**What would invalidate:** Curator-segment customers convert
+predominantly in 1–2 sessions; first/last touch is dispersed
+across many low-volume channels with no dominant compound pattern.
+
+**Estimated test cost:** Low — analytics query once multi-touch
+PostHog instrumentation lands.
+
+**Test approach:** PostHog cohort analysis of Curator-segment
+conversions; touch-count distribution; channel-pair frequency.
+
+**Status:** open (gated on multi-touch attribution instrumentation)
+
+**Related:** [[funnel]] P2 Engaged Curator path, [[personas]] P2
+Curator segment, H4 (interaction — branded-search-as-closer).
+
+---
+
+### H9 — `paid_meta_cold` delivers P4 Algo-Discovered disproportionately
+**Claim:** Cold paid Meta produces a customer cohort that skews
+heavily to P4 Algo-Discovered behavior (single buyer, lower repeat
+rate, demonstration-video responsive) compared to the overall
+customer base.
+
+**Confidence:** low (informed guess, untested)
+
+**Why we believe it:** P4 is defined as Tier 3 algo-fed content
+consumers; cold Meta is exactly that algorithmic delivery; the
+[[personas]] Distribution Single Buyer segment dominance (65.9%)
+aligns with what we'd expect if paid Meta is delivering P4.
+
+**What would validate:** `paid_meta_cold`-tagged cohort skews to
+Single Buyer segment at a meaningfully higher rate than the
+overall base; lower 6-month outfitting rate; demonstration-video
+creative outperforms specs-heavy creative on this audience.
+
+**What would invalidate:** `paid_meta_cold` cohort behaves
+indistinguishably from the overall base, suggesting Meta is
+delivering a mixed-persona slice; or, the cohort skews to a
+different persona than expected (e.g., P2 Curator).
+
+**Estimated test cost:** Low — cohort query against existing UTM
+data once persona-segment classification is in place.
+
+**Test approach:** PostHog cohort analysis of
+`paid_meta_cold`-tagged conversions, segmented by 6-month
+behavioral segment classification.
+
+**Status:** open
+
+**Related:** [[funnel]] `paid_meta_cold` channel, [[personas]] P4
+Algo-Discovered.
+
+---
+
+### H10 — AI search recommendation is a meaningful and growing channel
+**Claim:** LLM-driven recommendations (ChatGPT, Claude,
+Perplexity) deliver a non-trivial and growing share of
+solution-aware visitors. By end of 2026, LLM-referrer share
+should be comparable to or exceeding small dedicated organic
+channels.
+
+**Confidence:** low (no data; structural / category-trend argument)
+
+**Why we believe it:** LLM-mediated search is growing rapidly in
+general; product-recommendation queries are a common LLM use case;
+existing referrer data already shows occasional
+ChatGPT/Perplexity-class referrers at noise levels.
+
+**What would validate:** Visible LLM-referrer share growing
+month-over-month; share reaches ≥ 1% of total acquisition by Q4
+2026; brand presence visible in manual LLM probe responses for
+relevant queries.
+
+**What would invalidate:** LLM-referrer share stays at noise level
+(< 0.5%) over 6 months despite category growth in LLM usage; LLM
+probes consistently fail to surface Fitwell for relevant queries.
+
+**Estimated test cost:** Low — referrer parsing + instrumentation;
+periodic manual LLM probes.
+
+**Test approach:** Instrument PostHog/GA4 to capture LLM-referrer
+sources cleanly; track over time; quarterly manual probes of
+ChatGPT/Claude/Perplexity for category and adjacent queries.
+
+**Status:** open (flagged from [[funnel]]
+`ai_search_recommendation` channel entry)
+
+**Related:** [[funnel]] `ai_search_recommendation` channel.
+
+---
+
+### H11 — Creator partnerships act primarily as introducers, not closers
+**Claim:** For most creator partnerships, the creator post is the
+customer's *first* exposure (introducer role), with the actual
+conversion happening days/weeks later via a different channel
+(typically branded search or retargeting). The exception is
+creators with very high audience-trust who can close in a single
+touch.
+
+**Confidence:** low (was an open question; promoting to testable
+hypothesis)
+
+**Why we believe it:** Standard creator-marketing dynamics for
+considered purchases; consistent with the H8 P2 multi-touch
+pattern; H4 implies branded-search-as-closer behavior.
+
+**What would validate:** Of conversions attributable in part to a
+creator touch, > 60% have at least one intervening touch (Meta,
+branded search, retargeting) between the creator touch and the
+conversion; time-from-creator-touch-to-conversion distribution
+has a meaningful tail (days/weeks, not just same-session).
+
+**What would invalidate:** Creator touch is consistently the
+immediately-preceding touch before conversion; same-session
+conversion rate post-creator-touch is at or above site baseline,
+suggesting closer role.
+
+**Estimated test cost:** Medium — requires multi-touch attribution
+instrumentation that PostHog plus UTM hygiene can probably
+deliver.
+
+**Test approach:** Cohort analysis of creator-attributed
+conversions; time-from-first-creator-touch-to-conversion
+distribution; intervening-touch-count distribution.
+
+**Status:** open (gated on multi-touch instrumentation; promoted
+from earlier "Creator and influencer attribution" open questions
+section)
+
+**Related:** [[funnel]] `creator_partnerships` channel,
+`post_creator_branded_search` channel, [[personas]] P1, P2.
+
+---
+
+### H12 — Klaviyo is doing retention work, not acquisition work
+**Claim:** Klaviyo email as a UTM source primarily re-engages
+existing customers for outfitting purchases, not first-purchase
+acquisition. The high $96/customer LTV observed for Klaviyo-
+attributed orders is a retention signal, not an acquisition
+signal.
+
+**Confidence:** high (largely supported by current data)
+
+**Why we believe it:** [[personas]] Distribution shows Klaviyo as
+the highest-LTV channel ($96/cust, 2.44 units), but Klaviyo
+audiences are by construction post-signup — most signups happen
+post-purchase. The behavior is consistent with re-engagement, not
+cold acquisition.
+
+**What would validate:** Continued — Klaviyo-attributed orders
+remain dominantly from customers with prior purchase OR
+post-purchase email signup; first-purchase-attributable Klaviyo
+share stays < 10% of total Klaviyo revenue.
+
+**What would invalidate:** Klaviyo starts producing meaningful
+first-purchase attribution (> 20% of Klaviyo revenue from
+never-purchased emails), suggesting pre-purchase lead capture
+is becoming the dominant motion.
+
+**Estimated test cost:** Low — Shopify + Klaviyo cohort query.
+
+**Test approach:** Segment Klaviyo-attributed orders by customer
+purchase history (had-prior-order vs. first-order); track the
+first-purchase-Klaviyo share over time.
+
+**Status:** validated (operationally) — documenting for
+completeness so the channel categorization in
+[[funnel]] `email_klaviyo_acquisition` and
+[[retention-loop]] `klaviyo_post_purchase` is grounded.
+
+**Related:** [[funnel]] `email_klaviyo_acquisition`,
+[[retention-loop]] `klaviyo_post_purchase`, [[personas]]
+Distribution channel-LTV table.
+
+---
+
+### H13 — EDC audiences convert at comparable LTV to watch-enthusiast audiences
+**Claim:** Audiences from the EDC (everyday-carry) community —
+knife/wallet/pen/flashlight enthusiasts who overlap with watches —
+convert at LTV comparable to dedicated watch audiences and
+represent a meaningful expansion of the addressable market within
+the watch/strap/EDC broad-net envelope ([[funnel]] Targeting
+Discipline).
+
+**Confidence:** low (untested expansion premise)
+
+**Why we believe it:** EDC community has high overlap with watch
+interest; aesthetic appreciation, attention to functional detail,
+and willingness-to-spend-on-quality-accessories all align with our
+P2 Curator / P1b Deep Collector personas; EDC is explicitly in the
+broad-net envelope.
+
+**What would validate:** Paid Meta cohorts targeting EDC-adjacent
+interests deliver 6-month LTV ≥ 75% of pure-watch-targeted
+cohorts at comparable or lower CAC; behavioral-segment mix is
+broadly similar to watch cohorts.
+
+**What would invalidate:** EDC-targeted cohorts deliver
+substantially lower LTV (< 50% of watch cohorts), or skew heavily
+to Single Buyer segment with no outfitting conversion, suggesting
+poor product-market fit for the broader EDC audience.
+
+**Estimated test cost:** Medium — separate Meta campaign cell
+required; ~6–8 weeks of cohort accumulation for meaningful read.
+
+**Test approach:** Parallel Meta campaigns with watch-interest
+vs. EDC-adjacent-interest audiences using identical creative;
+track 90-day cohort behavior including segment distribution.
+
+**Status:** open
+
+**Related:** [[funnel]] `paid_meta_cold` channel, [[funnel]]
+Targeting Discipline section, [[personas]] P2, P1b.
+
+---
+
 ## Open Questions Not Yet Hypotheses
 
 These are unknowns that haven't been sharpened into testable claims
@@ -271,14 +506,18 @@ once the question is sharp enough to design a test for.
 
 ### Channel mix and audience
 - What's the optimal mix of channels (Meta, Google, organic, email,
-  influencer) for each persona?
+  influencer) for each persona? *(Partially addressed by H8, H9, H11,
+  H13 once those resolve.)*
 - Does educational content (blog, YouTube) drive eventual conversion,
   or only top-of-funnel awareness?
-- Is there a price point above which P2 Casual Owners drop off
-  sharply that doesn't exist for P1 Collectors?
+- Is there a price point above which P2 Curators drop off sharply
+  that doesn't exist for P1 Collectors?
 - How long is the typical consideration window — days, weeks,
-  months?
-- Do gift-buyers behave more like P1 or P2?
+  months? *(Addressed by H8 for P2.)*
+- Do gift-buyers behave more like P1 or P2? *(See [[funnel]]
+  `gift_recipient` channel and [[retention-loop]] gift-recipient
+  entry — these arrive at retention-loop entry, not acquisition
+  funnel entry.)*
 
 ### Ad performance and saturation
 - How many of our impressions are landing on people who've already
@@ -302,9 +541,10 @@ once the question is sharp enough to design a test for.
 ### Creator and influencer attribution
 - What's the correlation between creator post metrics (engagement
   rate, follower count, niche fit) and resulting sales lift?
-- When a creator posts and sales spike, what % of those buyers were
+- ~~When a creator posts and sales spike, what % of those buyers were
   already ad-exposed beforehand? Is the creator a *closer* (final
-  confidence push) or an *introducer* (first awareness touch)?
+  confidence push) or an *introducer* (first awareness touch)?~~
+  *Promoted to H11.*
 - Is there a measurable sales-lift half-life after a creator post?
   Days? Weeks?
 - Are there creator characteristics that predict lift better than
