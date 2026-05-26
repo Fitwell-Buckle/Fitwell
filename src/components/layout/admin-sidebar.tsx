@@ -70,6 +70,7 @@ const navItems: NavItem[] = [
       { href: "/attribution", label: "Attribution" },
       { href: "/campaigns", label: "Campaigns" },
       { href: "/funnel", label: "Funnel" },
+      { href: "/funnel/strategy", label: "Funnel — Strategic" },
     ],
   },
   { href: "/data-sync", label: "Data Sync", icon: RefreshCw },

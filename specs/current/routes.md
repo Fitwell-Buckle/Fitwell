@@ -42,7 +42,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/campaigns` | Campaign list — performance overview |
 | `/campaigns/[id]` | Campaign detail — spend, conversions, ROAS |
 | `/attribution` | UTM attribution analysis |
-| `/funnel` | Funnel visualization (landing → Shopify → purchase) |
+| `/funnel` | Funnel visualization (sessions → users → orders, operational end-state view) |
+| `/funnel/strategy` | Strategic / diagnostic funnel — 6-stage acquisition, 5-stage retention loop, channel breakdown. Aligned with `specs/strategy/funnel.md`, `retention-loop.md`, `personas.md`. |
 | `/products` | Product performance breakdown (+ incoming production qty per SKU) |
 | `/inventory` | Incoming inventory — per-SKU units in production, stage breakdown, projected ETA |
 | `/modules` | Modules hub (Production; Marketing coming soon) |
