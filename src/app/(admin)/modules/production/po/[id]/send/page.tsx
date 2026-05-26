@@ -6,6 +6,8 @@ import { getPoDetail } from "@/lib/production/service";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { fmtMoney, fmtDate, STATUS_LABELS, skuSize } from "@/lib/production/display";
+import { STAGE_LABELS, STAGES } from "@/lib/production/stages";
+import { formatPoNumber, planSubPos } from "@/lib/production/sub-po";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +53,24 @@ export default async function SendPoPage({
   const po = await getPoDetail(id);
   if (!po) notFound();
 
+  // Sub-POs carry no line items of their own — they render the master's. The
+  // sub-PO is sent to its own supplier, scoped to the stages that supplier owns.
+  const isSubPo = !!po.parentPoId;
+  const master = isSubPo ? await getPoDetail(po.parentPoId as string) : null;
+  const itemSource = master ?? po;
+  const poNumberDisplay = formatPoNumber(po.shopifyPoNumber, { suffix: po.poSuffix });
+  let supplierStages: string[] = [];
+  if (master) {
+    const plan = planSubPos(
+      STAGES.filter((s) => s !== "complete"),
+      master.stageAssignments,
+      master.supplierId,
+    );
+    supplierStages = (plan.find((p) => p.supplierId === po.supplierId)?.stages ?? []).map(
+      (s) => STAGE_LABELS[s],
+    );
+  }
+
   // The PO is sent to the vendor (supplier).
   const defaultTo = po.supplier?.contactEmail ?? "";
   const logoUrl = await getStoreLogoUrl();
@@ -70,7 +90,7 @@ export default async function SendPoPage({
     }
   }
 
-  const items = [...po.lineItems].sort(
+  const items = [...itemSource.lineItems].sort(
     (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
   );
   const total = items.reduce((s, li) => s + (li.unitCostCents ?? 0) * li.quantity, 0);
@@ -78,7 +98,7 @@ export default async function SendPoPage({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between print:hidden">
-        <PageHeader title={`Send PO ${po.shopifyPoNumber}`} />
+        <PageHeader title={`Send PO ${poNumberDisplay}`} />
         <Button variant="ghost" size="sm" asChild>
           <Link href={`/modules/production/po/${po.id}`}>Back</Link>
         </Button>
@@ -90,7 +110,7 @@ export default async function SendPoPage({
       <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-8 print:border-0 print:p-0">
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-lg font-semibold text-zinc-900">
-            Purchase Order {po.shopifyPoNumber}
+            Purchase Order {poNumberDisplay}
           </h1>
           {/* brightness-0 renders any logo (incl. the dynamic Shopify one) as solid black */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -140,6 +160,12 @@ export default async function SendPoPage({
           Issued: {fmtDate(po.issuedDate)} · ETA: {fmtDate(po.expectedDeliveryDate)} · Status:{" "}
           {STATUS_LABELS[po.status as keyof typeof STATUS_LABELS] ?? po.status}
         </div>
+        {supplierStages.length > 0 && (
+          <div className="mt-2 text-sm text-zinc-600">
+            <span className="font-medium text-zinc-900">Your stages:</span>{" "}
+            {supplierStages.join(", ")}
+          </div>
+        )}
 
         <div className="mt-6">
           <Table>

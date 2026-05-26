@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getPoDetail } from "@/lib/production/service";
 import { fmtMoney, fmtDate, STATUS_LABELS } from "@/lib/production/display";
 import { STAGE_LABELS } from "@/lib/production/stages";
+import { formatPoNumber } from "@/lib/production/sub-po";
 import { sendEmail } from "@/lib/email/resend";
 
 const bodySchema = z.object({
@@ -19,10 +20,14 @@ function esc(s: string): string {
   );
 }
 
-function buildPoEmailHtml(po: Po): string {
+function buildPoEmailHtml(
+  po: Po,
+  items: Po["lineItems"],
+  numberDisplay: string,
+): string {
   const cell = "padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;";
   const th = "padding:6px 10px;border-bottom:2px solid #ddd;font-size:11px;text-transform:uppercase;color:#888;text-align:left;";
-  const rows = po.lineItems
+  const rows = items
     .map((li) => {
       const lineTotal = li.unitCostCents != null ? li.unitCostCents * li.quantity : null;
       return `<tr>
@@ -34,13 +39,13 @@ function buildPoEmailHtml(po: Po): string {
       </tr>`;
     })
     .join("");
-  const total = po.lineItems.reduce(
+  const total = items.reduce(
     (s, li) => s + (li.unitCostCents ?? 0) * li.quantity,
     0,
   );
 
   return `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:680px;">
-    <h2 style="margin:0 0 4px;">Purchase Order ${esc(po.shopifyPoNumber)}</h2>
+    <h2 style="margin:0 0 4px;">Purchase Order ${esc(numberDisplay)}</h2>
     <p style="margin:0 0 16px;color:#666;font-size:13px;">Fitwell Buckle Co.</p>
     <table style="font-size:13px;color:#333;margin-bottom:16px;">
       <tr><td style="padding:2px 16px 2px 0;color:#888;">Supplier</td><td>${esc(po.supplier?.name ?? "—")}</td></tr>
@@ -96,6 +101,11 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // A sub-PO carries no line items of its own — bill the master's items.
+  const master = po.parentPoId ? await getPoDetail(po.parentPoId) : null;
+  const items = (master ?? po).lineItems;
+  const numberDisplay = formatPoNumber(po.shopifyPoNumber, { suffix: po.poSuffix });
+
   const to = [input.to, ...(input.additional ?? [])];
   const cc = session.user.email ?? undefined; // CC the logged-in user
 
@@ -103,8 +113,8 @@ export async function POST(
     await sendEmail({
       to,
       cc,
-      subject: `Purchase Order ${po.shopifyPoNumber} — Fitwell Buckle Co.`,
-      html: buildPoEmailHtml(po),
+      subject: `Purchase Order ${numberDisplay} — Fitwell Buckle Co.`,
+      html: buildPoEmailHtml(po, items, numberDisplay),
     });
     return NextResponse.json({ data: { sentTo: to, cc } });
   } catch (err) {

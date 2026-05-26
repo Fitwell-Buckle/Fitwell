@@ -13,10 +13,12 @@ import {
 import {
   planAdvance,
   planSetStage,
+  STAGES,
   STAGE_LABELS,
   type AdvanceTransition,
   type ProductionStage,
 } from "./stages";
+import { planSubPos, isMultiSupplier } from "./sub-po";
 import { resolveParent } from "./parents";
 import { validateStageEventDate, dateToNoonUtc } from "./stage-dates";
 import { isHandoff } from "./stage-owners";
@@ -155,6 +157,71 @@ export async function createPo(
   );
 
   return { poId: po.id, poNumber };
+}
+
+/**
+ * Create a PO split across multiple suppliers. Creates the master (line items +
+ * opening events; its supplier_id is the primary/fallback supplier), persists
+ * the stage→supplier map, then generates one sub-PO per distinct supplier
+ * (parent_po_id = master, po_suffix "A"/"B"…). Sub-POs carry no line items of
+ * their own — they render the master's items + the stages that supplier owns.
+ * If the assignments don't actually split across >1 supplier, no sub-POs are
+ * created and it behaves like a normal PO.
+ */
+export async function createMultiSupplierPo(
+  input: CreatePoInput,
+  stageSuppliers: { stage: ProductionStage; supplierId: string }[],
+): Promise<{
+  poId: string;
+  poNumber: string;
+  subPos: { id: string; suffix: string; supplierId: string }[];
+}> {
+  const master = await createPo(input);
+  await setStageAssignments(master.poId, stageSuppliers);
+
+  const workStages = STAGES.filter((s) => s !== "complete");
+  const plan = planSubPos(workStages, stageSuppliers, input.supplierId);
+  if (!isMultiSupplier(plan)) {
+    return { poId: master.poId, poNumber: master.poNumber, subPos: [] };
+  }
+
+  const subPos: { id: string; suffix: string; supplierId: string }[] = [];
+  for (const p of plan) {
+    const [sub] = await db
+      .insert(productionPo)
+      .values({
+        parentPoId: master.poId,
+        poSuffix: p.suffix,
+        supplierId: p.supplierId,
+        shopifyPoNumber: master.poNumber,
+        issuedDate: input.issuedDate,
+        expectedDeliveryDate: input.expectedDeliveryDate ?? null,
+        companyId: input.companyId ?? null,
+        shopifyLocationId: input.shopifyLocationId ?? null,
+        locationName: input.locationName ?? null,
+        status: "active",
+      })
+      .returning({ id: productionPo.id });
+    subPos.push({ id: sub.id, suffix: p.suffix, supplierId: p.supplierId });
+  }
+  return { poId: master.poId, poNumber: master.poNumber, subPos };
+}
+
+/** Sub-POs of a master, lettered order, with supplier names. */
+export async function getSubPos(masterId: string) {
+  return db.query.productionPo.findMany({
+    where: eq(productionPo.parentPoId, masterId),
+    columns: {
+      id: true,
+      poSuffix: true,
+      supplierId: true,
+      shopifyPoNumber: true,
+      status: true,
+      shopifyReceivedAt: true,
+    },
+    with: { supplier: { columns: { name: true } } },
+    orderBy: asc(productionPo.poSuffix),
+  });
 }
 
 /**

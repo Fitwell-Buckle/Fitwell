@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { desc, eq, or, inArray } from "drizzle-orm";
+import { desc, eq, or, and, inArray, isNull, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { productionPo, productionStageAssignment } from "@/lib/schema";
+import { formatPoNumber } from "@/lib/production/sub-po";
 import { getSupplierScope } from "@/lib/production/supplier-session";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -46,10 +47,13 @@ export default async function SupplierHomePage() {
     .where(eq(productionStageAssignment.supplierId, me));
   const assignedPoIds = [...new Set(assigned.map((a) => a.poId))];
 
+  // A supplier works the master PO (scoped to their stages); their sub-PO is the
+  // sent document, not a separate work unit — so exclude sub-PO rows here.
+  const involvement = assignedPoIds.length
+    ? or(eq(productionPo.supplierId, me), inArray(productionPo.id, assignedPoIds))
+    : eq(productionPo.supplierId, me);
   const pos = await db.query.productionPo.findMany({
-    where: assignedPoIds.length
-      ? or(eq(productionPo.supplierId, me), inArray(productionPo.id, assignedPoIds))
-      : eq(productionPo.supplierId, me),
+    where: and(isNull(productionPo.parentPoId), involvement),
     orderBy: desc(productionPo.createdAt),
     with: {
       supplier: { columns: { name: true } },
@@ -59,6 +63,16 @@ export default async function SupplierHomePage() {
       stageAssignments: { columns: { stage: true, supplierId: true } },
     },
   });
+
+  // This supplier's sub-PO suffix per master, so the list shows the number they
+  // were actually sent (e.g. 00100-A) rather than the bare master number.
+  const mySubPos = await db
+    .select({ parentPoId: productionPo.parentPoId, poSuffix: productionPo.poSuffix })
+    .from(productionPo)
+    .where(and(eq(productionPo.supplierId, me), isNotNull(productionPo.parentPoId)));
+  const suffixByMaster = new Map(
+    mySubPos.map((s) => [s.parentPoId, s.poSuffix] as const),
+  );
 
   // Board: only the stages this supplier owns (+ the handoff target after each),
   // and only the line items currently sitting in their owned stages.
@@ -141,7 +155,11 @@ export default async function SupplierHomePage() {
                       href={`/supplier/po/${po.id}`}
                       className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
                     >
-                      <Mono>{po.shopifyPoNumber}</Mono>
+                      <Mono>
+                        {formatPoNumber(po.shopifyPoNumber, {
+                          suffix: suffixByMaster.get(po.id) ?? undefined,
+                        })}
+                      </Mono>
                     </Link>
                   </TableCell>
                   <TableCell>

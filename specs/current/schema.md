@@ -260,6 +260,18 @@ A master PO tracked against Shopify's built-in PO feature (no Shopify PO API).
 Line items (`production_po_line_item`) also carry optional `company_id`,
 `shopify_location_id`, `location_name` that **override** the PO defaults.
 
+**Multi-supplier split** (`parent_po_id`, `po_suffix`): a PO routed across
+several suppliers becomes a **master** (`00100-Master`); each supplier gets a
+**sub-PO** (`parent_po_id` = master, `po_suffix` "A"/"B"…, `supplier_id` = that
+supplier, **no line items of its own** — it renders the master's). Sub-POs are
+generated from the master's stage→supplier assignments by `createMultiSupplierPo`
+(or `…FromInvoice`); `planSubPos`/`formatPoNumber` in `lib/production/sub-po.ts`
+(unit-tested) do the planning + numbering. Editing/receiving/invoicing stay on
+the master; each sub-PO is sent to its supplier (renders the master's items +
+that supplier's stages). The PO list hides sub-POs; the supplier portal works
+the master scoped to a supplier's stages and shows their sub-PO number.
+Migration `0014_sloppy_la_nuit`.
+
 ### `company` / `price_tier`
 
 Our own B2B companies (not Shopify), managed under Customers → Companies.

@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { createPoFromInvoice } from "@/lib/invoicing/service";
+import {
+  createPoFromInvoice,
+  createMultiSupplierPoFromInvoice,
+} from "@/lib/invoicing/service";
+import type { ProductionStage } from "@/lib/production/stages";
 
-const schema = z.object({ supplierId: z.string().min(1) });
+const schema = z.object({
+  supplierId: z.string().min(1),
+  multiSupplier: z.boolean().optional(),
+  stageAssignments: z
+    .array(z.object({ stage: z.string().min(1), supplierId: z.string().min(1) }))
+    .optional(),
+});
 
 // Create a draft production PO from an invoice (fulfillment). Admin-only.
 export async function POST(
@@ -33,7 +43,14 @@ export async function POST(
   }
 
   try {
-    const result = await createPoFromInvoice(id, input.supplierId);
+    const result =
+      input.multiSupplier && input.stageAssignments?.length
+        ? await createMultiSupplierPoFromInvoice(
+            id,
+            input.supplierId,
+            input.stageAssignments as { stage: ProductionStage; supplierId: string }[],
+          )
+        : await createPoFromInvoice(id, input.supplierId);
     return NextResponse.json({ data: result }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";

@@ -10,9 +10,11 @@ import {
   type InvoiceStatus,
 } from "@/lib/invoicing/invoicing";
 import { fmtMoney } from "@/lib/production/display";
+import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
 
 const selectCls =
   "h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
+const ASSIGNABLE_STAGES = STAGES.filter((s) => s !== "complete");
 
 export function InvoiceActions({
   invoiceId,
@@ -41,6 +43,8 @@ export function InvoiceActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
+  const [multiSupplier, setMultiSupplier] = useState(false);
+  const [stageOwners, setStageOwners] = useState<Record<string, string>>({});
 
   async function fulfill() {
     setError(null);
@@ -90,7 +94,17 @@ export function InvoiceActions({
       const res = await fetch(`/api/invoices/${invoiceId}/create-po`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierId }),
+        body: JSON.stringify({
+          supplierId,
+          ...(multiSupplier
+            ? {
+                multiSupplier: true,
+                stageAssignments: Object.entries(stageOwners)
+                  .filter(([, v]) => v)
+                  .map(([stage, supplierId]) => ({ stage, supplierId })),
+              }
+            : {}),
+        }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -128,7 +142,9 @@ export function InvoiceActions({
         </label>
 
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-zinc-500">Create production PO</span>
+          <span className="text-xs text-zinc-500">
+            Create production PO {multiSupplier ? "(primary supplier)" : ""}
+          </span>
           <div className="flex items-center gap-2">
             <select
               value={supplierId}
@@ -152,6 +168,40 @@ export function InvoiceActions({
               Create PO
             </Button>
           </div>
+          <label className="mt-1 flex items-center gap-1.5 text-xs text-zinc-600">
+            <input
+              type="checkbox"
+              checked={multiSupplier}
+              onChange={(e) => setMultiSupplier(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-zinc-300"
+            />
+            Multiple suppliers — split by stage into sub-POs
+          </label>
+          {multiSupplier && (
+            <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {ASSIGNABLE_STAGES.map((stage) => (
+                <div key={stage} className="flex items-center gap-2">
+                  <label className="w-28 shrink-0 text-[11px] text-zinc-500">
+                    {STAGE_LABELS[stage as ProductionStage]}
+                  </label>
+                  <select
+                    className={`${selectCls} min-w-0 flex-1`}
+                    value={stageOwners[stage] ?? ""}
+                    onChange={(e) =>
+                      setStageOwners((o) => ({ ...o, [stage]: e.target.value }))
+                    }
+                  >
+                    <option value="">Primary supplier</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>

@@ -7,7 +7,8 @@ import {
   company,
   productionPo,
 } from "@/lib/schema";
-import { createPo } from "@/lib/production/service";
+import { createPo, createMultiSupplierPo } from "@/lib/production/service";
+import type { ProductionStage } from "@/lib/production/stages";
 import { getShopifyClient } from "@/lib/shopify/client";
 import {
   computeInvoiceTotals,
@@ -201,6 +202,41 @@ export async function createPoFromInvoice(
       shopifyVariantId: l.shopifyVariantId,
     })),
   });
+}
+
+/**
+ * Like createPoFromInvoice, but splits the new PO across multiple suppliers by
+ * stage (generates a master + one sub-PO per supplier). primarySupplierId is the
+ * master's fallback for any unassigned stage.
+ */
+export async function createMultiSupplierPoFromInvoice(
+  invoiceId: string,
+  primarySupplierId: string,
+  stageAssignments: { stage: ProductionStage; supplierId: string }[],
+): Promise<{ poId: string; poNumber: string; subPos: { id: string; suffix: string; supplierId: string }[] }> {
+  const inv = await db.query.invoice.findFirst({
+    where: eq(invoice.id, invoiceId),
+    with: { lineItems: true },
+  });
+  if (!inv) throw new Error(`invoice ${invoiceId} not found`);
+
+  return createMultiSupplierPo(
+    {
+      supplierId: primarySupplierId,
+      issuedDate: today(),
+      companyId: inv.companyId,
+      notes: `From invoice ${inv.invoiceNumber}`,
+      lineItems: inv.lineItems.map((l) => ({
+        sku: l.sku,
+        title: l.title,
+        quantity: l.quantity,
+        unitCostCents: null,
+        shopifyProductId: l.shopifyProductId,
+        shopifyVariantId: l.shopifyVariantId,
+      })),
+    },
+    stageAssignments,
+  );
 }
 
 export type UpdateInvoiceResult =

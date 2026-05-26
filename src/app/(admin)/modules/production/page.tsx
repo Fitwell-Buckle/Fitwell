@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNull, isNotNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { productionPo } from "@/lib/schema";
@@ -36,6 +36,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CatalogFilters } from "@/components/catalog/catalog-filters";
 import { parseDateRange } from "@/lib/date-range";
+import { formatPoNumber } from "@/lib/production/sub-po";
 
 export const metadata: Metadata = {
   title: "Supplier POs | Fitwell Admin",
@@ -65,10 +66,13 @@ export default async function ProductionPage({
     typeof params.status === "string" && params.status ? params.status : "active";
   const statusFilter = status === "all" ? undefined : status;
 
-  const conditions = [];
+  const conditions = [
+    // Hide sub-POs from the list — they're shown under their master.
+    isNull(productionPo.parentPoId),
+  ];
   if (supplierId) conditions.push(eq(productionPo.supplierId, supplierId));
   if (statusFilter) conditions.push(eq(productionPo.status, statusFilter));
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const where = and(...conditions);
 
   const [pos, suppliers] = await Promise.all([
     db.query.productionPo.findMany({
@@ -90,6 +94,16 @@ export default async function ProductionPage({
     }),
     db.query.supplier.findMany({ columns: { id: true, name: true } }),
   ]);
+
+  // Which listed POs are masters (have sub-POs)? Their supplier shows as
+  // "Multiple suppliers" and their number as "00100-Master".
+  const childRows = await db
+    .select({ parentPoId: productionPo.parentPoId })
+    .from(productionPo)
+    .where(isNotNull(productionPo.parentPoId));
+  const masterIds = new Set(
+    childRows.map((r) => r.parentPoId).filter((x): x is string => !!x),
+  );
 
   // Catalog gives each line its size/colour/material + collection (by variant
   // id); optional, cached. Powers the standardized filter.
@@ -127,6 +141,7 @@ export default async function ProductionPage({
       ...po,
       derivedStage: derivePoStage(po.lineItems.map((li) => li.currentStage)),
       itemCount: po.lineItems.length,
+      isMaster: masterIds.has(po.id),
     }))
     // Date filter on the PO's issued date (matches the B2B/Influencer lists).
     .filter((po) => po.issuedDate >= fromStr && po.issuedDate <= toStr)
@@ -184,10 +199,12 @@ export default async function ProductionPage({
                       href={`/modules/production/po/${po.id}`}
                       className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
                     >
-                      <Mono>{po.shopifyPoNumber}</Mono>
+                      <Mono>{formatPoNumber(po.shopifyPoNumber, { isMaster: po.isMaster })}</Mono>
                     </Link>
                   </TableCell>
-                  <TableCell>{po.supplier?.name ?? "—"}</TableCell>
+                  <TableCell>
+                    {po.isMaster ? "Multiple suppliers" : po.supplier?.name ?? "—"}
+                  </TableCell>
                   <TableCell>
                     {po.derivedStage ? (
                       <Badge className={cn(stageBadgeClass(po.derivedStage))}>

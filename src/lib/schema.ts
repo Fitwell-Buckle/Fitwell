@@ -537,6 +537,12 @@ export const productionPo = pgTable(
     status: text("status").notNull().default("active"), // active | on_hold | complete | cancelled
     // Set manually when the user confirms they marked the PO received in Shopify.
     shopifyReceivedAt: timestamp("shopify_received_at", { mode: "date" }),
+    // Multi-supplier split: a PO routed across several suppliers becomes a
+    // "master" (parent_po_id null, has children); each supplier gets a sub-PO
+    // (parent_po_id = master, po_suffix "A"/"B"…, supplier_id = that supplier,
+    // no own line items — it renders the master's). Standalone PO: both null.
+    parentPoId: text("parent_po_id"),
+    poSuffix: text("po_suffix"),
     // Default B2B company the batch is for (our own company list; line items can
     // override). Its price tier drives the discount off retail.
     companyId: text("company_id").references(() => company.id),
@@ -551,6 +557,7 @@ export const productionPo = pgTable(
     index("production_po_supplier_id_idx").on(t.supplierId),
     index("production_po_status_idx").on(t.status),
     index("production_po_company_id_idx").on(t.companyId),
+    index("production_po_parent_po_id_idx").on(t.parentPoId),
   ],
 );
 

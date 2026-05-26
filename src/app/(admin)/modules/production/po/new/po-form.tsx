@@ -166,6 +166,8 @@ export function PoForm({
     initial?.expectedDeliveryDate ?? "",
   );
   const [lockStagesTogether, setLockStagesTogether] = useState(true);
+  // Multi-supplier: split the PO across suppliers by stage, generating sub-POs.
+  const [multiSupplier, setMultiSupplier] = useState(false);
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [companyId, setCompanyId] = useState(initial?.companyId ?? "");
   // Local, appendable copy so a newly-added company shows + selects inline.
@@ -310,6 +312,14 @@ export function PoForm({
             shopifyLocationId: locationId || null,
             locationName: locationName || null,
             ...(isEdit ? {} : { lockStagesTogether }),
+            ...(!isEdit && multiSupplier
+              ? {
+                  multiSupplier: true,
+                  stageAssignments: Object.entries(stageOwners)
+                    .filter(([, v]) => v)
+                    .map(([stage, supplierId]) => ({ stage, supplierId })),
+                }
+              : {}),
             lineItems,
           }),
         },
@@ -322,18 +332,22 @@ export function PoForm({
       }
       const savedId = isEdit ? (poId as string) : data.data.id;
       // Persist stage → supplier assignments (admin-only endpoint, best-effort).
-      try {
-        await fetch(`/api/production/po/${savedId}/stage-assignments`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            assignments: Object.entries(stageOwners)
-              .filter(([, v]) => v)
-              .map(([stage, supplierId]) => ({ stage, supplierId })),
-          }),
-        });
-      } catch {
-        /* non-fatal — the PO itself saved */
+      // Skipped for a multi-supplier create — the create route already set them
+      // on the master while generating sub-POs.
+      if (!(!isEdit && multiSupplier)) {
+        try {
+          await fetch(`/api/production/po/${savedId}/stage-assignments`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              assignments: Object.entries(stageOwners)
+                .filter(([, v]) => v)
+                .map(([stage, supplierId]) => ({ stage, supplierId })),
+            }),
+          });
+        } catch {
+          /* non-fatal — the PO itself saved */
+        }
       }
       router.push(`/modules/production/po/${savedId}`);
       router.refresh();
@@ -397,17 +411,32 @@ export function PoForm({
         </div>
 
         {!isEdit && (
-          <div className="mt-4 flex items-center gap-2">
-            <input
-              id="lock"
-              type="checkbox"
-              checked={lockStagesTogether}
-              onChange={(e) => setLockStagesTogether(e.target.checked)}
-              className="h-4 w-4 rounded border-zinc-300"
-            />
-            <label htmlFor="lock" className="text-sm text-zinc-700">
-              Advance all line items together (uncheck to move items independently)
-            </label>
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                id="lock"
+                type="checkbox"
+                checked={lockStagesTogether}
+                onChange={(e) => setLockStagesTogether(e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300"
+              />
+              <label htmlFor="lock" className="text-sm text-zinc-700">
+                Advance all line items together (uncheck to move items independently)
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="multi"
+                type="checkbox"
+                checked={multiSupplier}
+                onChange={(e) => setMultiSupplier(e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300"
+              />
+              <label htmlFor="multi" className="text-sm text-zinc-700">
+                Multiple suppliers — split this PO by stage into sub-POs (one per
+                supplier, e.g. <span className="font-mono">00100-A</span>)
+              </label>
+            </div>
           </div>
         )}
 
@@ -656,14 +685,30 @@ export function PoForm({
         </div>
       </Card>
 
+      {(isEdit || multiSupplier) && (
       <Card className="p-6">
-        <h2 className="text-sm font-semibold text-zinc-900">Stage owners</h2>
+        <h2 className="text-sm font-semibold text-zinc-900">
+          {multiSupplier && !isEdit
+            ? "Assign stages to suppliers (generates sub-POs)"
+            : "Stage owners"}
+        </h2>
         <p className="mt-1 text-xs text-zinc-500">
-          Assign each production stage to a supplier. Stages left as “PO supplier”
-          default to{" "}
-          {supplierList.find((s) => s.id === supplierId)?.name ?? "the PO supplier"}.
-          Each supplier sees only their own stage(s) in the supplier portal and is
-          notified when they hand off.
+          {multiSupplier && !isEdit ? (
+            <>
+              Each supplier you assign gets their own sub-PO (00100-A, 00100-B…)
+              to send. Stages left as “PO supplier” go to{" "}
+              {supplierList.find((s) => s.id === supplierId)?.name ?? "the PO supplier"}{" "}
+              (the master’s primary supplier).
+            </>
+          ) : (
+            <>
+              Assign each production stage to a supplier. Stages left as “PO
+              supplier” default to{" "}
+              {supplierList.find((s) => s.id === supplierId)?.name ?? "the PO supplier"}.
+              Each supplier sees only their own stage(s) in the supplier portal and
+              is notified when they hand off.
+            </>
+          )}
         </p>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {ASSIGNABLE_STAGES.map((stage) => (
@@ -689,6 +734,7 @@ export function PoForm({
           ))}
         </div>
       </Card>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
