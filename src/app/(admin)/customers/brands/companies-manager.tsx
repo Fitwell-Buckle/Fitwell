@@ -497,14 +497,6 @@ function CompanyForm({
     );
   }, [variants, draft.assignedProductIds]);
 
-  function toggleCollection(id: string) {
-    setDraft({
-      ...draft,
-      assignedCollectionIds: draft.assignedCollectionIds.includes(id)
-        ? draft.assignedCollectionIds.filter((x) => x !== id)
-        : [...draft.assignedCollectionIds, id],
-    });
-  }
   function addProducts(vs: CatalogVariant[]) {
     const ids = new Set(draft.assignedProductIds);
     for (const v of vs) ids.add(v.shopifyProductId);
@@ -582,72 +574,40 @@ function CompanyForm({
         <div className="sm:col-span-2">
           <label className={fieldLabel}>Order restriction (optional)</label>
           <p className="mb-2 text-xs text-zinc-500">
-            Limit which products this brand can order — by collection and/or
-            individual product. Leave everything empty to allow the whole catalog.
+            Limit which products this brand can order — search and add them below
+            (filter by collection right in the picker). Leave empty to allow the
+            whole catalog.
           </p>
-          {collections.length === 0 ? (
-            <p className="text-sm text-zinc-400">
-              {catalogLoading
-                ? "Loading catalog…"
-                : "Shopify catalog unavailable — can’t list collections right now."}
-            </p>
-          ) : (
-            <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
-              {collections.map((c) => {
-                const on = draft.assignedCollectionIds.includes(c.id);
-                return (
+          <ProductCombobox
+            variants={variants}
+            collections={collections}
+            value=""
+            exclude={excludeVariants}
+            disabled={catalogLoading}
+            placeholder={catalogLoading ? "Loading catalog…" : "Add products…"}
+            onSelect={(v) => addProducts([v])}
+            onSelectMany={addProducts}
+          />
+          {draft.assignedProductIds.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {draft.assignedProductIds.map((pid) => (
+                <span
+                  key={pid}
+                  className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-700"
+                >
+                  {productTitle.get(pid) ?? "Product"}
                   <button
-                    key={c.id}
                     type="button"
-                    onClick={() => toggleCollection(c.id)}
-                    className={
-                      on
-                        ? "rounded-full border border-zinc-900 bg-zinc-900 px-3 py-1 text-sm text-white"
-                        : "rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50"
-                    }
+                    onClick={() => removeProduct(pid)}
+                    aria-label="Remove product"
+                    className="text-zinc-400 hover:text-zinc-700"
                   >
-                    {c.title}
+                    ×
                   </button>
-                );
-              })}
+                </span>
+              ))}
             </div>
           )}
-
-          <div className="mt-3">
-            <label className="mb-1 block text-xs font-medium text-zinc-500">
-              Individual products
-            </label>
-            <ProductCombobox
-              variants={variants}
-              collections={collections}
-              value=""
-              exclude={excludeVariants}
-              disabled={catalogLoading}
-              placeholder={catalogLoading ? "Loading catalog…" : "Add products…"}
-              onSelect={(v) => addProducts([v])}
-              onSelectMany={addProducts}
-            />
-            {draft.assignedProductIds.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {draft.assignedProductIds.map((pid) => (
-                  <span
-                    key={pid}
-                    className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-700"
-                  >
-                    {productTitle.get(pid) ?? "Product"}
-                    <button
-                      type="button"
-                      onClick={() => removeProduct(pid)}
-                      aria-label="Remove product"
-                      className="text-zinc-400 hover:text-zinc-700"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
         <div className="sm:col-span-2">
           <label className={fieldLabel}>Notes</label>

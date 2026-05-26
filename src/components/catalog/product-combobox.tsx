@@ -270,6 +270,19 @@ export function ProductCombobox({
             </div>
           )}
 
+          {onSelectMany && checked.size > 0 && (
+            <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2">
+              <button
+                type="button"
+                onClick={addChecked}
+                className="rounded-md bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-zinc-800"
+              >
+                Add {checked.size}
+              </button>
+              <span className="text-xs text-zinc-500">{checked.size} selected</span>
+            </div>
+          )}
+
           <ul className="max-h-64 overflow-auto py-1">
             {results.length === 0 ? (
               <li className="px-3 py-2 text-sm text-zinc-400">No matching products.</li>
@@ -306,19 +319,6 @@ export function ProductCombobox({
               ))
             )}
           </ul>
-
-          {onSelectMany && checked.size > 0 && (
-            <div className="flex items-center justify-between gap-2 border-t border-zinc-100 bg-zinc-50 px-3 py-2">
-              <span className="text-xs text-zinc-500">{checked.size} selected</span>
-              <button
-                type="button"
-                onClick={addChecked}
-                className="rounded-md bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-zinc-800"
-              >
-                Add {checked.size}
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>
