@@ -5,7 +5,7 @@ import { asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { supplier, company, priceTier } from "@/lib/schema";
-import { getPoDetail } from "@/lib/production/service";
+import { getPoDetail, getSubPos } from "@/lib/production/service";
 import { skuSize } from "@/lib/production/display";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -24,8 +24,9 @@ export default async function EditPoPage({
   if (!session) redirect("/auth/login");
 
   const { id } = await params;
-  const [po, suppliers, companies, tiers] = await Promise.all([
+  const [po, subPos, suppliers, companies, tiers] = await Promise.all([
     getPoDetail(id),
+    getSubPos(id),
     db.query.supplier.findMany({
       columns: { id: true, name: true },
       orderBy: asc(supplier.name),
@@ -76,6 +77,7 @@ export default async function EditPoPage({
       stage: a.stage,
       supplierId: a.supplierId,
     })),
+    isMaster: subPos.length > 0,
   };
 
   return (

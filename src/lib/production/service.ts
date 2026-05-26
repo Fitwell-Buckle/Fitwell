@@ -207,6 +207,57 @@ export async function createMultiSupplierPo(
   return { poId: master.poId, poNumber: master.poNumber, subPos };
 }
 
+/**
+ * Reconcile a master's sub-POs to its current stage→supplier assignments
+ * (called on edit). Sub-POs are lightweight send documents with no line items
+ * of their own, so this rebuilds them from scratch: delete the master's existing
+ * sub-POs, then recreate one per distinct supplier. When `multiSupplier` is
+ * false (or the split collapses to one supplier), the master is left with no
+ * sub-POs (reverts to a standalone PO).
+ */
+export async function syncMasterSubPos(
+  masterId: string,
+  multiSupplier: boolean,
+): Promise<void> {
+  const master = await db.query.productionPo.findFirst({
+    where: eq(productionPo.id, masterId),
+    columns: {
+      id: true,
+      supplierId: true,
+      shopifyPoNumber: true,
+      issuedDate: true,
+      expectedDeliveryDate: true,
+      companyId: true,
+      shopifyLocationId: true,
+      locationName: true,
+    },
+    with: { stageAssignments: { columns: { stage: true, supplierId: true } } },
+  });
+  if (!master) return;
+
+  await db.delete(productionPo).where(eq(productionPo.parentPoId, masterId));
+  if (!multiSupplier) return;
+
+  const workStages = STAGES.filter((s) => s !== "complete");
+  const plan = planSubPos(workStages, master.stageAssignments, master.supplierId);
+  if (!isMultiSupplier(plan)) return;
+
+  for (const p of plan) {
+    await db.insert(productionPo).values({
+      parentPoId: masterId,
+      poSuffix: p.suffix,
+      supplierId: p.supplierId,
+      shopifyPoNumber: master.shopifyPoNumber,
+      issuedDate: master.issuedDate,
+      expectedDeliveryDate: master.expectedDeliveryDate ?? null,
+      companyId: master.companyId ?? null,
+      shopifyLocationId: master.shopifyLocationId ?? null,
+      locationName: master.locationName ?? null,
+      status: "active",
+    });
+  }
+}
+
 /** Sub-POs of a master, lettered order, with supplier names. */
 export async function getSubPos(masterId: string) {
   return db.query.productionPo.findMany({

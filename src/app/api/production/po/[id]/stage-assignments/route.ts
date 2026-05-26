@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { getStageAssignments, setStageAssignments } from "@/lib/production/service";
+import {
+  getStageAssignments,
+  setStageAssignments,
+  syncMasterSubPos,
+} from "@/lib/production/service";
 import { STAGES, type ProductionStage } from "@/lib/production/stages";
 
 const bodySchema = z.object({
   assignments: z
     .array(z.object({ stage: z.string(), supplierId: z.string() }))
     .max(20),
+  // When set, regenerate this PO's sub-POs to match the assignments (master);
+  // false/absent removes any sub-POs (standalone PO with stage owners only).
+  multiSupplier: z.boolean().optional(),
 });
 
 function denyNonAdmin(role: string | undefined) {
@@ -46,5 +53,6 @@ export async function PUT(
     .filter((a) => a.supplierId && STAGES.includes(a.stage as ProductionStage))
     .map((a) => ({ stage: a.stage as ProductionStage, supplierId: a.supplierId }));
   await setStageAssignments(id, valid);
+  await syncMasterSubPos(id, input.multiSupplier ?? false);
   return NextResponse.json({ data: { count: valid.length } });
 }

@@ -45,6 +45,7 @@ export interface PoFormInitial {
   locationName: string;
   lineItems: EditableLine[];
   stageAssignments?: { stage: string; supplierId: string }[];
+  isMaster?: boolean; // edit: PO already split across suppliers (has sub-POs)
 }
 
 // Stages an admin can assign an owner to (the terminal "complete" is implicit).
@@ -167,7 +168,7 @@ export function PoForm({
   );
   const [lockStagesTogether, setLockStagesTogether] = useState(true);
   // Multi-supplier: split the PO across suppliers by stage, generating sub-POs.
-  const [multiSupplier, setMultiSupplier] = useState(false);
+  const [multiSupplier, setMultiSupplier] = useState(initial?.isMaster ?? false);
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [companyId, setCompanyId] = useState(initial?.companyId ?? "");
   // Local, appendable copy so a newly-added company shows + selects inline.
@@ -340,6 +341,7 @@ export function PoForm({
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              multiSupplier,
               assignments: Object.entries(stageOwners)
                 .filter(([, v]) => v)
                 .map(([stage, supplierId]) => ({ stage, supplierId })),
@@ -410,8 +412,8 @@ export function PoForm({
           </div>
         </div>
 
-        {!isEdit && (
-          <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-2">
+          {!isEdit && (
             <div className="flex items-center gap-2">
               <input
                 id="lock"
@@ -424,21 +426,21 @@ export function PoForm({
                 Advance all line items together (uncheck to move items independently)
               </label>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="multi"
-                type="checkbox"
-                checked={multiSupplier}
-                onChange={(e) => setMultiSupplier(e.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300"
-              />
-              <label htmlFor="multi" className="text-sm text-zinc-700">
-                Multiple suppliers — split this PO by stage into sub-POs (one per
-                supplier, e.g. <span className="font-mono">00100-A</span>)
-              </label>
-            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <input
+              id="multi"
+              type="checkbox"
+              checked={multiSupplier}
+              onChange={(e) => setMultiSupplier(e.target.checked)}
+              className="h-4 w-4 rounded border-zinc-300"
+            />
+            <label htmlFor="multi" className="text-sm text-zinc-700">
+              Multiple suppliers — split this PO by stage into sub-POs (one per
+              supplier, e.g. <span className="font-mono">00100-A</span>)
+            </label>
           </div>
-        )}
+        </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -685,30 +687,17 @@ export function PoForm({
         </div>
       </Card>
 
-      {(isEdit || multiSupplier) && (
+      {multiSupplier && (
       <Card className="p-6">
         <h2 className="text-sm font-semibold text-zinc-900">
-          {multiSupplier && !isEdit
-            ? "Assign stages to suppliers (generates sub-POs)"
-            : "Stage owners"}
+          Assign stages to suppliers (generates sub-POs)
         </h2>
         <p className="mt-1 text-xs text-zinc-500">
-          {multiSupplier && !isEdit ? (
-            <>
-              Each supplier you assign gets their own sub-PO (00100-A, 00100-B…)
-              to send. Stages left as “PO supplier” go to{" "}
-              {supplierList.find((s) => s.id === supplierId)?.name ?? "the PO supplier"}{" "}
-              (the master’s primary supplier).
-            </>
-          ) : (
-            <>
-              Assign each production stage to a supplier. Stages left as “PO
-              supplier” default to{" "}
-              {supplierList.find((s) => s.id === supplierId)?.name ?? "the PO supplier"}.
-              Each supplier sees only their own stage(s) in the supplier portal and
-              is notified when they hand off.
-            </>
-          )}
+          Each supplier you assign gets their own sub-PO (00100-A, 00100-B…) to
+          send. Stages left as “PO supplier” go to{" "}
+          {supplierList.find((s) => s.id === supplierId)?.name ?? "the PO supplier"}{" "}
+          (the master’s primary supplier).
+          {isEdit && " Saving regenerates the sub-POs to match."}
         </p>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {ASSIGNABLE_STAGES.map((stage) => (
