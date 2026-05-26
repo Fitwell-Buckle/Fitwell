@@ -5,9 +5,11 @@ import { auth } from "@/lib/auth";
 import { getPoDetail } from "@/lib/production/service";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
+import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { fmtMoney, fmtDate, STATUS_LABELS, skuSize } from "@/lib/production/display";
-import { STAGE_LABELS, STAGES } from "@/lib/production/stages";
+import { STAGE_LABELS, STAGES, type ProductionStage } from "@/lib/production/stages";
 import { formatPoNumber, planSubPos } from "@/lib/production/sub-po";
+import { usesRawBlankSummary, summarizeRawBlanks } from "@/lib/production/raw-blank";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,17 +61,29 @@ export default async function SendPoPage({
   const master = isSubPo ? await getPoDetail(po.parentPoId as string) : null;
   const itemSource = master ?? po;
   const poNumberDisplay = formatPoNumber(po.shopifyPoNumber, { suffix: po.poSuffix });
-  let supplierStages: string[] = [];
+  let supplierStageKeys: ProductionStage[] = [];
   if (master) {
     const plan = planSubPos(
       STAGES.filter((s) => s !== "complete"),
       master.stageAssignments,
       master.supplierId,
     );
-    supplierStages = (plan.find((p) => p.supplierId === po.supplierId)?.stages ?? []).map(
-      (s) => STAGE_LABELS[s],
-    );
+    supplierStageKeys = plan.find((p) => p.supplierId === po.supplierId)?.stages ?? [];
   }
+  const supplierStages = supplierStageKeys.map((s) => STAGE_LABELS[s]);
+
+  // Raw-blank summary: a pre-polishing supplier (stamping/EDM) gets items grouped
+  // by size + material (colour is irrelevant to the blank). Needs the catalog to
+  // resolve size/material; if unavailable we fall back to per-SKU lines.
+  let lineAttrs: ReturnType<typeof makeLineAttrs> | null = null;
+  if (usesRawBlankSummary(supplierStageKeys)) {
+    try {
+      lineAttrs = makeLineAttrs(await getCatalogCached());
+    } catch {
+      lineAttrs = null;
+    }
+  }
+  const summarize = !!lineAttrs;
 
   // The PO is sent to the vendor (supplier).
   const defaultTo = po.supplier?.contactEmail ?? "";
@@ -94,6 +108,20 @@ export default async function SendPoPage({
     (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
   );
   const total = items.reduce((s, li) => s + (li.unitCostCents ?? 0) * li.quantity, 0);
+
+  // Raw-blank rows + total pieces (when summarizing for a stamping/EDM supplier).
+  const rawBlanks =
+    summarize && lineAttrs
+      ? summarizeRawBlanks(
+          items.map((li) => ({
+            sku: li.sku,
+            quantity: li.quantity,
+            sizeMm: lineAttrs.sizeOf(li),
+            material: lineAttrs.materialOf(li),
+          })),
+        )
+      : [];
+  const totalPieces = rawBlanks.reduce((s, g) => s + g.quantity, 0);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -167,50 +195,96 @@ export default async function SendPoPage({
           </div>
         )}
 
-        <div className="mt-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>SKU</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Unit cost</TableHead>
-                <TableHead className="text-right">Line total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((li) => (
-                <TableRow key={li.id}>
-                  <TableCell className="font-mono text-xs">{li.sku}</TableCell>
-                  <TableCell>
-                    {supplierStages.length > 0 && (
-                      <span className="font-semibold text-red-600">
-                        {supplierStages.join(", ")} —{" "}
-                      </span>
-                    )}
-                    {li.title}
-                  </TableCell>
-                  <TableCell className="text-right text-zinc-500">{li.quantity}</TableCell>
-                  <TableCell className="text-right text-zinc-500">
-                    {fmtMoney(li.unitCostCents)}
-                  </TableCell>
-                  <TableCell className="text-right text-zinc-700">
-                    {fmtMoney(
-                      li.unitCostCents != null ? li.unitCostCents * li.quantity : null,
-                    )}
-                  </TableCell>
+        {summarize ? (
+          <>
+            <p className="mt-6 mb-2 text-sm text-zinc-600">
+              Raw blanks to produce — grouped by size + material (colour/finish is
+              added downstream, so it&apos;s irrelevant at this stage):
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Raw blank</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead>Covers (finished SKUs)</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {rawBlanks.map((g) => (
+                  <TableRow key={g.label}>
+                    <TableCell>
+                      {supplierStages.length > 0 && (
+                        <span className="font-semibold text-red-600">
+                          {supplierStages.join(", ")} —{" "}
+                        </span>
+                      )}
+                      <span className="font-medium text-zinc-900">{g.label}</span>
+                    </TableCell>
+                    <TableCell className="text-right font-medium text-zinc-900">
+                      {g.quantity}
+                    </TableCell>
+                    <TableCell className="text-xs text-zinc-400">
+                      {g.skus.join(", ")}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
+              <span className="text-sm text-zinc-500">Total pieces</span>
+              <span className="ml-3 text-base font-semibold text-zinc-900">
+                {totalPieces}
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Qty</TableHead>
+                    <TableHead className="text-right">Unit cost</TableHead>
+                    <TableHead className="text-right">Line total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((li) => (
+                    <TableRow key={li.id}>
+                      <TableCell className="font-mono text-xs">{li.sku}</TableCell>
+                      <TableCell>
+                        {supplierStages.length > 0 && (
+                          <span className="font-semibold text-red-600">
+                            {supplierStages.join(", ")} —{" "}
+                          </span>
+                        )}
+                        {li.title}
+                      </TableCell>
+                      <TableCell className="text-right text-zinc-500">{li.quantity}</TableCell>
+                      <TableCell className="text-right text-zinc-500">
+                        {fmtMoney(li.unitCostCents)}
+                      </TableCell>
+                      <TableCell className="text-right text-zinc-700">
+                        {fmtMoney(
+                          li.unitCostCents != null ? li.unitCostCents * li.quantity : null,
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
-        <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
-          <span className="text-sm text-zinc-500">Total</span>
-          <span className="ml-3 text-base font-semibold text-zinc-900">
-            {fmtMoney(total)}
-          </span>
-        </div>
+            <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
+              <span className="text-sm text-zinc-500">Total</span>
+              <span className="ml-3 text-base font-semibold text-zinc-900">
+                {fmtMoney(total)}
+              </span>
+            </div>
+          </>
+        )}
 
         {po.notes && <p className="mt-6 text-sm text-zinc-600">{po.notes}</p>}
       </div>

@@ -67,6 +67,7 @@ export function ProductCombobox({
   const [active, setActive] = useState(0);
   const [sizes, setSizes] = useState<Set<number>>(new Set());
   const [colors, setColors] = useState<Set<string>>(new Set());
+  const [materials, setMaterials] = useState<Set<string>>(new Set());
   const [collectionId, setCollectionId] = useState(initialCollectionId);
   // Multi-select: variant ids checked for a batch "Add" (only when onSelectMany).
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -88,12 +89,16 @@ export function ProductCombobox({
   const allColors = [
     ...new Set(pool.map((v) => v.color).filter((c): c is string => !!c)),
   ].sort((a, b) => a.localeCompare(b));
+  const allMaterials = [
+    ...new Set(pool.map((v) => v.material).filter((m): m is string => !!m)),
+  ].sort((a, b) => a.localeCompare(b));
 
   function changeCollection(id: string) {
-    // Reset the chip filters so a stale size/colour can't hide the new pool.
+    // Reset the chip filters so a stale size/colour/material can't hide the new pool.
     setCollectionId(id);
     setSizes(new Set());
     setColors(new Set());
+    setMaterials(new Set());
     setActive(0);
     onCollectionChange?.(id);
   }
@@ -113,6 +118,15 @@ export function ProductCombobox({
       const next = new Set(prev);
       if (next.has(c)) next.delete(c);
       else next.add(c);
+      return next;
+    });
+  }
+  function toggleMaterial(m: string) {
+    setActive(0);
+    setMaterials((prev) => {
+      const next = new Set(prev);
+      if (next.has(m)) next.delete(m);
+      else next.add(m);
       return next;
     });
   }
@@ -160,6 +174,7 @@ export function ProductCombobox({
     .filter((v) => !exclude?.has(v.shopifyVariantId) || v.shopifyVariantId === value)
     .filter((v) => sizes.size === 0 || (v.sizeMm != null && sizes.has(v.sizeMm)))
     .filter((v) => colors.size === 0 || (v.color != null && colors.has(v.color)))
+    .filter((v) => materials.size === 0 || (v.material != null && materials.has(v.material)))
     .filter(
       (v) =>
         !q ||
@@ -235,7 +250,7 @@ export function ProductCombobox({
             />
           </div>
 
-          {(allSizes.length > 0 || allColors.length > 0) && (
+          {(allSizes.length > 0 || allColors.length > 0 || allMaterials.length > 0) && (
             <div className="flex flex-wrap gap-1 border-b border-zinc-100 px-2.5 py-2">
               {allSizes.map((s) => (
                 <button
@@ -265,6 +280,22 @@ export function ProductCombobox({
                   )}
                 >
                   {c}
+                </button>
+              ))}
+              {allMaterials.map((m) => (
+                <button
+                  key={`material-${m}`}
+                  type="button"
+                  onClick={() => toggleMaterial(m)}
+                  title="Material"
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-xs transition-colors",
+                    materials.has(m)
+                      ? "border-amber-600 bg-amber-600 text-white"
+                      : "border-amber-200 text-amber-700 hover:bg-amber-50",
+                  )}
+                >
+                  {m}
                 </button>
               ))}
             </div>
