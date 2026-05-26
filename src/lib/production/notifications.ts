@@ -2,6 +2,7 @@ import { desc, eq, isNull, count } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { adminNotification } from "@/lib/schema";
 import { sendEmail } from "@/lib/email/resend";
+import { formatPoNumber } from "./sub-po";
 
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "").split(",").filter(Boolean);
 
@@ -14,15 +15,21 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "").split(",").filter(Boolean)
 export async function notifyStageHandoff(params: {
   poId: string;
   poNumber: string;
+  /** The handing-off supplier's sub-PO suffix (e.g. "A") — shown as 00118-A. */
+  poSuffix?: string | null;
   lineItemId: string;
   sku: string;
   supplierId: string;
+  /** The supplier handing the work off. */
   supplierName: string;
-  fromStageLabel: string;
-  toStageLabel: string;
+  /** The supplier (or "Complete") the work moves to next. */
+  nextSupplierName: string;
 }): Promise<void> {
-  const title = `${params.supplierName} completed ${params.fromStageLabel} on PO ${params.poNumber}`;
-  const body = `${params.sku} handed off from ${params.fromStageLabel} → ${params.toStageLabel}.`;
+  const poDisplay = formatPoNumber(params.poNumber, {
+    suffix: params.poSuffix ?? undefined,
+  });
+  const title = `${params.supplierName} completed their stage on PO ${poDisplay}`;
+  const body = `${params.sku} handed off from ${params.supplierName} to ${params.nextSupplierName}.`;
 
   try {
     await db.insert(adminNotification).values({
@@ -38,7 +45,7 @@ export async function notifyStageHandoff(params: {
   }
 
   if (ADMIN_EMAILS.length === 0) return;
-  const subject = `Stage handoff — PO ${params.poNumber}`;
+  const subject = `Stage handoff — PO ${poDisplay}`;
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#18181b">
     <p style="font-size:15px;font-weight:600;margin:0">${title}</p>
     <p style="font-size:13px;color:#52525b;margin:6px 0 0">${body}</p>

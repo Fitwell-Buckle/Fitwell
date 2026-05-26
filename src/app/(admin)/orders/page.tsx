@@ -3,17 +3,9 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { order, customer, orderLineItem } from "@/lib/schema";
-import { desc, eq, and, gte, lte, count, exists, inArray, sql } from "drizzle-orm";
+import { desc, eq, and, gte, lte, count, exists, inArray } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
-import {
-  getCatalogCached,
-  getCatalogGroupsCached,
-  catalogSkusMatching,
-  makeCollectionLookup,
-  type CatalogVariant,
-  type CatalogCollectionGroup,
-} from "@/lib/catalog/load";
-import { CatalogFilters } from "@/components/catalog/catalog-filters";
+import { ListFilters } from "@/components/catalog/list-filters";
 import {
   Table,
   TableHeader,
@@ -53,36 +45,11 @@ export default async function OrdersPage({
   const offset = (page - 1) * limit;
   const status = typeof params.status === "string" ? params.status : undefined;
   const { from, to } = parseDateRange(params);
-  const collectionParam = typeof params.collection === "string" ? params.collection : "";
-  const sizeParam = typeof params.size === "string" ? params.size : "";
-  const colorParam = typeof params.color === "string" ? params.color : "";
-  const materialParam = typeof params.material === "string" ? params.material : "";
-
-  // Standardized catalog filter → resolve to a set of SKUs, then keep orders
-  // that contain a matching line item (preserves SQL pagination). Cached.
-  let catalog: CatalogVariant[] = [];
-  let groups: CatalogCollectionGroup[] = [];
-  try {
-    [catalog, groups] = await Promise.all([getCatalogCached(), getCatalogGroupsCached()]);
-  } catch {
-    /* filters degrade gracefully when Shopify is unavailable */
-  }
-  const { options: collectionOptions } = makeCollectionLookup(groups);
-  const sizeOptions = [
-    ...new Set(catalog.map((v) => v.sizeMm).filter((s): s is number => s != null)),
-  ].sort((a, b) => a - b);
-  const colorOptions = [
-    ...new Set(catalog.map((v) => v.color).filter((c): c is string => !!c)),
-  ].sort((a, b) => a.localeCompare(b));
-  const materialOptions = [
-    ...new Set(catalog.map((v) => v.material).filter((m): m is string => !!m)),
-  ].sort((a, b) => a.localeCompare(b));
-  const matchingSkus = catalogSkusMatching(catalog, groups, {
-    collection: collectionParam,
-    size: sizeParam,
-    color: colorParam,
-    material: materialParam,
-  });
+  // Item Chooser filter: the chosen product SKU(s) (comma-separated in the URL).
+  const skus = (typeof params.sku === "string" ? params.sku : "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const conditions = [];
   if (status) {
@@ -90,21 +57,17 @@ export default async function OrdersPage({
   }
   conditions.push(gte(order.processedAt, from));
   conditions.push(lte(order.processedAt, to));
-  if (matchingSkus) {
+  // Keep orders containing a chosen product (preserves SQL pagination).
+  if (skus.length > 0) {
     conditions.push(
-      matchingSkus.length === 0
-        ? sql`false`
-        : exists(
-            db
-              .select({ one: orderLineItem.id })
-              .from(orderLineItem)
-              .where(
-                and(
-                  eq(orderLineItem.orderId, order.id),
-                  inArray(orderLineItem.sku, matchingSkus),
-                ),
-              ),
+      exists(
+        db
+          .select({ one: orderLineItem.id })
+          .from(orderLineItem)
+          .where(
+            and(eq(orderLineItem.orderId, order.id), inArray(orderLineItem.sku, skus)),
           ),
+      ),
     );
   }
 
@@ -140,16 +103,7 @@ export default async function OrdersPage({
     <div>
       <PageHeader title="Consumer Orders" />
 
-      <CatalogFilters
-        collections={collectionOptions}
-        collection={collectionParam}
-        sizeOptions={sizeOptions}
-        size={sizeParam}
-        colorOptions={colorOptions}
-        color={colorParam}
-        materialOptions={materialOptions}
-        material={materialParam}
-      />
+      <ListFilters />
 
       <form action="" method="GET" className="mt-4 flex gap-2 items-center">
         <select

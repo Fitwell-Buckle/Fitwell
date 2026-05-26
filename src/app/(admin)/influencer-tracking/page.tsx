@@ -4,15 +4,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { listInfluencerOrders } from "@/lib/influencer/service";
 import { parseDateRange } from "@/lib/date-range";
-import {
-  getCatalogCached,
-  getCatalogGroupsCached,
-  catalogSkusMatching,
-  makeCollectionLookup,
-  type CatalogVariant,
-  type CatalogCollectionGroup,
-} from "@/lib/catalog/load";
-import { CatalogFilters } from "@/components/catalog/catalog-filters";
+import { ListFilters } from "@/components/catalog/list-filters";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { InfluencerTrackingTable } from "./tracking-table";
@@ -33,41 +25,19 @@ export default async function InfluencerTrackingPage({
   const { from, to } = parseDateRange(params);
   const fromStr = from.toISOString().slice(0, 10);
   const toStr = to.toISOString().slice(0, 10);
-  const collectionParam = typeof params.collection === "string" ? params.collection : "";
-  const sizeParam = typeof params.size === "string" ? params.size : "";
-  const colorParam = typeof params.color === "string" ? params.color : "";
-  const materialParam = typeof params.material === "string" ? params.material : "";
+  // Item Chooser filter: the chosen product SKU(s) (comma-separated in the URL).
+  const skuSet = new Set(
+    (typeof params.sku === "string" ? params.sku : "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
 
-  let catalog: CatalogVariant[] = [];
-  let groups: CatalogCollectionGroup[] = [];
   const orders = await listInfluencerOrders();
-  try {
-    [catalog, groups] = await Promise.all([getCatalogCached(), getCatalogGroupsCached()]);
-  } catch {
-    /* filters degrade gracefully when Shopify is unavailable */
-  }
-
-  const { options: collectionOptions } = makeCollectionLookup(groups);
-  const sizeOptions = [
-    ...new Set(catalog.map((v) => v.sizeMm).filter((s): s is number => s != null)),
-  ].sort((a, b) => a - b);
-  const colorOptions = [
-    ...new Set(catalog.map((v) => v.color).filter((c): c is string => !!c)),
-  ].sort((a, b) => a.localeCompare(b));
-  const materialOptions = [
-    ...new Set(catalog.map((v) => v.material).filter((m): m is string => !!m)),
-  ].sort((a, b) => a.localeCompare(b));
-  const matchingSkus = catalogSkusMatching(catalog, groups, {
-    collection: collectionParam,
-    size: sizeParam,
-    color: colorParam,
-    material: materialParam,
-  });
-  const matchSet = matchingSkus ? new Set(matchingSkus) : null;
 
   const rows = orders
     .filter((o) => o.issuedDate >= fromStr && o.issuedDate <= toStr)
-    .filter((o) => !matchSet || o.lineItems.some((l) => matchSet.has(l.sku)))
+    .filter((o) => skuSet.size === 0 || o.lineItems.some((l) => skuSet.has(l.sku)))
     .map((o) => ({
       id: o.id,
       orderNumber: o.orderNumber,
@@ -92,16 +62,7 @@ export default async function InfluencerTrackingPage({
         </Button>
       </div>
 
-      <CatalogFilters
-        collections={collectionOptions}
-        collection={collectionParam}
-        sizeOptions={sizeOptions}
-        size={sizeParam}
-        colorOptions={colorOptions}
-        color={colorParam}
-        materialOptions={materialOptions}
-        material={materialParam}
-      />
+      <ListFilters />
 
       <InfluencerTrackingTable rows={rows} today={today} />
     </div>

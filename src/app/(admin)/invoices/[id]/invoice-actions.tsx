@@ -248,8 +248,8 @@ export function InvoiceActions({
 
       {!canPushShopify && (
         <p className="mt-3 text-xs text-zinc-400">
-          Link this brand to a Shopify customer (Customers → B2B Brand List) to also
-          create a Shopify draft order with a payment link when sending.
+          Link this customer to a Shopify customer (Customers → B2B Customer List) to
+          also create a Shopify draft order with a payment link when sending.
         </p>
       )}
       {shopifyInvoiceUrl && (

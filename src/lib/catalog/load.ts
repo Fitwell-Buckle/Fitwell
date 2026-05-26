@@ -29,7 +29,10 @@ export async function loadCatalog(): Promise<CatalogVariant[]> {
       page_info: pageInfo,
     });
     for (const p of products) {
-      if (p.status && p.status !== "active") continue;
+      // Include active AND draft ("unlisted" — not published to the storefront)
+      // products so internal POs/invoices can reference them; only skip archived
+      // (discontinued) items.
+      if (p.status === "archived") continue;
       const optionNames = (p.options ?? []).map((o) => o.name);
       for (const v of p.variants ?? []) {
         const { sizeMm, color, material } = deriveAttrs(optionNames, [
@@ -90,7 +93,8 @@ export async function loadCatalogGroups(): Promise<CatalogCollectionGroup[]> {
       page_info: pageInfo,
     });
     for (const p of products) {
-      if (p.status && p.status !== "active") continue;
+      // Match loadCatalog: include active + draft (unlisted), skip only archived.
+      if (p.status === "archived") continue;
       const ids = (p.variants ?? []).map((v) => String(v.id));
       if (ids.length) variantIdsByProduct.set(String(p.id), ids);
     }

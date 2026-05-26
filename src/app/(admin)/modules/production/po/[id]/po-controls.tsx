@@ -3,8 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableHeader,
@@ -13,14 +11,8 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { STAGE_LABELS, isComplete, type ProductionStage } from "@/lib/production/stages";
-import {
-  PO_STATUSES,
-  STATUS_LABELS,
-  stageBadgeClass,
-  fmtMoney,
-} from "@/lib/production/display";
-import { cn } from "@/lib/utils";
+import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { PO_STATUSES, STATUS_LABELS, fmtMoney } from "@/lib/production/display";
 
 interface LineItem {
   id: string;
@@ -36,6 +28,9 @@ interface LineItem {
   warehouse: string | null;
   warehouseOverridden: boolean;
 }
+
+const STAGE_SELECT =
+  "h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300 disabled:opacity-50";
 
 export function PoControls({
   poId,
@@ -53,8 +48,6 @@ export function PoControls({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const allComplete = lineItems.every((li) => isComplete(li.currentStage));
 
   async function patchPo(body: Record<string, unknown>) {
     setError(null);
@@ -78,18 +71,20 @@ export function PoControls({
     }
   }
 
-  async function advance(lineItemId?: string) {
+  // Set a line item's stage directly (forward or back); auto-saves on change. A
+  // locked PO moves every line together (server-side via planSetStage).
+  async function setStage(lineItemId: string, toStage: string) {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch(`/api/production/po/${poId}/advance`, {
+      const res = await fetch(`/api/production/line-items/${lineItemId}/stage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(lineItemId ? { lineItemId } : {}),
+        body: JSON.stringify({ stage: toStage }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Advance failed.");
+        setError(data.error || "Couldn't update the stage.");
       } else {
         router.refresh();
       }
@@ -128,13 +123,8 @@ export function PoControls({
               onChange={(e) => patchPo({ lockStagesTogether: e.target.checked })}
               className="h-4 w-4 rounded border-zinc-300"
             />
-            <span>Advance together</span>
+            <span>Move stages together</span>
           </label>
-          {lockStagesTogether && (
-            <Button size="sm" disabled={busy || allComplete} onClick={() => advance()}>
-              {allComplete ? "All complete" : "Advance all"}
-            </Button>
-          )}
         </div>
       </div>
 
@@ -148,11 +138,9 @@ export function PoControls({
               <TableHead>Title</TableHead>
               <TableHead>Qty</TableHead>
               <TableHead>Unit cost</TableHead>
-              <TableHead>Brand</TableHead>
-              <TableHead>Warehouse</TableHead>
               <TableHead>Customer</TableHead>
-              <TableHead>Stage</TableHead>
-              {!lockStagesTogether && <TableHead className="text-right">Action</TableHead>}
+              <TableHead>Warehouse</TableHead>
+              <TableHead className="text-right">Stage</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -174,24 +162,20 @@ export function PoControls({
                     <span className="ml-1 text-[10px] uppercase text-amber-600">ovr</span>
                   )}
                 </TableCell>
-                <TableCell className="text-zinc-500">{li.customerName ?? "—"}</TableCell>
-                <TableCell>
-                  <Badge className={cn(stageBadgeClass(li.currentStage))}>
-                    {STAGE_LABELS[li.currentStage]}
-                  </Badge>
+                <TableCell className="text-right">
+                  <select
+                    value={li.currentStage}
+                    disabled={busy}
+                    onChange={(e) => setStage(li.id, e.target.value)}
+                    className={STAGE_SELECT}
+                  >
+                    {STAGES.map((s) => (
+                      <option key={s} value={s}>
+                        {STAGE_LABELS[s]}
+                      </option>
+                    ))}
+                  </select>
                 </TableCell>
-                {!lockStagesTogether && (
-                  <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy || isComplete(li.currentStage)}
-                      onClick={() => advance(li.id)}
-                    >
-                      {isComplete(li.currentStage) ? "Complete" : "Advance"}
-                    </Button>
-                  </TableCell>
-                )}
               </TableRow>
             ))}
           </TableBody>

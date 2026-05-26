@@ -1,6 +1,10 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { productionPo, productionPoLineItem } from "@/lib/schema";
+import {
+  productionPo,
+  productionPoLineItem,
+  productionSupplierLineCost,
+} from "@/lib/schema";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { planReceiveLine, type ReceiveLineStatus } from "./receive-plan";
 
@@ -35,6 +39,26 @@ export async function receivePo(poId: string): Promise<ReceiveResult> {
   const skipped: ReceiveResult["skipped"] = [];
   const failed: ReceiveResult["failed"] = [];
 
+  // Per-line unit cost to push into Shopify's cost basis: on a multi-supplier
+  // master this is the SUM of each supplier's unit cost for the line (the Total
+  // Cost rollup ÷ qty); standalone POs fall back to the line's own unit cost.
+  const costRows = await db
+    .select({
+      lineItemId: productionSupplierLineCost.lineItemId,
+      unitCostCents: productionSupplierLineCost.unitCostCents,
+    })
+    .from(productionSupplierLineCost)
+    .where(eq(productionSupplierLineCost.poId, poId));
+  const supplierUnitByLine = new Map<string, number>();
+  for (const r of costRows) {
+    if (r.unitCostCents != null) {
+      supplierUnitByLine.set(
+        r.lineItemId,
+        (supplierUnitByLine.get(r.lineItemId) ?? 0) + r.unitCostCents,
+      );
+    }
+  }
+
   const client = getShopifyClient();
   const now = new Date();
 
@@ -64,6 +88,8 @@ export async function receivePo(poId: string): Promise<ReceiveResult> {
         delta: plan.quantity,
         // Stamp the PO number onto the Shopify adjustment (referenceDocumentUri).
         reference: `https://admin.fitwellbuckle.co/po/${po.shopifyPoNumber}`,
+        // Total Cost ÷ qty = the line's unit cost basis for Shopify.
+        costCents: supplierUnitByLine.get(li.id) ?? li.unitCostCents ?? null,
       });
       await db
         .update(productionPoLineItem)

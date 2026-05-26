@@ -144,7 +144,7 @@ export function CompaniesManager({
 
   async function saveCompany() {
     setError(null);
-    if (!draft.name.trim()) return setError("Brand name is required.");
+    if (!draft.name.trim()) return setError("Customer name is required.");
     setBusy(true);
     const isNew = companyEditing === "new";
     try {
@@ -275,7 +275,7 @@ export function CompaniesManager({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Brand</TableHead>
+              <TableHead>Customer</TableHead>
               <TableHead>Price tier</TableHead>
               <TableHead>Can order</TableHead>
               <TableHead>Contact</TableHead>

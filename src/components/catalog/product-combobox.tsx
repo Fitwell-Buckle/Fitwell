@@ -160,17 +160,16 @@ export function ProductCombobox({
     });
   }
 
-  function addChecked() {
-    // Resolve from the full catalog so items checked under a previous
-    // collection/filter are still included.
-    const picked = variants.filter((v) => checked.has(v.shopifyVariantId));
-    if (picked.length > 0) onSelectMany?.(picked);
+  function commitMany(list: CatalogVariant[]) {
+    if (list.length > 0) onSelectMany?.(list);
     setChecked(new Set());
     setOpen(false);
   }
 
   const q = query.trim().toLowerCase();
-  const results = pool
+  // Everything matching the current collection + chip + search filters (used by
+  // "Add all"); `results` is just the slice we render.
+  const filteredAll = pool
     .filter((v) => !exclude?.has(v.shopifyVariantId) || v.shopifyVariantId === value)
     .filter((v) => sizes.size === 0 || (v.sizeMm != null && sizes.has(v.sizeMm)))
     .filter((v) => colors.size === 0 || (v.color != null && colors.has(v.color)))
@@ -180,8 +179,8 @@ export function ProductCombobox({
         !q ||
         `${v.sku} ${v.title} ${v.variantTitle ?? ""}`.toLowerCase().includes(q),
     )
-    .sort((a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku))
-    .slice(0, MAX_RESULTS);
+    .sort((a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku));
+  const results = filteredAll.slice(0, MAX_RESULTS);
 
   function choose(v: CatalogVariant) {
     onSelect(v);
@@ -301,16 +300,24 @@ export function ProductCombobox({
             </div>
           )}
 
-          {onSelectMany && checked.size > 0 && (
+          {onSelectMany && (checked.size > 0 || collectionId) && (
             <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2">
               <button
                 type="button"
-                onClick={addChecked}
+                onClick={() =>
+                  commitMany(
+                    checked.size > 0
+                      ? variants.filter((v) => checked.has(v.shopifyVariantId))
+                      : filteredAll,
+                  )
+                }
                 className="rounded-md bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-zinc-800"
               >
-                Add {checked.size}
+                {checked.size > 0 ? `Add ${checked.size}` : `Add all ${filteredAll.length}`}
               </button>
-              <span className="text-xs text-zinc-500">{checked.size} selected</span>
+              <span className="text-xs text-zinc-500">
+                {checked.size > 0 ? `${checked.size} selected` : "matching products"}
+              </span>
             </div>
           )}
 

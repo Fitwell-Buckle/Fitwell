@@ -756,6 +756,42 @@ export const productionStageAssignment = pgTable(
   ],
 );
 
+// Per-supplier, per-line-item production cost on a multi-supplier PO. Keyed by
+// the MASTER po + the supplier (not the sub-PO id) so it survives sub-PO regen
+// on edit. Each supplier prices the line items they touch (a stamping supplier's
+// raw-blank price is written per covered SKU — same per-piece cost on each). The
+// master rolls these up: sum of suppliers' unit costs per line × qty = line cost.
+export const productionSupplierLineCost = pgTable(
+  "production_supplier_line_cost",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // The master PO these costs roll up onto.
+    poId: text("po_id")
+      .notNull()
+      .references(() => productionPo.id, { onDelete: "cascade" }),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => supplier.id, { onDelete: "cascade" }),
+    lineItemId: text("line_item_id")
+      .notNull()
+      .references(() => productionPoLineItem.id, { onDelete: "cascade" }),
+    // Per-unit (per-piece) production cost this supplier charges for this line.
+    unitCostCents: integer("unit_cost_cents"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("supplier_line_cost_po_supplier_line_idx").on(
+      t.poId,
+      t.supplierId,
+      t.lineItemId,
+    ),
+    index("supplier_line_cost_po_idx").on(t.poId),
+  ],
+);
+
 // In-app admin notifications (e.g. a supplier handed off a stage). Unread =
 // read_at is null.
 export const adminNotification = pgTable(

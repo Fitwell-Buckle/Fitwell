@@ -26,6 +26,8 @@ export interface RawBlankInput {
   quantity: number;
   sizeMm: number | null;
   material: string | null;
+  /** Master line-item id, so per-group pricing can write to each covered line. */
+  lineItemId?: string;
 }
 
 export interface RawBlankGroup {
@@ -36,6 +38,8 @@ export interface RawBlankGroup {
   quantity: number;
   /** The finished SKUs this blank covers, for reference on the PO. */
   skus: string[];
+  /** Master line-item ids this blank covers (for per-group cost entry). */
+  lineItemIds: string[];
 }
 
 /**
@@ -56,11 +60,15 @@ export function summarizeRawBlanks(items: RawBlankInput[]): RawBlankGroup[] {
         material: it.material,
         quantity: 0,
         skus: [],
+        lineItemIds: [],
       };
       groups.set(key, g);
     }
     g.quantity += it.quantity;
     if (!g.skus.includes(it.sku)) g.skus.push(it.sku);
+    if (it.lineItemId && !g.lineItemIds.includes(it.lineItemId)) {
+      g.lineItemIds.push(it.lineItemId);
+    }
   }
   return [...groups.values()].sort(
     (a, b) =>

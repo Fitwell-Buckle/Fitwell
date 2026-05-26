@@ -15,19 +15,12 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { derivePoStage, STAGE_LABELS } from "@/lib/production/stages";
+import { supplierForStage } from "@/lib/production/stage-owners";
+import { formatPoNumber } from "@/lib/production/sub-po";
 import { fmtDate } from "@/lib/production/display";
-import {
-  getCatalogCached,
-  getCatalogGroupsCached,
-  makeLineAttrs,
-  makeCollectionLookup,
-  type CatalogVariant,
-  type CatalogCollectionGroup,
-  type LineAttrInput,
-} from "@/lib/catalog/load";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
 import { aggregateIncoming, type IncomingLine } from "@/lib/production/inventory";
-import { CatalogFilters } from "@/components/catalog/catalog-filters";
+import { ListFilters } from "@/components/catalog/list-filters";
 import { ProductionViewToggle } from "../view-toggle";
 import { KanbanBoard, type KanbanCard } from "../kanban/kanban-board";
 import { ProductionTimeline } from "../production-timeline";
@@ -58,10 +51,13 @@ export default async function ProductionSummaryPage({
   const status =
     typeof params.status === "string" && params.status ? params.status : "active";
   const statusFilter = status === "all" ? undefined : status;
-  const collectionParam = typeof params.collection === "string" ? params.collection : "";
-  const sizeParam = typeof params.size === "string" ? params.size : "";
-  const colorParam = typeof params.color === "string" ? params.color : "";
-  const materialParam = typeof params.material === "string" ? params.material : "";
+  // Item Chooser filter: the chosen product SKU(s) (comma-separated in the URL).
+  const skuSet = new Set(
+    (typeof params.sku === "string" ? params.sku : "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
 
   // Load all non-cancelled POs once. The Incoming Inventory view needs the full
   // set; the Board / Timeline views filter this in memory (small data set).
@@ -71,6 +67,7 @@ export default async function ProductionSummaryPage({
       orderBy: desc(productionPo.createdAt),
       with: {
         supplier: { columns: { name: true } },
+        stageAssignments: { columns: { stage: true, supplierId: true } },
         lineItems: {
           with: { stageEvents: { orderBy: asc(productionStageEvent.enteredAt) } },
         },
@@ -80,40 +77,35 @@ export default async function ProductionSummaryPage({
     getStageEstimates(),
   ]);
 
-  // Resolve each line's size/colour/material + collection from the catalog
-  // (optional, cached). These power the standardized filter.
-  let catalog: CatalogVariant[] = [];
-  let groups: CatalogCollectionGroup[] = [];
-  try {
-    [catalog, groups] = await Promise.all([getCatalogCached(), getCatalogGroupsCached()]);
-  } catch {
-    /* filters degrade gracefully when Shopify is unavailable */
+  // Owning-supplier resolution: a stage can belong to a different supplier than
+  // the PO's primary, and each gets a sub-PO suffix. Map supplier names + the
+  // suffix per (master, supplier) so cards/bars show the responsible sub-PO.
+  const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
+  const suffixByMasterSupplier = new Map<string, string>();
+  for (const po of allPos) {
+    if (po.parentPoId && po.poSuffix) {
+      suffixByMasterSupplier.set(`${po.parentPoId}:${po.supplierId}`, po.poSuffix);
+    }
   }
-  const { sizeOf: lineSize, colorOf: lineColor, materialOf: lineMaterial } =
-    makeLineAttrs(catalog);
-  const { inCollection, options: collectionOptions } = makeCollectionLookup(groups);
+  const lineOwner = (
+    po: { id: string; supplierId: string; shopifyPoNumber: string; supplier: { name: string } | null; stageAssignments: { stage: import("@/lib/production/stages").ProductionStage; supplierId: string }[] },
+    currentStage: import("@/lib/production/stages").ProductionStage,
+  ): { ownerId: string; supplier: string; poNumber: string } => {
+    const ownerId =
+      supplierForStage(po.stageAssignments, po.supplierId, currentStage) ?? po.supplierId;
+    const suffix = suffixByMasterSupplier.get(`${po.id}:${ownerId}`);
+    return {
+      ownerId,
+      supplier: supplierName.get(ownerId) ?? po.supplier?.name ?? "—",
+      poNumber: formatPoNumber(po.shopifyPoNumber, { suffix }),
+    };
+  };
 
   const allLines = allPos.flatMap((po) => po.lineItems);
-  const sizeOptions = [
-    ...new Set(allLines.map(lineSize).filter((s): s is number => s != null)),
-  ].sort((a, b) => a - b);
-  const colorOptions = [
-    ...new Set(allLines.map(lineColor).filter((c): c is string => !!c)),
-  ].sort((a, b) => a.localeCompare(b));
-  const materialOptions = [
-    ...new Set(allLines.map(lineMaterial).filter((m): m is string => !!m)),
-  ].sort((a, b) => a.localeCompare(b));
 
-  // A line matches the catalog filters when every active one matches.
-  const matchesCatalog = (li: LineAttrInput): boolean =>
-    (!collectionParam || inCollection(li, collectionParam)) &&
-    (!sizeParam || lineSize(li) === Number(sizeParam)) &&
-    (!colorParam || lineColor(li) === colorParam) &&
-    (!materialParam || lineMaterial(li) === materialParam);
-
-  // ── Incoming inventory: produced-but-not-received lines that match filters ──
+  // ── Incoming inventory: produced-but-not-received lines for the chosen product ──
   const incomingLines: IncomingLine[] = allLines
-    .filter((li) => !li.shopifyReceivedAt && matchesCatalog(li))
+    .filter((li) => !li.shopifyReceivedAt && (skuSet.size === 0 || skuSet.has(li.sku)))
     .map((li) => ({
       sku: li.sku,
       title: li.title,
@@ -124,41 +116,67 @@ export default async function ProductionSummaryPage({
   const incomingRows = aggregateIncoming(incomingLines, estimates, today);
   const totalIncoming = incomingRows.reduce((sum, r) => sum + r.incomingQty, 0);
 
-  // ── Board / Timeline: the filtered PO set (a PO matches if any line does) ──
+  // ── Board / Timeline: in-progress work, any age (a PO matches if any line
+  // does). Only POs with an unfinished line item — hides completed + cancelled. ──
+  // Note: the supplier filter is applied PER LINE (by the stage's owning
+  // supplier), not by the master's primary — so filtering by a sub-PO supplier
+  // (e.g. EPower on 00118-B) surfaces the lines they're responsible for.
   const filtered = allPos
     .filter((po) => !statusFilter || po.status === statusFilter)
-    .filter((po) => !supplierId || po.supplierId === supplierId)
+    .filter((po) => po.lineItems.some((li) => li.currentStage !== "complete"))
     .map((po) => ({
       ...po,
       derivedStage: derivePoStage(po.lineItems.map((li) => li.currentStage)),
     }))
     .filter((po) => !stage || po.derivedStage === stage)
-    .filter((po) => po.lineItems.some(matchesCatalog));
+    .filter((po) => skuSet.size === 0 || po.lineItems.some((li) => skuSet.has(li.sku)))
+    // Keep POs that have at least one line owned by the filtered supplier.
+    .filter(
+      (po) =>
+        !supplierId ||
+        po.lineItems.some((li) => lineOwner(po, li.currentStage).ownerId === supplierId),
+    );
 
   const cards: KanbanCard[] = filtered.flatMap((po) =>
-    po.lineItems.map((li) => ({
-      id: li.id,
-      sku: li.sku,
-      title: li.title,
-      quantity: li.quantity,
-      stage: li.currentStage,
-      poId: po.id,
-      poNumber: po.shopifyPoNumber,
-      supplier: po.supplier?.name ?? "—",
-      locked: po.lockStagesTogether,
-    })),
+    po.lineItems
+      .map((li) => ({ li, owner: lineOwner(po, li.currentStage) }))
+      .filter(({ owner }) => !supplierId || owner.ownerId === supplierId)
+      .map(({ li, owner }) => ({
+        id: li.id,
+        sku: li.sku,
+        title: li.title,
+        quantity: li.quantity,
+        stage: li.currentStage,
+        poId: po.id,
+        poNumber: owner.poNumber,
+        supplier: owner.supplier,
+        locked: po.lockStagesTogether,
+      })),
   );
 
-  const filterProps = {
-    collections: collectionOptions,
-    collection: collectionParam,
-    sizeOptions,
-    size: sizeParam,
-    colorOptions,
-    color: colorParam,
-    materialOptions,
-    material: materialParam,
-  };
+  // Timeline tracks carry the per-line owning supplier + sub-PO number too, and
+  // honour the same per-line supplier filter.
+  const timelinePos = filtered.map((po) => ({
+    id: po.id,
+    shopifyPoNumber: po.shopifyPoNumber,
+    supplier: po.supplier,
+    lineItems: po.lineItems
+      .map((li) => ({ li, owner: lineOwner(po, li.currentStage) }))
+      .filter(({ owner }) => !supplierId || owner.ownerId === supplierId)
+      .map(({ li, owner }) => ({
+        id: li.id,
+        sku: li.sku,
+        title: li.title,
+        currentStage: li.currentStage,
+        stageEvents: li.stageEvents,
+        supplierName: owner.supplier,
+        poNumber: owner.poNumber,
+      })),
+  }));
+
+  const listFilters = (
+    <ListFilters production={{ suppliers, supplierId, status, stage }} />
+  );
 
   return (
     <div>
@@ -169,7 +187,7 @@ export default async function ProductionSummaryPage({
 
       {view === "inventory" && (
         <>
-          <CatalogFilters {...filterProps} />
+          {listFilters}
           <div className="mt-6">
             <p className="text-sm text-zinc-500">
               Units in production that haven&apos;t been received into Shopify
@@ -234,10 +252,7 @@ export default async function ProductionSummaryPage({
 
       {view === "board" && (
         <>
-          <CatalogFilters
-            {...filterProps}
-            production={{ suppliers, supplierId, status, stage }}
-          />
+          {listFilters}
           <div className="mt-6">
             {cards.length === 0 ? (
               <p className="text-sm text-zinc-400">No line items match.</p>
@@ -250,11 +265,8 @@ export default async function ProductionSummaryPage({
 
       {view === "timeline" && (
         <>
-          <CatalogFilters
-            {...filterProps}
-            production={{ suppliers, supplierId, status, stage }}
-          />
-          <ProductionTimeline pos={filtered} estimates={estimates} />
+          {listFilters}
+          <ProductionTimeline pos={timelinePos} estimates={estimates} />
         </>
       )}
     </div>

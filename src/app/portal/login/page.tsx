@@ -72,7 +72,7 @@ export default function PortalLoginPage() {
             </div>
           ) : (
             <form onSubmit={submit}>
-              <h1 className="text-sm font-semibold text-zinc-900">Brand sign in</h1>
+              <h1 className="text-sm font-semibold text-zinc-900">Customer sign in</h1>
               <p className="mt-1 text-xs text-zinc-500">
                 Order Fitwell buckles at your brand&apos;s pricing. Enter your work
                 email and we&apos;ll send a one-time sign-in link.

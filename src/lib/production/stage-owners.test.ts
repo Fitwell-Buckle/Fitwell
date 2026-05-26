@@ -22,21 +22,33 @@ describe("stage-owners", () => {
     expect(supplierForStage(assignments, DEFAULT, "packaging")).toBe(DEFAULT);
   });
 
+  it("routes the opening supplier_po state to the stamping owner (the kickoff)", () => {
+    // supplier_po isn't real work — it belongs to whoever owns stamping.
+    expect(supplierForStage(assignments, DEFAULT, "supplier_po")).toBe("sup-stamp");
+    // …and falls back to the primary when stamping is unassigned.
+    expect(supplierForStage([], DEFAULT, "supplier_po")).toBe(DEFAULT);
+  });
+
   it("supplierOwnsStage reflects the resolution", () => {
     expect(supplierOwnsStage(assignments, DEFAULT, "sup-stamp", "stamping")).toBe(true);
     expect(supplierOwnsStage(assignments, DEFAULT, "sup-stamp", "edm")).toBe(false);
     expect(supplierOwnsStage(assignments, DEFAULT, "sup-main", "edm")).toBe(true);
   });
 
-  it("the stamping supplier owns only stamping", () => {
-    expect(stagesOwnedBySupplier(assignments, DEFAULT, "sup-stamp")).toEqual(["stamping"]);
+  it("the stamping supplier owns the kickoff (supplier_po) + stamping", () => {
+    // supplier_po folds into the first work stage so the route stays contiguous.
+    expect(stagesOwnedBySupplier(assignments, DEFAULT, "sup-stamp")).toEqual([
+      "supplier_po",
+      "stamping",
+    ]);
   });
 
-  it("the default supplier owns every unassigned stage (in order)", () => {
+  it("the default supplier owns every later unassigned stage (in order)", () => {
     const owned = stagesOwnedBySupplier(assignments, DEFAULT, "sup-main");
     expect(owned).not.toContain("stamping");
-    expect(owned).toContain("edm");
-    expect(owned[0]).toBe("supplier_po"); // pipeline order preserved
+    expect(owned).not.toContain("supplier_po"); // kickoff belongs to stamping owner
+    expect(owned[0]).toBe("edm"); // pipeline order preserved
+    expect(owned).toContain("packaging");
   });
 
   it("supplierHasAnyStage gates portal access", () => {

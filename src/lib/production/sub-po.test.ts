@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { formatPoNumber, planSubPos, isMultiSupplier } from "./sub-po";
+import {
+  formatPoNumber,
+  planSubPos,
+  isMultiSupplier,
+  subPoStageState,
+  subPoTransitions,
+} from "./sub-po";
 import type { ProductionStage } from "./stages";
 
 describe("formatPoNumber", () => {
@@ -60,5 +66,118 @@ describe("planSubPos", () => {
     // primary (A) owns everything except polishing; Y (B) owns polishing.
     expect(isMultiSupplier(plan)).toBe(true);
     expect(plan).toHaveLength(2);
+  });
+});
+
+describe("subPoStageState", () => {
+  // Supplier owns [stamping, edm]; line items flow through the shared pipeline.
+  const owned: ProductionStage[] = ["stamping", "edm"];
+
+  it("is 'waiting' while items are still upstream (e.g. supplier_po)", () => {
+    const s = subPoStageState(owned, ["supplier_po", "supplier_po"]);
+    expect(s.status).toBe("waiting");
+    expect(s.arrivedCount).toBe(0);
+    expect(s.upstreamCount).toBe(2);
+    expect(s.currentStage).toBeNull();
+  });
+
+  it("is 'advance' when an item can step forward within owned stages", () => {
+    const s = subPoStageState(owned, ["stamping", "stamping"]);
+    expect(s.status).toBe("advance");
+    expect(s.currentStage).toBe("stamping");
+    expect(s.arrivedCount).toBe(2);
+  });
+
+  it("is 'complete' when every arrived item is parked at the last owned stage", () => {
+    const s = subPoStageState(owned, ["edm", "edm"]);
+    expect(s.status).toBe("complete");
+    expect(s.currentStage).toBe("edm");
+  });
+
+  it("stays 'waiting' if some items are at the last stage but others haven't arrived", () => {
+    const s = subPoStageState(owned, ["edm", "supplier_po"]);
+    expect(s.status).toBe("waiting");
+  });
+
+  it("is 'advance' when items are mixed across owned stages", () => {
+    const s = subPoStageState(owned, ["stamping", "edm"]);
+    expect(s.status).toBe("advance");
+    expect(s.currentStage).toBe("stamping");
+  });
+
+  it("is 'done' once all items have moved past the owned stages", () => {
+    const s = subPoStageState(owned, ["polishing", "complete"]);
+    expect(s.status).toBe("done");
+    expect(s.doneCount).toBe(2);
+  });
+
+  it("treats a single-stage owner correctly (last == first)", () => {
+    expect(subPoStageState(["polishing"], ["polishing"]).status).toBe("complete");
+    expect(subPoStageState(["polishing"], ["stamping"]).status).toBe("waiting");
+    expect(subPoStageState(["polishing"], ["qc"]).status).toBe("done");
+  });
+});
+
+describe("subPoTransitions", () => {
+  const owned: ProductionStage[] = ["stamping", "edm"];
+
+  it("step: advances only within owned stages", () => {
+    const t = subPoTransitions({
+      ownedStages: owned,
+      lines: [
+        { id: "a", currentStage: "stamping" },
+        { id: "b", currentStage: "edm" }, // at last → no intra-step
+        { id: "c", currentStage: "supplier_po" }, // upstream → untouched
+      ],
+      mode: "step",
+    });
+    expect(t).toEqual([{ lineItemId: "a", from: "stamping", to: "edm" }]);
+  });
+
+  it("complete: hands every owned-stage item off to the next supplier's stage", () => {
+    const t = subPoTransitions({
+      ownedStages: owned,
+      lines: [
+        { id: "a", currentStage: "edm" },
+        { id: "b", currentStage: "edm" },
+      ],
+      mode: "complete",
+    });
+    // edm's next stage is polishing — the handoff target.
+    expect(t).toEqual([
+      { lineItemId: "a", from: "edm", to: "polishing" },
+      { lineItemId: "b", from: "edm", to: "polishing" },
+    ]);
+  });
+
+  it("complete: the last supplier in the route hands off to 'complete'", () => {
+    const t = subPoTransitions({
+      ownedStages: ["qc", "packaging"],
+      lines: [{ id: "a", currentStage: "packaging" }],
+      mode: "complete",
+    });
+    expect(t).toEqual([{ lineItemId: "a", from: "packaging", to: "complete" }]);
+  });
+});
+
+describe("sub-PO with non-contiguous owned stages", () => {
+  // Supplier owns stamping + polishing (EDM in between belongs to someone else).
+  const owned: ProductionStage[] = ["stamping", "polishing"];
+
+  it("hands off at each run boundary rather than jumping to the last stage", () => {
+    // A line at stamping completes that run by handing off to EDM (not polishing).
+    expect(
+      subPoTransitions({ ownedStages: owned, lines: [{ id: "a", currentStage: "stamping" }], mode: "complete" }),
+    ).toEqual([{ lineItemId: "a", from: "stamping", to: "edm" }]);
+    // A line back at polishing hands off to logo.
+    expect(
+      subPoTransitions({ ownedStages: owned, lines: [{ id: "a", currentStage: "polishing" }], mode: "complete" }),
+    ).toEqual([{ lineItemId: "a", from: "polishing", to: "logo" }]);
+  });
+
+  it("waits while the line sits in the gap stage (EDM) owned by another supplier", () => {
+    expect(subPoStageState(owned, ["edm"]).status).toBe("waiting");
+    // ready to hand off the stamping run
+    expect(subPoStageState(owned, ["stamping"]).status).toBe("complete");
   });
 });

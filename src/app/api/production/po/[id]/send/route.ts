@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { getPoDetail } from "@/lib/production/service";
+import { getPoDetail, getSupplierLineCosts } from "@/lib/production/service";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { fmtMoney, fmtDate, STATUS_LABELS } from "@/lib/production/display";
 import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
@@ -32,45 +32,76 @@ function buildPoEmailHtml(
   numberDisplay: string,
   stagePrefix: string,
   rawBlanks: RawBlankGroup[],
+  supplierUnit: Map<string, number | null>,
 ): string {
   const cell = "padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;";
   const th = "padding:6px 10px;border-bottom:2px solid #ddd;font-size:11px;text-transform:uppercase;color:#888;text-align:left;";
   const prefixHtml = stagePrefix
     ? `<span style="color:#dc2626;font-weight:600;">${esc(stagePrefix)} — </span>`
     : "";
-  // On a sub-PO, the meaningful total is what we pay this supplier.
-  const supplierPrice = po.parentPoId ? po.supplierPriceCents ?? null : null;
+  // A sub-PO shows what we pay THIS supplier, per line. Costs live on the master
+  // (keyed by supplier + line) and are passed in as a per-line lookup.
+  const isSubPo = !!po.parentPoId;
+  const supplierTotal = items.reduce(
+    (s, li) => s + (supplierUnit.get(li.id) ?? 0) * li.quantity,
+    0,
+  );
 
   let tableHtml: string;
   if (rawBlanks.length > 0) {
     // Raw-blank summary (pre-polishing supplier): grouped by size + material.
     const rows = rawBlanks
-      .map(
-        (g) => `<tr>
+      .map((g) => {
+        const unit = g.lineItemIds.length ? supplierUnit.get(g.lineItemIds[0]) ?? null : null;
+        const ext = unit != null ? unit * g.quantity : null;
+        return `<tr>
         <td style="${cell}">${prefixHtml}<strong>${esc(g.label)}</strong></td>
-        <td style="${cell}text-align:right;font-weight:bold;">${g.quantity}</td>
         <td style="${cell}color:#888;font-size:11px;">${esc(g.skus.join(", "))}</td>
-      </tr>`,
-      )
+        <td style="${cell}text-align:right;font-weight:bold;">${g.quantity}</td>
+        <td style="${cell}text-align:right;">${fmtMoney(ext)}</td>
+      </tr>`;
+      })
       .join("");
     const totalPieces = rawBlanks.reduce((s, g) => s + g.quantity, 0);
     tableHtml = `<p style="font-size:12px;color:#666;margin:0 0 8px;">Raw blanks to produce — grouped by size + material (colour/finish is added downstream):</p>
     <table style="width:100%;border-collapse:collapse;">
       <thead><tr>
         <th style="${th}">Raw blank</th>
-        <th style="${th}text-align:right;">Qty</th>
         <th style="${th}">Covers (finished SKUs)</th>
+        <th style="${th}text-align:right;">Qty</th>
+        <th style="${th}text-align:right;">Supplier price</th>
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr>
-        <td style="${cell}text-align:right;font-weight:bold;">Total pieces</td>
+        <td colspan="2" style="${cell}text-align:right;font-weight:bold;">Total pieces</td>
         <td style="${cell}text-align:right;font-weight:bold;">${totalPieces}</td>
-        <td style="${cell}"></td>
-      </tr>${
-        supplierPrice != null
-          ? `<tr><td style="${cell}text-align:right;font-weight:bold;">Supplier price</td><td style="${cell}text-align:right;font-weight:bold;">${fmtMoney(supplierPrice)}</td><td style="${cell}"></td></tr>`
-          : ""
-      }</tfoot>
+        <td style="${cell}text-align:right;font-weight:bold;">${supplierTotal > 0 ? fmtMoney(supplierTotal) : ""}</td>
+      </tr></tfoot>
+    </table>`;
+  } else if (isSubPo) {
+    const rows = items
+      .map((li) => {
+        const unit = supplierUnit.get(li.id) ?? null;
+        const ext = unit != null ? unit * li.quantity : null;
+        return `<tr>
+        <td style="${cell}font-family:monospace;">${esc(li.sku)}</td>
+        <td style="${cell}">${prefixHtml}${esc(li.title)}</td>
+        <td style="${cell}text-align:right;">${li.quantity}</td>
+        <td style="${cell}text-align:right;">${fmtMoney(ext)}</td>
+      </tr>`;
+      })
+      .join("");
+    tableHtml = `<table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="${th}">SKU</th><th style="${th}">Product</th>
+        <th style="${th}text-align:right;">Qty</th>
+        <th style="${th}text-align:right;">Supplier price</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td colspan="3" style="${cell}text-align:right;font-weight:bold;">Supplier total</td>
+        <td style="${cell}text-align:right;font-weight:bold;">${fmtMoney(supplierTotal)}</td>
+      </tr></tfoot>
     </table>`;
   } else {
     const rows = items
@@ -95,8 +126,8 @@ function buildPoEmailHtml(
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr>
-        <td colspan="4" style="${cell}text-align:right;font-weight:bold;">${supplierPrice != null ? "Supplier price" : "Total"}</td>
-        <td style="${cell}text-align:right;font-weight:bold;">${fmtMoney(supplierPrice != null ? supplierPrice : total)}</td>
+        <td colspan="4" style="${cell}text-align:right;font-weight:bold;">Total</td>
+        <td style="${cell}text-align:right;font-weight:bold;">${fmtMoney(total)}</td>
       </tr></tfoot>
     </table>`;
   }
@@ -106,7 +137,7 @@ function buildPoEmailHtml(
     <p style="margin:0 0 16px;color:#666;font-size:13px;">Fitwell Buckle Co.</p>
     <table style="font-size:13px;color:#333;margin-bottom:16px;">
       <tr><td style="padding:2px 16px 2px 0;color:#888;">Supplier</td><td>${esc(po.supplier?.name ?? "—")}</td></tr>
-      <tr><td style="padding:2px 16px 2px 0;color:#888;">Brand</td><td>${esc(po.company?.name ?? "—")}</td></tr>
+      <tr><td style="padding:2px 16px 2px 0;color:#888;">Customer</td><td>${esc(po.company?.name ?? "—")}</td></tr>
       <tr><td style="padding:2px 16px 2px 0;color:#888;">Status</td><td>${esc(STATUS_LABELS[po.status as keyof typeof STATUS_LABELS] ?? po.status)}</td></tr>
       <tr><td style="padding:2px 16px 2px 0;color:#888;">Issued</td><td>${esc(fmtDate(po.issuedDate))}</td></tr>
       <tr><td style="padding:2px 16px 2px 0;color:#888;">ETA</td><td>${esc(fmtDate(po.expectedDeliveryDate))}</td></tr>
@@ -160,7 +191,10 @@ export async function POST(
     );
     stageKeys = plan.find((p) => p.supplierId === po.supplierId)?.stages ?? [];
   }
-  const stagePrefix = stageKeys.map((s) => STAGE_LABELS[s]).join(", ");
+  const stagePrefix = stageKeys
+    .filter((s) => s !== "supplier_po")
+    .map((s) => STAGE_LABELS[s])
+    .join(", ");
 
   // Pre-polishing supplier → summarize the email as raw blanks (size + material).
   let rawBlanks: RawBlankGroup[] = [];
@@ -173,10 +207,20 @@ export async function POST(
           quantity: li.quantity,
           sizeMm: attrs.sizeOf(li),
           material: attrs.materialOf(li),
+          lineItemId: li.id,
         })),
       );
     } catch {
       /* catalog unavailable — fall back to per-SKU lines */
+    }
+  }
+
+  // Sub-PO: what we pay this supplier, per line (costs live on the master).
+  const supplierUnit = new Map<string, number | null>();
+  if (po.parentPoId) {
+    const costs = await getSupplierLineCosts((master ?? po).id);
+    for (const c of costs) {
+      if (c.supplierId === po.supplierId) supplierUnit.set(c.lineItemId, c.unitCostCents);
     }
   }
 
@@ -188,7 +232,7 @@ export async function POST(
       to,
       cc,
       subject: `Purchase Order ${numberDisplay} — Fitwell Buckle Co.`,
-      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks),
+      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit),
     });
     return NextResponse.json({ data: { sentTo: to, cc } });
   } catch (err) {

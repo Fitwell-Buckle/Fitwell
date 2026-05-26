@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { STAGE_LABELS, derivePoStage } from "@/lib/production/stages";
-import { supplierHasAnyStage } from "@/lib/production/stage-owners";
+import { supplierHasAnyStage, stagesOwnedBySupplier } from "@/lib/production/stage-owners";
+import { subPoStageTargets } from "@/lib/production/service";
 import {
   STATUS_LABELS,
   statusBadgeClass,
@@ -57,6 +58,21 @@ export default async function SupplierPoDetailPage({
     0,
   );
 
+  // The stages this supplier owns + the handoff target, for the stage dropdown.
+  const ownedStages = stagesOwnedBySupplier(
+    po.stageAssignments,
+    po.supplierId,
+    scope.supplierId,
+  );
+  // Suppliers see only their own work stages + a single "Complete" (hand off to
+  // the next team) — never the next team's stage name or the kickoff state.
+  const stageOptions = subPoStageTargets(ownedStages)
+    .filter((s) => s !== "supplier_po")
+    .map((s) => ({
+      value: s as string,
+      label: ownedStages.includes(s) ? STAGE_LABELS[s] : "Complete",
+    }));
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -103,8 +119,9 @@ export default async function SupplierPoDetailPage({
 
       <SupplierLineItems
         poId={po.id}
-        lockStagesTogether={po.lockStagesTogether}
         totalCents={totalCents}
+        ownedStages={ownedStages as string[]}
+        stageOptions={stageOptions}
         lineItems={sortedLineItems.map((li) => ({
           id: li.id,
           title: li.title,

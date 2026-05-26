@@ -10,13 +10,24 @@ export interface StageAssignment {
   supplierId: string;
 }
 
+// The opening "supplier_po" state isn't a manufacturing step — it belongs to
+// whoever starts the first real stage (stamping), so the kickoff sits inside
+// that supplier's sub-PO (contiguous with their work) rather than the primary
+// supplier's. Without this, splitting off just stamping leaves the primary
+// owning a non-contiguous [supplier_po, edm…] set and the PO stalls.
+const OPENING_STAGE: ProductionStage = "supplier_po";
+const FIRST_WORK_STAGE: ProductionStage = "stamping";
+
 /** Which supplier owns `stage` on this PO (assignment override, else default). */
 export function supplierForStage(
   assignments: StageAssignment[],
   defaultSupplierId: string | null,
   stage: ProductionStage,
 ): string | null {
-  return assignments.find((a) => a.stage === stage)?.supplierId ?? defaultSupplierId;
+  const effective = stage === OPENING_STAGE ? FIRST_WORK_STAGE : stage;
+  return (
+    assignments.find((a) => a.stage === effective)?.supplierId ?? defaultSupplierId
+  );
 }
 
 /** Does `supplierId` own `stage` on this PO? */

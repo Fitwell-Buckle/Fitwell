@@ -8,17 +8,25 @@ import {
   productionComment,
   productionAttachment,
   productionStageAssignment,
+  productionSupplierLineCost,
   supplier,
 } from "@/lib/schema";
 import {
   planAdvance,
   planSetStage,
+  nextStage,
   STAGES,
-  STAGE_LABELS,
   type AdvanceTransition,
   type ProductionStage,
 } from "./stages";
-import { planSubPos, isMultiSupplier } from "./sub-po";
+import {
+  planSubPos,
+  isMultiSupplier,
+  subPoStageState,
+  subPoTransitions,
+  type SubPoTransition,
+} from "./sub-po";
+import { stagesOwnedBySupplier, supplierForStage } from "./stage-owners";
 import { resolveParent } from "./parents";
 import { validateStageEventDate, dateToNoonUtc } from "./stage-dates";
 import { isHandoff } from "./stage-owners";
@@ -269,22 +277,260 @@ export async function getSubPos(masterId: string) {
       shopifyPoNumber: true,
       status: true,
       shopifyReceivedAt: true,
-      supplierPriceCents: true,
     },
     with: { supplier: { columns: { name: true } } },
     orderBy: asc(productionPo.poSuffix),
   });
 }
 
-/** The only field editable on a sub-PO: what that supplier charges (cents). */
-export async function setSubPoPrice(
-  poId: string,
-  supplierPriceCents: number | null,
+/**
+ * Per-supplier, per-line-item production costs for a master PO. Keyed by
+ * (master, supplier, line) so they survive sub-PO regeneration on edit. The
+ * master rolls these up: sum of suppliers' unit costs per line × qty.
+ */
+export async function getSupplierLineCosts(
+  masterPoId: string,
+): Promise<{ supplierId: string; lineItemId: string; unitCostCents: number | null }[]> {
+  return db
+    .select({
+      supplierId: productionSupplierLineCost.supplierId,
+      lineItemId: productionSupplierLineCost.lineItemId,
+      unitCostCents: productionSupplierLineCost.unitCostCents,
+    })
+    .from(productionSupplierLineCost)
+    .where(eq(productionSupplierLineCost.poId, masterPoId));
+}
+
+/**
+ * Upsert a supplier's per-line unit costs on a master PO. A null cost clears the
+ * entry's amount (kept as a row so re-entry is simple). For a raw-blank supplier
+ * the caller expands one group price into a row per covered line item, each
+ * carrying the same per-piece cost.
+ */
+export async function setSupplierLineCosts(
+  masterPoId: string,
+  supplierId: string,
+  costs: { lineItemId: string; unitCostCents: number | null }[],
 ): Promise<void> {
-  await db
-    .update(productionPo)
-    .set({ supplierPriceCents, updatedAt: new Date() })
-    .where(eq(productionPo.id, poId));
+  const now = new Date();
+  for (const c of costs) {
+    await db
+      .insert(productionSupplierLineCost)
+      .values({
+        poId: masterPoId,
+        supplierId,
+        lineItemId: c.lineItemId,
+        unitCostCents: c.unitCostCents,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          productionSupplierLineCost.poId,
+          productionSupplierLineCost.supplierId,
+          productionSupplierLineCost.lineItemId,
+        ],
+        set: { unitCostCents: c.unitCostCents, updatedAt: now },
+      });
+  }
+}
+
+/**
+ * Advance a sub-PO. The shared line items live on the master, but each supplier
+ * only drives them through the stages it owns:
+ *  - "step":     move every line still inside the supplier's stages forward one
+ *                (an intermediate Stamping → EDM). Only valid while "advance".
+ *  - "complete": hand every owned-stage line off to the next supplier's first
+ *                stage (or "complete" if last). Only valid once "complete"-ready
+ *                — every owned-stage line parked at the supplier's last stage.
+ * Mirrors advance()'s event bookkeeping and notifies admins on handoff.
+ */
+export async function advanceSubPo(params: {
+  subPoId: string;
+  mode: "step" | "complete";
+  userId?: string;
+}): Promise<SubPoTransition[]> {
+  const sub = await db.query.productionPo.findFirst({
+    where: eq(productionPo.id, params.subPoId),
+    columns: { id: true, parentPoId: true, supplierId: true },
+  });
+  if (!sub) throw new Error(`production PO ${params.subPoId} not found`);
+  if (!sub.parentPoId) throw new Error("not a sub-PO");
+
+  const master = await db.query.productionPo.findFirst({
+    where: eq(productionPo.id, sub.parentPoId),
+    columns: { id: true, supplierId: true },
+    with: {
+      lineItems: { columns: { id: true, currentStage: true } },
+      stageAssignments: { columns: { stage: true, supplierId: true } },
+    },
+  });
+  if (!master) throw new Error("master PO not found");
+
+  const owned = stagesOwnedBySupplier(
+    master.stageAssignments,
+    master.supplierId,
+    sub.supplierId,
+  );
+  const state = subPoStageState(
+    owned,
+    master.lineItems.map((li) => li.currentStage),
+  );
+  if (params.mode === "complete" && state.status !== "complete") {
+    throw new Error("sub-PO is not ready to complete");
+  }
+  if (params.mode === "step" && state.status !== "advance") {
+    throw new Error("nothing to advance");
+  }
+
+  const transitions = subPoTransitions({
+    ownedStages: owned,
+    lines: master.lineItems,
+    mode: params.mode,
+  });
+
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  for (const t of transitions) {
+    await db
+      .update(productionPoLineItem)
+      .set({
+        currentStage: t.to,
+        updatedAt: now,
+        actualCompletionDate: t.to === "complete" ? today : undefined,
+      })
+      .where(eq(productionPoLineItem.id, t.lineItemId));
+
+    await db
+      .update(productionStageEvent)
+      .set({ exitedAt: now })
+      .where(
+        and(
+          eq(productionStageEvent.lineItemId, t.lineItemId),
+          eq(productionStageEvent.stage, t.from),
+          isNull(productionStageEvent.exitedAt),
+        ),
+      );
+
+    await db.insert(productionStageEvent).values({
+      lineItemId: t.lineItemId,
+      stage: t.to,
+      enteredAt: now,
+      triggeredByUserId: params.userId ?? null,
+    });
+  }
+
+  // Completing a sub-PO hands the items to the next supplier — let the admins know.
+  if (params.mode === "complete") {
+    for (const t of transitions) {
+      await notifySupplierHandoff({
+        lineItemId: t.lineItemId,
+        supplierId: sub.supplierId,
+        transitions,
+      });
+    }
+  }
+
+  return transitions;
+}
+
+/** The stages a sub-PO can move its line items to: the supplier's own stages
+ *  (forward or back) plus each run-boundary handoff (the next stage after an
+ *  owned stage the supplier doesn't own — i.e. the next team). */
+export function subPoStageTargets(ownedStages: ProductionStage[]): ProductionStage[] {
+  const ownedSet = new Set(ownedStages);
+  const targets = new Set<ProductionStage>(ownedStages);
+  for (const s of ownedStages) {
+    const n = nextStage(s);
+    if (n != null && !ownedSet.has(n)) targets.add(n);
+  }
+  return STAGES.filter((s) => targets.has(s));
+}
+
+/**
+ * Set a sub-PO's stage directly (drives the master's line items currently in
+ * this supplier's stages to `toStage`). Allows forward, backward, and handoff
+ * moves — whatever's in `subPoStageTargets`. Auto-save target for the stage
+ * dropdown; replaces the step/complete advance buttons.
+ */
+export async function setSubPoStage(params: {
+  subPoId: string;
+  toStage: ProductionStage;
+  userId?: string;
+}): Promise<SubPoTransition[]> {
+  const sub = await db.query.productionPo.findFirst({
+    where: eq(productionPo.id, params.subPoId),
+    columns: { id: true, parentPoId: true, supplierId: true },
+  });
+  if (!sub) throw new Error(`production PO ${params.subPoId} not found`);
+  if (!sub.parentPoId) throw new Error("not a sub-PO");
+
+  const master = await db.query.productionPo.findFirst({
+    where: eq(productionPo.id, sub.parentPoId),
+    columns: { id: true, supplierId: true },
+    with: {
+      lineItems: { columns: { id: true, currentStage: true } },
+      stageAssignments: { columns: { stage: true, supplierId: true } },
+    },
+  });
+  if (!master) throw new Error("master PO not found");
+
+  const owned = stagesOwnedBySupplier(
+    master.stageAssignments,
+    master.supplierId,
+    sub.supplierId,
+  );
+  const ownedSet = new Set(owned);
+  if (!subPoStageTargets(owned).includes(params.toStage)) {
+    throw new Error("stage not available for this sub-PO");
+  }
+
+  // Move the lines currently in this supplier's hands (not upstream / done).
+  const transitions: SubPoTransition[] = master.lineItems
+    .filter((li) => ownedSet.has(li.currentStage) && li.currentStage !== params.toStage)
+    .map((li) => ({ lineItemId: li.id, from: li.currentStage, to: params.toStage }));
+
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  for (const t of transitions) {
+    await db
+      .update(productionPoLineItem)
+      .set({
+        currentStage: t.to,
+        updatedAt: now,
+        actualCompletionDate: t.to === "complete" ? today : null,
+      })
+      .where(eq(productionPoLineItem.id, t.lineItemId));
+
+    await db
+      .update(productionStageEvent)
+      .set({ exitedAt: now })
+      .where(
+        and(
+          eq(productionStageEvent.lineItemId, t.lineItemId),
+          isNull(productionStageEvent.exitedAt),
+        ),
+      );
+
+    await db.insert(productionStageEvent).values({
+      lineItemId: t.lineItemId,
+      stage: t.to,
+      enteredAt: now,
+      triggeredByUserId: params.userId ?? null,
+    });
+  }
+
+  // Moving out of owned stages is a handoff — notify the admins.
+  if (!ownedSet.has(params.toStage)) {
+    for (const t of transitions) {
+      await notifySupplierHandoff({
+        lineItemId: t.lineItemId,
+        supplierId: sub.supplierId,
+        transitions,
+      });
+    }
+  }
+
+  return transitions;
 }
 
 /**
@@ -594,15 +840,38 @@ export async function notifySupplierHandoff(params: {
       where: eq(supplier.id, params.supplierId),
       columns: { name: true },
     });
+
+    // The sub-PO the handing-off supplier owns (e.g. 00118-A), so the alert shows
+    // the actual sub-PO rather than the bare master number.
+    const workStages = STAGES.filter((s) => s !== "complete");
+    const plan = planSubPos(workStages, po.stageAssignments, po.supplierId);
+    const poSuffix = isMultiSupplier(plan)
+      ? plan.find((p) => p.supplierId === params.supplierId)?.suffix ?? null
+      : null;
+
+    // Who picks the work up next — the supplier owning the stage it moved into,
+    // or "Complete" when it's the final handoff.
+    let nextSupplierName = "Complete";
+    if (t.to !== "complete") {
+      const nextId = supplierForStage(po.stageAssignments, po.supplierId, t.to);
+      const next = nextId
+        ? await db.query.supplier.findFirst({
+            where: eq(supplier.id, nextId),
+            columns: { name: true },
+          })
+        : null;
+      nextSupplierName = next?.name ?? "the next supplier";
+    }
+
     await notifyStageHandoff({
       poId: li.poId,
       poNumber: po.shopifyPoNumber,
+      poSuffix,
       lineItemId: params.lineItemId,
       sku: li.sku,
       supplierId: params.supplierId,
       supplierName: sup?.name ?? "A supplier",
-      fromStageLabel: STAGE_LABELS[t.from],
-      toStageLabel: STAGE_LABELS[t.to],
+      nextSupplierName,
     });
   } catch (err) {
     console.error("notifySupplierHandoff failed:", err);

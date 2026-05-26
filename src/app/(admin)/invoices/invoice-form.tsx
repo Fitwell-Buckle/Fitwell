@@ -174,7 +174,7 @@ export function InvoiceForm({
 
   async function submit() {
     setError(null);
-    if (!companyId) return setError("Select a brand.");
+    if (!companyId) return setError("Select a customer.");
     if (!issuedDate) return setError("Enter the issued date.");
 
     const lineItems = [];
@@ -242,7 +242,7 @@ export function InvoiceForm({
       <Card className="p-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={fieldLabel}>Brand</label>
+            <label className={fieldLabel}>Customer</label>
             {isEdit ? (
               <Input value={initial?.companyName ?? ""} disabled />
             ) : (
@@ -253,9 +253,9 @@ export function InvoiceForm({
                   value: c.id,
                   label: c.tierName ? `${c.name} — ${c.tierName}` : c.name,
                 }))}
-                addLabel="Add new brand"
+                addLabel="Add new customer"
                 fields={[
-                  { key: "name", label: "Brand name", required: true },
+                  { key: "name", label: "Customer name", required: true },
                   { key: "contactEmail", label: "Contact email", type: "email" },
                   {
                     key: "priceTierId",
@@ -307,7 +307,7 @@ export function InvoiceForm({
             </p>
             {restricted && (
               <p className="mt-1 text-xs text-zinc-500">
-                Catalog limited to this brand’s assigned products/collections.
+                Catalog limited to this customer’s assigned products/collections.
               </p>
             )}
           </div>

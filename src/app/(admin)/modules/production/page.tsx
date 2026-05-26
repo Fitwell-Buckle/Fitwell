@@ -24,17 +24,8 @@ import {
   stageBadgeClass,
   fmtDate,
 } from "@/lib/production/display";
-import {
-  getCatalogCached,
-  getCatalogGroupsCached,
-  makeLineAttrs,
-  makeCollectionLookup,
-  type CatalogVariant,
-  type CatalogCollectionGroup,
-  type LineAttrInput,
-} from "@/lib/catalog/load";
 import { cn } from "@/lib/utils";
-import { CatalogFilters } from "@/components/catalog/catalog-filters";
+import { ListFilters } from "@/components/catalog/list-filters";
 import { parseDateRange } from "@/lib/date-range";
 import { formatPoNumber } from "@/lib/production/sub-po";
 
@@ -57,10 +48,13 @@ export default async function ProductionPage({
   const supplierId =
     typeof params.supplier === "string" ? params.supplier : "";
   const stage = typeof params.stage === "string" ? params.stage : "";
-  const collectionParam = typeof params.collection === "string" ? params.collection : "";
-  const sizeParam = typeof params.size === "string" ? params.size : "";
-  const colorParam = typeof params.color === "string" ? params.color : "";
-  const materialParam = typeof params.material === "string" ? params.material : "";
+  // Item Chooser filter: the chosen product SKU(s) (comma-separated in the URL).
+  const skuSet = new Set(
+    (typeof params.sku === "string" ? params.sku : "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
   // Default to Open (active). The "all" sentinel shows every status.
   const status =
     typeof params.status === "string" && params.status ? params.status : "active";
@@ -105,37 +99,6 @@ export default async function ProductionPage({
     childRows.map((r) => r.parentPoId).filter((x): x is string => !!x),
   );
 
-  // Catalog gives each line its size/colour/material + collection (by variant
-  // id); optional, cached. Powers the standardized filter.
-  let catalog: CatalogVariant[] = [];
-  let groups: CatalogCollectionGroup[] = [];
-  try {
-    [catalog, groups] = await Promise.all([getCatalogCached(), getCatalogGroupsCached()]);
-  } catch {
-    /* filters degrade gracefully when Shopify is unavailable */
-  }
-  const { sizeOf: lineSize, colorOf: lineColor, materialOf: lineMaterial } =
-    makeLineAttrs(catalog);
-  const { inCollection, options: collectionOptions } = makeCollectionLookup(groups);
-
-  // Filter options from the line items currently in view.
-  const allLines = pos.flatMap((po) => po.lineItems);
-  const sizeOptions = [
-    ...new Set(allLines.map(lineSize).filter((s): s is number => s != null)),
-  ].sort((a, b) => a - b);
-  const colorOptions = [
-    ...new Set(allLines.map(lineColor).filter((c): c is string => !!c)),
-  ].sort((a, b) => a.localeCompare(b));
-  const materialOptions = [
-    ...new Set(allLines.map(lineMaterial).filter((m): m is string => !!m)),
-  ].sort((a, b) => a.localeCompare(b));
-
-  const matchesCatalog = (li: LineAttrInput): boolean =>
-    (!collectionParam || inCollection(li, collectionParam)) &&
-    (!sizeParam || lineSize(li) === Number(sizeParam)) &&
-    (!colorParam || lineColor(li) === colorParam) &&
-    (!materialParam || lineMaterial(li) === materialParam);
-
   const rows = pos
     .map((po) => ({
       ...po,
@@ -147,8 +110,8 @@ export default async function ProductionPage({
     .filter((po) => po.issuedDate >= fromStr && po.issuedDate <= toStr)
     // Stage filter is applied on the derived stage (cheap at our scale).
     .filter((po) => !stage || po.derivedStage === stage)
-    // Catalog filters: keep POs with at least one matching line item.
-    .filter((po) => po.lineItems.some(matchesCatalog));
+    // Item Chooser filter: keep POs with a line item for a chosen product.
+    .filter((po) => skuSet.size === 0 || po.lineItems.some((li) => skuSet.has(li.sku)));
 
   return (
     <div>
@@ -159,17 +122,7 @@ export default async function ProductionPage({
         </Button>
       </div>
 
-      <CatalogFilters
-        collections={collectionOptions}
-        collection={collectionParam}
-        sizeOptions={sizeOptions}
-        size={sizeParam}
-        colorOptions={colorOptions}
-        color={colorParam}
-        materialOptions={materialOptions}
-        material={materialParam}
-        production={{ suppliers, supplierId, status, stage }}
-      />
+      <ListFilters production={{ suppliers, supplierId, status, stage }} />
 
       <DataTable className="mt-4">
         <Table>

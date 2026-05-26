@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -13,7 +12,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { STAGE_LABELS, isComplete, type ProductionStage } from "@/lib/production/stages";
+import { STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
 import { stageBadgeClass, fmtMoney } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 
@@ -26,35 +25,41 @@ interface LineItem {
   currentStage: ProductionStage;
 }
 
+const STAGE_SELECT =
+  "h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300 disabled:opacity-50";
+
 export function SupplierLineItems({
   poId,
-  lockStagesTogether,
   lineItems,
   totalCents,
+  ownedStages,
+  stageOptions,
 }: {
   poId: string;
-  lockStagesTogether: boolean;
   lineItems: LineItem[];
   totalCents: number;
+  /** Stages this supplier owns — only lines currently here are editable. */
+  ownedStages: string[];
+  /** Dropdown options: the supplier's stages + the handoff to the next team. */
+  stageOptions: { value: string; label: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const owned = new Set(ownedStages);
 
-  const allComplete = lineItems.every((li) => isComplete(li.currentStage));
-
-  async function advance(lineItemId?: string) {
+  async function setStage(lineItemId: string, toStage: string) {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch(`/api/production/po/${poId}/advance`, {
+      const res = await fetch(`/api/production/line-items/${lineItemId}/stage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(lineItemId ? { lineItemId } : {}),
+        body: JSON.stringify({ stage: toStage }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Advance failed.");
+        setError(data.error || "Couldn't update the stage.");
       } else {
         router.refresh();
       }
@@ -69,11 +74,9 @@ export function SupplierLineItems({
     <Card className="mt-5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-zinc-900">Line items</h2>
-        {lockStagesTogether && (
-          <Button size="sm" disabled={busy || allComplete} onClick={() => advance()}>
-            {allComplete ? "All complete" : "Advance all to next stage"}
-          </Button>
-        )}
+        <p className="text-xs text-zinc-500">
+          Pick a stage to advance your work — choose the next team to hand off.
+        </p>
       </div>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -86,8 +89,7 @@ export function SupplierLineItems({
               <TableHead>Title</TableHead>
               <TableHead>Qty</TableHead>
               <TableHead>Unit cost</TableHead>
-              <TableHead>Stage</TableHead>
-              {!lockStagesTogether && <TableHead className="text-right">Action</TableHead>}
+              <TableHead className="text-right">Stage</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -97,23 +99,26 @@ export function SupplierLineItems({
                 <TableCell>{li.title}</TableCell>
                 <TableCell className="text-zinc-500">{li.quantity}</TableCell>
                 <TableCell className="text-zinc-500">{li.unitCost}</TableCell>
-                <TableCell>
-                  <Badge className={cn(stageBadgeClass(li.currentStage))}>
-                    {STAGE_LABELS[li.currentStage]}
-                  </Badge>
-                </TableCell>
-                {!lockStagesTogether && (
-                  <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy || isComplete(li.currentStage)}
-                      onClick={() => advance(li.id)}
+                <TableCell className="text-right">
+                  {owned.has(li.currentStage) ? (
+                    <select
+                      value={li.currentStage}
+                      disabled={busy}
+                      onChange={(e) => setStage(li.id, e.target.value)}
+                      className={STAGE_SELECT}
                     >
-                      {isComplete(li.currentStage) ? "Complete" : "Advance"}
-                    </Button>
-                  </TableCell>
-                )}
+                      {stageOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Badge className={cn(stageBadgeClass(li.currentStage))}>
+                      {STAGE_LABELS[li.currentStage]}
+                    </Badge>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

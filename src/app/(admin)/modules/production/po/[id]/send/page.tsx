@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { getPoDetail } from "@/lib/production/service";
+import { getPoDetail, getSupplierLineCosts } from "@/lib/production/service";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
@@ -70,7 +70,10 @@ export default async function SendPoPage({
     );
     supplierStageKeys = plan.find((p) => p.supplierId === po.supplierId)?.stages ?? [];
   }
-  const supplierStages = supplierStageKeys.map((s) => STAGE_LABELS[s]);
+  // Opening "supplier_po" state is owned for routing but not a labelled work step.
+  const supplierStages = supplierStageKeys
+    .filter((s) => s !== "supplier_po")
+    .map((s) => STAGE_LABELS[s]);
 
   // Raw-blank summary: a pre-polishing supplier (stamping/EDM) gets items grouped
   // by size + material (colour is irrelevant to the blank). Needs the catalog to
@@ -118,13 +121,24 @@ export default async function SendPoPage({
             quantity: li.quantity,
             sizeMm: lineAttrs.sizeOf(li),
             material: lineAttrs.materialOf(li),
+            lineItemId: li.id,
           })),
         )
       : [];
   const totalPieces = rawBlanks.reduce((s, g) => s + g.quantity, 0);
-  // On a sub-PO the meaningful total is what we pay this supplier, not the
-  // master's per-unit production cost.
-  const supplierPrice = isSubPo ? po.supplierPriceCents ?? null : null;
+  // On a sub-PO the figures are what we pay THIS supplier, per line — not the
+  // master's internal production cost. Costs live on the master, keyed by
+  // (supplier, line); look up this supplier's slice.
+  const supplierUnit = new Map<string, number | null>();
+  if (isSubPo) {
+    const costs = await getSupplierLineCosts(itemSource.id);
+    for (const c of costs) {
+      if (c.supplierId === po.supplierId) supplierUnit.set(c.lineItemId, c.unitCostCents);
+    }
+  }
+  const supplierTotalCents = isSubPo
+    ? items.reduce((s, li) => s + (supplierUnit.get(li.id) ?? 0) * li.quantity, 0)
+    : 0;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -208,29 +222,38 @@ export default async function SendPoPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Raw blank</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
                   <TableHead>Covers (finished SKUs)</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Supplier price</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rawBlanks.map((g) => (
-                  <TableRow key={g.label}>
-                    <TableCell>
-                      {supplierStages.length > 0 && (
-                        <span className="font-semibold text-red-600">
-                          {supplierStages.join(", ")} —{" "}
-                        </span>
-                      )}
-                      <span className="font-medium text-zinc-900">{g.label}</span>
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-zinc-900">
-                      {g.quantity}
-                    </TableCell>
-                    <TableCell className="text-xs text-zinc-400">
-                      {g.skus.join(", ")}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {rawBlanks.map((g) => {
+                  const unit = g.lineItemIds.length
+                    ? supplierUnit.get(g.lineItemIds[0]) ?? null
+                    : null;
+                  return (
+                    <TableRow key={g.label}>
+                      <TableCell>
+                        {supplierStages.length > 0 && (
+                          <span className="font-semibold text-red-600">
+                            {supplierStages.join(", ")} —{" "}
+                          </span>
+                        )}
+                        <span className="font-medium text-zinc-900">{g.label}</span>
+                      </TableCell>
+                      <TableCell className="text-xs text-zinc-400">
+                        {g.skus.join(", ")}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-zinc-900">
+                        {g.quantity}
+                      </TableCell>
+                      <TableCell className="text-right text-zinc-700">
+                        {fmtMoney(unit != null ? unit * g.quantity : null)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
             <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
@@ -239,11 +262,11 @@ export default async function SendPoPage({
                 {totalPieces}
               </span>
             </div>
-            {supplierPrice != null && (
+            {supplierTotalCents > 0 && (
               <div className="mt-1 flex items-baseline justify-end">
-                <span className="text-sm text-zinc-500">Supplier price</span>
+                <span className="text-sm text-zinc-500">Supplier total</span>
                 <span className="ml-3 text-base font-semibold text-zinc-900">
-                  {fmtMoney(supplierPrice)}
+                  {fmtMoney(supplierTotalCents)}
                 </span>
               </div>
             )}
@@ -257,43 +280,62 @@ export default async function SendPoPage({
                     <TableHead>SKU</TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Unit cost</TableHead>
-                    <TableHead className="text-right">Line total</TableHead>
+                    {isSubPo ? (
+                      <TableHead className="text-right">Supplier price</TableHead>
+                    ) : (
+                      <>
+                        <TableHead className="text-right">Unit cost</TableHead>
+                        <TableHead className="text-right">Line total</TableHead>
+                      </>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((li) => (
-                    <TableRow key={li.id}>
-                      <TableCell className="font-mono text-xs">{li.sku}</TableCell>
-                      <TableCell>
-                        {supplierStages.length > 0 && (
-                          <span className="font-semibold text-red-600">
-                            {supplierStages.join(", ")} —{" "}
-                          </span>
+                  {items.map((li) => {
+                    const unit = isSubPo ? supplierUnit.get(li.id) ?? null : li.unitCostCents;
+                    return (
+                      <TableRow key={li.id}>
+                        <TableCell className="font-mono text-xs">{li.sku}</TableCell>
+                        <TableCell>
+                          {supplierStages.length > 0 && (
+                            <span className="font-semibold text-red-600">
+                              {supplierStages.join(", ")} —{" "}
+                            </span>
+                          )}
+                          {li.title}
+                        </TableCell>
+                        <TableCell className="text-right text-zinc-500">{li.quantity}</TableCell>
+                        {isSubPo ? (
+                          <TableCell className="text-right text-zinc-700">
+                            {fmtMoney(unit != null ? unit * li.quantity : null)}
+                          </TableCell>
+                        ) : (
+                          <>
+                            <TableCell className="text-right text-zinc-500">
+                              {fmtMoney(li.unitCostCents)}
+                            </TableCell>
+                            <TableCell className="text-right text-zinc-700">
+                              {fmtMoney(
+                                li.unitCostCents != null
+                                  ? li.unitCostCents * li.quantity
+                                  : null,
+                              )}
+                            </TableCell>
+                          </>
                         )}
-                        {li.title}
-                      </TableCell>
-                      <TableCell className="text-right text-zinc-500">{li.quantity}</TableCell>
-                      <TableCell className="text-right text-zinc-500">
-                        {fmtMoney(li.unitCostCents)}
-                      </TableCell>
-                      <TableCell className="text-right text-zinc-700">
-                        {fmtMoney(
-                          li.unitCostCents != null ? li.unitCostCents * li.quantity : null,
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
 
             <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
               <span className="text-sm text-zinc-500">
-                {isSubPo ? "Supplier price" : "Total"}
+                {isSubPo ? "Supplier total" : "Total"}
               </span>
               <span className="ml-3 text-base font-semibold text-zinc-900">
-                {isSubPo ? fmtMoney(supplierPrice) : fmtMoney(total)}
+                {isSubPo ? fmtMoney(supplierTotalCents) : fmtMoney(total)}
               </span>
             </div>
           </>

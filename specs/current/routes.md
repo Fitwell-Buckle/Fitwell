@@ -120,6 +120,8 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | PATCH | `/api/production/po/[id]` | Update PO fields (status, lock, dates, notes) |
 | PUT | `/api/production/po/[id]` | Full edit — header + reconcile line items (add/update/remove) |
 | POST | `/api/production/po/[id]/advance` | Advance stage — whole PO (locked) or one line item |
+| POST | `/api/production/po/[id]/sub-advance` | Advance a **sub-PO**: `{mode}` — `step` (forward within the supplier's stages) or `complete` (hand off to the next supplier). Admin or the owning supplier |
+| PUT | `/api/production/po/[id]/line-costs` | Set a sub-PO supplier's per-line unit costs `{costs:[{lineItemId,unitCostCents}]}`; rolled up onto the master by (supplier, line); admin-only |
 | POST | `/api/production/po/[id]/receive` | Receive into Shopify (C2) — `inventoryAdjustQuantities` +qty per line item, with the PO number stamped on the adjustment reference; idempotent per line; admin-only; needs `write_inventory` |
 | POST | `/api/production/po/[id]/invoice` | Create invoice(s) from a PO — one per bill-to company, priced at Shopify retail − tier; admin-only |
 | POST | `/api/production/po/[id]/comments` | Add a comment to a PO |

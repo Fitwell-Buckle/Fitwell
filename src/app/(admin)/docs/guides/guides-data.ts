@@ -44,7 +44,7 @@ export const guides: Guide[] = [
         shot: "The dashboard with the left sidebar expanded.",
       },
       {
-        text: "Under Customers you'll find Consumer List, B2B Brand List, B2B Orders, and Consumer Orders. Under Products you'll find the Product List, Supplier POs, Production Summary, and Supplier List. (Incoming inventory now lives inside Production Summary.)",
+        text: "Under Customers you'll find Consumer List, B2B Customer List, B2B Orders, and Consumer Orders. Under Products you'll find the Product List, Supplier POs, Production Summary, and Supplier List. (Incoming inventory now lives inside Production Summary.)",
         shot: "The Products group expanded in the sidebar.",
       },
     ],
@@ -64,7 +64,7 @@ export const guides: Guide[] = [
         shot: "The supplier dropdown showing the Add new supplier option.",
       },
       {
-        text: "Set the Issued date and (optionally) an ETA, a Brand (the B2B buyer), and a Warehouse. A brand can also be added inline with “Add new brand”. In the Stage owners section you can assign each production stage to a different supplier (leave one as “PO supplier” to keep the default) — each supplier then sees only their stages in their portal.",
+        text: "Set the Issued date and (optionally) an ETA, a Customer (the B2B buyer), and a Warehouse. A customer can also be added inline with “Add new customer”. In the Stage owners section you can assign each production stage to a different supplier (leave one as “PO supplier” to keep the default) — each supplier then sees only their stages in their portal.",
       },
       {
         text: "Add line items: click the product field, then type to search, or narrow by Collection and the size/colour chips. Pick a product, set the quantity and unit cost.",
@@ -208,7 +208,7 @@ export const guides: Guide[] = [
     category: "B2B & invoicing",
     steps: [
       {
-        text: "Go to Customers → B2B Brand List. First, create a Price tier (a name + a % off retail) in the Price tiers card — e.g. “Wholesale — 30% off”.",
+        text: "Go to Customers → B2B Customer List. First, create a Price tier (a name + a % off retail) in the Price tiers card — e.g. “Wholesale — 30% off”.",
         shot: "The Price tiers card with a tier being added.",
       },
       {
@@ -254,7 +254,7 @@ export const guides: Guide[] = [
     category: "B2B & invoicing",
     steps: [
       {
-        text: "Go to Customers → B2B Brand List → Edit the brand. In the “Portal logins” card, add the buyer's email.",
+        text: "Go to Customers → B2B Customer List → Edit the brand. In the “Portal logins” card, add the buyer's email.",
         shot: "The Portal logins card on a brand.",
       },
       {

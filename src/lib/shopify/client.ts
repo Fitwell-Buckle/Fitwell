@@ -362,6 +362,12 @@ class ShopifyClient {
 
     const sp = new URLSearchParams();
     sp.set("limit", String(params.limit ?? 250));
+    // Return EVERY product regardless of sales-channel publish state — otherwise
+    // the REST default can omit unpublished / "unlisted" products entirely, so
+    // they'd never reach the catalog no matter how we filter client-side. (Status
+    // — active/draft/archived — is filtered in loadCatalog, not here.) The
+    // filter carries through pagination via the page_info link.
+    sp.set("published_status", "any");
 
     const { body, nextPageUrl } = await this.fetchPage<{
       products: ShopifyProduct[];
@@ -551,6 +557,8 @@ class ShopifyClient {
     locationId: string | number;
     delta: number;
     reference?: string;
+    /** Optional per-unit cost (cents) to record on the inventory item (C2). */
+    costCents?: number | null;
   }): Promise<{ available: number | null }> {
     const inventoryItemId = await this.getVariantInventoryItemId(params.variantId);
 
@@ -593,7 +601,55 @@ class ShopifyClient {
     const change = data.inventoryAdjustQuantities.inventoryAdjustmentGroup?.changes?.find(
       (c) => c.name === "available",
     );
+
+    // Record the unit cost on the inventory item (best-effort): the quantity
+    // adjust already succeeded and the line will be stamped received, so a cost
+    // failure must NOT throw here (that would lose the idempotency stamp and
+    // risk double-counting on retry).
+    if (params.costCents != null) {
+      try {
+        await this.setInventoryItemCost(inventoryItemId, params.costCents);
+      } catch (err) {
+        console.warn(
+          `Set inventory cost failed for item ${inventoryItemId}:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
     return { available: change?.quantityAfterChange ?? null };
+  }
+
+  /**
+   * Set an inventory item's unit cost (the "cost per item" in Shopify). Used on
+   * receipt so the Total Cost from production flows into Shopify's cost basis.
+   * Cost is the shop currency in major units (e.g. 8.00). Requires write_inventory.
+   */
+  async setInventoryItemCost(
+    inventoryItemId: string | number,
+    costCents: number,
+  ): Promise<void> {
+    const id = String(inventoryItemId).split("/").pop();
+    const cost = (costCents / 100).toFixed(2);
+    const data = await this.graphql<{
+      inventoryItemUpdate: {
+        userErrors: { field: string[] | null; message: string }[];
+      };
+    }>(
+      `mutation FitwellSetCost($id: ID!, $input: InventoryItemInput!) {
+        inventoryItemUpdate(id: $id, input: $input) {
+          userErrors { field message }
+          inventoryItem { id }
+        }
+      }`,
+      { id: `gid://shopify/InventoryItem/${id}`, input: { cost } },
+    );
+    const errs = data.inventoryItemUpdate.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(
+        `Set inventory cost failed: ${errs.map((e) => e.message).join("; ")}`,
+      );
+    }
   }
 
   // ── B2B invoicing (draft orders) ──────────────────────────────────

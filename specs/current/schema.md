@@ -272,6 +272,39 @@ that supplier's stages). The PO list hides sub-POs; the supplier portal works
 the master scoped to a supplier's stages and shows their sub-PO number.
 Migration `0014_sloppy_la_nuit`.
 
+**Stage advancement on sub-POs**: for a multi-supplier master, stage editing
+moves off the master (now a read-only cost rollup) onto each **sub-PO**. A
+sub-PO drives the shared line items only through the stages that supplier owns:
+**Advance** steps within its own stages, **Complete PO** hands every owned-stage
+line off to the next supplier's first stage (or `complete` for the last). The
+master's `Receive into Shopify` unlocks once all lines reach `complete` (i.e.
+every supplier finished). `subPoStageState`/`subPoTransitions` in
+`lib/production/sub-po.ts` (unit-tested) compute the button state + moves;
+`advanceSubPo` in the service applies them. `supplier_po` (the opening "PO
+placed" state) is no longer an assignable stage — it falls to the primary
+supplier.
+
+### `production_supplier_line_cost`
+
+Per-supplier, per-line-item production cost on a multi-supplier PO. Keyed by the
+**master** PO + supplier (not the sub-PO id) so costs survive sub-PO regeneration
+on edit.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `po_id` | text | FK → production_po (master), cascade delete |
+| `supplier_id` | text | FK → supplier, cascade delete |
+| `line_item_id` | text | FK → production_po_line_item, cascade delete |
+| `unit_cost_cents` | integer | Per-unit cost this supplier charges for this line |
+| `created_at` / `updated_at` | timestamp | |
+
+Unique on (`po_id`, `supplier_id`, `line_item_id`). A sub-PO supplier prices each
+line (a raw-blank/stamping supplier prices the group; the same per-piece cost is
+written to every SKU the blank covers). The master rolls these up: Σ each
+supplier's unit cost per line × qty = line total. Supersedes the single
+`production_po.supplier_price_cents` (now unused). Migration `0016_slim_blink`.
+
 ### `company` / `price_tier`
 
 Our own B2B companies (not Shopify), managed under Customers → Companies.

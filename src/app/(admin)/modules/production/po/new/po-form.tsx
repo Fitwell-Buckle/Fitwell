@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -48,8 +48,12 @@ export interface PoFormInitial {
   isMaster?: boolean; // edit: PO already split across suppliers (has sub-POs)
 }
 
-// Stages an admin can assign an owner to (the terminal "complete" is implicit).
-const ASSIGNABLE_STAGES = STAGES.filter((s) => s !== "complete");
+// Stages an admin can assign an owner to, in workflow order. "supplier_po" is
+// the opening state (PO placed, nothing started) and "complete" is terminal —
+// neither is real manufacturing work, so neither is assignable.
+const ASSIGNABLE_STAGES = STAGES.filter(
+  (s) => s !== "complete" && s !== "supplier_po",
+);
 
 interface LineItemRow {
   id?: string; // present = existing line (edit); absent = new line
@@ -155,9 +159,20 @@ export function PoForm({
   const router = useRouter();
   const isEdit = !!poId;
 
-  const [supplierId, setSupplierId] = useState(
-    initial?.supplierId ?? suppliers[0]?.id ?? "",
-  );
+  // Selected supplier(s). One = single-supplier PO; more than one = a
+  // multi-supplier (master) PO split by stage into sub-POs.
+  const [supplierIds, setSupplierIds] = useState<string[]>(() => {
+    if (!initial) return [];
+    if (initial.isMaster) {
+      return [
+        ...new Set([
+          initial.supplierId,
+          ...(initial.stageAssignments ?? []).map((a) => a.supplierId),
+        ]),
+      ].filter(Boolean);
+    }
+    return initial.supplierId ? [initial.supplierId] : [];
+  });
   // Local, appendable copy so a newly-added supplier shows + selects inline.
   const [supplierList, setSupplierList] = useState(suppliers);
   const [issuedDate, setIssuedDate] = useState(
@@ -167,8 +182,6 @@ export function PoForm({
     initial?.expectedDeliveryDate ?? "",
   );
   const [lockStagesTogether, setLockStagesTogether] = useState(true);
-  // Multi-supplier: split the PO across suppliers by stage, generating sub-POs.
-  const [multiSupplier, setMultiSupplier] = useState(initial?.isMaster ?? false);
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [companyId, setCompanyId] = useState(initial?.companyId ?? "");
   // Local, appendable copy so a newly-added company shows + selects inline.
@@ -190,6 +203,21 @@ export function PoForm({
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // One supplier = single PO; more than one = a multi-supplier (master) PO.
+  const multiSupplier = supplierIds.length > 1;
+  function addSupplier(id: string) {
+    if (id) setSupplierIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
+  }
+  function removeSupplier(id: string) {
+    setSupplierIds((ids) => ids.filter((x) => x !== id));
+    // Drop any stage assignments that pointed at the removed supplier.
+    setStageOwners((o) => {
+      const next = { ...o };
+      for (const k of Object.keys(next)) if (next[k] === id) next[k] = "";
+      return next;
+    });
+  }
 
   useEffect(() => {
     let active = true;
@@ -250,8 +278,17 @@ export function PoForm({
 
   async function submit() {
     setError(null);
-    if (!supplierId) return setError("Select a supplier.");
+    if (supplierIds.length === 0) return setError("Select at least one supplier.");
     if (!issuedDate) return setError("Enter the issued date.");
+    // Multi-supplier: every production stage must be assigned to a supplier first.
+    if (multiSupplier && ASSIGNABLE_STAGES.some((s) => !stageOwners[s])) {
+      return setError("Assign a supplier to every stage before saving.");
+    }
+    // The master's primary (fallback) supplier: the stamping owner on a
+    // multi-supplier PO (so the opening state routes there), else the lone one.
+    const primaryId = multiSupplier
+      ? stageOwners["stamping"] || supplierIds[0]
+      : supplierIds[0];
 
     const lineItems = [];
     for (const [i, r] of rows.entries()) {
@@ -278,7 +315,12 @@ export function PoForm({
       if (!Number.isInteger(quantity) || quantity <= 0) {
         return setError(`Line ${i + 1}: quantity must be a positive whole number.`);
       }
-      const unitCostCents = r.unitCost.trim() ? Math.round(Number(r.unitCost) * 100) : null;
+      // On a multi-supplier PO the unit cost comes from each sub-PO's prices.
+      const unitCostCents = multiSupplier
+        ? null
+        : r.unitCost.trim()
+          ? Math.round(Number(r.unitCost) * 100)
+          : null;
       if (unitCostCents !== null && (!Number.isFinite(unitCostCents) || unitCostCents < 0)) {
         return setError(`Line ${i + 1}: unit cost must be a non-negative amount.`);
       }
@@ -305,7 +347,7 @@ export function PoForm({
           method: isEdit ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            supplierId,
+            supplierId: primaryId,
             issuedDate,
             expectedDeliveryDate: expectedDeliveryDate || null,
             notes: notes.trim() || null,
@@ -364,11 +406,44 @@ export function PoForm({
       <Card className="p-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={fieldLabel}>Supplier</label>
+            <label className={fieldLabel}>Supplier(s)</label>
+            {supplierIds.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {supplierIds.map((id) => {
+                  const s = supplierList.find((x) => x.id === id);
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-700"
+                    >
+                      {s?.name ?? id}
+                      <button
+                        type="button"
+                        onClick={() => removeSupplier(id)}
+                        aria-label={`Remove ${s?.name ?? "supplier"}`}
+                        className="text-zinc-400 hover:text-zinc-700"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
             <QuickAddSelect
-              value={supplierId}
-              onChange={setSupplierId}
-              options={supplierList.map((s) => ({ value: s.id, label: s.name }))}
+              value=""
+              onChange={addSupplier}
+              options={[
+                {
+                  value: "",
+                  label: supplierIds.length
+                    ? "Add another supplier…"
+                    : "Select a supplier…",
+                },
+                ...supplierList
+                  .filter((s) => !supplierIds.includes(s.id))
+                  .map((s) => ({ value: s.id, label: s.name })),
+              ]}
               addLabel="Add new supplier"
               fields={[
                 { key: "name", label: "Supplier name", required: true },
@@ -389,6 +464,11 @@ export function PoForm({
                 return { id: d.data.id };
               }}
             />
+            <p className="mt-1 text-xs text-zinc-500">
+              {multiSupplier
+                ? "Multiple suppliers — assign each stage below."
+                : "Pick one supplier, or add more for a multi-supplier PO."}
+            </p>
           </div>
           <div>
             <label className={fieldLabel}>PO number</label>
@@ -412,39 +492,24 @@ export function PoForm({
           </div>
         </div>
 
-        <div className="mt-4 space-y-2">
-          {!isEdit && (
-            <div className="flex items-center gap-2">
-              <input
-                id="lock"
-                type="checkbox"
-                checked={lockStagesTogether}
-                onChange={(e) => setLockStagesTogether(e.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300"
-              />
-              <label htmlFor="lock" className="text-sm text-zinc-700">
-                Advance all line items together (uncheck to move items independently)
-              </label>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
+        {!isEdit && (
+          <div className="mt-4 flex items-center gap-2">
             <input
-              id="multi"
+              id="lock"
               type="checkbox"
-              checked={multiSupplier}
-              onChange={(e) => setMultiSupplier(e.target.checked)}
+              checked={lockStagesTogether}
+              onChange={(e) => setLockStagesTogether(e.target.checked)}
               className="h-4 w-4 rounded border-zinc-300"
             />
-            <label htmlFor="multi" className="text-sm text-zinc-700">
-              Multiple suppliers — split this PO by stage into sub-POs (one per
-              supplier, e.g. <span className="font-mono">00100-A</span>)
+            <label htmlFor="lock" className="text-sm text-zinc-700">
+              Advance all line items together (uncheck to move items independently)
             </label>
           </div>
-        </div>
+        )}
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={fieldLabel}>Brand (optional)</label>
+            <label className={fieldLabel}>Customer (optional)</label>
             <QuickAddSelect
               value={companyId}
               onChange={setCompanyId}
@@ -455,9 +520,9 @@ export function PoForm({
                   label: c.tierName ? `${c.name} — ${c.tierName}` : c.name,
                 })),
               ]}
-              addLabel="Add new brand"
+              addLabel="Add new customer"
               fields={[
-                { key: "name", label: "Brand name", required: true },
+                { key: "name", label: "Customer name", required: true },
                 { key: "contactEmail", label: "Contact email", type: "email" },
                 {
                   key: "priceTierId",
@@ -533,6 +598,43 @@ export function PoForm({
           />
         </div>
       </Card>
+
+      {/* Shown only for a multi-supplier PO; assign every stage before adding lines. */}
+      {multiSupplier && (
+        <Card className="p-6">
+          <h2 className="text-sm font-semibold text-zinc-900">Assign stages to suppliers</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Each stage goes to one of the selected suppliers; each supplier gets
+            their own sub-PO (00100-A, 00100-B…) to send. Assign every stage.
+            {isEdit && " Saving regenerates the sub-POs to match."}
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            {ASSIGNABLE_STAGES.map((stage) => (
+              <div key={stage} className="flex items-center gap-2">
+                <label className="w-44 shrink-0 text-xs text-zinc-600">
+                  {STAGE_LABELS[stage as ProductionStage]}
+                </label>
+                <select
+                  className={`${selectSm} min-w-0 flex-1`}
+                  value={stageOwners[stage] ?? ""}
+                  onChange={(e) =>
+                    setStageOwners((o) => ({ ...o, [stage]: e.target.value }))
+                  }
+                >
+                  <option value="">— Select supplier —</option>
+                  {supplierList
+                    .filter((s) => supplierIds.includes(s.id))
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card className="p-6">
         <div className="flex items-center justify-between">
@@ -620,9 +722,14 @@ export function PoForm({
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder="Unit $"
-                    title="Production cost per unit (not the Shopify retail price)"
-                    value={r.unitCost}
+                    placeholder={multiSupplier ? "—" : "Unit $"}
+                    title={
+                      multiSupplier
+                        ? "Set per sub-PO on a multi-supplier PO"
+                        : "Production cost per unit (not the Shopify retail price)"
+                    }
+                    value={multiSupplier ? "" : r.unitCost}
+                    disabled={multiSupplier}
                     onChange={(e) => updateRow(i, { unitCost: e.target.value })}
                   />
                   <Button
@@ -648,7 +755,7 @@ export function PoForm({
                     value={r.companyId}
                     onChange={(e) => updateRow(i, { companyId: e.target.value })}
                   >
-                    <option value="">Brand: PO default</option>
+                    <option value="">Customer: PO default</option>
                     {companyList.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -680,50 +787,20 @@ export function PoForm({
         </div>
 
         <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
-          <span className="text-sm text-zinc-500">Total cost</span>
-          <span className="ml-3 text-base font-semibold text-zinc-900">
-            {fmtMoney(totalCents)}
-          </span>
+          {multiSupplier ? (
+            <span className="text-sm text-zinc-500">
+              Costs are set per sub-PO (after sending).
+            </span>
+          ) : (
+            <>
+              <span className="text-sm text-zinc-500">Total cost</span>
+              <span className="ml-3 text-base font-semibold text-zinc-900">
+                {fmtMoney(totalCents)}
+              </span>
+            </>
+          )}
         </div>
       </Card>
-
-      {multiSupplier && (
-      <Card className="p-6">
-        <h2 className="text-sm font-semibold text-zinc-900">
-          Assign stages to suppliers (generates sub-POs)
-        </h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          Each supplier you assign gets their own sub-PO (00100-A, 00100-B…) to
-          send. Stages left as “PO supplier” go to{" "}
-          {supplierList.find((s) => s.id === supplierId)?.name ?? "the PO supplier"}{" "}
-          (the master’s primary supplier).
-          {isEdit && " Saving regenerates the sub-POs to match."}
-        </p>
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {ASSIGNABLE_STAGES.map((stage) => (
-            <div key={stage} className="flex items-center gap-2">
-              <label className="w-36 shrink-0 text-xs text-zinc-600">
-                {STAGE_LABELS[stage as ProductionStage]}
-              </label>
-              <select
-                className={`${selectSm} min-w-0 flex-1`}
-                value={stageOwners[stage] ?? ""}
-                onChange={(e) =>
-                  setStageOwners((o) => ({ ...o, [stage]: e.target.value }))
-                }
-              >
-                <option value="">PO supplier</option>
-                {supplierList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))}
-        </div>
-      </Card>
-      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

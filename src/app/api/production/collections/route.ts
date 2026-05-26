@@ -14,7 +14,10 @@ export interface CatalogGroup {
 const UNCATEGORIZED_ID = "__uncategorized__";
 
 function variantsOf(p: ShopifyProduct): CatalogVariant[] {
-  if (p.status && p.status !== "active") return [];
+  // Include active, draft, and unlisted (unpublished) products; skip only
+  // archived. Mirrors loadCatalog so the chooser (which prefers this endpoint)
+  // surfaces unlisted items too.
+  if (p.status === "archived") return [];
   const optionNames = (p.options ?? []).map((o) => o.name);
   return (p.variants ?? []).map((v) => {
     const { sizeMm, color, material } = deriveAttrs(optionNames, [

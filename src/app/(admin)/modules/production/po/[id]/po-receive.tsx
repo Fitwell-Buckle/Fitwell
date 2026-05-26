@@ -74,8 +74,8 @@ export function PoReceive({
           <h2 className="text-sm font-semibold text-zinc-900">Receive into Shopify</h2>
           <p className="mt-1 max-w-xl text-xs text-zinc-500">
             Push each line item&apos;s quantity to its warehouse as a Shopify inventory
-            adjustment. Each line is received once — re-running only sends lines that
-            haven&apos;t been received yet.
+            adjustment and record its unit cost (the Total Cost ÷ qty). Each line is
+            received once — re-running only sends lines that haven&apos;t been received yet.
           </p>
         </div>
         <Button onClick={receive} disabled={busy}>

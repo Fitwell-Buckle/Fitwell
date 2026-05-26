@@ -24,6 +24,10 @@ export interface TimelinePo {
     sku: string;
     title: string;
     currentStage: ProductionStage;
+    // Per-line owning supplier + sub-PO number (the supplier responsible for the
+    // line's current stage); falls back to the PO's primary supplier/number.
+    supplierName?: string;
+    poNumber?: string;
     stageEvents: {
       id: string;
       stage: ProductionStage;
@@ -80,8 +84,8 @@ export function ProductionTimeline({
           return {
             key: li.id,
             poId: po.id,
-            poNumber: po.shopifyPoNumber,
-            supplier: po.supplier?.name ?? "—",
+            poNumber: li.poNumber ?? po.shopifyPoNumber,
+            supplier: li.supplierName ?? po.supplier?.name ?? "—",
             sku: li.sku,
             title: li.title,
             currentStage: li.currentStage,

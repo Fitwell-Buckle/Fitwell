@@ -5,7 +5,8 @@ import { loadCatalog, type CatalogVariant } from "@/lib/catalog/load";
 // Re-exported so existing importers keep working.
 export type { CatalogVariant };
 
-// Flattened Shopify catalog (active products only) for the product chooser.
+// Flattened Shopify catalog for the product chooser. Includes active, draft, and
+// unlisted (unpublished) products — only archived items are excluded.
 export async function GET() {
   const session = await auth();
   if (!session?.user) {

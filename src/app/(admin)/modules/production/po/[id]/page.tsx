@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { getPoDetail, getSubPos } from "@/lib/production/service";
+import { getPoDetail, getSubPos, getSupplierLineCosts } from "@/lib/production/service";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { STAGE_LABELS, STAGES, derivePoStage, type ProductionStage } from "@/lib/production/stages";
-import { formatPoNumber, planSubPos } from "@/lib/production/sub-po";
+import { STAGE_LABELS, STAGES, nextStage, derivePoStage, type ProductionStage } from "@/lib/production/stages";
+import { formatPoNumber, planSubPos, subPoStageState } from "@/lib/production/sub-po";
+import { stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { usesRawBlankSummary, summarizeRawBlanks } from "@/lib/production/raw-blank";
 import {
@@ -34,7 +35,7 @@ import { PoAttachments } from "./po-attachments";
 import { PoReceive } from "./po-receive";
 import { PoStageTimeline } from "./po-stage-timeline";
 import { PoCreateInvoice } from "./po-create-invoice";
-import { SubPoPrice } from "./sub-po-price";
+import { SubPoCovers, type SubPoCoverRow } from "./sub-po-covers";
 
 function fmtBytes(n: number | null): string {
   if (!n) return "";
@@ -77,7 +78,11 @@ export default async function PoDetailPage({
     const mplan = planSubPos(workStages, subMaster.stageAssignments, subMaster.supplierId);
     subStageKeys = mplan.find((p) => p.supplierId === po.supplierId)?.stages ?? [];
   }
-  const subStages = subStageKeys.map((s) => STAGE_LABELS[s]);
+  // Show only real work stages in the prefix; the opening "supplier_po" state is
+  // owned for routing but isn't a labelled step.
+  const subStages = subStageKeys
+    .filter((s) => s !== "supplier_po")
+    .map((s) => STAGE_LABELS[s]);
   const subItems = subMaster
     ? [...subMaster.lineItems].sort(
         (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
@@ -93,6 +98,7 @@ export default async function PoDetailPage({
           quantity: li.quantity,
           sizeMm: attrs.sizeOf(li),
           material: attrs.materialOf(li),
+          lineItemId: li.id,
         })),
       );
     } catch {
@@ -100,7 +106,86 @@ export default async function PoDetailPage({
     }
   }
 
+  // Sub-PO: this supplier's per-line unit costs (keyed on the master) + the
+  // lifecycle state + the stage dropdown options (owned stages + handoff).
+  const subState = isSubPo
+    ? subPoStageState(subStageKeys, subItems.map((li) => li.currentStage))
+    : null;
+  // Dropdown the supplier sees: only their OWN work stages, plus a single
+  // "Complete" that hands the batch to the next team (they don't see the next
+  // team's stage name). supplier_po is the internal kickoff — never shown.
+  const subWorkStages = subStageKeys.filter((s) => s !== "supplier_po");
+  const subHandoffStage = subStageKeys.length
+    ? nextStage(subStageKeys[subStageKeys.length - 1])
+    : null;
+  const subStageOptions = isSubPo
+    ? [
+        ...subWorkStages.map((s) => ({ value: s as string, label: STAGE_LABELS[s] })),
+        ...(subHandoffStage ? [{ value: subHandoffStage as string, label: "Complete" }] : []),
+      ]
+    : [];
+  // The select's current value: the not-started (supplier_po) batch shows the
+  // supplier's first work stage so the dropdown always has a matching option.
+  const subCurrentStageValue =
+    isSubPo && subState
+      ? subState.currentStage === "supplier_po"
+        ? subWorkStages[0] ?? subState.currentStage
+        : subState.currentStage
+      : null;
+  let subCoverRows: SubPoCoverRow[] = [];
+  if (isSubPo && subMaster) {
+    const costs = await getSupplierLineCosts(subMaster.id);
+    const myCost = new Map(
+      costs
+        .filter((c) => c.supplierId === po.supplierId)
+        .map((c) => [c.lineItemId, c.unitCostCents]),
+    );
+    if (subRawBlanks.length > 0) {
+      subCoverRows = subRawBlanks.map((g) => ({
+        key: g.label,
+        primary: g.label,
+        covers: g.skus.join(", "),
+        lineItemIds: g.lineItemIds,
+        quantity: g.quantity,
+        // Every SKU in the blank shares one per-piece price; read the first.
+        unitCents: g.lineItemIds.length ? myCost.get(g.lineItemIds[0]) ?? null : null,
+      }));
+    } else {
+      subCoverRows = subItems.map((li) => ({
+        key: li.id,
+        sku: li.sku,
+        primary: li.title,
+        lineItemIds: [li.id],
+        quantity: li.quantity,
+        unitCents: myCost.get(li.id) ?? null,
+      }));
+    }
+  }
+
+  // Master: roll every supplier's per-line unit cost up onto each line item.
+  const supplierColumns = isMaster
+    ? subPos.map((s) => ({
+        supplierId: s.supplierId,
+        label: `${s.poSuffix ?? ""} · ${s.supplier?.name ?? "—"}`.replace(/^ · /, ""),
+      }))
+    : [];
+  const masterCostMap = new Map<string, number | null>();
+  if (isMaster) {
+    const costs = await getSupplierLineCosts(po.id);
+    for (const c of costs) masterCostMap.set(`${c.supplierId}:${c.lineItemId}`, c.unitCostCents);
+  }
+
   const derivedStage = derivePoStage(po.lineItems.map((li) => li.currentStage));
+  // A sub-PO has no line items of its own, so its header stage comes from the
+  // master's lines that this supplier currently holds.
+  const displayStage: ProductionStage | "mixed" | null = isSubPo
+    ? subState?.currentStage ?? null
+    : derivedStage;
+  // Sub-POs listed in pipeline (route) order, not by suffix letter.
+  const subPoRank = new Map(plan.map((p, i) => [p.supplierId, i]));
+  const orderedSubPos = [...subPos].sort(
+    (a, b) => (subPoRank.get(a.supplierId) ?? 99) - (subPoRank.get(b.supplierId) ?? 99),
+  );
 
   // Order line items by buckle size (16, 18, 20, 22…), matching the create form.
   const sortedLineItems = [...po.lineItems].sort(
@@ -110,6 +195,19 @@ export default async function PoDetailPage({
     (sum, li) => sum + (li.unitCostCents ?? 0) * li.quantity,
     0,
   );
+
+  // Master rollup grand total: Σ (qty × sum of every supplier's unit cost).
+  const masterLineUnitSum = (lineItemId: string) =>
+    supplierColumns.reduce(
+      (s, col) => s + (masterCostMap.get(`${col.supplierId}:${lineItemId}`) ?? 0),
+      0,
+    );
+  const masterGrandTotalCents = isMaster
+    ? sortedLineItems.reduce(
+        (sum, li) => sum + masterLineUnitSum(li.id) * li.quantity,
+        0,
+      )
+    : 0;
 
   return (
     <div>
@@ -148,7 +246,8 @@ export default async function PoDetailPage({
           >
             open the master ({formatPoNumber(po.shopifyPoNumber, { isMaster: true })})
           </Link>
-          . Line items, editing, receiving, and invoicing live on the master.
+          . Advance this supplier&apos;s stages below; editing, receiving, and
+          invoicing live on the master.
         </Card>
       )}
 
@@ -163,9 +262,9 @@ export default async function PoDetailPage({
           <div>
             <div className="text-xs text-zinc-400">Stage</div>
             <div className="mt-1">
-              {derivedStage ? (
-                <Badge className={cn(stageBadgeClass(derivedStage))}>
-                  {derivedStage === "mixed" ? "Mixed" : STAGE_LABELS[derivedStage]}
+              {displayStage ? (
+                <Badge className={cn(stageBadgeClass(displayStage))}>
+                  {displayStage === "mixed" ? "Mixed" : STAGE_LABELS[displayStage]}
                 </Badge>
               ) : (
                 "—"
@@ -189,7 +288,7 @@ export default async function PoDetailPage({
             <div className="mt-1 text-zinc-700">{fmtDate(po.issuedDate)}</div>
           </div>
           <div>
-            <div className="text-xs text-zinc-400">Brand</div>
+            <div className="text-xs text-zinc-400">Customer</div>
             <div className="mt-1 text-zinc-700">
               {po.company?.name ?? "—"}
               {po.company?.priceTier && (
@@ -211,11 +310,11 @@ export default async function PoDetailPage({
         <Card className="mt-5 p-6">
           <h2 className="text-sm font-semibold text-zinc-900">Sub-POs</h2>
           <p className="mt-1 text-xs text-zinc-500">
-            One PO per supplier — send each to its supplier. Editing, receiving,
-            and invoicing stay on this master.
+            One PO per supplier — each supplier advances their own stages on their
+            sub-PO. Receiving and invoicing stay on this master.
           </p>
           <div className="mt-3 divide-y divide-zinc-100">
-            {subPos.map((s) => (
+            {orderedSubPos.map((s) => (
               <div key={s.id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <Link
@@ -227,6 +326,7 @@ export default async function PoDetailPage({
                   <span className="ml-2 text-sm text-zinc-600">{s.supplier?.name ?? "—"}</span>
                   <div className="mt-0.5 truncate text-xs text-zinc-400">
                     {(stagesBySupplier.get(s.supplierId) ?? [])
+                      .filter((st) => st !== "supplier_po")
                       .map((st) => STAGE_LABELS[st])
                       .join(", ") || "—"}
                   </div>
@@ -240,91 +340,16 @@ export default async function PoDetailPage({
         </Card>
       )}
 
-      {isSubPo && (
-        <Card className="mt-5 p-6">
-          <h2 className="text-sm font-semibold text-zinc-900">What this sub-PO covers</h2>
-          <p className="mt-1 text-xs text-zinc-500">
-            Read-only — line items, stage advancement, receiving, and invoicing are
-            managed on the{" "}
-            <Link
-              href={`/modules/production/po/${po.parentPoId}`}
-              className="underline underline-offset-2"
-            >
-              master PO
-            </Link>
-            .
-          </p>
-          <div className="mt-4">
-            {subRawBlanks.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Raw blank</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead>Covers (finished SKUs)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {subRawBlanks.map((g) => (
-                    <TableRow key={g.label}>
-                      <TableCell>
-                        {subStages.length > 0 && (
-                          <span className="font-semibold text-red-600">
-                            {subStages.join(", ")} —{" "}
-                          </span>
-                        )}
-                        <span className="font-medium text-zinc-900">{g.label}</span>
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-zinc-900">
-                        {g.quantity}
-                      </TableCell>
-                      <TableCell className="text-xs text-zinc-400">
-                        {g.skus.join(", ")}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {subItems.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="py-6 text-center text-zinc-400">
-                        No items on the master.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    subItems.map((li) => (
-                      <TableRow key={li.id}>
-                        <TableCell className="font-mono text-xs">{li.sku}</TableCell>
-                        <TableCell>
-                          {subStages.length > 0 && (
-                            <span className="font-semibold text-red-600">
-                              {subStages.join(", ")} —{" "}
-                            </span>
-                          )}
-                          {li.title}
-                        </TableCell>
-                        <TableCell className="text-right text-zinc-500">
-                          {li.quantity}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-          <SubPoPrice poId={po.id} initialCents={po.supplierPriceCents} />
-        </Card>
+      {isSubPo && subState && (
+        <SubPoCovers
+          poId={po.id}
+          isRawBlank={subRawBlanks.length > 0}
+          stagePrefix={subStages.join(", ")}
+          rows={subCoverRows}
+          status={subState.status}
+          currentStage={subCurrentStageValue}
+          stageOptions={subStageOptions}
+        />
       )}
 
       {!isSubPo && (
@@ -345,30 +370,94 @@ export default async function PoDetailPage({
         />
       )}
 
-      <PoControls
-        poId={po.id}
-        status={po.status}
-        lockStagesTogether={po.lockStagesTogether}
-        totalCents={totalCents}
-        lineItems={sortedLineItems.map((li) => ({
-          id: li.id,
-          title: li.title,
-          sku: li.sku,
-          quantity: li.quantity,
-          unitCost: fmtMoney(li.unitCostCents),
-          currentStage: li.currentStage,
-          customerName: li.customer
-            ? `${li.customer.firstName ?? ""} ${li.customer.lastName ?? ""}`.trim() ||
-              null
-            : null,
-          expectedCompletionDate: li.expectedCompletionDate,
-          // Effective company / warehouse: line override falls back to the PO default.
-          company: li.company?.name ?? po.company?.name ?? null,
-          companyOverridden: !!li.company,
-          warehouse: li.locationName ?? po.locationName ?? null,
-          warehouseOverridden: !!li.locationName,
-        }))}
-      />
+      {isMaster ? (
+        <Card className="mt-5 p-6">
+          <h2 className="text-sm font-semibold text-zinc-900">Line items &amp; costs</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Each supplier&apos;s unit cost per line; the line total is qty × the summed
+            unit cost. Stage advancement happens on each sub-PO above.
+          </p>
+          <div className="mt-4 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Product</TableHead>
+                  {supplierColumns.map((col) => (
+                    <TableHead key={col.supplierId} className="text-right">
+                      {col.label}
+                    </TableHead>
+                  ))}
+                  <TableHead className="text-right">Unit cost</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Total cost</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedLineItems.map((li) => {
+                  const perSupplier = supplierColumns.map(
+                    (col) => masterCostMap.get(`${col.supplierId}:${li.id}`) ?? null,
+                  );
+                  const anyCost = perSupplier.some((c) => c != null);
+                  const unitSum = perSupplier.reduce<number>((s, c) => s + (c ?? 0), 0);
+                  return (
+                    <TableRow key={li.id}>
+                      <TableCell className="font-mono text-xs">{li.sku}</TableCell>
+                      <TableCell>{li.title}</TableCell>
+                      {perSupplier.map((c, i) => (
+                        <TableCell
+                          key={supplierColumns[i].supplierId}
+                          className="text-right text-zinc-500"
+                        >
+                          {fmtMoney(c)}
+                        </TableCell>
+                      ))}
+                      <TableCell className="text-right font-medium text-zinc-900">
+                        {anyCost ? fmtMoney(unitSum) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right text-zinc-500">{li.quantity}</TableCell>
+                      <TableCell className="text-right font-medium text-zinc-900">
+                        {anyCost ? fmtMoney(unitSum * li.quantity) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
+            <span className="text-sm text-zinc-500">Total production cost</span>
+            <span className="ml-3 text-base font-semibold text-zinc-900">
+              {fmtMoney(masterGrandTotalCents)}
+            </span>
+          </div>
+        </Card>
+      ) : (
+        <PoControls
+          poId={po.id}
+          status={po.status}
+          lockStagesTogether={po.lockStagesTogether}
+          totalCents={totalCents}
+          lineItems={sortedLineItems.map((li) => ({
+            id: li.id,
+            title: li.title,
+            sku: li.sku,
+            quantity: li.quantity,
+            unitCost: fmtMoney(li.unitCostCents),
+            currentStage: li.currentStage,
+            customerName: li.customer
+              ? `${li.customer.firstName ?? ""} ${li.customer.lastName ?? ""}`.trim() ||
+                null
+              : null,
+            expectedCompletionDate: li.expectedCompletionDate,
+            // Effective company / warehouse: line override falls back to the PO default.
+            company: li.company?.name ?? po.company?.name ?? null,
+            companyOverridden: !!li.company,
+            warehouse: li.locationName ?? po.locationName ?? null,
+            warehouseOverridden: !!li.locationName,
+          }))}
+        />
+      )}
 
       <PoStageTimeline
         lines={sortedLineItems.map((li) => ({

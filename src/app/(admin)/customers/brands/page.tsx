@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CompaniesManager } from "./companies-manager";
 
 export const metadata: Metadata = {
-  title: "B2B Brand List | Fitwell Admin",
+  title: "B2B Customer List | Fitwell Admin",
 };
 
 export default async function BrandsPage() {
@@ -31,7 +31,7 @@ export default async function BrandsPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="B2B Brand List" />
+        <PageHeader title="B2B Customer List" />
         <Button variant="ghost" size="sm" asChild>
           <Link href="/customers">Back to Customers</Link>
         </Button>

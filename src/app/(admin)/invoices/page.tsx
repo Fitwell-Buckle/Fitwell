@@ -14,15 +14,7 @@ import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { parseDateRange } from "@/lib/date-range";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
 import { aggregateIncoming, type IncomingLine } from "@/lib/production/inventory";
-import {
-  getCatalogCached,
-  getCatalogGroupsCached,
-  catalogSkusMatching,
-  makeCollectionLookup,
-  type CatalogVariant,
-  type CatalogCollectionGroup,
-} from "@/lib/catalog/load";
-import { CatalogFilters } from "@/components/catalog/catalog-filters";
+import { ListFilters } from "@/components/catalog/list-filters";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,14 +45,15 @@ export default async function B2BOrdersPage({
   const { from, to } = parseDateRange(params);
   const fromStr = from.toISOString().slice(0, 10);
   const toStr = to.toISOString().slice(0, 10);
-  const collectionParam = typeof params.collection === "string" ? params.collection : "";
-  const sizeParam = typeof params.size === "string" ? params.size : "";
-  const colorParam = typeof params.color === "string" ? params.color : "";
-  const materialParam = typeof params.material === "string" ? params.material : "";
+  // Item Chooser filter: the chosen product SKU(s) (comma-separated in the URL).
+  const skuSet = new Set(
+    (typeof params.sku === "string" ? params.sku : "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
 
-  // Catalog (filter options + SKU set), production lines (for ETA), invoices.
-  let catalog: CatalogVariant[] = [];
-  let groups: CatalogCollectionGroup[] = [];
+  // Production lines (for ETA) + invoices.
   const [invoices, pos, estimates] = await Promise.all([
     db.query.invoice.findMany({
       orderBy: desc(invoice.createdAt),
@@ -86,29 +79,6 @@ export default async function B2BOrdersPage({
     }),
     getStageEstimates(),
   ]);
-  try {
-    [catalog, groups] = await Promise.all([getCatalogCached(), getCatalogGroupsCached()]);
-  } catch {
-    /* filters degrade gracefully when Shopify is unavailable */
-  }
-
-  const { options: collectionOptions } = makeCollectionLookup(groups);
-  const sizeOptions = [
-    ...new Set(catalog.map((v) => v.sizeMm).filter((s): s is number => s != null)),
-  ].sort((a, b) => a - b);
-  const colorOptions = [
-    ...new Set(catalog.map((v) => v.color).filter((c): c is string => !!c)),
-  ].sort((a, b) => a.localeCompare(b));
-  const materialOptions = [
-    ...new Set(catalog.map((v) => v.material).filter((m): m is string => !!m)),
-  ].sort((a, b) => a.localeCompare(b));
-  const matchingSkus = catalogSkusMatching(catalog, groups, {
-    collection: collectionParam,
-    size: sizeParam,
-    color: colorParam,
-    material: materialParam,
-  });
-  const matchSet = matchingSkus ? new Set(matchingSkus) : null;
 
   // Production ETA per SKU = soonest projected completion across in-production
   // (not-yet-received) lines. An order's ETA is the latest of its SKUs'.
@@ -128,7 +98,7 @@ export default async function B2BOrdersPage({
 
   const rows = invoices
     .filter((inv) => inv.issuedDate >= fromStr && inv.issuedDate <= toStr)
-    .filter((inv) => !matchSet || inv.lineItems.some((l) => matchSet.has(l.sku)))
+    .filter((inv) => skuSet.size === 0 || inv.lineItems.some((l) => skuSet.has(l.sku)))
     .map((inv) => {
       let productionEta: string | null = null;
       for (const l of inv.lineItems) {
@@ -147,16 +117,7 @@ export default async function B2BOrdersPage({
         </Button>
       </div>
 
-      <CatalogFilters
-        collections={collectionOptions}
-        collection={collectionParam}
-        sizeOptions={sizeOptions}
-        size={sizeParam}
-        colorOptions={colorOptions}
-        color={colorParam}
-        materialOptions={materialOptions}
-        material={materialParam}
-      />
+      <ListFilters />
 
       <DataTable className="mt-4">
         <Table>
@@ -164,7 +125,7 @@ export default async function B2BOrdersPage({
             <TableRow>
               <TableHead>Order #</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Brand</TableHead>
+              <TableHead>Customer</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Due date</TableHead>
