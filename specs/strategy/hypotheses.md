@@ -416,43 +416,61 @@ section)
 
 ---
 
-### H12 — Klaviyo is doing retention work, not acquisition work
-**Claim:** Klaviyo email as a UTM source primarily re-engages
-existing customers for outfitting purchases, not first-purchase
-acquisition. The high $96/customer LTV observed for Klaviyo-
-attributed orders is a retention signal, not an acquisition
-signal.
+### H12 — Klaviyo does both acquisition (welcome flow) and retention (post-purchase flows)
+**Claim:** Klaviyo plays *two distinct jobs* that share
+infrastructure but produce separable outcomes:
+- **Acquisition:** the welcome-flow discount code converts
+  pre-purchase email signups into first-time buyers. The 41
+  first-order-Klaviyo customers in the Nov 2025–May 2026 window
+  ($96 LTV, 2.44 units) are this cohort.
+- **Retention:** post-purchase flows ("outfit your collection",
+  abandoned-cart, re-engagement) drive second and subsequent
+  orders from existing customers.
 
-**Confidence:** high (largely supported by current data)
+**Confidence:** medium for the dual-role claim; high for the
+welcome-flow acquisition contribution (data-supported); low for the
+*relative split* of acquisition vs. retention revenue (not yet
+measured separately).
 
-**Why we believe it:** [[personas]] Distribution shows Klaviyo as
-the highest-LTV channel ($96/cust, 2.44 units), but Klaviyo
-audiences are by construction post-signup — most signups happen
-post-purchase. The behavior is consistent with re-engagement, not
-cold acquisition.
+**History:** This hypothesis was originally written as "Klaviyo is
+doing retention, not acquisition" with status `validated` — that
+framing was wrong. The first-order-UTM analysis showing Klaviyo's
+high LTV was *acquisition* data (welcome-flow conversions), not
+retention data, and I conflated them. Corrected 2026-05-26.
 
-**What would validate:** Continued — Klaviyo-attributed orders
-remain dominantly from customers with prior purchase OR
-post-purchase email signup; first-purchase-attributable Klaviyo
-share stays < 10% of total Klaviyo revenue.
+**Why we believe the welcome-flow acquisition role:** Direct
+confirmation from Tom — welcome-flow discount codes are being
+redeemed at meaningful volume; 41 first-order-Klaviyo-attributed
+customers in the 6-month D2C window quantify the lower bound.
 
-**What would invalidate:** Klaviyo starts producing meaningful
-first-purchase attribution (> 20% of Klaviyo revenue from
-never-purchased emails), suggesting pre-purchase lead capture
-is becoming the dominant motion.
+**Why we believe the post-purchase retention role:** Standard
+Klaviyo platform usage; "outfit your collection" sequence is
+designed for this; structurally fits the [[retention-loop]] motion.
+Volume not yet isolated.
 
-**Estimated test cost:** Low — Shopify + Klaviyo cohort query.
+**What would validate (the dual-role framing):** Segmenting
+Klaviyo-tagged orders by customer order-sequence position shows
+meaningful volume in both first-order (welcome flow) AND
+repeat-order (post-purchase) buckets — neither is < 20% of total
+Klaviyo revenue.
 
-**Test approach:** Segment Klaviyo-attributed orders by customer
-purchase history (had-prior-order vs. first-order); track the
-first-purchase-Klaviyo share over time.
+**What would invalidate:** One of the two motions accounts for
+essentially all Klaviyo revenue (> 90% in either direction),
+collapsing the dual-role framing back to a single role.
 
-**Status:** validated (operationally) — documenting for
-completeness so the channel categorization in
-[[funnel]] `email_klaviyo_acquisition` and
-[[retention-loop]] `klaviyo_post_purchase` is grounded.
+**Estimated test cost:** Low — Shopify + Klaviyo cohort query
+segmenting by customer order-sequence position.
 
-**Related:** [[funnel]] `email_klaviyo_acquisition`,
+**Test approach:** Pull Klaviyo-attributed orders for the D2C
+window. For each, classify as first-order (acquisition) or
+repeat-order (retention) based on customer order history. Compute
+revenue, customer count, and LTV per side. Track the split over
+time.
+
+**Status:** open (the split-quantification is the open question;
+the dual-role framing is the working assumption)
+
+**Related:** [[funnel]] `email_klaviyo_welcome_flow`,
 [[retention-loop]] `klaviyo_post_purchase`, [[personas]]
 Distribution channel-LTV table.
 

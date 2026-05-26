@@ -572,13 +572,18 @@ Top channels by total revenue:
 | Direct / unattributed | 305 | $76 | 1.90 | Mix of brand search, word of mouth, untagged Meta. Largest segment. |
 | Search referrer | 264 | $66 | 1.64 | Organic search. Lower LTV — consistent with P5 Comfort search pattern. |
 | Meta (paid) | 57 | $85 | 1.96 | Solid mid-LTV; this is the working acquisition lever. |
-| Klaviyo (email) | 41 | $96 | 2.44 | **Highest LTV.** Post-purchase retention working — these are existing customers re-activating for outfitting, not new acquisitions. |
+| Klaviyo (email) | 41 | $96 | 2.44 | **Highest LTV.** Welcome-flow acquisitions — these are people who gave us their email (most via on-site signup), received the welcome-flow discount code, and converted on their *first* order. Post-purchase Klaviyo flows then drive additional outfitting on top. |
 | IG organic | 34 | $68 | 1.53 | P4 Algo-Discovered pattern. |
 
-**Klaviyo email driving the highest LTV is a retention finding, not
-an acquisition finding** — these customers are already in the base,
-being re-activated. The implication: post-purchase email is a real
-outfitting driver, and the email program is doing work.
+**Klaviyo is doing both acquisition and retention work.** The 41
+Klaviyo-tagged customers above had Klaviyo as their *first-order*
+UTM — almost certainly welcome-flow discount-code redemptions. The
+$96 LTV / 2.44 units suggests welcome-flow signups are a high-quality
+acquisition cohort (well above the $74 base LTV), and the post-
+purchase Klaviyo flows then drive outfitting on top of that. The
+first-purchase-Klaviyo vs. repeat-purchase-Klaviyo split isn't
+isolated in this analysis (it captured first-order UTM only); future
+analysis should segment by order sequence position.
 
 ### Outfitter-reviewers — creator-program candidates
 

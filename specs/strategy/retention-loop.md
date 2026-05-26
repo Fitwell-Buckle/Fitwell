@@ -201,16 +201,22 @@ acquisition channels in [[funnel]]:
 **Targets:** `first_buyer` → `second_buyer`, `second_buyer` →
 `multi_unit`
 **Persona affinity:** any
-**Measurement:** Klaviyo + UTM `utm_source=klaviyo`; PostHog
-**Current data:** Per [[personas]] Distribution, Klaviyo as a UTM
-source produces the highest LTV ($96/customer, 2.44 units) — but
-this is *post-purchase re-engagement*, not acquisition. The
-channel is doing real work.
-**Status:** active
-**Notes:** This is the dominant retention lever. The "outfit your
-collection" sequence (or whatever its equivalent is currently
-called) is the single most leveraged piece of marketing copy in the
-program.
+**Measurement:** Klaviyo + UTM `utm_source=klaviyo` on orders where
+the customer has prior order history; needs to be segmented from
+welcome-flow first-order Klaviyo (which is acquisition — see
+[[funnel]] `email_klaviyo_welcome_flow`).
+**Current data:** Not cleanly isolated yet. The $96 LTV / 2.44 units
+finding for Klaviyo customers in [[personas]] Distribution is
+first-order-Klaviyo, i.e. welcome-flow acquisition, not retention.
+Post-purchase Klaviyo work is happening but is not separately
+measured in current analyses.
+**Status:** active (operationally) — needs measurement isolation
+**Notes:** Shares infrastructure with the welcome-flow acquisition
+channel but a different job. The "outfit your collection" sequence
+and other post-purchase nurtures are this channel; the welcome-flow
+discount code is not. Important future work: segment Klaviyo-tagged
+orders by customer order-sequence position (first vs. repeat) so
+acquisition and retention contributions are quantifiable separately.
 
 ### `judgeme_re_engagement`
 **Targets:** `first_buyer` → `second_buyer`; `outfitter` → `advocate`

@@ -343,16 +343,34 @@ retargeting in the 2-week afterglow window
 ROI with geo-targeted retargeting" open question in [[personas]]
 applies to this channel specifically.
 
-#### `email_klaviyo_acquisition`
-**Typical entry stage(s):** `problem_aware` → `considering` (depends
-on what they signed up for)
-**Hypothesized persona affinity:** anyone willing to give email; skews P2
-**Journey role:** accelerator
-**Measurement:** Klaviyo signups + UTM on emails
-**Cost shape:** organic + Klaviyo platform cost
-**Status:** depends on which lead-gen forms exist (audit needed)
-**Notes:** This is the pre-purchase Klaviyo. Post-purchase Klaviyo is
-the dominant retention channel — see [[retention-loop]].
+#### `email_klaviyo_welcome_flow`
+**Typical entry stage(s):** `considering` → `converting` (the
+welcome-flow discount code triggers first purchase)
+**Hypothesized persona affinity:** anyone willing to give email
+before buying; current data suggests this cohort skews higher-LTV
+than the base, possibly because email signup is a high-intent
+self-selection signal
+**Evidence:** observed — 41 first-order-Klaviyo-attributed
+customers in the Nov 2025–May 2026 window, averaging $96 LTV and
+2.44 units (vs. $74 / 1.7 units base). See [[personas]]
+Distribution channel-LTV table.
+**Journey role:** closer (the welcome-flow discount code closes the
+first purchase) — and arguably also an accelerator for the upstream
+signup decision, since the offer of "10% off" or similar is itself
+a touch
+**Measurement:** Klaviyo signups + Klaviyo UTM on welcome-flow
+emails; Shopify discount-code attribution
+**Cost shape:** Klaviyo platform cost + discount margin foregone
+**Status:** active — confirmed first-purchase driver
+**Notes:** This was previously mis-categorized as "retention" in the
+analysis because Klaviyo-tagged orders looked like outfitting-shape.
+Reality: many Klaviyo-tagged *first orders* come from welcome-flow
+discount redemption (acquisition), and Klaviyo-tagged *repeat
+orders* come from post-purchase flows (retention) — these are
+separate jobs sharing infrastructure. The post-purchase Klaviyo
+work lives in [[retention-loop]] `klaviyo_post_purchase`. The
+welcome-flow signup itself happens via on-site forms / pop-ups
+upstream of this channel.
 
 #### `strap_maker_partnership`
 **Typical entry stage(s):** `solution_aware` (they're already buying
