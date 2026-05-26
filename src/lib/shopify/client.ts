@@ -611,6 +611,8 @@ class ShopifyClient {
     email: string | null;
     shopifyCustomerId?: string | null;
     discountPercent: number;
+    /** Label for the order-level discount (defaults to the B2B tier). */
+    discountTitle?: string;
     note?: string;
     lines: {
       variantId: string | null;
@@ -639,7 +641,7 @@ class ShopifyClient {
       input.appliedDiscount = {
         valueType: "PERCENTAGE",
         value: params.discountPercent,
-        title: "B2B price tier",
+        title: params.discountTitle ?? "B2B price tier",
       };
     }
     if (params.shopifyCustomerId) {

@@ -35,6 +35,9 @@ export const user = pgTable("user", {
   // Set for users with role='company' so the B2B portal can scope to their
   // company + apply their price tier (Phase 7).
   companyId: text("company_id"),
+  // NOTE: a future `influencer_id` column (for the influencer self-serve portal)
+  // will be added in its own migration when that phase lands — intentionally not
+  // here yet, so the running app never queries a column the DB doesn't have.
 });
 
 export const account = pgTable(
@@ -948,6 +951,166 @@ export const invoiceLineItemRelations = relations(invoiceLineItem, ({ one }) => 
     references: [invoice.id],
   }),
 }));
+
+// ─── Influencer Tracking ────────────────────────────────────────────
+
+// Auto-incrementing influencer gifting-order number source (formatted
+// "GIFT-00100"). Separate from the B2B invoice sequence.
+export const influencerOrderNumberSeq = pgSequence("influencer_order_number_seq", {
+  startWith: 100,
+});
+
+// An influencer/creator we gift product to in exchange for content. Orders are
+// gifting (100% off) and carry an affiliate link per order. They may only order
+// from the Shopify collections assigned here (enforced in the future portal).
+export const influencer = pgTable(
+  "influencer",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    // Social handle (e.g. "@maker.minute") + the platform it's on.
+    handle: text("handle"),
+    platform: text("platform"), // instagram | tiktok | youtube | ...
+    contactName: text("contact_name"),
+    contactEmail: text("contact_email"),
+    // Optional link to a synced Shopify customer (the gifting recipient).
+    customerId: text("customer_id").references(() => customer.id),
+    // Shopify collection ids this influencer may order from. Empty = all.
+    assignedCollectionIds: text("assigned_collection_ids").array(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("influencer_customer_id_idx").on(t.customerId)],
+);
+
+// Allowlist of emails that may sign in to the influencer self-serve portal
+// (next phase). Mirrors company_contact / supplier_contact.
+export const influencerContact = pgTable(
+  "influencer_contact",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    influencerId: text("influencer_id")
+      .notNull()
+      .references(() => influencer.id, { onDelete: "cascade" }),
+    email: text("email").notNull(), // stored lowercased; one influencer per email
+    name: text("name"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("influencer_contact_email_idx").on(t.email),
+    index("influencer_contact_influencer_id_idx").on(t.influencerId),
+  ],
+);
+
+// A gifting order placed for an influencer. Pushed to Shopify as a draft order
+// at 100% off. Content-deadline tracking: contentDueDate is when their content
+// must publish; publishedAt is set when it goes live. The Tracking page derives
+// approaching / missed / hit from these.
+export const influencerOrder = pgTable(
+  "influencer_order",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Auto-generated from influencer_order_number_seq, e.g. "GIFT-00100".
+    orderNumber: text("order_number").notNull(),
+    influencerId: text("influencer_id")
+      .notNull()
+      .references(() => influencer.id),
+    status: text("status").notNull().default("draft"), // draft | sent | cancelled
+    issuedDate: date("issued_date").notNull(),
+    // When the influencer's content is due to be published (the deadline).
+    contentDueDate: date("content_due_date"),
+    // Set when the content actually goes live (deadline "hit").
+    publishedAt: date("published_at"),
+    // The affiliate/tracking link for this order's content.
+    affiliateLink: text("affiliate_link"),
+    notes: text("notes"),
+    // Money in cents. Gifting => discountPercent 100, totalCents 0; subtotal is
+    // the retail gift value (kept for reporting).
+    subtotalCents: integer("subtotal_cents").notNull().default(0),
+    discountPercent: real("discount_percent"),
+    discountCents: integer("discount_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull().default(0),
+    currency: text("currency").notNull().default("USD"),
+    shopifyDraftOrderId: text("shopify_draft_order_id"),
+    shopifyInvoiceUrl: text("shopify_invoice_url"),
+    sentAt: timestamp("sent_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("influencer_order_influencer_id_idx").on(t.influencerId),
+    index("influencer_order_status_idx").on(t.status),
+    index("influencer_order_content_due_date_idx").on(t.contentDueDate),
+  ],
+);
+
+export const influencerOrderLineItem = pgTable(
+  "influencer_order_line_item",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => influencerOrder.id, { onDelete: "cascade" }),
+    sku: text("sku").notNull(),
+    title: text("title").notNull(),
+    quantity: integer("quantity").notNull(),
+    // Retail unit price (the gift value); the order-level 100% discount applies.
+    unitPriceCents: integer("unit_price_cents").notNull().default(0),
+    shopifyProductId: text("shopify_product_id"),
+    shopifyVariantId: text("shopify_variant_id"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("influencer_order_line_item_order_id_idx").on(t.orderId)],
+);
+
+export const influencerRelations = relations(influencer, ({ one, many }) => ({
+  customer: one(customer, {
+    fields: [influencer.customerId],
+    references: [customer.id],
+  }),
+  contacts: many(influencerContact),
+  orders: many(influencerOrder),
+}));
+
+export const influencerContactRelations = relations(
+  influencerContact,
+  ({ one }) => ({
+    influencer: one(influencer, {
+      fields: [influencerContact.influencerId],
+      references: [influencer.id],
+    }),
+  }),
+);
+
+export const influencerOrderRelations = relations(
+  influencerOrder,
+  ({ one, many }) => ({
+    influencer: one(influencer, {
+      fields: [influencerOrder.influencerId],
+      references: [influencer.id],
+    }),
+    lineItems: many(influencerOrderLineItem),
+  }),
+);
+
+export const influencerOrderLineItemRelations = relations(
+  influencerOrderLineItem,
+  ({ one }) => ({
+    order: one(influencerOrder, {
+      fields: [influencerOrderLineItem.orderId],
+      references: [influencerOrder.id],
+    }),
+  }),
+);
 
 // Single-row remittance / bank-wire details shown on invoices (id is always
 // "default"). Editable in admin Settings.

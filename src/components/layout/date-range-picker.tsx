@@ -64,6 +64,7 @@ const PICKER_PATHS = [
   "/funnel",
   "/orders",
   "/invoices",
+  "/influencer-tracking",
 ];
 
 export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {

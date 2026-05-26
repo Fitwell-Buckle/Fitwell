@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-05-13
+Last updated: 2026-05-25
 
 ## Active Workstreams
 
@@ -106,6 +106,30 @@ Depends on landing pages. Not needed while Shopify is the only web property.
 **Owner**: Greg
 
 Low priority until analytics pipeline is feeding data for digest emails.
+
+### 8. 🔨 Influencer Tracking (phase 1 — admin-managed)
+**Last worked**: 2026-05-25
+**Owner**: Oliver
+**Branch**: `production-management` (PR)
+
+Gift product to creators in exchange for content, tracked against a publish
+deadline. Styled to mirror the B2B Orders/Brands system. Pricing = **gifting
+(100% off) + an affiliate link per order**.
+
+**Done (phase 1, admin-managed)**:
+- [x] Schema: `influencer`, `influencer_contact`, `influencer_order` (+ line items), `influencer_order_number_seq` ("GIFT-00100"); migration `0011_sour_junta.sql` (influencer tables only — `user.influencer_id` deferred to the portal phase so the app never queries a missing column)
+- [x] Pure `deadlineStatus()` helper (approaching/missed/hit/on_track/no_deadline) + 12 unit tests
+- [x] Service + API: influencer CRUD, portal-login allowlist, gifting-order create (Shopify draft order at 100% off + affiliate link + content due date), order PATCH (deadline/published/link/status)
+- [x] Pages under **Marketing**: `/influencers` (manager + assigned-collections picker), `/influencer-tracking` (deadline list, inline-edit deadline, mark published, affiliate link), `/influencer-tracking/new` (order form, picker restricted to assigned collections)
+- [x] Nav + middleware + date-picker wiring; `npm run check` green (213 tests)
+
+**Remaining / handoff**:
+- [ ] **Migration-history reconciliation (carryover from the main-merge consolidation).** `drizzle-kit migrate` fails on this branch with `type "production_stage" already exists` — the DB physically has everything through `0010`, but drizzle's `__drizzle_migrations` table doesn't recognize the consolidated `0010` file, so it re-runs it. This blocks **any** `db:migrate` here and on production. Needs a deliberate reconciliation with Greg (consistent across all dev branches + prod).
+- [ ] **NOTE for that reconciliation:** Oliver's dev branch (`ep-icy-lake-aqix27gq`) already has the influencer tables created **directly** (via `/tmp/apply-influencer-tables.mjs`, bypassing drizzle tracking) to unblock local work. So `0011_sour_junta` is applied in the DB but **not recorded** in `__drizzle_migrations` — the reconciliation must mark it applied (or it'll try to recreate and fail with "already exists").
+- [ ] Grant Shopify `write_draft_orders` scope so gifting draft orders actually push (otherwise orders still save as `draft` with a warning)
+- [ ] **Phase 2 (next chunk): self-serve influencer portal** — `role='influencer'`, magic-link login (`influencer_contact` allowlist), browse only assigned collections, enter publish date at checkout
+
+---
 
 ## Completed Workstreams
 

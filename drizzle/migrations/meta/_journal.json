@@ -78,6 +78,13 @@
       "when": 1779748954211,
       "tag": "0010_dark_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779759242530,
+      "tag": "0011_sour_junta",
+      "breakpoints": true
     }
   ]
 }

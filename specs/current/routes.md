@@ -43,6 +43,9 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/campaigns/[id]` | Campaign detail — spend, conversions, ROAS |
 | `/attribution` | UTM attribution analysis |
 | `/funnel` | Funnel visualization (landing → Shopify → purchase) |
+| `/influencers` | Influencer list (CRUD) — handle/platform, assigned collections, portal-login allowlist |
+| `/influencer-tracking` | Gifting orders + content-deadline tracking (approaching / missed / hit); inline-edit deadline, mark published, affiliate link |
+| `/influencer-tracking/new` | Create a gifting order (100% off draft order; product picker limited to the influencer's assigned collections; content due date + affiliate link) |
 | `/products` | Product performance breakdown (+ incoming production qty per SKU) |
 | `/inventory` | Incoming inventory — per-SKU units in production, stage breakdown, projected ETA |
 | `/modules` | Modules hub (Production; Marketing coming soon) |
@@ -138,6 +141,16 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/invoices/[id]/send` | Email the invoice (Resend) + push a Shopify draft order with a payment link when the company is linked to a Shopify customer (`write_draft_orders`); marks "sent" |
 | POST | `/api/invoices/[id]/create-po` | Create a draft production PO from the invoice (pick supplier) |
 | PATCH | `/api/settings/billing` | Update remittance / bank-wire details shown on invoices |
+
+### Influencer API (each handler checks `auth()`; admin-only — suppliers/companies 403)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/influencers` | Create an influencer |
+| PATCH | `/api/influencers/[id]` | Update an influencer (incl. assigned collections) |
+| POST | `/api/influencers/[id]/contacts` | Add an influencer portal-login email (future portal allowlist) |
+| DELETE | `/api/influencer-contacts/[id]` | Remove an influencer portal-login email |
+| POST | `/api/influencer-orders` | Create a gifting order — push a Shopify draft order at 100% off (`write_draft_orders`), record content due date + affiliate link; still records as `draft` (with a warning) if the Shopify push fails |
+| PATCH | `/api/influencer-orders/[id]` | Edit content deadline / published date / affiliate link / status |
 
 ### Portal API (B2B; company-scoped via `role='company'`)
 | Method | Path | Description |

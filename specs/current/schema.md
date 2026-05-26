@@ -320,6 +320,29 @@ holds the blob URL + metadata.
 Nullable text column added to `user`; set for users with `role='supplier'` so the
 supplier portal can scope queries to their own POs (Phase 3).
 
+## Influencer Tracking
+
+Creators we gift product to in exchange for content. Managed under
+**Marketing → Influencers** (the entity + assigned collections) and
+**Marketing → Influencer Tracking** (gifting orders + content-deadline status).
+Orders are gifting (**100% off** — a Shopify draft order at full discount) and
+carry an **affiliate link per order**.
+
+| Table | Key columns |
+|-------|-------------|
+| `influencer` | `name`, `handle?`, `platform?`, `contact_name?`, `contact_email?`, `customer_id` (FK → customer, optional Shopify link), `assigned_collection_ids` (text[] — Shopify collection ids; empty = all), `notes` |
+| `influencer_contact` | `influencer_id` (FK, cascade), `email` (unique, lowercased), `name?` — allowlist for the future self-serve portal |
+| `influencer_order` | `order_number` ("GIFT-00100", from `influencer_order_number_seq`), `influencer_id` (FK), `status` (draft\|sent\|cancelled), `issued_date`, `content_due_date?` (the deadline), `published_at?` (set when content goes live), `affiliate_link?`, `subtotal_cents` (retail gift value), `discount_percent` (100), `total_cents` (0), `shopify_draft_order_id?`, `shopify_invoice_url?`, `sent_at?`, `notes?` |
+| `influencer_order_line_item` | `order_id` (FK, cascade), `sku`, `title`, `quantity`, `unit_price_cents` (retail gift value), `shopify_product_id?`, `shopify_variant_id?` |
+
+Deadline status (`approaching` / `missed` / `hit` / `on_track` / `no_deadline`)
+is derived from `content_due_date` + `published_at` by the pure helper
+`deadlineStatus()` in `src/lib/influencer/influencer.ts` (unit-tested) — not
+stored. A `user.influencer_id` column (for the future influencer portal,
+`role='influencer'`) is **deferred to that phase's own migration** — it's
+intentionally not added here, so the running app never queries a column the DB
+doesn't have.
+
 ## Open Questions
 
 - [ ] Do we need a `product` table, or is Shopify sufficient as source of truth for product catalog?

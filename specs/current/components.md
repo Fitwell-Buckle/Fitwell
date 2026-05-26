@@ -26,7 +26,19 @@ Radix UI + Tailwind CSS. Styled with `class-variance-authority` for variants.
 |-----------|-------|
 | `header` | Marketing site header — logo, nav, CTA |
 | `footer` | Marketing site footer — links, legal |
-| `admin-sidebar` | Dashboard sidebar navigation |
+| `admin-sidebar` | Dashboard sidebar navigation (Marketing group includes Influencers + Influencer Tracking) |
+
+## Influencer Tracking (`app/(admin)/influencers/`, `app/(admin)/influencer-tracking/`)
+
+Same server-page-fetches / client-component-mutates-then-`router.refresh()` shape
+as the Production module. Deadline logic is pure + unit-tested in
+`lib/influencer/influencer.ts`; DB writes go through `lib/influencer/service.ts`.
+
+| Component | Usage |
+|-----------|-------|
+| `influencers/influencers-manager` | Client — influencer CRUD, assigned-collections picker, customer-search contact autocomplete, portal-login allowlist |
+| `influencer-tracking/tracking-table` | Client — gifting-order list with urgency chips; inline-edit content deadline, mark published, add/edit affiliate link |
+| `influencer-tracking/new/order-form` | Client — create a gifting order (100% off); product picker restricted to the influencer's assigned collections; content due date + affiliate link |
 
 ## Tracking (`components/tracking/`)
 
