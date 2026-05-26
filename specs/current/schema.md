@@ -266,8 +266,13 @@ Our own B2B companies (not Shopify), managed under Customers → Companies.
 
 | Table | Key columns |
 |-------|-------------|
-| `company` | `name`, `contact_name?`, `contact_email?`, `customer_id` (FK → customer, optional link to a synced Shopify customer), `price_tier_id` (FK → price_tier), `notes` |
+| `company` | `name`, `contact_name?`, `contact_email?`, `customer_id` (FK → customer, optional link to a synced Shopify customer), `price_tier_id` (FK → price_tier), `assigned_collection_ids` (text[]), `assigned_product_ids` (text[]), `notes` |
 | `price_tier` | `name`, `discount_percent` (real, % off retail) |
+
+A brand's `assigned_collection_ids` + `assigned_product_ids` **restrict** which
+products it can order (both empty = the whole catalog). Enforced on the B2B
+order form and the company portal (browse + checkout) via `allowedVariantIds()`
+in `lib/catalog/load.ts`. Migration `0012_round_queen_noir`.
 | `created_at` / `updated_at` | timestamp | |
 
 ### `production_po_line_item`
@@ -323,8 +328,8 @@ supplier portal can scope queries to their own POs (Phase 3).
 ## Influencer Tracking
 
 Creators we gift product to in exchange for content. Managed under
-**Marketing → Influencers** (the entity + assigned collections) and
-**Marketing → Influencer Tracking** (gifting orders + content-deadline status).
+**Marketing → Influencer List** (the entity + assigned collections) and
+**Marketing → Influencer Orders** (gifting orders + content-deadline status).
 Orders are gifting (**100% off** — a Shopify draft order at full discount) and
 carry an **affiliate link per order**.
 

@@ -19,7 +19,12 @@ export default async function NewInvoicePage() {
 
   const [companies, tiers] = await Promise.all([
     db.query.company.findMany({
-      columns: { id: true, name: true },
+      columns: {
+        id: true,
+        name: true,
+        assignedCollectionIds: true,
+        assignedProductIds: true,
+      },
       orderBy: asc(company.name),
       with: { priceTier: { columns: { name: true, discountPercent: true } } },
     }),
@@ -34,6 +39,8 @@ export default async function NewInvoicePage() {
     name: c.name,
     tierName: c.priceTier?.name ?? null,
     tierDiscount: c.priceTier?.discountPercent ?? 0,
+    assignedCollectionIds: c.assignedCollectionIds ?? [],
+    assignedProductIds: c.assignedProductIds ?? [],
   }));
 
   return (

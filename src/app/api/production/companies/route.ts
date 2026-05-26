@@ -33,6 +33,8 @@ export async function POST(req: Request) {
         contactEmail: input.contactEmail || null,
         customerId: input.customerId || null,
         priceTierId: input.priceTierId || null,
+        assignedCollectionIds: input.assignedCollectionIds ?? [],
+        assignedProductIds: input.assignedProductIds ?? [],
         notes: input.notes || null,
       })
       .returning({ id: company.id });

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import type { CustomerMatch } from "@/app/api/production/customer-search/route";
+import { useCatalog } from "@/components/catalog/use-catalog";
+import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Table,
@@ -38,6 +40,8 @@ export interface Company {
   notes: string | null;
   priceTierId: string | null;
   tierName: string | null;
+  assignedCollectionIds: string[];
+  assignedProductIds: string[];
   contacts: CompanyLogin[];
 }
 
@@ -115,6 +119,8 @@ export function CompaniesManager({
     contactEmail: "",
     customerId: "",
     priceTierId: "",
+    assignedCollectionIds: [],
+    assignedProductIds: [],
     notes: "",
   });
 
@@ -127,6 +133,8 @@ export function CompaniesManager({
       contactEmail: c?.contactEmail ?? "",
       customerId: c?.customerId ?? "",
       priceTierId: c?.priceTierId ?? "",
+      assignedCollectionIds: c?.assignedCollectionIds ?? [],
+      assignedProductIds: c?.assignedProductIds ?? [],
       notes: c?.notes ?? "",
     });
   }
@@ -150,6 +158,8 @@ export function CompaniesManager({
             contactEmail: draft.contactEmail.trim() || null,
             customerId: draft.customerId || null,
             priceTierId: draft.priceTierId || null,
+            assignedCollectionIds: draft.assignedCollectionIds,
+            assignedProductIds: draft.assignedProductIds,
             notes: draft.notes.trim() || null,
           }),
         },
@@ -261,6 +271,7 @@ export function CompaniesManager({
             <TableRow>
               <TableHead>Brand</TableHead>
               <TableHead>Price tier</TableHead>
+              <TableHead>Can order</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead className="text-right">Edit</TableHead>
             </TableRow>
@@ -268,7 +279,7 @@ export function CompaniesManager({
           <TableBody>
             {companies.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-zinc-400">
+                <TableCell colSpan={5} className="py-8 text-center text-zinc-400">
                   No brands yet.
                 </TableCell>
               </TableRow>
@@ -278,6 +289,20 @@ export function CompaniesManager({
                   <TableCell className="font-medium text-zinc-900">{c.name}</TableCell>
                   <TableCell>
                     {c.tierName ? <Badge>{c.tierName}</Badge> : <span className="text-zinc-400">—</span>}
+                  </TableCell>
+                  <TableCell className="text-zinc-500">
+                    {c.assignedCollectionIds.length === 0 && c.assignedProductIds.length === 0 ? (
+                      <span className="text-zinc-400">All</span>
+                    ) : (
+                      [
+                        c.assignedCollectionIds.length > 0 &&
+                          `${c.assignedCollectionIds.length} coll.`,
+                        c.assignedProductIds.length > 0 &&
+                          `${c.assignedProductIds.length} prod.`,
+                      ]
+                        .filter(Boolean)
+                        .join(" + ")
+                    )}
                   </TableCell>
                   <TableCell className="text-zinc-500">
                     {c.contactName ?? c.contactEmail ?? "—"}
@@ -363,6 +388,8 @@ interface CompanyDraft {
   contactEmail: string;
   customerId: string; // linked Shopify (synced) customer
   priceTierId: string;
+  assignedCollectionIds: string[];
+  assignedProductIds: string[];
   notes: string;
 }
 
@@ -455,6 +482,41 @@ function CompanyForm({
   onCancel: () => void;
   busy: boolean;
 }) {
+  const { variants, collections, loading: catalogLoading } = useCatalog();
+  // Shopify product id → display title (first variant's product title).
+  const productTitle = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const v of variants) if (!m.has(v.shopifyProductId)) m.set(v.shopifyProductId, v.title);
+    return m;
+  }, [variants]);
+  // Hide already-assigned products from the picker.
+  const excludeVariants = useMemo(() => {
+    const ids = new Set(draft.assignedProductIds);
+    return new Set(
+      variants.filter((v) => ids.has(v.shopifyProductId)).map((v) => v.shopifyVariantId),
+    );
+  }, [variants, draft.assignedProductIds]);
+
+  function toggleCollection(id: string) {
+    setDraft({
+      ...draft,
+      assignedCollectionIds: draft.assignedCollectionIds.includes(id)
+        ? draft.assignedCollectionIds.filter((x) => x !== id)
+        : [...draft.assignedCollectionIds, id],
+    });
+  }
+  function addProducts(vs: CatalogVariant[]) {
+    const ids = new Set(draft.assignedProductIds);
+    for (const v of vs) ids.add(v.shopifyProductId);
+    setDraft({ ...draft, assignedProductIds: [...ids] });
+  }
+  function removeProduct(pid: string) {
+    setDraft({
+      ...draft,
+      assignedProductIds: draft.assignedProductIds.filter((p) => p !== pid),
+    });
+  }
+
   return (
     <Card className="p-6">
       <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
@@ -517,6 +579,76 @@ function CompanyForm({
             </button>
           </div>
         )}
+        <div className="sm:col-span-2">
+          <label className={fieldLabel}>Order restriction (optional)</label>
+          <p className="mb-2 text-xs text-zinc-500">
+            Limit which products this brand can order — by collection and/or
+            individual product. Leave everything empty to allow the whole catalog.
+          </p>
+          {collections.length === 0 ? (
+            <p className="text-sm text-zinc-400">
+              {catalogLoading
+                ? "Loading catalog…"
+                : "Shopify catalog unavailable — can’t list collections right now."}
+            </p>
+          ) : (
+            <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
+              {collections.map((c) => {
+                const on = draft.assignedCollectionIds.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => toggleCollection(c.id)}
+                    className={
+                      on
+                        ? "rounded-full border border-zinc-900 bg-zinc-900 px-3 py-1 text-sm text-white"
+                        : "rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50"
+                    }
+                  >
+                    {c.title}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-3">
+            <label className="mb-1 block text-xs font-medium text-zinc-500">
+              Individual products
+            </label>
+            <ProductCombobox
+              variants={variants}
+              collections={collections}
+              value=""
+              exclude={excludeVariants}
+              disabled={catalogLoading}
+              placeholder={catalogLoading ? "Loading catalog…" : "Add products…"}
+              onSelect={(v) => addProducts([v])}
+              onSelectMany={addProducts}
+            />
+            {draft.assignedProductIds.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {draft.assignedProductIds.map((pid) => (
+                  <span
+                    key={pid}
+                    className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-700"
+                  >
+                    {productTitle.get(pid) ?? "Product"}
+                    <button
+                      type="button"
+                      onClick={() => removeProduct(pid)}
+                      aria-label="Remove product"
+                      className="text-zinc-400 hover:text-zinc-700"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
         <div className="sm:col-span-2">
           <label className={fieldLabel}>Notes</label>
           <Input value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />

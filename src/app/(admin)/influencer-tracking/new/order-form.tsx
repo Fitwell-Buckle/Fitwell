@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fmtMoney } from "@/lib/production/display";
 import { computeGiftTotals } from "@/lib/influencer/influencer";
-import { ProductCombobox } from "@/components/catalog/product-combobox";
+import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 
 export interface InfluencerOption {
@@ -92,6 +92,25 @@ export function InfluencerOrderForm({
   }
   function removeRow(i: number) {
     setRows((rs) => (rs.length === 1 ? rs : rs.filter((_, idx) => idx !== i)));
+  }
+  function rowFromVariant(v: CatalogVariant): Row {
+    return {
+      variantKey: v.shopifyVariantId,
+      shopifyProductId: v.shopifyProductId,
+      sku: v.sku,
+      title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
+      quantity: "1",
+      unitPrice: (v.priceCents / 100).toString(),
+    };
+  }
+  // Batch add: fill the current row with the first pick, insert the rest after.
+  function addManyAt(i: number, vs: CatalogVariant[]) {
+    if (vs.length === 0) return;
+    setRows((rs) => {
+      const copy = [...rs];
+      copy.splice(i, 1, ...vs.map(rowFromVariant));
+      return copy;
+    });
   }
 
   async function submit() {
@@ -277,6 +296,7 @@ export function InfluencerOrderForm({
                         unitPrice: (v.priceCents / 100).toString(),
                       })
                     }
+                    onSelectMany={(vs) => addManyAt(i, vs)}
                   />
                 )}
                 <Input

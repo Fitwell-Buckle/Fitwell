@@ -6,5 +6,8 @@ export const companySchema = z.object({
   contactEmail: z.string().email().max(200).nullish().or(z.literal("")),
   customerId: z.string().max(200).nullish(),
   priceTierId: z.string().max(200).nullish(),
+  // Catalog restriction (empty = whole catalog): Shopify collection + product ids.
+  assignedCollectionIds: z.array(z.string().max(200)).nullish(),
+  assignedProductIds: z.array(z.string().max(200)).nullish(),
   notes: z.string().max(5000).nullish(),
 });

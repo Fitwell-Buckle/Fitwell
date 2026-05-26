@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import type { ShopifyRef, ShopifyRefs } from "@/app/api/production/shopify-refs/route";
 import { fmtMoney } from "@/lib/production/display";
 import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
-import { ProductCombobox } from "@/components/catalog/product-combobox";
+import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { QuickAddSelect } from "@/components/forms/quick-add-select";
 
@@ -225,6 +225,24 @@ export function PoForm({
   }
   function removeRow(i: number) {
     setRows((rs) => (rs.length === 1 ? rs : rs.filter((_, idx) => idx !== i)));
+  }
+  function rowFromVariant(v: CatalogVariant): LineItemRow {
+    return {
+      ...emptyRow(),
+      variantKey: v.shopifyVariantId,
+      shopifyProductId: v.shopifyProductId,
+      sku: v.sku,
+      title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
+    };
+  }
+  // Batch add: fill the current row with the first pick, insert the rest after.
+  function addManyAt(i: number, vs: CatalogVariant[]) {
+    if (vs.length === 0) return;
+    setRows((rs) => {
+      const copy = [...rs];
+      copy.splice(i, 1, ...vs.map(rowFromVariant));
+      return copy;
+    });
   }
 
   async function submit() {
@@ -555,6 +573,7 @@ export function PoForm({
                           title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
                         })
                       }
+                      onSelectMany={(vs) => addManyAt(i, vs)}
                     />
                   )}
                   <Input

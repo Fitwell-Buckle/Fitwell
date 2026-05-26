@@ -401,6 +401,10 @@ export const company = pgTable(
     // Optional link to a synced Shopify customer (the contact person).
     customerId: text("customer_id").references(() => customer.id),
     priceTierId: text("price_tier_id").references(() => priceTier.id),
+    // Catalog restriction (B2B portal + order forms): Shopify collection ids and
+    // product ids this brand may order from. Both empty/null = the whole catalog.
+    assignedCollectionIds: text("assigned_collection_ids").array(),
+    assignedProductIds: text("assigned_product_ids").array(),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),

@@ -51,6 +51,12 @@ export async function PATCH(
         ...(input.priceTierId !== undefined
           ? { priceTierId: input.priceTierId || null }
           : {}),
+        ...(input.assignedCollectionIds !== undefined
+          ? { assignedCollectionIds: input.assignedCollectionIds ?? [] }
+          : {}),
+        ...(input.assignedProductIds !== undefined
+          ? { assignedProductIds: input.assignedProductIds ?? [] }
+          : {}),
         ...(input.notes !== undefined ? { notes: input.notes || null } : {}),
         updatedAt: new Date(),
       })

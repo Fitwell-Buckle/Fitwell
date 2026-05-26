@@ -52,6 +52,8 @@ export default async function BrandsPage() {
           notes: c.notes,
           priceTierId: c.priceTierId,
           tierName: c.priceTier?.name ?? null,
+          assignedCollectionIds: c.assignedCollectionIds ?? [],
+          assignedProductIds: c.assignedProductIds ?? [],
           contacts: c.contacts.map((ct) => ({
             id: ct.id,
             email: ct.email,

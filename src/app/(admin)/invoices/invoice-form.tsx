@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fmtMoney } from "@/lib/production/display";
 import { computeInvoiceTotals } from "@/lib/invoicing/invoicing";
-import { ProductCombobox } from "@/components/catalog/product-combobox";
+import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { QuickAddSelect } from "@/components/forms/quick-add-select";
 
@@ -18,6 +18,8 @@ export interface InvoiceCompanyOption {
   name: string;
   tierName: string | null;
   tierDiscount: number; // percent
+  assignedCollectionIds: string[];
+  assignedProductIds: string[];
 }
 
 export interface PriceTierOption {
@@ -108,6 +110,31 @@ export function InvoiceForm({
     ? (initial?.tierDiscount ?? 0)
     : (companyList.find((c) => c.id === companyId)?.tierDiscount ?? 0);
 
+  // Catalog restriction: on a new order, limit the picker to the selected
+  // brand's assigned collections + products (empty = whole catalog). Skipped on
+  // edit (the company is fixed and its assignments aren't loaded here).
+  const selectedCompany = companyList.find((c) => c.id === companyId);
+  const assignedColl = selectedCompany?.assignedCollectionIds ?? [];
+  const assignedProd = selectedCompany?.assignedProductIds ?? [];
+  const hasRestriction = !isEdit && (assignedColl.length > 0 || assignedProd.length > 0);
+  const collSet = new Set(assignedColl);
+  const prodSet = new Set(assignedProd);
+  const allowedCollections = hasRestriction
+    ? collections.filter((c) => collSet.has(c.id))
+    : collections;
+  const allowedVariantIds = new Set<string>();
+  if (hasRestriction) {
+    for (const c of collections)
+      if (collSet.has(c.id)) for (const vid of c.variantIds) allowedVariantIds.add(vid);
+    for (const v of variants)
+      if (prodSet.has(v.shopifyProductId)) allowedVariantIds.add(v.shopifyVariantId);
+  }
+  const allowedVariants = hasRestriction
+    ? variants.filter((v) => allowedVariantIds.has(v.shopifyVariantId))
+    : variants;
+  const restricted = hasRestriction && allowedVariants.length > 0;
+  const pickerVariants = restricted ? allowedVariants : variants;
+
   const totals = computeInvoiceTotals(
     rows.map((r) => ({
       quantity: Math.max(0, Math.floor(Number(r.quantity) || 0)),
@@ -124,6 +151,25 @@ export function InvoiceForm({
   }
   function removeRow(i: number) {
     setRows((rs) => (rs.length === 1 ? rs : rs.filter((_, idx) => idx !== i)));
+  }
+  function rowFromVariant(v: CatalogVariant): Row {
+    return {
+      variantKey: v.shopifyVariantId,
+      shopifyProductId: v.shopifyProductId,
+      sku: v.sku,
+      title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
+      quantity: "1",
+      unitPrice: (v.priceCents / 100).toString(),
+    };
+  }
+  // Batch add: fill the current row with the first pick, insert the rest after.
+  function addManyAt(i: number, vs: CatalogVariant[]) {
+    if (vs.length === 0) return;
+    setRows((rs) => {
+      const copy = [...rs];
+      copy.splice(i, 1, ...vs.map(rowFromVariant));
+      return copy;
+    });
   }
 
   async function submit() {
@@ -244,6 +290,8 @@ export function InvoiceForm({
                       name: vals.name.trim(),
                       tierName: tier?.name ?? null,
                       tierDiscount: tier?.discountPercent ?? 0,
+                      assignedCollectionIds: [],
+                      assignedProductIds: [],
                     },
                   ]);
                   return { id: d.data.id };
@@ -257,6 +305,11 @@ export function InvoiceForm({
                 "No tier discount"
               )}
             </p>
+            {restricted && (
+              <p className="mt-1 text-xs text-zinc-500">
+                Catalog limited to this brand’s assigned products/collections.
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -318,8 +371,8 @@ export function InvoiceForm({
                   </>
                 ) : (
                   <ProductCombobox
-                    variants={variants}
-                    collections={collections}
+                    variants={pickerVariants}
+                    collections={allowedCollections}
                     value={r.variantKey}
                     exclude={taken}
                     disabled={catalogLoading}
@@ -335,6 +388,7 @@ export function InvoiceForm({
                         unitPrice: (v.priceCents / 100).toString(),
                       })
                     }
+                    onSelectMany={(vs) => addManyAt(i, vs)}
                   />
                 )}
                 <Input

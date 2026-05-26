@@ -4,7 +4,12 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
 import { getCompanyScope } from "@/lib/portal/company-session";
-import { getCatalogCached } from "@/lib/catalog/load";
+import {
+  getCatalogCached,
+  getCatalogGroupsCached,
+  allowedVariantIds,
+  type CatalogCollectionGroup,
+} from "@/lib/catalog/load";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { recordCompanyOrder } from "@/lib/invoicing/service";
 
@@ -48,7 +53,13 @@ export async function POST(req: Request) {
 
   const comp = await db.query.company.findFirst({
     where: eq(company.id, scope.companyId),
-    columns: { id: true, name: true, contactEmail: true },
+    columns: {
+      id: true,
+      name: true,
+      contactEmail: true,
+      assignedCollectionIds: true,
+      assignedProductIds: true,
+    },
     with: {
       priceTier: { columns: { discountPercent: true } },
       customer: { columns: { shopifyId: true } },
@@ -68,12 +79,33 @@ export async function POST(req: Request) {
   }
   const byVariant = new Map(catalog.map((v) => [v.shopifyVariantId, v]));
 
+  // Enforce this brand's catalog restriction (null = unrestricted). Defense in
+  // depth — the portal already hides disallowed items.
+  let groups: CatalogCollectionGroup[] = [];
+  try {
+    groups = await getCatalogGroupsCached();
+  } catch {
+    /* product-only enforcement if collections can't be resolved */
+  }
+  const allowed = allowedVariantIds({
+    assignedCollectionIds: comp.assignedCollectionIds,
+    assignedProductIds: comp.assignedProductIds,
+    groups,
+    catalog,
+  });
+
   const lines = [];
   for (const li of input.lineItems) {
     const v = byVariant.get(li.shopifyVariantId);
     if (!v) {
       return NextResponse.json(
         { error: "One or more items are no longer available." },
+        { status: 400 },
+      );
+    }
+    if (allowed && !allowed.has(li.shopifyVariantId)) {
+      return NextResponse.json(
+        { error: "One or more items aren’t available to your brand." },
         { status: 400 },
       );
     }

@@ -35,6 +35,7 @@ export function ProductCombobox({
   collections,
   value,
   onSelect,
+  onSelectMany,
   exclude,
   placeholder = "Search products…",
   disabled = false,
@@ -46,6 +47,10 @@ export function ProductCombobox({
   collections?: CatalogCollection[];
   value: string; // selected shopifyVariantId ("" = none)
   onSelect: (variant: CatalogVariant) => void;
+  /** When provided, each result gets a checkbox and an "Add" button appears once
+   *  one or more are checked — lets the user add several products at once.
+   *  Single-clicking a row still adds just that item (via onSelect). */
+  onSelectMany?: (variants: CatalogVariant[]) => void;
   /** Variant ids to hide (e.g. already chosen on other lines). */
   exclude?: Set<string>;
   placeholder?: string;
@@ -63,6 +68,8 @@ export function ProductCombobox({
   const [sizes, setSizes] = useState<Set<number>>(new Set());
   const [colors, setColors] = useState<Set<string>>(new Set());
   const [collectionId, setCollectionId] = useState(initialCollectionId);
+  // Multi-select: variant ids checked for a batch "Add" (only when onSelectMany).
+  const [checked, setChecked] = useState<Set<string>>(new Set());
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -124,10 +131,29 @@ export function ProductCombobox({
     if (open) {
       setQuery("");
       setActive(0);
+      setChecked(new Set());
       // Focus the search box as soon as the dropdown opens.
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
+
+  function toggleCheck(id: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function addChecked() {
+    // Resolve from the full catalog so items checked under a previous
+    // collection/filter are still included.
+    const picked = variants.filter((v) => checked.has(v.shopifyVariantId));
+    if (picked.length > 0) onSelectMany?.(picked);
+    setChecked(new Set());
+    setOpen(false);
+  }
 
   const q = query.trim().toLowerCase();
   const results = pool
@@ -249,15 +275,27 @@ export function ProductCombobox({
               <li className="px-3 py-2 text-sm text-zinc-400">No matching products.</li>
             ) : (
               results.map((v, i) => (
-                <li key={v.shopifyVariantId}>
+                <li
+                  key={v.shopifyVariantId}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 text-sm",
+                    i === active ? "bg-zinc-100" : "hover:bg-zinc-50",
+                  )}
+                  onMouseEnter={() => setActive(i)}
+                >
+                  {onSelectMany && (
+                    <input
+                      type="checkbox"
+                      checked={checked.has(v.shopifyVariantId)}
+                      onChange={() => toggleCheck(v.shopifyVariantId)}
+                      aria-label={`Select ${variantLabel(v)}`}
+                      className="h-4 w-4 shrink-0 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-300"
+                    />
+                  )}
                   <button
                     type="button"
-                    onMouseEnter={() => setActive(i)}
                     onClick={() => choose(v)}
-                    className={cn(
-                      "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm",
-                      i === active ? "bg-zinc-100" : "hover:bg-zinc-50",
-                    )}
+                    className="flex flex-1 items-center justify-between gap-2 text-left"
                   >
                     <span className="truncate">{variantLabel(v)}</span>
                     {v.shopifyVariantId === value && (
@@ -268,6 +306,19 @@ export function ProductCombobox({
               ))
             )}
           </ul>
+
+          {onSelectMany && checked.size > 0 && (
+            <div className="flex items-center justify-between gap-2 border-t border-zinc-100 bg-zinc-50 px-3 py-2">
+              <span className="text-xs text-zinc-500">{checked.size} selected</span>
+              <button
+                type="button"
+                onClick={addChecked}
+                className="rounded-md bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-zinc-800"
+              >
+                Add {checked.size}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

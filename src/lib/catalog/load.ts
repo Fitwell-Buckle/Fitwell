@@ -173,6 +173,31 @@ export function catalogSkusMatching(
   return [...skus];
 }
 
+/**
+ * The set of variant ids a brand/influencer may order, given their assigned
+ * Shopify collection ids + product ids. Returns null when nothing is assigned
+ * (= unrestricted, the whole catalog). Used by the B2B portal + checkout to
+ * enforce per-brand catalog restrictions server-side.
+ */
+export function allowedVariantIds(params: {
+  assignedCollectionIds: string[] | null | undefined;
+  assignedProductIds: string[] | null | undefined;
+  groups: CatalogCollectionGroup[];
+  catalog: CatalogVariant[];
+}): Set<string> | null {
+  const coll = new Set(params.assignedCollectionIds ?? []);
+  const prod = new Set(params.assignedProductIds ?? []);
+  if (coll.size === 0 && prod.size === 0) return null; // unrestricted
+  const allowed = new Set<string>();
+  for (const g of params.groups) {
+    if (coll.has(g.id)) for (const vid of g.variantIds) allowed.add(vid);
+  }
+  for (const v of params.catalog) {
+    if (prod.has(v.shopifyProductId)) allowed.add(v.shopifyVariantId);
+  }
+  return allowed;
+}
+
 export interface LineAttrInput {
   sku: string;
   shopifyVariantId: string | null;

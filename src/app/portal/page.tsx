@@ -3,7 +3,13 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
 import { getCompanyScope } from "@/lib/portal/company-session";
-import { getCatalogCached, type CatalogVariant } from "@/lib/catalog/load";
+import {
+  getCatalogCached,
+  getCatalogGroupsCached,
+  allowedVariantIds,
+  type CatalogVariant,
+  type CatalogCollectionGroup,
+} from "@/lib/catalog/load";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { PortalOrder } from "./portal-order";
@@ -12,10 +18,14 @@ export default async function PortalHomePage() {
   const scope = await getCompanyScope();
   if (!scope) redirect("/portal/login");
 
-  const [comp, catalog] = await Promise.all([
+  const [comp, catalog, groups] = await Promise.all([
     db.query.company.findFirst({
       where: eq(company.id, scope.companyId),
-      columns: { name: true },
+      columns: {
+        name: true,
+        assignedCollectionIds: true,
+        assignedProductIds: true,
+      },
       with: { priceTier: { columns: { name: true, discountPercent: true } } },
     }),
     (async (): Promise<CatalogVariant[]> => {
@@ -25,9 +35,28 @@ export default async function PortalHomePage() {
         return [];
       }
     })(),
+    (async (): Promise<CatalogCollectionGroup[]> => {
+      try {
+        return await getCatalogGroupsCached();
+      } catch {
+        return [];
+      }
+    })(),
   ]);
 
   const discount = comp?.priceTier?.discountPercent ?? 0;
+
+  // Limit the orderable catalog to this brand's assigned collections + products
+  // (null = unrestricted). Enforced again at checkout.
+  const allowed = allowedVariantIds({
+    assignedCollectionIds: comp?.assignedCollectionIds,
+    assignedProductIds: comp?.assignedProductIds,
+    groups,
+    catalog,
+  });
+  const visibleCatalog = allowed
+    ? catalog.filter((v) => allowed.has(v.shopifyVariantId))
+    : catalog;
 
   return (
     <div>
@@ -47,7 +76,7 @@ export default async function PortalHomePage() {
         )}
       </p>
 
-      <PortalOrder variants={catalog} discountPercent={discount} />
+      <PortalOrder variants={visibleCatalog} discountPercent={discount} />
     </div>
   );
 }
