@@ -88,6 +88,11 @@ Commands:
   webhooks
       List registered webhooks from Shopify API
 
+  register-webhooks [--address URL]
+      Register all webhook topics (orders, customers, refunds, products,
+      collections) pointing at our handler. Idempotent — skips existing.
+      Defaults to the production handler URL. Needs the write_webhooks scope.
+
   sync [--since YYYY-MM-DD]
       Trigger manual sync (default: last 24h)
 `);
@@ -343,6 +348,68 @@ async function cmdWebhooks(): Promise<void> {
   printTable(["Topic", "Address", "Created At"], tableRows);
 }
 
+// All webhook topics this app handles (see lib/shopify/webhooks.ts). The
+// products/* and collections/* topics drive the item-chooser catalog-cache
+// invalidation; the rest sync orders/customers/refunds.
+const WEBHOOK_TOPICS = [
+  "orders/create",
+  "orders/updated",
+  "customers/create",
+  "customers/update",
+  "refunds/create",
+  "products/create",
+  "products/update",
+  "products/delete",
+  "collections/create",
+  "collections/update",
+  "collections/delete",
+];
+const DEFAULT_WEBHOOK_ADDRESS =
+  "https://admin.fitwellbuckle.co/api/webhooks/shopify";
+
+async function cmdRegisterWebhooks(flags: Record<string, string>): Promise<void> {
+  const address = flags.address ?? DEFAULT_WEBHOOK_ADDRESS;
+  const shopify = getShopifyClient();
+
+  // Skip topics already pointing at our address (idempotent).
+  const existing = await shopify.fetch<{
+    webhooks: Array<{ id: number; topic: string; address: string }>;
+  }>("/webhooks.json");
+  const have = new Set(
+    existing.webhooks.filter((w) => w.address === address).map((w) => w.topic),
+  );
+
+  console.log(`Registering webhooks → ${address}\n`);
+  let created = 0,
+    skipped = 0,
+    failed = 0;
+  for (const topic of WEBHOOK_TOPICS) {
+    if (have.has(topic)) {
+      console.log(`  – ${topic}  (already registered)`);
+      skipped++;
+      continue;
+    }
+    try {
+      await shopify.fetch("/webhooks.json", {
+        method: "POST",
+        body: JSON.stringify({ webhook: { topic, address, format: "json" } }),
+      });
+      console.log(`  ✓ ${topic}`);
+      created++;
+    } catch (e) {
+      console.error(`  ✗ ${topic}: ${e instanceof Error ? e.message : e}`);
+      failed++;
+    }
+  }
+  console.log(`\nDone — created ${created}, skipped ${skipped}, failed ${failed}.`);
+  if (failed > 0) {
+    console.log(
+      "If failures are 403 / scope errors, grant the app the write_webhooks " +
+        "scope and re-authorize the store, then re-run.",
+    );
+  }
+}
+
 async function cmdSync(flags: Record<string, string>): Promise<void> {
   const since = flags.since
     ? new Date(flags.since)
@@ -415,6 +482,9 @@ async function cmdSync(flags: Record<string, string>): Promise<void> {
       break;
     case "webhooks":
       await cmdWebhooks();
+      break;
+    case "register-webhooks":
+      await cmdRegisterWebhooks(flags);
       break;
     case "sync":
       await cmdSync(flags);

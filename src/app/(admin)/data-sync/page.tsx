@@ -227,8 +227,8 @@ export default async function DataSyncPage() {
                 </Badge>
               </div>
               <p className="mt-0.5 text-sm text-zinc-500">
-                orders/create, orders/updated, customers/create,
-                customers/update
+                orders/*, customers/*, refunds/create, products/* and
+                collections/* (the last two refresh the catalog cache)
               </p>
               <p className="mt-1 font-mono text-[11px] text-zinc-400">
                 → admin.fitwellbuckle.co/api/webhooks/shopify
