@@ -8,12 +8,19 @@ import {
   productionPo,
 } from "@/lib/schema";
 import { createPo } from "@/lib/production/service";
+import { getShopifyClient } from "@/lib/shopify/client";
 import {
   computeInvoiceTotals,
+  computeDeposit,
   formatInvoiceNumber,
   groupByCompany,
   type InvoiceStatus,
 } from "./invoicing";
+
+function isScopeError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return m.includes("write_draft_orders") || m.includes("access denied") || m.includes("403");
+}
 
 const dateString = z
   .string()
@@ -267,7 +274,13 @@ export async function getInvoiceDetail(invoiceId: string) {
     where: eq(invoice.id, invoiceId),
     with: {
       company: {
-        columns: { id: true, name: true, contactName: true, contactEmail: true },
+        columns: {
+          id: true,
+          name: true,
+          contactName: true,
+          contactEmail: true,
+          depositPercent: true,
+        },
         with: {
           priceTier: { columns: { name: true, discountPercent: true } },
           customer: { columns: { email: true, shopifyId: true } },
@@ -293,6 +306,107 @@ export async function listInvoicesForCompany(companyId: string) {
     where: eq(invoice.companyId, companyId),
     orderBy: desc(invoice.createdAt),
   });
+}
+
+/**
+ * Snapshot a brand's deposit terms onto an invoice (the deposit % + the deposit
+ * amount due now), computed from the invoice's current total. Returns the split.
+ * Called when an order is first sent / placed.
+ */
+export async function snapshotInvoiceDeposit(
+  invoiceId: string,
+  depositPercent: number,
+  totalCents: number,
+): Promise<{ depositCents: number; balanceCents: number }> {
+  const split = computeDeposit(totalCents, depositPercent);
+  await db
+    .update(invoice)
+    .set({
+      depositPercent: depositPercent > 0 ? depositPercent : null,
+      depositCents: split.depositCents,
+      updatedAt: new Date(),
+    })
+    .where(eq(invoice.id, invoiceId));
+  return split;
+}
+
+export type FulfillResult =
+  | { ok: true; balancePayUrl: string | null; note: string }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Mark an invoice fulfilled. If a deposit was taken (so a balance remains),
+ * create the balance Shopify draft order + payment link; otherwise just stamp
+ * fulfilledAt. Idempotent-ish: refuses if already fulfilled. The Shopify push
+ * degrades gracefully when the write_draft_orders scope is missing.
+ */
+export async function markInvoiceFulfilled(invoiceId: string): Promise<FulfillResult> {
+  const inv = await db.query.invoice.findFirst({
+    where: eq(invoice.id, invoiceId),
+    with: {
+      company: {
+        columns: { name: true, contactEmail: true },
+        with: { customer: { columns: { shopifyId: true } } },
+      },
+    },
+  });
+  if (!inv) return { ok: false, status: 404, error: "Not found" };
+  if (inv.fulfilledAt) return { ok: false, status: 409, error: "Already fulfilled." };
+
+  const now = new Date();
+  const balanceCents = inv.depositCents > 0 ? inv.totalCents - inv.depositCents : 0;
+
+  // No deposit (paid in full up front) or nothing left to bill → just stamp it.
+  if (inv.depositCents <= 0 || balanceCents <= 0) {
+    await db
+      .update(invoice)
+      .set({ fulfilledAt: now, updatedAt: now })
+      .where(eq(invoice.id, invoiceId));
+    return { ok: true, balancePayUrl: null, note: "Marked fulfilled (no balance due)." };
+  }
+
+  // Bill the balance as a single custom-line draft order (the deposit already
+  // covered its share; line detail lives on the invoice document).
+  let balancePayUrl: string | null = null;
+  let note = "Marked fulfilled.";
+  try {
+    const r = await getShopifyClient().createDraftOrderInvoice({
+      email: inv.company?.contactEmail ?? null,
+      shopifyCustomerId: inv.company?.customer?.shopifyId ?? null,
+      discountPercent: 0,
+      note: `Balance for invoice ${inv.invoiceNumber}`,
+      lines: [
+        {
+          variantId: null,
+          title: `Balance due — ${inv.invoiceNumber}`,
+          quantity: 1,
+          unitPriceCents: balanceCents,
+        },
+      ],
+    });
+    balancePayUrl = r.invoiceUrl;
+    await db
+      .update(invoice)
+      .set({
+        shopifyBalanceDraftOrderId: r.draftOrderId,
+        shopifyBalanceInvoiceUrl: r.invoiceUrl,
+        fulfilledAt: now,
+        updatedAt: now,
+      })
+      .where(eq(invoice.id, invoiceId));
+    note = "Marked fulfilled — created the balance payment link.";
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    await db
+      .update(invoice)
+      .set({ fulfilledAt: now, updatedAt: now })
+      .where(eq(invoice.id, invoiceId));
+    note = isScopeError(msg)
+      ? "Marked fulfilled — balance link skipped (grant write_draft_orders)."
+      : "Marked fulfilled — balance draft order failed.";
+    console.error("Balance draft order failed:", err);
+  }
+  return { ok: true, balancePayUrl, note };
 }
 
 /**

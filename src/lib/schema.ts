@@ -405,6 +405,9 @@ export const company = pgTable(
     // product ids this brand may order from. Both empty/null = the whole catalog.
     assignedCollectionIds: text("assigned_collection_ids").array(),
     assignedProductIds: text("assigned_product_ids").array(),
+    // Upfront deposit required from this brand, as a % of order value (0 = pay
+    // in full). The remaining balance is billed when the order is fulfilled.
+    depositPercent: real("deposit_percent").notNull().default(0),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
@@ -897,10 +900,24 @@ export const invoice = pgTable(
     sourcePoId: text("source_po_id").references(() => productionPo.id, {
       onDelete: "set null",
     }),
+    // The "primary" draft order = the deposit (when depositPercent > 0) or the
+    // full amount (when 0).
     shopifyDraftOrderId: text("shopify_draft_order_id"),
     shopifyInvoiceUrl: text("shopify_invoice_url"),
     sentAt: timestamp("sent_at", { mode: "date" }),
     paidAt: timestamp("paid_at", { mode: "date" }),
+    // Deposit billing (snapshot of the brand's deposit_percent at order time).
+    // null/0 = single full payment. deposit_cents is billed up front; the
+    // balance (total − deposit) is billed via a second draft order at fulfillment.
+    depositPercent: real("deposit_percent"),
+    depositCents: integer("deposit_cents").notNull().default(0),
+    depositPaidAt: timestamp("deposit_paid_at", { mode: "date" }),
+    shopifyBalanceDraftOrderId: text("shopify_balance_draft_order_id"),
+    shopifyBalanceInvoiceUrl: text("shopify_balance_invoice_url"),
+    balancePaidAt: timestamp("balance_paid_at", { mode: "date" }),
+    // Set when the order is marked fulfilled — this is what generates + sends
+    // the balance draft order.
+    fulfilledAt: timestamp("fulfilled_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },

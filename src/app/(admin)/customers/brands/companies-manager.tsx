@@ -42,6 +42,7 @@ export interface Company {
   tierName: string | null;
   assignedCollectionIds: string[];
   assignedProductIds: string[];
+  depositPercent: number;
   contacts: CompanyLogin[];
 }
 
@@ -121,6 +122,7 @@ export function CompaniesManager({
     priceTierId: "",
     assignedCollectionIds: [],
     assignedProductIds: [],
+    depositPercent: "",
     notes: "",
   });
 
@@ -135,6 +137,7 @@ export function CompaniesManager({
       priceTierId: c?.priceTierId ?? "",
       assignedCollectionIds: c?.assignedCollectionIds ?? [],
       assignedProductIds: c?.assignedProductIds ?? [],
+      depositPercent: c?.depositPercent ? String(c.depositPercent) : "",
       notes: c?.notes ?? "",
     });
   }
@@ -160,6 +163,9 @@ export function CompaniesManager({
             priceTierId: draft.priceTierId || null,
             assignedCollectionIds: draft.assignedCollectionIds,
             assignedProductIds: draft.assignedProductIds,
+            depositPercent: draft.depositPercent.trim()
+              ? Number(draft.depositPercent)
+              : 0,
             notes: draft.notes.trim() || null,
           }),
         },
@@ -390,6 +396,7 @@ interface CompanyDraft {
   priceTierId: string;
   assignedCollectionIds: string[];
   assignedProductIds: string[];
+  depositPercent: string; // form input; "" = 0 (pay in full)
   notes: string;
 }
 
@@ -531,6 +538,21 @@ function CompanyForm({
               </option>
             ))}
           </select>
+        </div>
+        <div>
+          <label className={fieldLabel}>Deposit %</label>
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            placeholder="0"
+            value={draft.depositPercent}
+            onChange={(e) => setDraft({ ...draft, depositPercent: e.target.value })}
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            Collected up front; the balance is billed when the order is fulfilled. 0 = pay in full.
+          </p>
         </div>
         <CustomerSearchField
           label="Contact name (search customers)"

@@ -266,13 +266,21 @@ Our own B2B companies (not Shopify), managed under Customers → Companies.
 
 | Table | Key columns |
 |-------|-------------|
-| `company` | `name`, `contact_name?`, `contact_email?`, `customer_id` (FK → customer, optional link to a synced Shopify customer), `price_tier_id` (FK → price_tier), `assigned_collection_ids` (text[]), `assigned_product_ids` (text[]), `notes` |
+| `company` | `name`, `contact_name?`, `contact_email?`, `customer_id` (FK → customer, optional link to a synced Shopify customer), `price_tier_id` (FK → price_tier), `assigned_collection_ids` (text[]), `assigned_product_ids` (text[]), `deposit_percent` (real, default 0), `notes` |
 | `price_tier` | `name`, `discount_percent` (real, % off retail) |
 
 A brand's `assigned_collection_ids` + `assigned_product_ids` **restrict** which
 products it can order (both empty = the whole catalog). Enforced on the B2B
 order form and the company portal (browse + checkout) via `allowedVariantIds()`
 in `lib/catalog/load.ts`. Migration `0012_round_queen_noir`.
+
+`deposit_percent` (0 = pay in full) drives **two-payment deposit billing**: on
+send / portal checkout the Shopify draft order bills only the deposit (a single
+custom line) and the deposit is snapshotted onto the invoice
+(`deposit_percent`, `deposit_cents`); marking the order **fulfilled** generates
+a second "balance" draft order (`shopify_balance_draft_order_id` /
+`shopify_balance_invoice_url`). `computeDeposit()` in `lib/invoicing/invoicing.ts`
+(unit-tested) does the split. Migration `0013_lying_sleeper`.
 | `created_at` / `updated_at` | timestamp | |
 
 ### `production_po_line_item`

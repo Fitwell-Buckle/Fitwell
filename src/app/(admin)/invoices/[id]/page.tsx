@@ -223,6 +223,13 @@ export default async function InvoiceDetailPage({
         suppliers={suppliers}
         canPushShopify={!!inv.company?.customer?.shopifyId}
         shopifyInvoiceUrl={inv.shopifyInvoiceUrl}
+        depositPercent={inv.depositPercent}
+        depositCents={inv.depositCents}
+        balanceCents={inv.depositCents > 0 ? inv.totalCents - inv.depositCents : 0}
+        fulfilledAt={
+          inv.fulfilledAt ? fmtDate(inv.fulfilledAt.toISOString().slice(0, 10)) : null
+        }
+        balanceInvoiceUrl={inv.shopifyBalanceInvoiceUrl}
       />
     </div>
   );

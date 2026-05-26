@@ -54,6 +54,7 @@ export default async function BrandsPage() {
           tierName: c.priceTier?.name ?? null,
           assignedCollectionIds: c.assignedCollectionIds ?? [],
           assignedProductIds: c.assignedProductIds ?? [],
+          depositPercent: c.depositPercent ?? 0,
           contacts: c.contacts.map((ct) => ({
             id: ct.id,
             email: ct.email,

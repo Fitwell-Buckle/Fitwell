@@ -9,6 +9,7 @@ import {
   INVOICE_STATUS_LABELS,
   type InvoiceStatus,
 } from "@/lib/invoicing/invoicing";
+import { fmtMoney } from "@/lib/production/display";
 
 const selectCls =
   "h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
@@ -19,17 +20,45 @@ export function InvoiceActions({
   suppliers,
   canPushShopify,
   shopifyInvoiceUrl,
+  depositPercent,
+  depositCents,
+  balanceCents,
+  fulfilledAt,
+  balanceInvoiceUrl,
 }: {
   invoiceId: string;
   status: string;
   suppliers: { id: string; name: string }[];
   canPushShopify: boolean;
   shopifyInvoiceUrl: string | null;
+  depositPercent: number | null;
+  depositCents: number;
+  balanceCents: number;
+  fulfilledAt: string | null;
+  balanceInvoiceUrl: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
+
+  async function fulfill() {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/fulfill`, { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(d.error || "Couldn't mark fulfilled.");
+      } else {
+        router.refresh();
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function setStatus(next: string) {
     setError(null);
@@ -126,6 +155,46 @@ export function InvoiceActions({
         </div>
 
       </div>
+
+      {depositCents > 0 && (
+        <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50 p-3 text-sm">
+          <div className="font-medium text-zinc-900">
+            Deposit billing{depositPercent ? ` — ${depositPercent}%` : ""}
+          </div>
+          <div className="mt-1 text-zinc-600">
+            Deposit due now: {fmtMoney(depositCents)} · Balance on fulfillment:{" "}
+            {fmtMoney(balanceCents)}
+          </div>
+          {fulfilledAt ? (
+            <div className="mt-2 text-emerald-700">
+              ✓ Fulfilled {fulfilledAt}
+              {balanceInvoiceUrl && (
+                <>
+                  {" — "}
+                  <a
+                    href={balanceInvoiceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 underline underline-offset-2"
+                  >
+                    balance payment link
+                  </a>
+                </>
+              )}
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              disabled={busy}
+              onClick={fulfill}
+            >
+              Mark fulfilled &amp; bill balance
+            </Button>
+          )}
+        </div>
+      )}
 
       {!canPushShopify && (
         <p className="mt-3 text-xs text-zinc-400">

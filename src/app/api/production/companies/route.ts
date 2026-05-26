@@ -35,6 +35,7 @@ export async function POST(req: Request) {
         priceTierId: input.priceTierId || null,
         assignedCollectionIds: input.assignedCollectionIds ?? [],
         assignedProductIds: input.assignedProductIds ?? [],
+        depositPercent: input.depositPercent ?? 0,
         notes: input.notes || null,
       })
       .returning({ id: company.id });

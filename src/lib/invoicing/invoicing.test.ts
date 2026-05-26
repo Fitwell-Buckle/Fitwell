@@ -3,7 +3,28 @@ import {
   formatInvoiceNumber,
   computeInvoiceTotals,
   groupByCompany,
+  computeDeposit,
 } from "@/lib/invoicing/invoicing";
+
+describe("computeDeposit", () => {
+  it("0% = no deposit, full amount is the balance", () => {
+    expect(computeDeposit(10000, 0)).toEqual({ depositCents: 0, balanceCents: 10000 });
+    expect(computeDeposit(10000, null)).toEqual({ depositCents: 0, balanceCents: 10000 });
+  });
+  it("splits at the given percentage", () => {
+    expect(computeDeposit(10000, 50)).toEqual({ depositCents: 5000, balanceCents: 5000 });
+    expect(computeDeposit(10000, 30)).toEqual({ depositCents: 3000, balanceCents: 7000 });
+  });
+  it("rounds the deposit and keeps deposit + balance == total", () => {
+    const { depositCents, balanceCents } = computeDeposit(10001, 50);
+    expect(depositCents).toBe(5001); // round(5000.5)
+    expect(depositCents + balanceCents).toBe(10001);
+  });
+  it("clamps out-of-range percentages", () => {
+    expect(computeDeposit(10000, 150)).toEqual({ depositCents: 10000, balanceCents: 0 });
+    expect(computeDeposit(10000, -10)).toEqual({ depositCents: 0, balanceCents: 10000 });
+  });
+});
 
 describe("formatInvoiceNumber", () => {
   it("zero-pads with an INV- prefix", () => {

@@ -9,5 +9,7 @@ export const companySchema = z.object({
   // Catalog restriction (empty = whole catalog): Shopify collection + product ids.
   assignedCollectionIds: z.array(z.string().max(200)).nullish(),
   assignedProductIds: z.array(z.string().max(200)).nullish(),
+  // Upfront deposit as a % of order value (0 = pay in full).
+  depositPercent: z.number().min(0).max(100).nullish(),
   notes: z.string().max(5000).nullish(),
 });

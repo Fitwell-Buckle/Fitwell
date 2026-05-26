@@ -59,6 +59,27 @@ export function computeInvoiceTotals(
   return { subtotalCents, discountCents, totalCents: subtotalCents - discountCents };
 }
 
+export interface DepositSplit {
+  depositCents: number;
+  balanceCents: number;
+}
+
+/**
+ * Split an order total into a deposit due now + a balance due at fulfillment,
+ * given the brand's deposit percentage (clamped 0–100). 0% = no deposit (the
+ * whole amount is the balance / a single payment). The deposit rounds to the
+ * nearest cent; the balance is the remainder so the two always sum to total.
+ */
+export function computeDeposit(
+  totalCents: number,
+  depositPercent: number | null | undefined,
+): DepositSplit {
+  const pct = Math.max(0, Math.min(100, depositPercent || 0));
+  if (pct <= 0) return { depositCents: 0, balanceCents: totalCents };
+  const depositCents = Math.round((totalCents * pct) / 100);
+  return { depositCents, balanceCents: totalCents - depositCents };
+}
+
 /**
  * Group items by their bill-to company key. Items whose key is null/empty have
  * no company to invoice and are returned separately (the caller warns).

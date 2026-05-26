@@ -4,7 +4,12 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { invoice } from "@/lib/schema";
-import { getInvoiceDetail, updateInvoiceStatus } from "@/lib/invoicing/service";
+import {
+  getInvoiceDetail,
+  updateInvoiceStatus,
+  snapshotInvoiceDeposit,
+} from "@/lib/invoicing/service";
+import { computeDeposit } from "@/lib/invoicing/invoicing";
 import { buildInvoiceEmailHtml } from "@/lib/invoicing/email";
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { sendEmail } from "@/lib/email/resend";
@@ -61,6 +66,19 @@ export async function POST(
   const shopifyCustomerId = inv.company?.customer?.shopifyId ?? null;
   const notes: string[] = [];
 
+  // Deposit terms (snapshot from the brand). When a deposit applies, the
+  // payment link bills only the deposit now; the balance is billed at fulfillment.
+  const depositPercent = inv.company?.depositPercent ?? 0;
+  const split = computeDeposit(inv.totalCents, depositPercent);
+  const hasDeposit = split.depositCents > 0 && split.balanceCents > 0;
+  if (depositPercent > 0) {
+    await snapshotInvoiceDeposit(id, depositPercent, inv.totalCents);
+  }
+  const depositNote = hasDeposit
+    ? `A ${depositPercent}% deposit ($${(split.depositCents / 100).toFixed(2)}) is due now via the payment link below. The remaining balance ($${(split.balanceCents / 100).toFixed(2)}) will be billed when your order is fulfilled.`
+    : null;
+  const emailMessage = [depositNote, message].filter(Boolean).join("\n\n") || null;
+
   // 1) Optional Shopify draft order (gives a payment link we can include).
   let payUrl: string | null = inv.shopifyInvoiceUrl ?? null;
   let pushedShopify = false;
@@ -69,14 +87,25 @@ export async function POST(
       const r = await getShopifyClient().createDraftOrderInvoice({
         email: primary,
         shopifyCustomerId,
-        discountPercent: inv.discountPercent ?? 0,
-        note: `Invoice ${inv.invoiceNumber}`,
-        lines: inv.lineItems.map((l) => ({
-          variantId: l.shopifyVariantId,
-          title: l.title,
-          quantity: l.quantity,
-          unitPriceCents: l.unitPriceCents,
-        })),
+        discountPercent: hasDeposit ? 0 : inv.discountPercent ?? 0,
+        note: hasDeposit
+          ? `Deposit (${depositPercent}%) for invoice ${inv.invoiceNumber}`
+          : `Invoice ${inv.invoiceNumber}`,
+        lines: hasDeposit
+          ? [
+              {
+                variantId: null,
+                title: `Deposit (${depositPercent}%) — ${inv.invoiceNumber}`,
+                quantity: 1,
+                unitPriceCents: split.depositCents,
+              },
+            ]
+          : inv.lineItems.map((l) => ({
+              variantId: l.shopifyVariantId,
+              title: l.title,
+              quantity: l.quantity,
+              unitPriceCents: l.unitPriceCents,
+            })),
       });
       payUrl = r.invoiceUrl ?? payUrl;
       pushedShopify = true;
@@ -88,7 +117,11 @@ export async function POST(
           updatedAt: new Date(),
         })
         .where(eq(invoice.id, id));
-      notes.push("created a Shopify payment link");
+      notes.push(
+        hasDeposit
+          ? `created a Shopify deposit link (${depositPercent}%)`
+          : "created a Shopify payment link",
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
       notes.push(
@@ -123,7 +156,7 @@ export async function POST(
       })),
       payUrl,
       remittance: billing,
-      message,
+      message: emailMessage,
     });
 
     if (!process.env.RESEND_API_KEY) {
@@ -132,7 +165,7 @@ export async function POST(
         `\n──────────────────────────────────────────────\n` +
           `Invoice ${inv.invoiceNumber} for ${recipients.join(", ")}` +
           (payUrl ? `\nPay link: ${payUrl}` : "") +
-          (message ? `\nMessage: ${message}` : "") +
+          (emailMessage ? `\nMessage: ${emailMessage}` : "") +
           `\n(RESEND_API_KEY not set — email logged for local dev)\n` +
           `──────────────────────────────────────────────\n`,
       );

@@ -57,6 +57,9 @@ export async function PATCH(
         ...(input.assignedProductIds !== undefined
           ? { assignedProductIds: input.assignedProductIds ?? [] }
           : {}),
+        ...(input.depositPercent !== undefined
+          ? { depositPercent: input.depositPercent ?? 0 }
+          : {}),
         ...(input.notes !== undefined ? { notes: input.notes || null } : {}),
         updatedAt: new Date(),
       })

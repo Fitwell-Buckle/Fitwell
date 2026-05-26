@@ -11,7 +11,8 @@ import {
   type CatalogCollectionGroup,
 } from "@/lib/catalog/load";
 import { getShopifyClient } from "@/lib/shopify/client";
-import { recordCompanyOrder } from "@/lib/invoicing/service";
+import { recordCompanyOrder, snapshotInvoiceDeposit } from "@/lib/invoicing/service";
+import { computeInvoiceTotals, computeDeposit } from "@/lib/invoicing/invoicing";
 
 const schema = z.object({
   lineItems: z
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
       contactEmail: true,
       assignedCollectionIds: true,
       assignedProductIds: true,
+      depositPercent: true,
     },
     with: {
       priceTier: { columns: { discountPercent: true } },
@@ -112,20 +114,41 @@ export async function POST(req: Request) {
     lines.push({ v, quantity: li.quantity });
   }
 
-  // 1) Shopify draft order (the payment checkout) at the company's tier.
+  // Deposit terms: when the brand requires a deposit, bill only the deposit now
+  // (single custom line); the balance is billed when the order is fulfilled.
+  const discountPercent = comp.priceTier?.discountPercent ?? 0;
+  const totals = computeInvoiceTotals(
+    lines.map(({ v, quantity }) => ({ quantity, unitPriceCents: v.priceCents })),
+    discountPercent,
+  );
+  const split = computeDeposit(totals.totalCents, comp.depositPercent ?? 0);
+  const hasDeposit = split.depositCents > 0 && split.balanceCents > 0;
+
+  // 1) Shopify draft order (the payment checkout).
   let draft;
   try {
     draft = await getShopifyClient().createDraftOrderInvoice({
       email: scope.email ?? comp.contactEmail ?? null,
       shopifyCustomerId: comp.customer?.shopifyId ?? null,
-      discountPercent: comp.priceTier?.discountPercent ?? 0,
-      note: `Portal order — ${comp.name}`,
-      lines: lines.map(({ v, quantity }) => ({
-        variantId: v.shopifyVariantId,
-        title: v.variantTitle ? `${v.title} — ${v.variantTitle}` : v.title,
-        quantity,
-        unitPriceCents: v.priceCents,
-      })),
+      discountPercent: hasDeposit ? 0 : discountPercent,
+      note: hasDeposit
+        ? `Portal order deposit (${comp.depositPercent}%) — ${comp.name}`
+        : `Portal order — ${comp.name}`,
+      lines: hasDeposit
+        ? [
+            {
+              variantId: null,
+              title: `Deposit (${comp.depositPercent}%) — ${comp.name}`,
+              quantity: 1,
+              unitPriceCents: split.depositCents,
+            },
+          ]
+        : lines.map(({ v, quantity }) => ({
+            variantId: v.shopifyVariantId,
+            title: v.variantTitle ? `${v.title} — ${v.variantTitle}` : v.title,
+            quantity,
+            unitPriceCents: v.priceCents,
+          })),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
@@ -157,8 +180,26 @@ export async function POST(req: Request) {
     shopifyInvoiceUrl: draft.invoiceUrl,
   });
 
+  // Snapshot the deposit terms onto the recorded invoice.
+  if (hasDeposit) {
+    await snapshotInvoiceDeposit(order.id, comp.depositPercent ?? 0, totals.totalCents);
+  }
+
   return NextResponse.json(
-    { data: { invoiceId: order.id, invoiceNumber: order.invoiceNumber, payUrl: draft.invoiceUrl } },
+    {
+      data: {
+        invoiceId: order.id,
+        invoiceNumber: order.invoiceNumber,
+        payUrl: draft.invoiceUrl,
+        deposit: hasDeposit
+          ? {
+              percent: comp.depositPercent,
+              depositCents: split.depositCents,
+              balanceCents: split.balanceCents,
+            }
+          : null,
+      },
+    },
     { status: 201 },
   );
 }
