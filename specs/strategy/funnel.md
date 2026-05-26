@@ -350,10 +350,12 @@ welcome-flow discount code triggers first purchase)
 before buying; current data suggests this cohort skews higher-LTV
 than the base, possibly because email signup is a high-intent
 self-selection signal
-**Evidence:** observed — 41 first-order-Klaviyo-attributed
-customers in the Nov 2025–May 2026 window, averaging $96 LTV and
-2.44 units (vs. $74 / 1.7 units base). See [[personas]]
-Distribution channel-LTV table.
+**Evidence:** observed → confirmed — 64 welcome-flow-acquired
+customers in the Nov 2025–May 2026 window driving $4,798 (89.7% of
+all Klaviyo revenue), with **+27.6% LTV lift over baseline** ($92.06
+vs $72.12 — the lift comes from order size, not repeat frequency).
+See `scripts/klaviyo-acquisition-vs-retention.ts` and [[personas]]
+Distribution channel-LTV section.
 **Journey role:** closer (the welcome-flow discount code closes the
 first purchase) — and arguably also an accelerator for the upstream
 signup decision, since the offer of "10% off" or similar is itself

@@ -575,15 +575,24 @@ Top channels by total revenue:
 | Klaviyo (email) | 41 | $96 | 2.44 | **Highest LTV.** Welcome-flow acquisitions — these are people who gave us their email (most via on-site signup), received the welcome-flow discount code, and converted on their *first* order. Post-purchase Klaviyo flows then drive additional outfitting on top. |
 | IG organic | 34 | $68 | 1.53 | P4 Algo-Discovered pattern. |
 
-**Klaviyo is doing both acquisition and retention work.** The 41
-Klaviyo-tagged customers above had Klaviyo as their *first-order*
-UTM — almost certainly welcome-flow discount-code redemptions. The
-$96 LTV / 2.44 units suggests welcome-flow signups are a high-quality
-acquisition cohort (well above the $74 base LTV), and the post-
-purchase Klaviyo flows then drive outfitting on top of that. The
-first-purchase-Klaviyo vs. repeat-purchase-Klaviyo split isn't
-isolated in this analysis (it captured first-order UTM only); future
-analysis should segment by order sequence position.
+**Klaviyo is dominantly an acquisition channel — the welcome flow is
+the engine.** A follow-up analysis (`scripts/klaviyo-acquisition-vs-
+retention.ts`) split Klaviyo-touched orders by customer
+order-sequence position:
+
+- **Acquisition (welcome flow):** 64 orders / 64 customers /
+  **$4,798 revenue = 89.7% of Klaviyo revenue.** Welcome-flow
+  customers average **$92.06 total LTV vs $72.12 baseline = +27.6%
+  lift.** The lift comes from order *size* (2.41 units/customer vs
+  1.78 baseline), not from coming back more often (repeat rate is
+  10.9% vs 10.0% baseline — essentially the same).
+- **Retention (post-purchase flows):** 5 orders / 5 customers /
+  $551 = only 10.3% of Klaviyo revenue. All are 2nd orders; no
+  3rd+ orders attributed to Klaviyo. Post-purchase Klaviyo's
+  measured contribution is small — either the post-purchase email
+  program isn't doing much, or the second-and-beyond purchases ARE
+  happening but customers are returning via direct/branded search
+  rather than Klaviyo links. Worth investigating.
 
 ### Outfitter-reviewers — creator-program candidates
 

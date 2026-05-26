@@ -202,21 +202,28 @@ acquisition channels in [[funnel]]:
 `multi_unit`
 **Persona affinity:** any
 **Measurement:** Klaviyo + UTM `utm_source=klaviyo` on orders where
-the customer has prior order history; needs to be segmented from
-welcome-flow first-order Klaviyo (which is acquisition — see
-[[funnel]] `email_klaviyo_welcome_flow`).
-**Current data:** Not cleanly isolated yet. The $96 LTV / 2.44 units
-finding for Klaviyo customers in [[personas]] Distribution is
-first-order-Klaviyo, i.e. welcome-flow acquisition, not retention.
-Post-purchase Klaviyo work is happening but is not separately
-measured in current analyses.
-**Status:** active (operationally) — needs measurement isolation
-**Notes:** Shares infrastructure with the welcome-flow acquisition
-channel but a different job. The "outfit your collection" sequence
-and other post-purchase nurtures are this channel; the welcome-flow
-discount code is not. Important future work: segment Klaviyo-tagged
-orders by customer order-sequence position (first vs. repeat) so
-acquisition and retention contributions are quantifiable separately.
+the customer has prior order history. Now segmented from welcome-
+flow first-order Klaviyo (see [[funnel]] `email_klaviyo_welcome_flow`)
+via `scripts/klaviyo-acquisition-vs-retention.ts`.
+**Current data:** **Surprisingly small measured contribution.** In
+the Nov 2025–May 2026 window: 5 orders / 5 customers / $551 — only
+10.3% of all Klaviyo-touched revenue, and all are 2nd orders (no
+3rd+ orders attributed to Klaviyo at all). The post-purchase email
+program is either (a) not driving meaningful repeat purchase yet, or
+(b) driving repeat *visits* that then convert via direct or branded
+search rather than via tagged Klaviyo links.
+**Status:** active operationally; weakly measured
+**Notes:** The earlier "dominant retention lever" framing of this
+channel was wrong. The data says post-purchase Klaviyo attribution
+is small in absolute terms. This could be a measurement artifact
+(emails drive return visits that close via other channels) or a
+real weakness in the post-purchase sequence design — most likely
+both. Next investigation: tag post-purchase Klaviyo links more
+aggressively (per-email UTMs, not generic `utm_source=klaviyo`) so
+we can measure email-driven return visits separately from email-
+attributed orders. The "outfit your collection" sequence is the
+single highest-leverage piece of copy to test against — if it's not
+working, that's the place to fix it.
 
 ### `judgeme_re_engagement`
 **Targets:** `first_buyer` → `second_buyer`; `outfitter` → `advocate`

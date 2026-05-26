@@ -416,63 +416,70 @@ section)
 
 ---
 
-### H12 — Klaviyo does both acquisition (welcome flow) and retention (post-purchase flows)
-**Claim:** Klaviyo plays *two distinct jobs* that share
-infrastructure but produce separable outcomes:
-- **Acquisition:** the welcome-flow discount code converts
-  pre-purchase email signups into first-time buyers. The 41
-  first-order-Klaviyo customers in the Nov 2025–May 2026 window
-  ($96 LTV, 2.44 units) are this cohort.
-- **Retention:** post-purchase flows ("outfit your collection",
-  abandoned-cart, re-engagement) drive second and subsequent
-  orders from existing customers.
+### H12 — Klaviyo is dominantly an acquisition channel; post-purchase retention contribution is small
+**Claim:** Klaviyo's contribution to revenue is overwhelmingly the
+welcome-flow acquisition path (~90%), with post-purchase retention
+flows contributing a small measured share (~10%). Welcome-flow-
+acquired customers have **+27.6% LTV lift over baseline** ($92.06
+vs $72.12), driven by *order size* (2.41 units/customer vs 1.78
+baseline), not by *repeat frequency* (10.9% vs 10.0% — essentially
+identical).
 
-**Confidence:** medium for the dual-role claim; high for the
-welcome-flow acquisition contribution (data-supported); low for the
-*relative split* of acquisition vs. retention revenue (not yet
-measured separately).
+**Confidence:** high for the split (now measured); medium for the
+*why* behind the LTV lift (self-selection vs. discount-induced
+larger orders, unseparated).
 
-**History:** This hypothesis was originally written as "Klaviyo is
-doing retention, not acquisition" with status `validated` — that
-framing was wrong. The first-order-UTM analysis showing Klaviyo's
-high LTV was *acquisition* data (welcome-flow conversions), not
-retention data, and I conflated them. Corrected 2026-05-26.
+**History:**
+- Originally (2026-05-26 first draft) written as "Klaviyo is doing
+  retention, not acquisition" with status `validated` — wrong;
+  conflated first-order-UTM data with retention data.
+- Corrected to "Klaviyo does both — acquisition AND retention" as
+  a dual-role framing, status `open`.
+- Now measured (2026-05-26 same day, via
+  `scripts/klaviyo-acquisition-vs-retention.ts`): the split is
+  ~90% acquisition / ~10% retention by revenue; status updated to
+  `validated` with the measured split.
 
-**Why we believe the welcome-flow acquisition role:** Direct
-confirmation from Tom — welcome-flow discount codes are being
-redeemed at meaningful volume; 41 first-order-Klaviyo-attributed
-customers in the 6-month D2C window quantify the lower bound.
+**Evidence (from script run, Nov 2025–May 2026):**
+- Total Klaviyo-touched paid revenue: $5,349.26 (8.7% of all paid
+  revenue)
+- Acquisition (welcome flow): 64 orders / 64 customers / $4,797.94
+  / 89.7% of Klaviyo revenue
+- Retention: 5 orders / 5 customers / $551.32 / 10.3% of Klaviyo
+  revenue — ALL are 2nd orders, no 3rd+ orders attributed to
+  Klaviyo
+- Welcome-flow LTV: $92.06 vs $72.12 baseline = **+27.6% lift**
+- Repeat-buyer rate among welcome-flow customers: 10.9% (vs 10.0%
+  baseline — not statistically meaningful difference)
+- Overlap: only 2 customers were BOTH acquired AND retained via
+  Klaviyo
 
-**Why we believe the post-purchase retention role:** Standard
-Klaviyo platform usage; "outfit your collection" sequence is
-designed for this; structurally fits the [[retention-loop]] motion.
-Volume not yet isolated.
+**Implication:** The +27.6% LTV lift on welcome-flow customers is
+a real and measurable acquisition-quality finding. But the small
+retention contribution is either (a) a real weakness in post-
+purchase Klaviyo design, or (b) a measurement artifact where the
+emails drive return visits that close via other channels (direct,
+branded search). Most likely both. The "dominant retention lever"
+framing in earlier drafts of [[retention-loop]] was wrong and has
+been corrected.
 
-**What would validate (the dual-role framing):** Segmenting
-Klaviyo-tagged orders by customer order-sequence position shows
-meaningful volume in both first-order (welcome flow) AND
-repeat-order (post-purchase) buckets — neither is < 20% of total
-Klaviyo revenue.
+**Open follow-up questions (promote to H14+ if they sharpen into
+testable claims):**
+- *Why* is welcome-flow LTV higher — selection (high-intent
+  signups) or treatment (discount code encourages bigger first
+  orders)? Cohort analysis of order size distribution by channel
+  would help.
+- Is post-purchase Klaviyo measurably driving return visits even
+  if not order attribution? Needs per-email UTM tagging plus
+  PostHog session-source data.
 
-**What would invalidate:** One of the two motions accounts for
-essentially all Klaviyo revenue (> 90% in either direction),
-collapsing the dual-role framing back to a single role.
-
-**Estimated test cost:** Low — Shopify + Klaviyo cohort query
-segmenting by customer order-sequence position.
-
-**Test approach:** Pull Klaviyo-attributed orders for the D2C
-window. For each, classify as first-order (acquisition) or
-repeat-order (retention) based on customer order history. Compute
-revenue, customer count, and LTV per side. Track the split over
-time.
-
-**Status:** open (the split-quantification is the open question;
-the dual-role framing is the working assumption)
+**Status:** validated (split quantified) — converting to a
+measured claim rather than an open hypothesis. Re-test quarterly
+as cohorts mature.
 
 **Related:** [[funnel]] `email_klaviyo_welcome_flow`,
 [[retention-loop]] `klaviyo_post_purchase`, [[personas]]
-Distribution channel-LTV table.
+Distribution channel-LTV section.
 
 ---
 
