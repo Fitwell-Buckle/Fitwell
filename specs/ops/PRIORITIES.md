@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 ## Current Strategic Focus (2026-05-25)
 
@@ -172,6 +172,22 @@ Deferred — Shopify is the primary web property for now. Decision logged in `sp
 **Owner**: Greg
 
 Low priority until analytics pipeline is feeding data for digest emails.
+
+---
+
+### 8. 🔨 Strategic Funnel — Next Iteration (in flight)
+**Last worked**: 2026-05-26 (v1 shipped; iteration plan drafted)
+**Source of truth**: `specs/work-plans/todo/funnel-strategy-next-iteration.md`
+**Owner**: Tom (planning), Greg (engineering)
+
+V1 of `/funnel/strategy` shipped (commits `81e4079`, `fd5f5bd`) — 6-stage acquisition + 5-stage retention loop + channel breakdown, with honest gap markers. Iteration plan covers:
+- Phase 1: Tier 1 quick wins (wholesale filter, Meta cold/retargeting split, GSC unblock)
+- Phase 2: Channel × persona cross-cut (click a channel → see persona mix; persona filter pills at top)
+- Phase 3: Klaviyo API integration (live email-side measurement)
+- Phase 4: Order sequence-position column (acquisition vs. retention discrimination)
+- Phase 5: Judge.me API integration (live advocate count)
+
+PostHog client-side instrumentation (workstream 6) is the largest unblock for upper-funnel measurement but is independent of this plan.
 
 ## Completed Workstreams
 
