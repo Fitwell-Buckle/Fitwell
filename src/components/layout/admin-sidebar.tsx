@@ -16,6 +16,10 @@ import {
   ChevronDown,
   Menu,
   X,
+  ReceiptText,
+  ShoppingBag,
+  ClipboardList,
+  Gift,
   type LucideIcon,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
@@ -24,6 +28,8 @@ import { cn } from "@/lib/utils";
 interface NavChild {
   href: string;
   label: string;
+  // Order/"action" pages get an icon + bolder label to stand out.
+  icon?: LucideIcon;
 }
 
 interface NavLeaf {
@@ -49,8 +55,8 @@ const navItems: NavItem[] = [
     children: [
       { href: "/customers", label: "Consumer List" },
       { href: "/customers/brands", label: "B2B Brand List" },
-      { href: "/invoices", label: "B2B Orders" },
-      { href: "/orders", label: "Consumer Orders" },
+      { href: "/invoices", label: "B2B Orders", icon: ReceiptText },
+      { href: "/orders", label: "Consumer Orders", icon: ShoppingBag },
     ],
   },
   {
@@ -58,7 +64,7 @@ const navItems: NavItem[] = [
     icon: Package,
     children: [
       { href: "/products", label: "Product List" },
-      { href: "/modules/production", label: "Supplier POs" },
+      { href: "/modules/production", label: "Supplier POs", icon: ClipboardList },
       { href: "/modules/production/summary", label: "Production Summary" },
       { href: "/modules/production/suppliers", label: "Supplier List" },
     ],
@@ -71,7 +77,7 @@ const navItems: NavItem[] = [
       { href: "/campaigns", label: "Campaigns" },
       { href: "/funnel", label: "Funnel" },
       { href: "/influencers", label: "Influencer List" },
-      { href: "/influencer-tracking", label: "Influencer Orders" },
+      { href: "/influencer-tracking", label: "Influencer Orders", icon: Gift },
     ],
   },
   { href: "/data-sync", label: "Data Sync", icon: RefreshCw },
@@ -244,19 +250,25 @@ function SidebarContent({
                 <div className="mt-1 space-y-1 pl-9">
                   {children.map((child) => {
                     const active = child.href === activeChildHref;
+                    const ChildIcon = child.icon;
                     return (
                       <Link
                         key={child.href}
                         href={child.href}
                         onClick={onNavigate}
                         className={cn(
-                          "block rounded-md px-3 py-1.5 text-sm transition-colors",
+                          "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
                           active
                             ? "bg-zinc-800 text-white"
                             : "text-zinc-400 hover:bg-zinc-800 hover:text-white",
                         )}
                       >
-                        {child.label}
+                        {ChildIcon && (
+                          <ChildIcon className="h-4 w-4 shrink-0" />
+                        )}
+                        <span className={ChildIcon ? "font-semibold" : undefined}>
+                          {child.label}
+                        </span>
                       </Link>
                     );
                   })}
