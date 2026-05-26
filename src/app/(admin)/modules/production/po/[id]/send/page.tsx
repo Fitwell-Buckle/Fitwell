@@ -122,6 +122,9 @@ export default async function SendPoPage({
         )
       : [];
   const totalPieces = rawBlanks.reduce((s, g) => s + g.quantity, 0);
+  // On a sub-PO the meaningful total is what we pay this supplier, not the
+  // master's per-unit production cost.
+  const supplierPrice = isSubPo ? po.supplierPriceCents ?? null : null;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -236,6 +239,14 @@ export default async function SendPoPage({
                 {totalPieces}
               </span>
             </div>
+            {supplierPrice != null && (
+              <div className="mt-1 flex items-baseline justify-end">
+                <span className="text-sm text-zinc-500">Supplier price</span>
+                <span className="ml-3 text-base font-semibold text-zinc-900">
+                  {fmtMoney(supplierPrice)}
+                </span>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -278,9 +289,11 @@ export default async function SendPoPage({
             </div>
 
             <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
-              <span className="text-sm text-zinc-500">Total</span>
+              <span className="text-sm text-zinc-500">
+                {isSubPo ? "Supplier price" : "Total"}
+              </span>
               <span className="ml-3 text-base font-semibold text-zinc-900">
-                {fmtMoney(total)}
+                {isSubPo ? fmtMoney(supplierPrice) : fmtMoney(total)}
               </span>
             </div>
           </>

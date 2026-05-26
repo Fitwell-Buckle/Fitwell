@@ -543,6 +543,9 @@ export const productionPo = pgTable(
     // no own line items — it renders the master's). Standalone PO: both null.
     parentPoId: text("parent_po_id"),
     poSuffix: text("po_suffix"),
+    // What this supplier charges for their portion (sub-PO only; the only field
+    // editable on a sub-PO — everything else lives on the master). Cents.
+    supplierPriceCents: integer("supplier_price_cents"),
     // Default B2B company the batch is for (our own company list; line items can
     // override). Its price tier drives the discount off retail.
     companyId: text("company_id").references(() => company.id),

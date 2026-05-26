@@ -34,6 +34,7 @@ import { PoAttachments } from "./po-attachments";
 import { PoReceive } from "./po-receive";
 import { PoStageTimeline } from "./po-stage-timeline";
 import { PoCreateInvoice } from "./po-create-invoice";
+import { SubPoPrice } from "./sub-po-price";
 
 function fmtBytes(n: number | null): string {
   if (!n) return "";
@@ -322,6 +323,7 @@ export default async function PoDetailPage({
               </Table>
             )}
           </div>
+          <SubPoPrice poId={po.id} initialCents={po.supplierPriceCents} />
         </Card>
       )}
 

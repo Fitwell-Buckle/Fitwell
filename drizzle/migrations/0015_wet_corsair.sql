@@ -1,0 +1,1 @@
+ALTER TABLE "production_po" ADD COLUMN "supplier_price_cents" integer;

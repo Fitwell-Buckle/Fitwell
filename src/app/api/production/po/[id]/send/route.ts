@@ -38,6 +38,8 @@ function buildPoEmailHtml(
   const prefixHtml = stagePrefix
     ? `<span style="color:#dc2626;font-weight:600;">${esc(stagePrefix)} — </span>`
     : "";
+  // On a sub-PO, the meaningful total is what we pay this supplier.
+  const supplierPrice = po.parentPoId ? po.supplierPriceCents ?? null : null;
 
   let tableHtml: string;
   if (rawBlanks.length > 0) {
@@ -64,7 +66,11 @@ function buildPoEmailHtml(
         <td style="${cell}text-align:right;font-weight:bold;">Total pieces</td>
         <td style="${cell}text-align:right;font-weight:bold;">${totalPieces}</td>
         <td style="${cell}"></td>
-      </tr></tfoot>
+      </tr>${
+        supplierPrice != null
+          ? `<tr><td style="${cell}text-align:right;font-weight:bold;">Supplier price</td><td style="${cell}text-align:right;font-weight:bold;">${fmtMoney(supplierPrice)}</td><td style="${cell}"></td></tr>`
+          : ""
+      }</tfoot>
     </table>`;
   } else {
     const rows = items
@@ -89,8 +95,8 @@ function buildPoEmailHtml(
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr>
-        <td colspan="4" style="${cell}text-align:right;font-weight:bold;">Total</td>
-        <td style="${cell}text-align:right;font-weight:bold;">${fmtMoney(total)}</td>
+        <td colspan="4" style="${cell}text-align:right;font-weight:bold;">${supplierPrice != null ? "Supplier price" : "Total"}</td>
+        <td style="${cell}text-align:right;font-weight:bold;">${fmtMoney(supplierPrice != null ? supplierPrice : total)}</td>
       </tr></tfoot>
     </table>`;
   }

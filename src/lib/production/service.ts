@@ -269,10 +269,22 @@ export async function getSubPos(masterId: string) {
       shopifyPoNumber: true,
       status: true,
       shopifyReceivedAt: true,
+      supplierPriceCents: true,
     },
     with: { supplier: { columns: { name: true } } },
     orderBy: asc(productionPo.poSuffix),
   });
+}
+
+/** The only field editable on a sub-PO: what that supplier charges (cents). */
+export async function setSubPoPrice(
+  poId: string,
+  supplierPriceCents: number | null,
+): Promise<void> {
+  await db
+    .update(productionPo)
+    .set({ supplierPriceCents, updatedAt: new Date() })
+    .where(eq(productionPo.id, poId));
 }
 
 /**
