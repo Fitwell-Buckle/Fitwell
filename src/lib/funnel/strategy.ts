@@ -13,7 +13,13 @@
  * can be tested without a DATABASE_URL.
  */
 import { db } from "@/lib/db";
-import { customer, order, ga4Daily, metaAdsDaily } from "@/lib/schema";
+import {
+  customer,
+  order,
+  orderLineItem,
+  ga4Daily,
+  metaAdsDaily,
+} from "@/lib/schema";
 import { and, gte, lte, sql, sum, count, eq, isNull, or } from "drizzle-orm";
 import {
   CHANNEL_LABELS,
@@ -190,19 +196,24 @@ export interface RetentionLoop {
 const STATIC_ADVOCATE_COUNT = 9;
 
 export async function getRetentionLoop(): Promise<RetentionLoop> {
+  // Pull customers with order rollups and total units. Use LEFT JOIN through
+  // order → order_line_item so customers with orders but no line items still
+  // appear (with totalQty = 0). The earlier correlated-subquery approach
+  // produced an ambiguous-id error in Neon — explicit joins are safer.
   const rows = await db
     .select({
       orderCount: customer.orderCount,
       totalSpent: customer.totalSpent,
-      totalQty: sql<number>`COALESCE((
-        SELECT SUM(oli.quantity)::int
-        FROM "order" o
-        JOIN order_line_item oli ON oli.order_id = o.id
-        WHERE o.customer_id = ${customer.id}
-      ), 0)`.mapWith(Number),
+      totalQty:
+        sql<number>`COALESCE(SUM(${orderLineItem.quantity}), 0)::int`.mapWith(
+          Number,
+        ),
     })
     .from(customer)
-    .where(sql`${customer.orderCount} > 0`);
+    .leftJoin(order, eq(order.customerId, customer.id))
+    .leftJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
+    .where(sql`${customer.orderCount} > 0`)
+    .groupBy(customer.id, customer.orderCount, customer.totalSpent);
 
   const acc: Record<
     RetentionStage,
