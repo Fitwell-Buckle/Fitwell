@@ -90,7 +90,7 @@ async function main() {
   console.log("-".repeat(75));
 
   let totalBuyers = 0;
-  let totalSpend = 0n;
+  let totalSpend = BigInt(0);
   for (const r of rows) {
     totalBuyers += Number(r.buyers);
     totalSpend += BigInt(r.total_180d_cents);
