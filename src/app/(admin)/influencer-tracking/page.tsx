@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { InfluencerTrackingTable } from "./tracking-table";
 
 export const metadata: Metadata = {
-  title: "Influencer Tracking | Fitwell Admin",
+  title: "Influencer Orders | Fitwell Admin",
 };
 
 export default async function InfluencerTrackingPage({
@@ -86,7 +86,7 @@ export default async function InfluencerTrackingPage({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Influencer Tracking" />
+        <PageHeader title="Influencer Orders" />
         <Button asChild>
           <Link href="/influencer-tracking/new">New gifting order</Link>
         </Button>

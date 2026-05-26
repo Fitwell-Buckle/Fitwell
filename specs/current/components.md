@@ -26,9 +26,9 @@ Radix UI + Tailwind CSS. Styled with `class-variance-authority` for variants.
 |-----------|-------|
 | `header` | Marketing site header — logo, nav, CTA |
 | `footer` | Marketing site footer — links, legal |
-| `admin-sidebar` | Dashboard sidebar navigation (Marketing group includes Influencers + Influencer Tracking) |
+| `admin-sidebar` | Dashboard sidebar navigation (Marketing group includes Influencer List + Influencer Orders) |
 
-## Influencer Tracking (`app/(admin)/influencers/`, `app/(admin)/influencer-tracking/`)
+## Influencer List + Orders (`app/(admin)/influencers/`, `app/(admin)/influencer-tracking/`)
 
 Same server-page-fetches / client-component-mutates-then-`router.refresh()` shape
 as the Production module. Deadline logic is pure + unit-tested in

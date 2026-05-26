@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { InfluencersManager } from "./influencers-manager";
 
 export const metadata: Metadata = {
-  title: "Influencers | Fitwell Admin",
+  title: "Influencer List | Fitwell Admin",
 };
 
 export default async function InfluencersPage() {
@@ -38,9 +38,9 @@ export default async function InfluencersPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Influencers" />
+        <PageHeader title="Influencer List" />
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/influencer-tracking">Tracking</Link>
+          <Link href="/influencer-tracking">Orders</Link>
         </Button>
       </div>
 
