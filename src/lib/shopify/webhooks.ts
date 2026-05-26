@@ -1,8 +1,10 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { order } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { upsertOrder, upsertCustomer } from "./sync";
+import { CATALOG_CACHE_TAG } from "@/lib/catalog/load";
 import type { ShopifyOrder, ShopifyCustomer } from "@/types/shopify";
 
 export function verifyWebhook(body: string, hmacHeader: string): boolean {
@@ -65,6 +67,22 @@ export async function handleWebhookTopic(
       console.log(
         `Webhook ${topic}: refund for order ${payload.order_id} processed in ${Date.now() - start}ms`,
       );
+      break;
+    }
+
+    // Any product or collection change drops the cached catalog so the item
+    // chooser picks it up on the next load (instead of waiting out the TTL).
+    case "products/create":
+    case "products/update":
+    case "products/delete":
+    case "collections/create":
+    case "collections/update":
+    case "collections/delete":
+    case "collection_listings/add":
+    case "collection_listings/remove":
+    case "collection_listings/update": {
+      revalidateTag(CATALOG_CACHE_TAG);
+      console.log(`Webhook ${topic}: catalog cache invalidated`);
       break;
     }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { loadCatalog, type CatalogVariant } from "@/lib/catalog/load";
+import { getCatalogCached, type CatalogVariant } from "@/lib/catalog/load";
 
 // Re-exported so existing importers keep working.
 export type { CatalogVariant };
@@ -14,7 +14,7 @@ export async function GET() {
   }
 
   try {
-    const variants = await loadCatalog();
+    const variants = await getCatalogCached();
     return NextResponse.json({ data: variants });
   } catch (err) {
     console.error("Fetch Shopify catalog failed:", err);

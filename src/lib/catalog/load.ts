@@ -3,6 +3,16 @@ import { getShopifyClient, toCents } from "@/lib/shopify/client";
 import { skuSize } from "@/lib/production/display";
 import { deriveAttrs } from "./attrs";
 
+/**
+ * Cache tag for the whole Shopify catalog. The catalog is cached effectively
+ * indefinitely (a 1-week fallback TTL) and only refetched when this tag is
+ * invalidated via `revalidateTag` — either the manual "Refresh catalog" action
+ * or a Shopify product/collection webhook. So the chooser loads instantly and
+ * the catalog stays put until something actually changes.
+ */
+export const CATALOG_CACHE_TAG = "shopify-catalog";
+const CATALOG_REVALIDATE_SECONDS = 60 * 60 * 24 * 7; // 1 week (safety net)
+
 export interface CatalogVariant {
   shopifyProductId: string;
   shopifyVariantId: string;
@@ -65,7 +75,8 @@ export async function loadCatalog(): Promise<CatalogVariant[]> {
  * every render. The picker still fetches live via /api/production/products.
  */
 export const getCatalogCached = unstable_cache(loadCatalog, ["production-catalog"], {
-  revalidate: 3600,
+  revalidate: CATALOG_REVALIDATE_SECONDS,
+  tags: [CATALOG_CACHE_TAG],
 });
 
 export interface CatalogCollectionGroup {
@@ -122,8 +133,44 @@ export async function loadCatalogGroups(): Promise<CatalogCollectionGroup[]> {
 export const getCatalogGroupsCached = unstable_cache(
   loadCatalogGroups,
   ["production-catalog-groups"],
-  { revalidate: 3600 },
+  { revalidate: CATALOG_REVALIDATE_SECONDS, tags: [CATALOG_CACHE_TAG] },
 );
+
+export interface CatalogCollectionGroupFull {
+  id: string;
+  title: string;
+  variants: CatalogVariant[];
+}
+
+const UNCATEGORIZED_ID = "__uncategorized__";
+
+/**
+ * Catalog grouped by collection with FULL variants — what the product chooser
+ * needs. Assembled by joining the two cached loaders (variants + per-collection
+ * variant ids), so the chooser no longer re-pages Shopify on every open; it's
+ * served from the 1-hour catalog cache. Products in no collection land in
+ * "Uncategorized".
+ */
+export async function loadCatalogCollections(): Promise<CatalogCollectionGroupFull[]> {
+  const [variants, groups] = await Promise.all([
+    getCatalogCached(),
+    getCatalogGroupsCached(),
+  ]);
+  const byId = new Map(variants.map((v) => [v.shopifyVariantId, v]));
+  const full: CatalogCollectionGroupFull[] = groups.map((g) => ({
+    id: g.id,
+    title: g.title,
+    variants: g.variantIds
+      .map((id) => byId.get(id))
+      .filter((v): v is CatalogVariant => !!v),
+  }));
+  const inGroup = new Set(groups.flatMap((g) => g.variantIds));
+  const uncategorized = variants.filter((v) => !inGroup.has(v.shopifyVariantId));
+  if (uncategorized.length > 0) {
+    full.push({ id: UNCATEGORIZED_ID, title: "Uncategorized", variants: uncategorized });
+  }
+  return full;
+}
 
 /**
  * Build a `collectionOf(line)` resolver + the list of collection options from

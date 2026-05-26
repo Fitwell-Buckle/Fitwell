@@ -15,6 +15,7 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 import { ListFilters } from "@/components/catalog/list-filters";
+import { RefreshCatalogButton } from "@/components/catalog/refresh-catalog-button";
 
 export const metadata: Metadata = {
   title: "Products | Fitwell Admin",
@@ -80,7 +81,10 @@ export default async function ProductsPage({
 
   return (
     <div>
-      <PageHeader title="Product List" />
+      <div className="flex items-center justify-between">
+        <PageHeader title="Product List" />
+        <RefreshCatalogButton />
+      </div>
 
       <ListFilters />
 
