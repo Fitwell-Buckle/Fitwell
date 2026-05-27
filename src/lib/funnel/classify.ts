@@ -119,6 +119,34 @@ export function mapToChannel(input: {
   return "other_unattributed";
 }
 
+/**
+ * Classify a Meta Ads campaign as cold (awareness / prospecting) vs.
+ * retargeting based on the campaign name. Retargeting and cold creative
+ * play different roles in the journey — retargeting impressions belong in
+ * the `considering` stage, cold impressions belong in `unaware`.
+ *
+ * Heuristic-only — refine with a per-campaign override table if naming
+ * conventions diverge from the patterns below.
+ *
+ * Rules (case-insensitive, whole-word-ish):
+ *   - contains 'retarget' (covers 'retargeting', 'retarget-engagers') → retargeting
+ *   - contains 'rt-' or '-rt-' or '_rt_' (RT prefix/suffix in campaign names) → retargeting
+ *   - empty / null → unknown
+ *   - otherwise → cold (default — most non-explicit campaigns are awareness)
+ */
+export type MetaCampaignKind = "cold" | "retargeting" | "unknown";
+
+export function mapMetaCampaign(
+  campaignName: string | null | undefined,
+): MetaCampaignKind {
+  if (!campaignName) return "unknown";
+  const name = campaignName.toLowerCase();
+  if (name.includes("retarget")) return "retargeting";
+  // RT as a word-segment marker — bounded by start, end, or non-alphanumeric.
+  if (/(^|[^a-z0-9])rt([^a-z0-9]|$)/.test(name)) return "retargeting";
+  return "cold";
+}
+
 export const CHANNEL_LABELS: Record<Channel, string> = {
   email_klaviyo_welcome_flow: "Klaviyo welcome flow",
   email_klaviyo_other: "Klaviyo (other)",

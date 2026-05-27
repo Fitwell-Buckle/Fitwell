@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { classifyRetentionStage, mapToChannel } from "./classify";
+import {
+  classifyRetentionStage,
+  mapMetaCampaign,
+  mapToChannel,
+} from "./classify";
 
 describe("classifyRetentionStage", () => {
   it("classifies a single-buyer single-unit as first_buyer", () => {
@@ -207,5 +211,52 @@ describe("mapToChannel", () => {
         utmCampaign: "  cold-broad  ",
       }),
     ).toBe("paid_meta_cold");
+  });
+});
+
+describe("mapMetaCampaign", () => {
+  it("returns 'unknown' for null / undefined / empty", () => {
+    expect(mapMetaCampaign(null)).toBe("unknown");
+    expect(mapMetaCampaign(undefined)).toBe("unknown");
+    expect(mapMetaCampaign("")).toBe("unknown");
+  });
+
+  it("classifies explicit retargeting campaigns", () => {
+    expect(mapMetaCampaign("Retargeting Visitors 60d")).toBe("retargeting");
+    expect(mapMetaCampaign("retarget-engagers")).toBe("retargeting");
+    expect(mapMetaCampaign("Watch — Retargeting (30d)")).toBe("retargeting");
+  });
+
+  it("classifies RT-prefixed / suffixed campaigns as retargeting", () => {
+    expect(mapMetaCampaign("RT - Engagers 30d")).toBe("retargeting");
+    expect(mapMetaCampaign("RT_engagers_30d")).toBe("retargeting");
+    expect(mapMetaCampaign("summer_2026_rt_warm")).toBe("retargeting");
+    expect(mapMetaCampaign("V3-RT-cart-abandoners")).toBe("retargeting");
+  });
+
+  it("classifies cold / awareness campaigns as cold", () => {
+    expect(mapMetaCampaign("Awareness - Cold - Watch Enthusiasts")).toBe(
+      "cold",
+    );
+    expect(mapMetaCampaign("TOFU - broad audience")).toBe("cold");
+    expect(mapMetaCampaign("Spring 2026 launch")).toBe("cold");
+  });
+
+  it("defaults unrecognized non-retargeting names to cold", () => {
+    expect(mapMetaCampaign("MOFU - Considerers")).toBe("cold");
+    expect(mapMetaCampaign("V2_test_campaign")).toBe("cold");
+    expect(mapMetaCampaign("Some random name with no hint")).toBe("cold");
+  });
+
+  it("does NOT false-match 'rt' inside words", () => {
+    // The 'rt' regex is bounded so it doesn't fire on 'art', 'cart', 'sport'.
+    expect(mapMetaCampaign("art-collector-audience")).toBe("cold");
+    expect(mapMetaCampaign("Sport watch enthusiasts")).toBe("cold");
+    expect(mapMetaCampaign("Cart-targeted creative")).toBe("cold");
+  });
+
+  it("is case-insensitive", () => {
+    expect(mapMetaCampaign("RETARGET")).toBe("retargeting");
+    expect(mapMetaCampaign("ReTaRgEt")).toBe("retargeting");
   });
 });

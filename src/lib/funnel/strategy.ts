@@ -20,7 +20,19 @@ import {
   ga4Daily,
   metaAdsDaily,
 } from "@/lib/schema";
-import { and, gte, lte, sql, sum, count, eq, isNull, or } from "drizzle-orm";
+import {
+  and,
+  gte,
+  lte,
+  sql,
+  sum,
+  count,
+  eq,
+  ne,
+  isNull,
+  isNotNull,
+  or,
+} from "drizzle-orm";
 import {
   CHANNEL_LABELS,
   RETENTION_STAGE_META,
@@ -29,8 +41,20 @@ import {
   type RetentionStage,
   classifyRetentionStage,
   formatCents,
+  mapMetaCampaign,
   mapToChannel,
 } from "./classify";
+
+/**
+ * D2C-only order filter. Excludes wholesale / draft orders so the
+ * strategy funnel matches the D2C scope in specs/strategy/funnel.md.
+ * NULL sourceName is treated as D2C (orders predating sourceName
+ * capture are mostly D2C web orders).
+ */
+const D2C_ONLY = or(
+  isNull(order.sourceName),
+  ne(order.sourceName, "shopify_draft_order"),
+);
 
 export {
   CHANNEL_LABELS,
@@ -67,20 +91,18 @@ export async function getAcquisitionFunnel(
   from: Date,
   to: Date,
 ): Promise<AcquisitionFunnel> {
-  const [metaImpr, metaClicks, ga4Sessions, ga4Direct, orderTotals] =
+  const [metaByCampaign, ga4Sessions, ga4Direct, orderTotals] =
     await Promise.all([
+      // Per-campaign Meta rollup so we can split cold vs. retargeting
       db
         .select({
+          campaignName: metaAdsDaily.campaignName,
           impressions: sum(metaAdsDaily.impressions).mapWith(Number),
-          reach: sum(metaAdsDaily.reach).mapWith(Number),
+          clicks: sum(metaAdsDaily.clicks).mapWith(Number),
         })
         .from(metaAdsDaily)
-        .where(and(gte(metaAdsDaily.date, from), lte(metaAdsDaily.date, to))),
-
-      db
-        .select({ clicks: sum(metaAdsDaily.clicks).mapWith(Number) })
-        .from(metaAdsDaily)
-        .where(and(gte(metaAdsDaily.date, from), lte(metaAdsDaily.date, to))),
+        .where(and(gte(metaAdsDaily.date, from), lte(metaAdsDaily.date, to)))
+        .groupBy(metaAdsDaily.campaignName),
 
       db
         .select({
@@ -108,31 +130,58 @@ export async function getAcquisitionFunnel(
           ),
         ),
 
+      // D2C orders only — exclude wholesale / draft orders
       db
         .select({
           orders: count(),
           revenue: sum(order.totalPrice).mapWith(Number),
         })
         .from(order)
-        .where(and(gte(order.processedAt, from), lte(order.processedAt, to))),
+        .where(
+          and(
+            gte(order.processedAt, from),
+            lte(order.processedAt, to),
+            D2C_ONLY,
+          ),
+        ),
     ]);
+
+  // Split Meta impressions/clicks per campaign-name heuristic.
+  // mapMetaCampaign('Awareness — Cold — Watch Enthusiasts') = 'cold'
+  // mapMetaCampaign('RT — Engagers 30d') = 'retargeting'
+  let coldImpr = 0;
+  let coldClicks = 0;
+  let retargImpr = 0;
+  for (const row of metaByCampaign) {
+    const kind = mapMetaCampaign(row.campaignName);
+    const impr = row.impressions ?? 0;
+    const clicks = row.clicks ?? 0;
+    if (kind === "retargeting") {
+      retargImpr += impr;
+    } else {
+      // 'cold' and 'unknown' both bucket as cold (most non-explicit campaigns
+      // are awareness/cold; revisit if a per-campaign override table arrives).
+      coldImpr += impr;
+      coldClicks += clicks;
+    }
+  }
 
   const stages: FunnelStageRow[] = [
     {
       stage: "unaware",
-      value: metaImpr[0]?.impressions ?? 0,
+      value: coldImpr,
       format: "count",
-      source: "metaAdsDaily.impressions (cold + retargeting mixed)",
+      source: "metaAdsDaily.impressions (cold campaigns only)",
       confidence: "medium",
-      note: "Total Meta paid impressions in window. Cold-vs-retargeting split requires campaign-name parsing (v2).",
+      note: "Meta cold/awareness impressions per mapMetaCampaign(). Retargeting moved to `considering`. Unrecognized campaign names default to cold; refine via a per-campaign override table if needed.",
     },
     {
       stage: "problem_aware",
-      value: metaClicks[0]?.clicks ?? 0,
+      value: coldClicks,
       format: "count",
-      source: "metaAdsDaily.clicks",
+      source: "metaAdsDaily.clicks (cold campaigns only)",
       confidence: "weak",
-      note: "Meta paid clicks as a coarse proxy. True problem_aware count requires PostHog video_progress / section_dwelled on the problem section.",
+      note: "Cold-campaign clicks as a coarse proxy. True problem_aware count requires PostHog video_progress / section_dwelled on the problem section.",
     },
     {
       stage: "solution_aware",
@@ -152,17 +201,17 @@ export async function getAcquisitionFunnel(
     },
     {
       stage: "considering",
-      value: 0,
+      value: retargImpr,
       format: "count",
-      source: "(none — needs PostHog cart_item_added / checkout_started)",
-      confidence: "missing",
-      note: "Not measurable until storefront pixel ships (see specs/work-plans/todo/posthog-integration.md Phase 1).",
+      source: "metaAdsDaily.impressions (retargeting campaigns only)",
+      confidence: "weak",
+      note: "Meta retargeting impressions as a proxy for considering-stage exposure (lagging indicator of audience size). True considering count requires PostHog cart_item_added / checkout_started events.",
     },
     {
       stage: "converting",
       value: orderTotals[0]?.orders ?? 0,
       format: "count",
-      source: "order table",
+      source: "order table (D2C only — wholesale/draft excluded)",
       confidence: "strong",
       note: `${formatCents(orderTotals[0]?.revenue ?? 0)} revenue in window.`,
     },
@@ -196,24 +245,45 @@ export interface RetentionLoop {
 const STATIC_ADVOCATE_COUNT = 9;
 
 export async function getRetentionLoop(): Promise<RetentionLoop> {
-  // Pull customers with order rollups and total units. Use LEFT JOIN through
-  // order → order_line_item so customers with orders but no line items still
-  // appear (with totalQty = 0). The earlier correlated-subquery approach
-  // produced an ambiguous-id error in Neon — explicit joins are safer.
-  const rows = await db
-    .select({
-      orderCount: customer.orderCount,
-      totalSpent: customer.totalSpent,
-      totalQty:
-        sql<number>`COALESCE(SUM(${orderLineItem.quantity}), 0)::int`.mapWith(
-          Number,
-        ),
-    })
-    .from(customer)
-    .leftJoin(order, eq(order.customerId, customer.id))
-    .leftJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
-    .where(sql`${customer.orderCount} > 0`)
-    .groupBy(customer.id, customer.orderCount, customer.totalSpent);
+  // Compute per-customer rollups directly from the order table (D2C only),
+  // not from customer.orderCount / customer.totalSpent which are denormalized
+  // and known to drift (per personas.md Distribution finding). Two parallel
+  // queries — orders for count + spend, line items for total units — joined
+  // by customerId in TypeScript. Cleaner than a single grouped JOIN where the
+  // line-item fan-out would inflate SUM(totalPrice).
+  const [orderSummary, qtySummary] = await Promise.all([
+    db
+      .select({
+        customerId: order.customerId,
+        orderCount: count().mapWith(Number),
+        totalSpent: sum(order.totalPrice).mapWith(Number),
+      })
+      .from(order)
+      .where(and(isNotNull(order.customerId), D2C_ONLY))
+      .groupBy(order.customerId),
+
+    db
+      .select({
+        customerId: order.customerId,
+        totalQty: sum(orderLineItem.quantity).mapWith(Number),
+      })
+      .from(order)
+      .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
+      .where(and(isNotNull(order.customerId), D2C_ONLY))
+      .groupBy(order.customerId),
+  ]);
+
+  const qtyByCustomer = new Map<string, number>();
+  for (const q of qtySummary) {
+    if (q.customerId) qtyByCustomer.set(q.customerId, q.totalQty ?? 0);
+  }
+  const rows = orderSummary
+    .filter((r) => r.customerId !== null)
+    .map((r) => ({
+      orderCount: r.orderCount,
+      totalSpent: r.totalSpent ?? 0,
+      totalQty: qtyByCustomer.get(r.customerId!) ?? 0,
+    }));
 
   const acc: Record<
     RetentionStage,
@@ -263,7 +333,7 @@ export async function getRetentionLoop(): Promise<RetentionLoop> {
       source:
         stage === "advocate"
           ? "Static cross-reference (Judge.me export 2026-05-26)"
-          : "customer.order_count + customer.total_spent + order_line_item.quantity",
+          : "order + order_line_item (D2C only, computed from orders not denormalized customer fields)",
       confidence: stage === "advocate" ? "weak" : "strong",
       note:
         stage === "advocate"
@@ -287,16 +357,25 @@ export interface ChannelRow {
 }
 
 export async function getChannelBreakdown(): Promise<ChannelRow[]> {
+  // Customer attribution (first-touch UTM) joined to their D2C order totals.
+  // INNER JOIN ensures we only count customers with at least one D2C order;
+  // wholesale-only customers (B2B) drop out per the funnel.md D2C scope.
   const rows = await db
     .select({
       utmSource: customer.utmSource,
       utmMedium: customer.utmMedium,
       utmCampaign: customer.utmCampaign,
-      orderCount: customer.orderCount,
-      totalSpent: customer.totalSpent,
+      orderCount: count(order.id).mapWith(Number),
+      totalSpent: sum(order.totalPrice).mapWith(Number),
     })
     .from(customer)
-    .where(sql`${customer.orderCount} > 0`);
+    .innerJoin(order, and(eq(order.customerId, customer.id), D2C_ONLY))
+    .groupBy(
+      customer.id,
+      customer.utmSource,
+      customer.utmMedium,
+      customer.utmCampaign,
+    );
 
   const acc = new Map<Channel, ChannelRow>();
   for (const r of rows) {
