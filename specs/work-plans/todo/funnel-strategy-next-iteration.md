@@ -37,7 +37,7 @@ this plan ships independent of that work.
 
 ### Included
 - Tier 1 quick wins (wholesale filter, Meta cold/retargeting split, GSC unblock if cheap)
-- Klaviyo API integration (schema, cron, dashboard widgets) for live email-side measurement
+- Klaviyo API integration (read side: schema, cron, dashboard widgets) — **scope moved to `klaviyo-integration.md`** (its Phase 0). Listed here because this iteration's measurement goals depend on that work.
 - Judge.me API integration for live advocate tracking + vocabulary refresh
 - Order sequence-position column (`order.order_sequence`) for clean acquisition-vs-retention discrimination at the order level
 - Channel × persona cross-cut on `/funnel/strategy` (click-to-expand channel rows; persona filter at the top)
@@ -81,28 +81,16 @@ filters to that persona's slice.
 - Unit: per-channel segment classifier produces expected percentages on a fixture.
 - Smoke: filter pills + expand-row both work via URL params.
 
-### Phase 3: Klaviyo API integration (~1–2 days)
+### Phase 3: Klaviyo API integration — moved out 2026-05-27
 
-Live email-side measurement that resolves the H12 acquisition-vs-retention split from inside the email tool, not via UTM heuristics.
-
-- [ ] Add schema:
-  - `klaviyo_list_growth_daily` — date, subscribers, new_subscribers, unsubscribes
-  - `klaviyo_email_performance` — campaign_id, sent_at, sends, opens, clicks, conversions, revenue_cents
-  - `klaviyo_flow_attribution` — flow_id, customer_id, order_id, attributed_revenue_cents, touched_at
-- [ ] Add env: `KLAVIYO_API_KEY` to `.env.example` and Vercel
-- [ ] Create `src/lib/analytics/klaviyo.ts` client wrapping the Klaviyo API
-- [ ] Create `/api/cron/extract-klaviyo/route.ts` — daily sync to populate the three tables
-- [ ] Register cron in `vercel.json` (daily, ~07:30 UTC after other extractions)
-- [ ] Add Klaviyo widgets to `/funnel/strategy`:
-  - List growth sparkline near the top
-  - Per-flow attribution as a row in the channel breakdown (replacing the UTM-heuristic split)
-  - Welcome-flow vs. post-purchase split as a small visualization in the retention-loop section
-- [ ] Update `specs/current/integrations.md` with Klaviyo integration details
-- [ ] Update `specs/current/scheduled-jobs.md` with the new cron
-
-#### Tests
-- Unit: Klaviyo API response → schema mapping
-- Integration: cron run populates the daily tables (against test API key if available, else mock)
+Scope grew beyond the read-only measurement piece originally planned
+here (Tom wants write-side authoring too — campaigns and flows
+deployed from this repo). The full integration now lives in
+`specs/work-plans/todo/klaviyo-integration.md`. Its **Phase 0** is
+the read-side work originally scoped here: same three tables, same
+daily cron, same `/funnel/strategy` widgets. That phase is the
+dependency for this iteration's measurement goals; the write-side
+phases (1–5 there) are independent of this plan.
 
 ### Phase 4: Order sequence-position column (~half day)
 
@@ -144,12 +132,10 @@ Live advocate count + vocabulary refresh pipeline.
 
 - **Should Meta retargeting impressions land in `unaware` or `considering`?** Strictly speaking, retargeted users are at minimum `brand_aware`. The Phase 1 split moves them out of `unaware`; the question is whether they fit `considering` (closer to checkout) or `brand_aware` (still considering). Defer the precise placement until we see the numbers.
 - **GSC OAuth Playground workaround durability** — if the workaround turns out to be brittle (needs reauth weekly), reframe as a real engineering project rather than a quick win.
-- **Klaviyo "flow" granularity** — Klaviyo flows have steps; do we attribute per-flow or per-step? Per-flow is simpler; per-step is more honest about which email drove the order. Decide during Phase 3.
 - **Order sequence under refunds / cancellations** — does a refunded order count toward sequence? Probably yes (it happened), but flag for review when implementing.
 
 ### Risks
 
-- **Klaviyo API rate limits** — daily syncs should be fine, but if we add real-time webhook ingestion later (e.g., for live email-open dashboards), need to plan around the limit.
 - **Phase 2 (cross-cut) UX** — server-side filter via URL params is fine for v1 but every click is a full re-render. If it gets sluggish (~30+ customers in any channel × persona cell), refactor to client-side filtering.
 - **Phase 5 advocate count vs. reality** — the static `9` may be over- or under-counting. Live query will reveal the truth; be prepared for the number to move significantly when the live count lands.
 
@@ -162,7 +148,7 @@ Live advocate count + vocabulary refresh pipeline.
 ### Phased rollout strategy
 
 - Phases 1 + 2 are pure dashboard improvements — ship together if same day.
-- Phase 3 adds a new external integration; ships independently.
+- Phase 3 moved to `klaviyo-integration.md`. This iteration consumes its Phase 0 (read side) but doesn't block on the write-side phases.
 - Phase 4 touches the Shopify sync — coordinate with Greg to avoid stomping on in-flight sync changes.
 - Phase 5 adds another external integration; ships independently.
 
