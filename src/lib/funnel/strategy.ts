@@ -37,8 +37,11 @@ import {
   CHANNEL_LABELS,
   RETENTION_STAGE_META,
   type Channel,
+  type ChannelAggregate,
   type Confidence,
   type RetentionStage,
+  type SegmentMix,
+  aggregateChannelsFromCustomers,
   classifyRetentionStage,
   formatCents,
   mapMetaCampaign,
@@ -67,8 +70,10 @@ export {
 } from "./classify";
 export type {
   Channel,
+  ChannelAggregate,
   Confidence,
   RetentionStage,
+  SegmentMix,
 } from "./classify";
 
 // ─── Acquisition funnel ─────────────────────────────────────────────
@@ -347,64 +352,72 @@ export async function getRetentionLoop(): Promise<RetentionLoop> {
 
 // ─── Channel breakdown ──────────────────────────────────────────────
 
-export interface ChannelRow {
-  channel: Channel;
-  label: string;
-  customers: number;
-  orders: number;
-  totalSpendCents: number;
-  avgLtvCents: number;
-}
+// ChannelRow is an alias for the pure ChannelAggregate type — kept so
+// the page code reads naturally ("channel row") without coupling it to
+// the helper's name.
+export type ChannelRow = ChannelAggregate;
 
-export async function getChannelBreakdown(): Promise<ChannelRow[]> {
-  // Customer attribution (first-touch UTM) joined to their D2C order totals.
-  // INNER JOIN ensures we only count customers with at least one D2C order;
-  // wholesale-only customers (B2B) drop out per the funnel.md D2C scope.
-  const rows = await db
-    .select({
-      utmSource: customer.utmSource,
-      utmMedium: customer.utmMedium,
-      utmCampaign: customer.utmCampaign,
-      orderCount: count(order.id).mapWith(Number),
-      totalSpent: sum(order.totalPrice).mapWith(Number),
-    })
-    .from(customer)
-    .innerJoin(order, and(eq(order.customerId, customer.id), D2C_ONLY))
-    .groupBy(
-      customer.id,
-      customer.utmSource,
-      customer.utmMedium,
-      customer.utmCampaign,
-    );
+/**
+ * Returns the per-channel breakdown with segment mix.
+ *
+ * When `segmentFilter` is set, only customers whose retention-loop
+ * stage matches that filter are counted toward each channel's
+ * totals — the segmentMix on each row will be zero in every other
+ * stage.
+ *
+ * Pure accumulation lives in `aggregateChannelsFromCustomers` in
+ * classify.ts; this function is just the DB-fetch wrapper.
+ */
+export async function getChannelBreakdown(
+  segmentFilter?: RetentionStage,
+): Promise<ChannelRow[]> {
+  // Two parallel queries to avoid line-item fan-out inflating order
+  // counts/spend: one for per-customer order count + spend + UTM, one
+  // for per-customer total units.
+  const [orderRows, qtyRows] = await Promise.all([
+    db
+      .select({
+        customerId: customer.id,
+        utmSource: customer.utmSource,
+        utmMedium: customer.utmMedium,
+        utmCampaign: customer.utmCampaign,
+        orderCount: count(order.id).mapWith(Number),
+        totalSpent: sum(order.totalPrice).mapWith(Number),
+      })
+      .from(customer)
+      .innerJoin(order, and(eq(order.customerId, customer.id), D2C_ONLY))
+      .groupBy(
+        customer.id,
+        customer.utmSource,
+        customer.utmMedium,
+        customer.utmCampaign,
+      ),
 
-  const acc = new Map<Channel, ChannelRow>();
-  for (const r of rows) {
-    const channel = mapToChannel({
+    db
+      .select({
+        customerId: order.customerId,
+        totalQty: sum(orderLineItem.quantity).mapWith(Number),
+      })
+      .from(order)
+      .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
+      .where(and(isNotNull(order.customerId), D2C_ONLY))
+      .groupBy(order.customerId),
+  ]);
+
+  const qtyByCustomer = new Map<string, number>();
+  for (const q of qtyRows) {
+    if (q.customerId) qtyByCustomer.set(q.customerId, q.totalQty ?? 0);
+  }
+
+  return aggregateChannelsFromCustomers(
+    orderRows.map((r) => ({
       utmSource: r.utmSource,
       utmMedium: r.utmMedium,
       utmCampaign: r.utmCampaign,
-    });
-    const e =
-      acc.get(channel) ??
-      {
-        channel,
-        label: CHANNEL_LABELS[channel],
-        customers: 0,
-        orders: 0,
-        totalSpendCents: 0,
-        avgLtvCents: 0,
-      };
-    e.customers += 1;
-    e.orders += r.orderCount ?? 0;
-    e.totalSpendCents += r.totalSpent ?? 0;
-    acc.set(channel, e);
-  }
-
-  const out = [...acc.values()].map((r) => ({
-    ...r,
-    avgLtvCents:
-      r.customers > 0 ? Math.round(r.totalSpendCents / r.customers) : 0,
-  }));
-  out.sort((a, b) => b.totalSpendCents - a.totalSpendCents);
-  return out;
+      orderCount: r.orderCount,
+      totalSpentCents: r.totalSpent ?? 0,
+      totalQty: qtyByCustomer.get(r.customerId) ?? 0,
+    })),
+    segmentFilter,
+  );
 }

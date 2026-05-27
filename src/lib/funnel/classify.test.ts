@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  aggregateChannelsFromCustomers,
   classifyRetentionStage,
   mapMetaCampaign,
   mapToChannel,
+  type CustomerOrderRollup,
 } from "./classify";
 
 describe("classifyRetentionStage", () => {
@@ -258,5 +260,158 @@ describe("mapMetaCampaign", () => {
   it("is case-insensitive", () => {
     expect(mapMetaCampaign("RETARGET")).toBe("retargeting");
     expect(mapMetaCampaign("ReTaRgEt")).toBe("retargeting");
+  });
+});
+
+describe("aggregateChannelsFromCustomers", () => {
+  // Realistic fixture mirroring real-data shape: a few customers per
+  // channel, mixed retention stages, two channels with overlap.
+  const fixture: CustomerOrderRollup[] = [
+    // paid_meta_cold customers
+    {
+      utmSource: "meta",
+      utmMedium: "cpc",
+      utmCampaign: "awareness-cold",
+      orderCount: 1,
+      totalSpentCents: 4000,
+      totalQty: 1,
+    }, // first_buyer
+    {
+      utmSource: "meta",
+      utmMedium: "cpc",
+      utmCampaign: "awareness-cold",
+      orderCount: 1,
+      totalSpentCents: 4000,
+      totalQty: 1,
+    }, // first_buyer
+    {
+      utmSource: "meta",
+      utmMedium: "cpc",
+      utmCampaign: "awareness-cold",
+      orderCount: 3,
+      totalSpentCents: 18000,
+      totalQty: 6,
+    }, // outfitter
+    // direct customers
+    {
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+      orderCount: 1,
+      totalSpentCents: 4000,
+      totalQty: 3,
+    }, // multi_unit
+    {
+      utmSource: "(direct)",
+      utmMedium: null,
+      utmCampaign: null,
+      orderCount: 2,
+      totalSpentCents: 8000,
+      totalQty: 2,
+    }, // second_buyer
+    // klaviyo welcome
+    {
+      utmSource: "klaviyo",
+      utmMedium: "email",
+      utmCampaign: "welcome-flow-e1",
+      orderCount: 5,
+      totalSpentCents: 30000,
+      totalQty: 8,
+    }, // outfitter
+  ];
+
+  it("buckets customers into the right channels with correct counts", () => {
+    const rows = aggregateChannelsFromCustomers(fixture);
+    const byChannel = new Map(rows.map((r) => [r.channel, r]));
+
+    expect(byChannel.get("paid_meta_cold")?.customers).toBe(3);
+    expect(byChannel.get("direct")?.customers).toBe(2);
+    expect(byChannel.get("email_klaviyo_welcome_flow")?.customers).toBe(1);
+  });
+
+  it("computes segmentMix counts that sum to the channel's customer count", () => {
+    const rows = aggregateChannelsFromCustomers(fixture);
+    for (const r of rows) {
+      const mixSum = Object.values(r.segmentMix).reduce((a, b) => a + b, 0);
+      expect(mixSum).toBe(r.customers);
+    }
+  });
+
+  it("populates the right stages in segmentMix per channel", () => {
+    const rows = aggregateChannelsFromCustomers(fixture);
+    const meta = rows.find((r) => r.channel === "paid_meta_cold")!;
+    expect(meta.segmentMix.first_buyer).toBe(2);
+    expect(meta.segmentMix.outfitter).toBe(1);
+    expect(meta.segmentMix.second_buyer).toBe(0);
+
+    const direct = rows.find((r) => r.channel === "direct")!;
+    expect(direct.segmentMix.multi_unit).toBe(1);
+    expect(direct.segmentMix.second_buyer).toBe(1);
+  });
+
+  it("sums orders + revenue per channel correctly", () => {
+    const rows = aggregateChannelsFromCustomers(fixture);
+    const meta = rows.find((r) => r.channel === "paid_meta_cold")!;
+    expect(meta.orders).toBe(1 + 1 + 3);
+    expect(meta.totalSpendCents).toBe(4000 + 4000 + 18000);
+  });
+
+  it("computes avgLtvCents as totalSpend / customers, rounded", () => {
+    const rows = aggregateChannelsFromCustomers(fixture);
+    const meta = rows.find((r) => r.channel === "paid_meta_cold")!;
+    // (4000 + 4000 + 18000) / 3 = 8666.67 → 8667
+    expect(meta.avgLtvCents).toBe(8667);
+  });
+
+  it("sorts channels by total revenue descending", () => {
+    const rows = aggregateChannelsFromCustomers(fixture);
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i - 1].totalSpendCents).toBeGreaterThanOrEqual(
+        rows[i].totalSpendCents,
+      );
+    }
+  });
+
+  it("filters to a single segment when segmentFilter is set", () => {
+    const rows = aggregateChannelsFromCustomers(fixture, "outfitter");
+    // Only 2 outfitter customers in the fixture (1 paid_meta_cold, 1 klaviyo)
+    const totalCustomers = rows.reduce((s, r) => s + r.customers, 0);
+    expect(totalCustomers).toBe(2);
+    // Every row's segmentMix should be outfitter-only
+    for (const r of rows) {
+      expect(r.segmentMix.first_buyer).toBe(0);
+      expect(r.segmentMix.second_buyer).toBe(0);
+      expect(r.segmentMix.multi_unit).toBe(0);
+      expect(r.segmentMix.outfitter).toBeGreaterThan(0);
+    }
+  });
+
+  it("drops customers with no orders (orderCount = 0)", () => {
+    const withOrphan: CustomerOrderRollup[] = [
+      ...fixture,
+      {
+        utmSource: "meta",
+        utmMedium: "cpc",
+        utmCampaign: "test",
+        orderCount: 0,
+        totalSpentCents: 0,
+        totalQty: 0,
+      },
+    ];
+    const beforeRows = aggregateChannelsFromCustomers(fixture);
+    const afterRows = aggregateChannelsFromCustomers(withOrphan);
+    const beforeTotal = beforeRows.reduce((s, r) => s + r.customers, 0);
+    const afterTotal = afterRows.reduce((s, r) => s + r.customers, 0);
+    expect(afterTotal).toBe(beforeTotal);
+  });
+
+  it("returns an empty array for empty input", () => {
+    expect(aggregateChannelsFromCustomers([])).toEqual([]);
+  });
+
+  it("respects channel labels from CHANNEL_LABELS", () => {
+    const rows = aggregateChannelsFromCustomers(fixture);
+    const meta = rows.find((r) => r.channel === "paid_meta_cold")!;
+    expect(meta.label).toBe("Meta paid (cold)");
   });
 });

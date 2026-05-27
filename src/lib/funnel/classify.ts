@@ -147,6 +147,90 @@ export function mapMetaCampaign(
   return "cold";
 }
 
+// ─── Channel aggregation (pure helper for getChannelBreakdown) ─────
+
+export type SegmentMix = Record<RetentionStage, number>;
+
+export interface ChannelAggregate {
+  channel: Channel;
+  label: string;
+  customers: number;
+  orders: number;
+  totalSpendCents: number;
+  avgLtvCents: number;
+  segmentMix: SegmentMix;
+}
+
+export interface CustomerOrderRollup {
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  orderCount: number;
+  totalSpentCents: number;
+  totalQty: number;
+}
+
+function emptySegmentMix(): SegmentMix {
+  return {
+    first_buyer: 0,
+    second_buyer: 0,
+    multi_unit: 0,
+    outfitter: 0,
+    advocate: 0,
+  };
+}
+
+/**
+ * Pure aggregator: customer roll-ups → per-channel ChannelAggregate[].
+ * Each customer is classified into a retention stage; mapped to a channel
+ * via mapToChannel; accumulated into the channel's totals + segment mix.
+ * If `segmentFilter` is set, only customers in that stage count.
+ *
+ * Extracted from `getChannelBreakdown` in strategy.ts so the
+ * accumulation logic is testable without DB mocking.
+ */
+export function aggregateChannelsFromCustomers(
+  customers: CustomerOrderRollup[],
+  segmentFilter?: RetentionStage,
+): ChannelAggregate[] {
+  const acc = new Map<Channel, ChannelAggregate>();
+  for (const c of customers) {
+    const stage = classifyRetentionStage(c.orderCount, c.totalQty);
+    if (!stage) continue;
+    if (segmentFilter && stage !== segmentFilter) continue;
+
+    const channel = mapToChannel({
+      utmSource: c.utmSource,
+      utmMedium: c.utmMedium,
+      utmCampaign: c.utmCampaign,
+    });
+    const e =
+      acc.get(channel) ??
+      {
+        channel,
+        label: CHANNEL_LABELS[channel],
+        customers: 0,
+        orders: 0,
+        totalSpendCents: 0,
+        avgLtvCents: 0,
+        segmentMix: emptySegmentMix(),
+      };
+    e.customers += 1;
+    e.orders += c.orderCount;
+    e.totalSpendCents += c.totalSpentCents;
+    e.segmentMix[stage] += 1;
+    acc.set(channel, e);
+  }
+
+  const out = [...acc.values()].map((r) => ({
+    ...r,
+    avgLtvCents:
+      r.customers > 0 ? Math.round(r.totalSpendCents / r.customers) : 0,
+  }));
+  out.sort((a, b) => b.totalSpendCents - a.totalSpendCents);
+  return out;
+}
+
 export const CHANNEL_LABELS: Record<Channel, string> = {
   email_klaviyo_welcome_flow: "Klaviyo welcome flow",
   email_klaviyo_other: "Klaviyo (other)",
