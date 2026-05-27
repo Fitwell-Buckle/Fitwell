@@ -6,7 +6,9 @@ import {
   subPoStageState,
   subPoTransitions,
 } from "./sub-po";
-import type { ProductionStage } from "./stages";
+import { STAGES, type ProductionStage } from "./stages";
+
+const ORDER = [...STAGES];
 
 describe("formatPoNumber", () => {
   it("formats standalone, master, and sub-PO numbers", () => {
@@ -31,6 +33,7 @@ describe("planSubPos", () => {
 
   it("groups a supplier's stages into one sub-PO, ordered by pipeline appearance", () => {
     const plan = planSubPos(
+      ORDER,
       stages,
       [
         { stage: "stamping", supplierId: "sup-X" },
@@ -51,7 +54,7 @@ describe("planSubPos", () => {
   });
 
   it("unassigned stages all fall to the primary supplier → a single sub-PO", () => {
-    const plan = planSubPos(stages, [], "sup-primary");
+    const plan = planSubPos(ORDER, stages, [], "sup-primary");
     expect(plan).toHaveLength(1);
     expect(plan[0]).toMatchObject({ supplierId: "sup-primary", suffix: "A" });
     expect(isMultiSupplier(plan)).toBe(false);
@@ -59,6 +62,7 @@ describe("planSubPos", () => {
 
   it("flags a genuine multi-supplier split", () => {
     const plan = planSubPos(
+      ORDER,
       stages,
       [{ stage: "polishing", supplierId: "sup-Y" }],
       "sup-primary",
@@ -74,7 +78,7 @@ describe("subPoStageState", () => {
   const owned: ProductionStage[] = ["stamping", "edm"];
 
   it("is 'waiting' while items are still upstream (e.g. supplier_po)", () => {
-    const s = subPoStageState(owned, ["supplier_po", "supplier_po"]);
+    const s = subPoStageState(ORDER, owned, ["supplier_po", "supplier_po"]);
     expect(s.status).toBe("waiting");
     expect(s.arrivedCount).toBe(0);
     expect(s.upstreamCount).toBe(2);
@@ -82,39 +86,39 @@ describe("subPoStageState", () => {
   });
 
   it("is 'advance' when an item can step forward within owned stages", () => {
-    const s = subPoStageState(owned, ["stamping", "stamping"]);
+    const s = subPoStageState(ORDER, owned, ["stamping", "stamping"]);
     expect(s.status).toBe("advance");
     expect(s.currentStage).toBe("stamping");
     expect(s.arrivedCount).toBe(2);
   });
 
   it("is 'complete' when every arrived item is parked at the last owned stage", () => {
-    const s = subPoStageState(owned, ["edm", "edm"]);
+    const s = subPoStageState(ORDER, owned, ["edm", "edm"]);
     expect(s.status).toBe("complete");
     expect(s.currentStage).toBe("edm");
   });
 
   it("stays 'waiting' if some items are at the last stage but others haven't arrived", () => {
-    const s = subPoStageState(owned, ["edm", "supplier_po"]);
+    const s = subPoStageState(ORDER, owned, ["edm", "supplier_po"]);
     expect(s.status).toBe("waiting");
   });
 
   it("is 'advance' when items are mixed across owned stages", () => {
-    const s = subPoStageState(owned, ["stamping", "edm"]);
+    const s = subPoStageState(ORDER, owned, ["stamping", "edm"]);
     expect(s.status).toBe("advance");
     expect(s.currentStage).toBe("stamping");
   });
 
   it("is 'done' once all items have moved past the owned stages", () => {
-    const s = subPoStageState(owned, ["polishing", "complete"]);
+    const s = subPoStageState(ORDER, owned, ["polishing", "complete"]);
     expect(s.status).toBe("done");
     expect(s.doneCount).toBe(2);
   });
 
   it("treats a single-stage owner correctly (last == first)", () => {
-    expect(subPoStageState(["polishing"], ["polishing"]).status).toBe("complete");
-    expect(subPoStageState(["polishing"], ["stamping"]).status).toBe("waiting");
-    expect(subPoStageState(["polishing"], ["qc"]).status).toBe("done");
+    expect(subPoStageState(ORDER, ["polishing"], ["polishing"]).status).toBe("complete");
+    expect(subPoStageState(ORDER, ["polishing"], ["stamping"]).status).toBe("waiting");
+    expect(subPoStageState(ORDER, ["polishing"], ["qc"]).status).toBe("done");
   });
 });
 
@@ -123,6 +127,7 @@ describe("subPoTransitions", () => {
 
   it("step: advances only within owned stages", () => {
     const t = subPoTransitions({
+      order: ORDER,
       ownedStages: owned,
       lines: [
         { id: "a", currentStage: "stamping" },
@@ -136,6 +141,7 @@ describe("subPoTransitions", () => {
 
   it("complete: hands every owned-stage item off to the next supplier's stage", () => {
     const t = subPoTransitions({
+      order: ORDER,
       ownedStages: owned,
       lines: [
         { id: "a", currentStage: "edm" },
@@ -152,6 +158,7 @@ describe("subPoTransitions", () => {
 
   it("complete: the last supplier in the route hands off to 'complete'", () => {
     const t = subPoTransitions({
+      order: ORDER,
       ownedStages: ["qc", "packaging"],
       lines: [{ id: "a", currentStage: "packaging" }],
       mode: "complete",
@@ -167,17 +174,17 @@ describe("sub-PO with non-contiguous owned stages", () => {
   it("hands off at each run boundary rather than jumping to the last stage", () => {
     // A line at stamping completes that run by handing off to EDM (not polishing).
     expect(
-      subPoTransitions({ ownedStages: owned, lines: [{ id: "a", currentStage: "stamping" }], mode: "complete" }),
+      subPoTransitions({ order: ORDER, ownedStages: owned, lines: [{ id: "a", currentStage: "stamping" }], mode: "complete" }),
     ).toEqual([{ lineItemId: "a", from: "stamping", to: "edm" }]);
     // A line back at polishing hands off to logo.
     expect(
-      subPoTransitions({ ownedStages: owned, lines: [{ id: "a", currentStage: "polishing" }], mode: "complete" }),
+      subPoTransitions({ order: ORDER, ownedStages: owned, lines: [{ id: "a", currentStage: "polishing" }], mode: "complete" }),
     ).toEqual([{ lineItemId: "a", from: "polishing", to: "logo" }]);
   });
 
   it("waits while the line sits in the gap stage (EDM) owned by another supplier", () => {
-    expect(subPoStageState(owned, ["edm"]).status).toBe("waiting");
+    expect(subPoStageState(ORDER, owned, ["edm"]).status).toBe("waiting");
     // ready to hand off the stamping run
-    expect(subPoStageState(owned, ["stamping"]).status).toBe("complete");
+    expect(subPoStageState(ORDER, owned, ["stamping"]).status).toBe("complete");
   });
 });

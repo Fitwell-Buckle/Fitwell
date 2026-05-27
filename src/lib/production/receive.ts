@@ -7,6 +7,8 @@ import {
 } from "@/lib/schema";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { planReceiveLine, type ReceiveLineStatus } from "./receive-plan";
+import { getStageOrder } from "./stage-labels";
+import { terminalStage } from "./stages";
 
 export interface ReceiveResult {
   poId: string;
@@ -60,17 +62,21 @@ export async function receivePo(poId: string): Promise<ReceiveResult> {
   }
 
   const client = getShopifyClient();
+  const terminal = terminalStage(await getStageOrder());
   const now = new Date();
 
   for (const li of po.lineItems) {
-    const plan = planReceiveLine({
-      id: li.id,
-      currentStage: li.currentStage,
-      quantity: li.quantity,
-      shopifyVariantId: li.shopifyVariantId,
-      shopifyReceivedAt: li.shopifyReceivedAt,
-      effectiveLocationId: li.shopifyLocationId ?? po.shopifyLocationId,
-    });
+    const plan = planReceiveLine(
+      {
+        id: li.id,
+        currentStage: li.currentStage,
+        quantity: li.quantity,
+        shopifyVariantId: li.shopifyVariantId,
+        shopifyReceivedAt: li.shopifyReceivedAt,
+        effectiveLocationId: li.shopifyLocationId ?? po.shopifyLocationId,
+      },
+      terminal,
+    );
 
     if (plan.status === "already_received") {
       received.push({ lineItemId: li.id, sku: li.sku });

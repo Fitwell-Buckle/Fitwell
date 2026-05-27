@@ -1,5 +1,4 @@
-import { getBillingSettings, hasRemittance } from "@/lib/invoicing/billing-settings";
-import { remittanceRows } from "@/lib/invoicing/email";
+import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/lib/invoicing/invoicing";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
@@ -121,20 +120,10 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
             </a>
           </p>
         )}
-        {hasRemittance(billing) && (
-          <div className="mt-2">
-            <div className="text-zinc-500">Bank wire / ACH:</div>
-            {remittanceRows(billing!).map((r) => (
-              <div key={r.label} className="text-zinc-700">
-                <span className="text-zinc-400">{r.label}:</span> {r.value}
-              </div>
-            ))}
-            {billing!.instructions && (
-              <p className="mt-1 whitespace-pre-line font-semibold text-zinc-900">
-                {billing!.instructions}
-              </p>
-            )}
-          </div>
+        {billing?.instructions && (
+          <p className="mt-2 whitespace-pre-line font-semibold text-zinc-900">
+            {billing.instructions}
+          </p>
         )}
       </div>
     </div>

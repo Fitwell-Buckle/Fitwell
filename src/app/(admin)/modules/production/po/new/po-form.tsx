@@ -9,8 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { ShopifyRef, ShopifyRefs } from "@/app/api/production/shopify-refs/route";
 import { fmtMoney } from "@/lib/production/display";
-import { STAGES, type ProductionStage } from "@/lib/production/stages";
-import { useStageLabels } from "@/components/production/stage-labels-provider";
+import { type ProductionStage } from "@/lib/production/stages";
+import { useStageLabels, useStageOrder } from "@/components/production/stage-labels-provider";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { QuickAddSelect } from "@/components/forms/quick-add-select";
@@ -48,13 +48,6 @@ export interface PoFormInitial {
   stageAssignments?: { stage: string; supplierId: string }[];
   isMaster?: boolean; // edit: PO already split across suppliers (has sub-POs)
 }
-
-// Stages an admin can assign an owner to, in workflow order. "supplier_po" is
-// the opening state (PO placed, nothing started) and "complete" is terminal —
-// neither is real manufacturing work, so neither is assignable.
-const ASSIGNABLE_STAGES = STAGES.filter(
-  (s) => s !== "complete" && s !== "supplier_po",
-);
 
 interface LineItemRow {
   id?: string; // present = existing line (edit); absent = new line
@@ -159,6 +152,9 @@ export function PoForm({
 }) {
   const router = useRouter();
   const stageLabels = useStageLabels();
+  const stageOrder = useStageOrder();
+  // Assignable stages = work stages between the opening + terminal bookends.
+  const ASSIGNABLE_STAGES = stageOrder.slice(1, -1);
   const isEdit = !!poId;
 
   // Selected supplier(s). One = single-supplier PO; more than one = a
@@ -286,10 +282,11 @@ export function PoForm({
     if (multiSupplier && ASSIGNABLE_STAGES.some((s) => !stageOwners[s])) {
       return setError("Assign a supplier to every stage before saving.");
     }
-    // The master's primary (fallback) supplier: the stamping owner on a
+    // The master's primary (fallback) supplier: the first-work-stage owner on a
     // multi-supplier PO (so the opening state routes there), else the lone one.
+    const firstWorkStage = stageOrder[1];
     const primaryId = multiSupplier
-      ? stageOwners["stamping"] || supplierIds[0]
+      ? stageOwners[firstWorkStage] || supplierIds[0]
       : supplierIds[0];
 
     const lineItems = [];

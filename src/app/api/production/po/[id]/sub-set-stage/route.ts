@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { setSubPoStage } from "@/lib/production/service";
 import { ensureSupplierMayActOnPo } from "@/lib/production/scope";
-import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { type ProductionStage } from "@/lib/production/stages";
 
 const bodySchema = z.object({ toStage: z.string() });
 
@@ -39,10 +39,7 @@ export async function POST(
     );
   }
 
-  if (!STAGES.includes(input.toStage as ProductionStage)) {
-    return NextResponse.json({ error: "Unknown stage" }, { status: 400 });
-  }
-
+  // setSubPoStage validates toStage against the sub-PO's available targets.
   try {
     const transitions = await setSubPoStage({
       subPoId: id,

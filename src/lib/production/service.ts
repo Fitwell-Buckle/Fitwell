@@ -15,10 +15,12 @@ import {
   planAdvance,
   planSetStage,
   nextStage,
-  STAGES,
+  firstStage,
+  terminalStage,
   type AdvanceTransition,
   type ProductionStage,
 } from "./stages";
+import { getStageOrder } from "./stage-labels";
 import {
   planSubPos,
   isMultiSupplier,
@@ -113,6 +115,8 @@ export const advanceSchema = z.object({
 export async function createPo(
   input: CreatePoInput,
 ): Promise<{ poId: string; poNumber: string }> {
+  const opening = firstStage(await getStageOrder());
+
   const seq = await db.execute(
     sql`SELECT nextval('production_po_number_seq')::int AS n`,
   );
@@ -151,16 +155,17 @@ export async function createPo(
         companyId: li.companyId ?? null,
         shopifyLocationId: li.shopifyLocationId ?? null,
         locationName: li.locationName ?? null,
+        currentStage: opening,
       })),
     )
     .returning({ id: productionPoLineItem.id });
 
-  // Seed the opening "supplier_po" stage event so the timeline and future
-  // cycle-time math have a starting point.
+  // Seed the opening stage event so the timeline and future cycle-time math
+  // have a starting point.
   await db.insert(productionStageEvent).values(
     insertedItems.map((item) => ({
       lineItemId: item.id,
-      stage: "supplier_po" as const,
+      stage: opening,
     })),
   );
 
@@ -187,8 +192,9 @@ export async function createMultiSupplierPo(
   const master = await createPo(input);
   await setStageAssignments(master.poId, stageSuppliers);
 
-  const workStages = STAGES.filter((s) => s !== "complete");
-  const plan = planSubPos(workStages, stageSuppliers, input.supplierId);
+  const order = await getStageOrder();
+  const workStages = order.slice(0, -1);
+  const plan = planSubPos(order, workStages, stageSuppliers, input.supplierId);
   if (!isMultiSupplier(plan)) {
     return { poId: master.poId, poNumber: master.poNumber, subPos: [] };
   }
@@ -246,8 +252,9 @@ export async function syncMasterSubPos(
   await db.delete(productionPo).where(eq(productionPo.parentPoId, masterId));
   if (!multiSupplier) return;
 
-  const workStages = STAGES.filter((s) => s !== "complete");
-  const plan = planSubPos(workStages, master.stageAssignments, master.supplierId);
+  const order = await getStageOrder();
+  const workStages = order.slice(0, -1);
+  const plan = planSubPos(order, workStages, master.stageAssignments, master.supplierId);
   if (!isMultiSupplier(plan)) return;
 
   for (const p of plan) {
@@ -366,12 +373,16 @@ export async function advanceSubPo(params: {
   });
   if (!master) throw new Error("master PO not found");
 
+  const order = await getStageOrder();
+  const terminal = terminalStage(order);
   const owned = stagesOwnedBySupplier(
+    order,
     master.stageAssignments,
     master.supplierId,
     sub.supplierId,
   );
   const state = subPoStageState(
+    order,
     owned,
     master.lineItems.map((li) => li.currentStage),
   );
@@ -383,6 +394,7 @@ export async function advanceSubPo(params: {
   }
 
   const transitions = subPoTransitions({
+    order,
     ownedStages: owned,
     lines: master.lineItems,
     mode: params.mode,
@@ -396,7 +408,7 @@ export async function advanceSubPo(params: {
       .set({
         currentStage: t.to,
         updatedAt: now,
-        actualCompletionDate: t.to === "complete" ? today : undefined,
+        actualCompletionDate: t.to === terminal ? today : undefined,
       })
       .where(eq(productionPoLineItem.id, t.lineItemId));
 
@@ -436,14 +448,17 @@ export async function advanceSubPo(params: {
 /** The stages a sub-PO can move its line items to: the supplier's own stages
  *  (forward or back) plus each run-boundary handoff (the next stage after an
  *  owned stage the supplier doesn't own — i.e. the next team). */
-export function subPoStageTargets(ownedStages: ProductionStage[]): ProductionStage[] {
+export function subPoStageTargets(
+  order: readonly string[],
+  ownedStages: ProductionStage[],
+): ProductionStage[] {
   const ownedSet = new Set(ownedStages);
   const targets = new Set<ProductionStage>(ownedStages);
   for (const s of ownedStages) {
-    const n = nextStage(s);
+    const n = nextStage(order, s);
     if (n != null && !ownedSet.has(n)) targets.add(n);
   }
-  return STAGES.filter((s) => targets.has(s));
+  return order.filter((s) => targets.has(s));
 }
 
 /**
@@ -474,13 +489,16 @@ export async function setSubPoStage(params: {
   });
   if (!master) throw new Error("master PO not found");
 
+  const order = await getStageOrder();
+  const terminal = terminalStage(order);
   const owned = stagesOwnedBySupplier(
+    order,
     master.stageAssignments,
     master.supplierId,
     sub.supplierId,
   );
   const ownedSet = new Set(owned);
-  if (!subPoStageTargets(owned).includes(params.toStage)) {
+  if (!subPoStageTargets(order, owned).includes(params.toStage)) {
     throw new Error("stage not available for this sub-PO");
   }
 
@@ -497,7 +515,7 @@ export async function setSubPoStage(params: {
       .set({
         currentStage: t.to,
         updatedAt: now,
-        actualCompletionDate: t.to === "complete" ? today : null,
+        actualCompletionDate: t.to === terminal ? today : null,
       })
       .where(eq(productionPoLineItem.id, t.lineItemId));
 
@@ -576,6 +594,7 @@ export async function updatePoFull(
     }
   }
 
+  const opening = firstStage(await getStageOrder());
   const now = new Date();
   for (const li of input.lineItems) {
     if (li.id && existingIds.has(li.id)) {
@@ -608,11 +627,12 @@ export async function updatePoFull(
           companyId: li.companyId ?? null,
           shopifyLocationId: li.shopifyLocationId ?? null,
           locationName: li.locationName ?? null,
+          currentStage: opening,
         })
         .returning({ id: productionPoLineItem.id });
       await db
         .insert(productionStageEvent)
-        .values({ lineItemId: ins.id, stage: "supplier_po" as const });
+        .values({ lineItemId: ins.id, stage: opening });
     }
   }
 
@@ -642,7 +662,10 @@ export async function advance(params: {
   });
   if (!po) throw new Error(`production PO ${params.poId} not found`);
 
+  const order = await getStageOrder();
+  const terminal = terminalStage(order);
   const transitions = planAdvance({
+    order,
     lockStagesTogether: po.lockStagesTogether,
     lineItems: po.lineItems,
     lineItemId: params.lineItemId,
@@ -657,7 +680,7 @@ export async function advance(params: {
       .set({
         currentStage: t.to,
         updatedAt: now,
-        actualCompletionDate: t.to === "complete" ? today : undefined,
+        actualCompletionDate: t.to === terminal ? today : undefined,
       })
       .where(eq(productionPoLineItem.id, t.lineItemId));
 
@@ -706,6 +729,7 @@ export async function setStage(params: {
   });
   if (!po) throw new Error(`production PO ${li.poId} not found`);
 
+  const terminal = terminalStage(await getStageOrder());
   const transitions = planSetStage({
     lockStagesTogether: po.lockStagesTogether,
     lineItems: po.lineItems,
@@ -722,7 +746,7 @@ export async function setStage(params: {
       .set({
         currentStage: t.to,
         updatedAt: now,
-        actualCompletionDate: t.to === "complete" ? today : null,
+        actualCompletionDate: t.to === terminal ? today : null,
       })
       .where(eq(productionPoLineItem.id, t.lineItemId));
 
@@ -833,7 +857,9 @@ export async function notifySupplierHandoff(params: {
       with: { stageAssignments: { columns: { stage: true, supplierId: true } } },
     });
     if (!po) return;
-    if (!isHandoff(po.stageAssignments, po.supplierId, params.supplierId, t.from, t.to)) {
+    const order = await getStageOrder();
+    const terminal = terminalStage(order);
+    if (!isHandoff(order, po.stageAssignments, po.supplierId, params.supplierId, t.from, t.to)) {
       return;
     }
     const sup = await db.query.supplier.findFirst({
@@ -843,8 +869,8 @@ export async function notifySupplierHandoff(params: {
 
     // The sub-PO the handing-off supplier owns (e.g. 00118-A), so the alert shows
     // the actual sub-PO rather than the bare master number.
-    const workStages = STAGES.filter((s) => s !== "complete");
-    const plan = planSubPos(workStages, po.stageAssignments, po.supplierId);
+    const workStages = order.slice(0, -1);
+    const plan = planSubPos(order, workStages, po.stageAssignments, po.supplierId);
     const poSuffix = isMultiSupplier(plan)
       ? plan.find((p) => p.supplierId === params.supplierId)?.suffix ?? null
       : null;
@@ -852,8 +878,8 @@ export async function notifySupplierHandoff(params: {
     // Who picks the work up next — the supplier owning the stage it moved into,
     // or "Complete" when it's the final handoff.
     let nextSupplierName = "Complete";
-    if (t.to !== "complete") {
-      const nextId = supplierForStage(po.stageAssignments, po.supplierId, t.to);
+    if (t.to !== terminal) {
+      const nextId = supplierForStage(order, po.stageAssignments, po.supplierId, t.to);
       const next = nextId
         ? await db.query.supplier.findFirst({
             where: eq(supplier.id, nextId),

@@ -8,8 +8,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { STAGES, nextStage, derivePoStage, type ProductionStage } from "@/lib/production/stages";
-import { getStageLabels } from "@/lib/production/stage-labels";
+import { nextStage, derivePoStage, isTerminal, type ProductionStage } from "@/lib/production/stages";
+import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { formatPoNumber, planSubPos, subPoStageState } from "@/lib/production/sub-po";
 import { stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
@@ -61,7 +61,8 @@ export default async function PoDetailPage({
   const { id } = await params;
   const po = await getPoDetail(id);
   if (!po) notFound();
-  const stageLabels = await getStageLabels();
+  const [stageLabels, order] = await Promise.all([getStageLabels(), getStageOrder()]);
+  const workStages = order.slice(0, -1);
 
   // Multi-supplier framing: a PO with sub-POs is a master; a PO with a parent
   // is a sub-PO. The per-supplier stage split comes from the master's
@@ -71,8 +72,7 @@ export default async function PoDetailPage({
   const isSubPo = !!po.parentPoId;
   // One invoice per PO — if it's already been invoiced, link to it instead.
   const existingInvoice = isSubPo ? null : await invoiceForPo(po.id);
-  const workStages = STAGES.filter((s) => s !== "complete");
-  const plan = isMaster ? planSubPos(workStages, po.stageAssignments, po.supplierId) : [];
+  const plan = isMaster ? planSubPos(order, workStages, po.stageAssignments, po.supplierId) : [];
   const stagesBySupplier = new Map(plan.map((p) => [p.supplierId, p.stages]));
 
   // Sub-PO: load the master so we can show (read-only) what this sub-PO covers —
@@ -80,13 +80,13 @@ export default async function PoDetailPage({
   const subMaster = isSubPo ? await getPoDetail(po.parentPoId as string) : null;
   let subStageKeys: ProductionStage[] = [];
   if (subMaster) {
-    const mplan = planSubPos(workStages, subMaster.stageAssignments, subMaster.supplierId);
+    const mplan = planSubPos(order, workStages, subMaster.stageAssignments, subMaster.supplierId);
     subStageKeys = mplan.find((p) => p.supplierId === po.supplierId)?.stages ?? [];
   }
   // Show only real work stages in the prefix; the opening "supplier_po" state is
   // owned for routing but isn't a labelled step.
   const subStages = subStageKeys
-    .filter((s) => s !== "supplier_po")
+    .filter((s) => s !== order[0])
     .map((s) => stageLabels[s]);
   const subItems = subMaster
     ? [...subMaster.lineItems].sort(
@@ -114,14 +114,14 @@ export default async function PoDetailPage({
   // Sub-PO: this supplier's per-line unit costs (keyed on the master) + the
   // lifecycle state + the stage dropdown options (owned stages + handoff).
   const subState = isSubPo
-    ? subPoStageState(subStageKeys, subItems.map((li) => li.currentStage))
+    ? subPoStageState(order, subStageKeys, subItems.map((li) => li.currentStage))
     : null;
   // Dropdown the supplier sees: only their OWN work stages, plus a single
   // "Complete" that hands the batch to the next team (they don't see the next
   // team's stage name). supplier_po is the internal kickoff — never shown.
-  const subWorkStages = subStageKeys.filter((s) => s !== "supplier_po");
+  const subWorkStages = subStageKeys.filter((s) => s !== order[0]);
   const subHandoffStage = subStageKeys.length
-    ? nextStage(subStageKeys[subStageKeys.length - 1])
+    ? nextStage(order, subStageKeys[subStageKeys.length - 1])
     : null;
   const subStageOptions = isSubPo
     ? [
@@ -133,7 +133,7 @@ export default async function PoDetailPage({
   // supplier's first work stage so the dropdown always has a matching option.
   const subCurrentStageValue =
     isSubPo && subState
-      ? subState.currentStage === "supplier_po"
+      ? subState.currentStage === order[0]
         ? subWorkStages[0] ?? subState.currentStage
         : subState.currentStage
       : null;
@@ -331,7 +331,7 @@ export default async function PoDetailPage({
                   <span className="ml-2 text-sm text-zinc-600">{s.supplier?.name ?? "—"}</span>
                   <div className="mt-0.5 truncate text-xs text-zinc-400">
                     {(stagesBySupplier.get(s.supplierId) ?? [])
-                      .filter((st) => st !== "supplier_po")
+                      .filter((st) => st !== order[0])
                       .map((st) => stageLabels[st])
                       .join(", ") || "—"}
                   </div>
@@ -360,7 +360,8 @@ export default async function PoDetailPage({
       {!isSubPo && (
         <>
       {/* C2 receiving: show once the PO is complete, or after it's been received. */}
-      {(derivedStage === "complete" || po.shopifyReceivedAt) && (
+      {((!!derivedStage && derivedStage !== "mixed" && isTerminal(order, derivedStage)) ||
+        po.shopifyReceivedAt) && (
         <PoReceive
           poId={po.id}
           receivedAt={

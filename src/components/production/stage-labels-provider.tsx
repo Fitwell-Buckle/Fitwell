@@ -1,25 +1,40 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { STAGES, STAGE_LABELS } from "@/lib/production/stages";
 
-type StageLabels = Record<ProductionStage, string>;
+interface StageContext {
+  /** key → label, including soft-deleted stages so history still renders. */
+  labels: Record<string, string>;
+  /** Active stage keys in pipeline order. */
+  order: string[];
+}
 
-const StageLabelsContext = createContext<StageLabels>(STAGE_LABELS);
+const StageContext = createContext<StageContext>({
+  labels: STAGE_LABELS,
+  order: [...STAGES],
+});
 
 export function StageLabelsProvider({
-  value,
+  labels,
+  order,
   children,
 }: {
-  value: StageLabels;
+  labels: Record<string, string>;
+  order: string[];
   children: React.ReactNode;
 }) {
   return (
-    <StageLabelsContext.Provider value={value}>{children}</StageLabelsContext.Provider>
+    <StageContext.Provider value={{ labels, order }}>{children}</StageContext.Provider>
   );
 }
 
-/** Effective stage labels for client components (defaults + admin overrides). */
-export function useStageLabels(): StageLabels {
-  return useContext(StageLabelsContext);
+/** key → effective label (defaults + admin overrides), for client components. */
+export function useStageLabels(): Record<string, string> {
+  return useContext(StageContext).labels;
+}
+
+/** Active stage keys in pipeline order, for client components. */
+export function useStageOrder(): string[] {
+  return useContext(StageContext).order;
 }

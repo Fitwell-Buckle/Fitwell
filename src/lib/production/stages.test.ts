@@ -2,34 +2,56 @@ import { describe, it, expect } from "vitest";
 import {
   STAGES,
   nextStage,
-  isComplete,
+  prevStage,
+  isTerminal,
+  firstStage,
+  terminalStage,
   derivePoStage,
   planAdvance,
   planSetStage,
   type ProductionStage,
 } from "./stages";
 
+const ORDER = [...STAGES];
+
 describe("nextStage", () => {
-  it("walks the fixed progression in order", () => {
-    expect(nextStage("supplier_po")).toBe("stamping");
-    expect(nextStage("packaging")).toBe("complete");
+  it("walks the progression in order", () => {
+    expect(nextStage(ORDER, "supplier_po")).toBe("stamping");
+    expect(nextStage(ORDER, "packaging")).toBe("complete");
   });
 
   it("returns null at the terminal stage", () => {
-    expect(nextStage("complete")).toBeNull();
+    expect(nextStage(ORDER, "complete")).toBeNull();
   });
 
   it("covers every non-terminal stage", () => {
-    for (let i = 0; i < STAGES.length - 1; i++) {
-      expect(nextStage(STAGES[i])).toBe(STAGES[i + 1]);
+    for (let i = 0; i < ORDER.length - 1; i++) {
+      expect(nextStage(ORDER, ORDER[i])).toBe(ORDER[i + 1]);
     }
   });
 });
 
-describe("isComplete", () => {
-  it("is true only for the terminal stage", () => {
-    expect(isComplete("complete")).toBe(true);
-    expect(isComplete("qc")).toBe(false);
+describe("prevStage", () => {
+  it("walks backward and stops at the first stage", () => {
+    expect(prevStage(ORDER, "stamping")).toBe("supplier_po");
+    expect(prevStage(ORDER, "supplier_po")).toBeNull();
+  });
+});
+
+describe("first / terminal helpers", () => {
+  it("identifies the bookend stages by position", () => {
+    expect(firstStage(ORDER)).toBe("supplier_po");
+    expect(terminalStage(ORDER)).toBe("complete");
+    expect(isTerminal(ORDER, "complete")).toBe(true);
+    expect(isTerminal(ORDER, "qc")).toBe(false);
+  });
+
+  it("respects a custom order (renamed/reordered stages)", () => {
+    const custom = ["intake", "cut", "ship"];
+    expect(firstStage(custom)).toBe("intake");
+    expect(terminalStage(custom)).toBe("ship");
+    expect(nextStage(custom, "cut")).toBe("ship");
+    expect(isTerminal(custom, "ship")).toBe(true);
   });
 });
 
@@ -50,6 +72,7 @@ describe("derivePoStage", () => {
 describe("planAdvance — locked PO", () => {
   it("advances every non-complete line item one stage", () => {
     const plan = planAdvance({
+      order: ORDER,
       lockStagesTogether: true,
       lineItems: [
         { id: "a", currentStage: "stamping" },
@@ -64,6 +87,7 @@ describe("planAdvance — locked PO", () => {
 
   it("skips line items already complete", () => {
     const plan = planAdvance({
+      order: ORDER,
       lockStagesTogether: true,
       lineItems: [
         { id: "a", currentStage: "complete" },
@@ -75,6 +99,7 @@ describe("planAdvance — locked PO", () => {
 
   it("returns an empty plan when all items are complete", () => {
     const plan = planAdvance({
+      order: ORDER,
       lockStagesTogether: true,
       lineItems: [{ id: "a", currentStage: "complete" }],
     });
@@ -90,6 +115,7 @@ describe("planAdvance — broken PO", () => {
 
   it("advances only the targeted line item", () => {
     const plan = planAdvance({
+      order: ORDER,
       lockStagesTogether: false,
       lineItems,
       lineItemId: "b",
@@ -99,18 +125,19 @@ describe("planAdvance — broken PO", () => {
 
   it("throws when no target is provided", () => {
     expect(() =>
-      planAdvance({ lockStagesTogether: false, lineItems }),
+      planAdvance({ order: ORDER, lockStagesTogether: false, lineItems }),
     ).toThrow(/lineItemId is required/);
   });
 
   it("throws when the target is not on the PO", () => {
     expect(() =>
-      planAdvance({ lockStagesTogether: false, lineItems, lineItemId: "zzz" }),
+      planAdvance({ order: ORDER, lockStagesTogether: false, lineItems, lineItemId: "zzz" }),
     ).toThrow(/not found/);
   });
 
   it("returns an empty plan when the targeted item is already complete", () => {
     const plan = planAdvance({
+      order: ORDER,
       lockStagesTogether: false,
       lineItems: [{ id: "a", currentStage: "complete" }],
       lineItemId: "a",

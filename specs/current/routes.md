@@ -128,6 +128,8 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/production/po/[id]/attachments` | Upload a file to a PO (Vercel Blob; multipart) |
 | DELETE | `/api/production/attachments/[id]` | Delete an attachment (blob + row) |
 | POST | `/api/production/line-items/[id]/stage` | Set a line item's stage (kanban drag); locked POs move together |
+| GET | `/api/production/stages` | List the active production stages (key + label + position) for the editor |
+| PUT | `/api/production/stages` | Replace the pipeline — rename/add/delete/reorder stages. Deleting a stage with items in it requires a `{moves:{key:"forward"\|"back"}}` direction; it soft-deletes (history kept) and moves stranded line items. Admin-only. Drives the Production Summary "Setup" modal |
 | PATCH | `/api/production/stage-events/[id]` | Edit a stage transition date (entered_at, day-granularity); syncs the previous stage's exited_at; chronological bounds; admin-only |
 | POST | `/api/production/suppliers` | Create a supplier |
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |

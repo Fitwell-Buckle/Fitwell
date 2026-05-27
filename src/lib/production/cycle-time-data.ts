@@ -2,6 +2,7 @@ import { and, gte, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { productionStageEvent } from "@/lib/schema";
 import { buildStageEstimates } from "./cycle-time";
+import { getStageOrder } from "./stage-labels";
 import type { ProductionStage } from "./stages";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -38,5 +39,5 @@ export async function getStageEstimates(): Promise<Record<ProductionStage, numbe
     (samplesByStage[e.stage] ??= []).push(days);
   }
 
-  return buildStageEstimates(samplesByStage);
+  return buildStageEstimates(await getStageOrder(), samplesByStage);
 }

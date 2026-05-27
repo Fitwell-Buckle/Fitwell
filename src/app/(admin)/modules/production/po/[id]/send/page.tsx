@@ -7,8 +7,8 @@ import { getShopifyClient } from "@/lib/shopify/client";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { fmtMoney, fmtDate, STATUS_LABELS, skuSize } from "@/lib/production/display";
-import { STAGES, type ProductionStage } from "@/lib/production/stages";
-import { getStageLabels } from "@/lib/production/stage-labels";
+import { type ProductionStage } from "@/lib/production/stages";
+import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { formatPoNumber, planSubPos } from "@/lib/production/sub-po";
 import { usesRawBlankSummary, summarizeRawBlanks } from "@/lib/production/raw-blank";
 import { PageHeader } from "@/components/ui/page-header";
@@ -55,7 +55,7 @@ export default async function SendPoPage({
   const { id } = await params;
   const po = await getPoDetail(id);
   if (!po) notFound();
-  const stageLabels = await getStageLabels();
+  const [stageLabels, order] = await Promise.all([getStageLabels(), getStageOrder()]);
 
   // Sub-POs carry no line items of their own — they render the master's. The
   // sub-PO is sent to its own supplier, scoped to the stages that supplier owns.
@@ -66,7 +66,8 @@ export default async function SendPoPage({
   let supplierStageKeys: ProductionStage[] = [];
   if (master) {
     const plan = planSubPos(
-      STAGES.filter((s) => s !== "complete"),
+      order,
+      order.slice(0, -1),
       master.stageAssignments,
       master.supplierId,
     );
@@ -74,7 +75,7 @@ export default async function SendPoPage({
   }
   // Opening "supplier_po" state is owned for routing but not a labelled work step.
   const supplierStages = supplierStageKeys
-    .filter((s) => s !== "supplier_po")
+    .filter((s) => s !== order[0])
     .map((s) => stageLabels[s]);
 
   // Raw-blank summary: a pre-polishing supplier (stamping/EDM) gets items grouped

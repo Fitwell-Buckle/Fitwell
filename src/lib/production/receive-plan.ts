@@ -31,7 +31,10 @@ export interface ReceivePlanLine {
   quantity: number;
 }
 
-export function planReceiveLine(li: ReceiveLineInput): ReceivePlanLine {
+export function planReceiveLine(
+  li: ReceiveLineInput,
+  terminal: string = "complete",
+): ReceivePlanLine {
   const base = {
     lineItemId: li.id,
     variantId: li.shopifyVariantId,
@@ -39,7 +42,7 @@ export function planReceiveLine(li: ReceiveLineInput): ReceivePlanLine {
     quantity: li.quantity,
   };
   if (li.shopifyReceivedAt) return { ...base, status: "already_received" };
-  if (li.currentStage !== "complete") return { ...base, status: "not_ready" };
+  if (li.currentStage !== terminal) return { ...base, status: "not_ready" };
   if (!li.shopifyVariantId) return { ...base, status: "no_variant" };
   if (!li.effectiveLocationId) return { ...base, status: "no_warehouse" };
   return { ...base, status: "ready" };

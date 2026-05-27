@@ -223,10 +223,28 @@ Tracks in-house buckle production across suppliers and an 8-stage workflow.
 Added by the Production work plan (Phase 1). Money is stored in **cents**
 (integers); date-only fields use Postgres `date`.
 
-### `production_stage` (enum)
+### `production_stage_def` (dynamic stages)
 
-Fixed, ordered progression — every line item passes through all stages:
-`supplier_po → stamping → edm → polishing → logo → plating → qc → packaging → complete`.
+The pipeline's stages are now **data-driven** — admins add / rename / delete /
+reorder them in the Production Summary "Setup" modal. Each row is a stage:
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `key` | text | PK — the stable identifier stored on line items / events / assignments |
+| `label` | text | Display name (editable) |
+| `position` | int | Pipeline order. Position 0 = **opening** (POs open here + sub-PO routing); last = **terminal** (reaching it triggers the Shopify receive) |
+| `active` | boolean | `false` = soft-deleted (kept so historical timelines still render its name) |
+| `created_at` / `updated_at` | timestamp | |
+
+Seeded with the original 9 stages (`supplier_po → stamping → edm → polishing →
+logo → plating → qc → packaging → complete`). The `current_stage` / `stage`
+columns below are now `text` (a stage `key`), not the legacy `production_stage`
+enum. The effective order/labels resolve via `getStageLabels()` /
+`getStageOrder()` / `getStages()` in `src/lib/production/stage-labels.ts`
+(cached, tag-invalidated on edit). Pure pipeline logic takes the ordered key
+list as a parameter, so first/terminal are by **position**, not hardcoded keys.
+Deleting a stage moves any line items still in it forward/back to the nearest
+surviving stage. (Superseded the short-lived `production_stage_label` table.)
 
 ### `supplier`
 
@@ -338,7 +356,7 @@ a second "balance" draft order (`shopify_balance_draft_order_id` /
 | `sku` / `title` | text | Required |
 | `quantity` | integer | Required |
 | `unit_cost_cents` | integer | Nullable |
-| `current_stage` | production_stage | Default `supplier_po` |
+| `current_stage` | text | Stage `key` (FK-ish into `production_stage_def`); default `supplier_po` |
 | `expected_completion_date` / `actual_completion_date` | date | Nullable |
 | `customer_id` | text | FK → customer, optional earmark |
 | `order_line_item_id` | text | FK → order_line_item, optional earmark |
@@ -352,7 +370,7 @@ Append-on-transition log; powers the timeline and (later) cycle-time estimates.
 |--------|------|-------|
 | `id` | uuid (text) | PK |
 | `line_item_id` | text | FK → production_po_line_item (cascade delete) |
-| `stage` | production_stage | The stage entered |
+| `stage` | text | Stage `key` entered (into `production_stage_def`) |
 | `entered_at` | timestamp | Defaults now |
 | `exited_at` | timestamp | Set when the item leaves the stage |
 | `triggered_by_user_id` | text | FK → user, nullable |

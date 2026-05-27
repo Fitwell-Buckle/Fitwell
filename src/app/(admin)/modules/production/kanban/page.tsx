@@ -8,6 +8,8 @@ import { productionPo } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { supplierForStage } from "@/lib/production/stage-owners";
+import { getStageOrder } from "@/lib/production/stage-labels";
+import { terminalStage } from "@/lib/production/stages";
 import { formatPoNumber } from "@/lib/production/sub-po";
 import { KanbanBoard, type KanbanCard } from "./kanban-board";
 
@@ -18,6 +20,9 @@ export const metadata: Metadata = {
 export default async function KanbanPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
+
+  const order = await getStageOrder();
+  const terminal = terminalStage(order);
 
   const lineItems = await db.query.productionPoLineItem.findMany({
     columns: { id: true, sku: true, title: true, quantity: true, currentStage: true },
@@ -70,7 +75,7 @@ export default async function KanbanPage() {
   const livePoIds = new Set<string>();
   for (const [poId, lines] of byPo) {
     const po = lines[0].po!;
-    if (po.status === "active" && lines.some((l) => l.currentStage !== "complete")) {
+    if (po.status === "active" && lines.some((l) => l.currentStage !== terminal)) {
       livePoIds.add(poId);
     }
   }
@@ -80,7 +85,7 @@ export default async function KanbanPage() {
     .map((li) => {
       const po = li.po!;
       const ownerId =
-        supplierForStage(po.stageAssignments, po.supplierId, li.currentStage) ??
+        supplierForStage(order, po.stageAssignments, po.supplierId, li.currentStage) ??
         po.supplierId;
       const suffix = suffixByMasterSupplier.get(`${po.id}:${ownerId}`);
       return {
@@ -121,7 +126,7 @@ export default async function KanbanPage() {
             No in-progress line items. Create a PO to populate the board.
           </p>
         ) : (
-          <KanbanBoard cards={cards} />
+          <KanbanBoard cards={cards} stages={order} />
         )}
       </div>
     </div>

@@ -2,7 +2,7 @@
 // which sub-POs to create from a stage→supplier assignment map. Kept
 // side-effect-free for unit tests.
 
-import { STAGES, nextStage, type ProductionStage } from "./stages";
+import { nextStage, type ProductionStage } from "./stages";
 import { supplierForStage } from "./stage-owners";
 
 /**
@@ -41,23 +41,24 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
  * treat that as a normal standalone PO.
  */
 export function planSubPos(
+  order: readonly string[],
   stages: ProductionStage[],
   assignments: { stage: ProductionStage; supplierId: string }[],
   primarySupplierId: string,
 ): SubPoPlan[] {
-  const order: string[] = [];
+  const supplierOrder: string[] = [];
   const bySupplier = new Map<string, ProductionStage[]>();
   for (const stage of stages) {
-    // supplierForStage folds the opening "supplier_po" state into the stamping
-    // owner, so the first work supplier leads the route (and isn't held up).
-    const sup = supplierForStage(assignments, primarySupplierId, stage) ?? primarySupplierId;
+    // supplierForStage folds the opening stage into the first-work owner, so the
+    // first work supplier leads the route (and isn't held up).
+    const sup = supplierForStage(order, assignments, primarySupplierId, stage) ?? primarySupplierId;
     if (!bySupplier.has(sup)) {
       bySupplier.set(sup, []);
-      order.push(sup);
+      supplierOrder.push(sup);
     }
     bySupplier.get(sup)!.push(stage);
   }
-  return order.map((supplierId, i) => ({
+  return supplierOrder.map((supplierId, i) => ({
     supplierId,
     suffix: LETTERS[i] ?? `${i + 1}`,
     stages: bySupplier.get(supplierId)!,
@@ -69,7 +70,8 @@ export function isMultiSupplier(plan: SubPoPlan[]): boolean {
   return plan.length > 1;
 }
 
-const stageIndex = (s: ProductionStage): number => STAGES.indexOf(s);
+const indexer = (order: readonly string[]) => (s: ProductionStage): number =>
+  order.indexOf(s);
 
 /**
  * Where a sub-PO sits in its lifecycle. A sub-PO owns a contiguous slice of the
@@ -95,9 +97,11 @@ export interface SubPoStageState {
 }
 
 export function subPoStageState(
+  order: readonly string[],
   ownedStages: ProductionStage[],
   lineStages: ProductionStage[],
 ): SubPoStageState {
+  const stageIndex = indexer(order);
   const owned = [...ownedStages].sort((a, b) => stageIndex(a) - stageIndex(b));
   const ownedSet = new Set(owned);
   if (owned.length === 0) {
@@ -140,7 +144,7 @@ export function subPoStageState(
     status = upstreamCount > 0 ? "waiting" : "done";
   } else {
     const canStep = arrivedStages.some((s) => {
-      const n = nextStage(s);
+      const n = nextStage(order, s);
       return n != null && ownedSet.has(n);
     });
     if (canStep) status = "advance";
@@ -174,6 +178,7 @@ export interface SubPoTransition {
  *                supplier, or "complete" when this is the last stage).
  */
 export function subPoTransitions(params: {
+  order: readonly string[];
   ownedStages: ProductionStage[];
   lines: { id: string; currentStage: ProductionStage }[];
   mode: "step" | "complete";
@@ -182,7 +187,7 @@ export function subPoTransitions(params: {
   const out: SubPoTransition[] = [];
   for (const li of params.lines) {
     if (!ownedSet.has(li.currentStage)) continue;
-    const to = nextStage(li.currentStage);
+    const to = nextStage(params.order, li.currentStage);
     if (to == null) continue;
     const nextOwned = ownedSet.has(to);
     if (params.mode === "step" ? nextOwned : !nextOwned) {

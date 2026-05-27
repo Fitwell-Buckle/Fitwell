@@ -1,4 +1,4 @@
-import { isComplete, type ProductionStage } from "./stages";
+import type { ProductionStage } from "./stages";
 
 // Pure, DB-free selectors for the production deadline-alerts cron. Dates are
 // YYYY-MM-DD strings, which sort lexicographically == chronologically.
@@ -36,10 +36,13 @@ export function lineItemsNeedingAlert(params: {
   lineItems: AlertLine[];
   today: string;
   withinDays: number;
+  /** The terminal stage key (a line there is done). Defaults to the seeded key. */
+  terminal?: string;
 }): DueLine[] {
+  const terminal = params.terminal ?? "complete";
   const cutoff = addDays(params.today, params.withinDays);
   return params.lineItems
-    .filter((li) => !isComplete(li.currentStage) && li.dueDate !== null && li.dueDate <= cutoff)
+    .filter((li) => li.currentStage !== terminal && li.dueDate !== null && li.dueDate <= cutoff)
     .map((li) => ({ ...li, overdue: (li.dueDate as string) < params.today }));
 }
 
@@ -54,13 +57,16 @@ export interface NagPo {
  * POs that are fully complete (every line at the complete stage) but haven't
  * been received into Shopify yet — these get a "ready to receive" nag.
  */
-export function posNeedingReceiveNag(pos: NagPo[]): { id: string; poNumber: string }[] {
+export function posNeedingReceiveNag(
+  pos: NagPo[],
+  terminal: string = "complete",
+): { id: string; poNumber: string }[] {
   return pos
     .filter(
       (po) =>
         !po.receivedAt &&
         po.lineStages.length > 0 &&
-        po.lineStages.every((s) => isComplete(s)),
+        po.lineStages.every((s) => s === terminal),
     )
     .map((po) => ({ id: po.id, poNumber: po.poNumber }));
 }

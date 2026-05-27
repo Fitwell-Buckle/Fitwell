@@ -17,11 +17,10 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import {
-  STAGES,
   derivePoStage,
   type ProductionStage,
 } from "@/lib/production/stages";
-import { getStageLabels } from "@/lib/production/stage-labels";
+import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import {
   STATUS_LABELS,
   statusBadgeClass,
@@ -39,7 +38,7 @@ export default async function SupplierHomePage() {
   const scope = await getSupplierScope();
   if (!scope) redirect("/supplier/login");
   const me = scope.supplierId;
-  const stageLabels = await getStageLabels();
+  const [stageLabels, order] = await Promise.all([getStageLabels(), getStageOrder()]);
 
   // POs this supplier is involved in: their own POs OR ones where they own a stage.
   const assigned = await db
@@ -81,11 +80,11 @@ export default async function SupplierHomePage() {
   const handoff = new Set<ProductionStage>();
   const cards: KanbanCard[] = [];
   for (const po of pos) {
-    const owned = stagesOwnedBySupplier(po.stageAssignments, po.supplierId, me);
+    const owned = stagesOwnedBySupplier(order, po.stageAssignments, po.supplierId, me);
     const ownedSet = new Set(owned);
     for (const s of owned) {
       ownedAll.add(s);
-      const next = STAGES[STAGES.indexOf(s) + 1];
+      const next = order[order.indexOf(s) + 1];
       if (next && !ownedSet.has(next)) handoff.add(next);
     }
     for (const li of po.lineItems) {
@@ -104,7 +103,7 @@ export default async function SupplierHomePage() {
       }
     }
   }
-  const boardStages = STAGES.filter((s) => ownedAll.has(s) || handoff.has(s));
+  const boardStages = order.filter((s) => ownedAll.has(s) || handoff.has(s));
 
   const rows = pos.map((po) => ({
     ...po,

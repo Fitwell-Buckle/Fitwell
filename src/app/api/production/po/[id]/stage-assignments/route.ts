@@ -6,7 +6,8 @@ import {
   setStageAssignments,
   syncMasterSubPos,
 } from "@/lib/production/service";
-import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { type ProductionStage } from "@/lib/production/stages";
+import { getStageOrder } from "@/lib/production/stage-labels";
 
 const bodySchema = z.object({
   assignments: z
@@ -49,8 +50,9 @@ export async function PUT(
   } catch {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
+  const order = await getStageOrder();
   const valid = input.assignments
-    .filter((a) => a.supplierId && STAGES.includes(a.stage as ProductionStage))
+    .filter((a) => a.supplierId && order.includes(a.stage))
     .map((a) => ({ stage: a.stage as ProductionStage, supplierId: a.supplierId }));
   await setStageAssignments(id, valid);
   await syncMasterSubPos(id, input.multiSupplier ?? false);

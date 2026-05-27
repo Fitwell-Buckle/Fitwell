@@ -10,7 +10,11 @@ import {
   supplierOwnsStage,
   type StageAssignment,
 } from "./stage-owners";
-import type { ProductionStage } from "./stages";
+// Access guards use the default stage order for the opening-stage ownership
+// fold. They must stay free of server-only imports (the isolation test exercises
+// this module under plain vitest), and the fold only affects the opening stage —
+// coarse enough for an access check.
+import { STAGES, type ProductionStage } from "./stages";
 
 // NOTE: this module must NOT import `@/lib/auth` (NextAuth). It's exercised by
 // the isolation integration test under plain vitest, where next-auth can't
@@ -74,7 +78,7 @@ export async function ensureSupplierMayActOnPo(
   const me = session.user.supplierId;
   if (
     canSupplierAccessPo(own.supplierId, me) ||
-    supplierHasAnyStage(own.assignments, own.supplierId, me)
+    supplierHasAnyStage(STAGES, own.assignments, own.supplierId, me)
   ) {
     return null;
   }
@@ -101,6 +105,7 @@ export async function ensureSupplierMayActOnLineItem(
   if (!own) return { error: "Forbidden", status: 403 };
   if (
     supplierOwnsStage(
+      STAGES,
       own.assignments,
       own.supplierId,
       session.user.supplierId,

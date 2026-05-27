@@ -1,5 +1,9 @@
-// Pure, DB-free stage logic for the production module. Kept side-effect-free so
-// the advance rules (locked vs broken POs) can be unit tested in isolation.
+// Pure, DB-free stage logic for the production module. Stages are now dynamic
+// (added / renamed / deleted / reordered at runtime, stored in
+// production_stage_def). The arrays below are the DEFAULT seed + fallback; the
+// live order/labels come from getStages()/getStageOrder() (server) or
+// useStages() (client). Functions that depend on pipeline order take the
+// ordered key list explicitly so they stay pure + unit-testable.
 
 export const STAGES = [
   "supplier_po",
@@ -13,9 +17,11 @@ export const STAGES = [
   "complete",
 ] as const;
 
-export type ProductionStage = (typeof STAGES)[number];
+// A stage key is now an arbitrary string (user-defined), not a fixed union.
+export type ProductionStage = string;
 
-export const STAGE_LABELS: Record<ProductionStage, string> = {
+/** Default seed labels — overridden per-key by production_stage_def.label. */
+export const STAGE_LABELS: Record<string, string> = {
   supplier_po: "Supplier PO",
   stamping: "Raw Material Stamping",
   edm: "EDM",
@@ -27,15 +33,39 @@ export const STAGE_LABELS: Record<ProductionStage, string> = {
   complete: "Complete",
 };
 
-export function isComplete(stage: ProductionStage): boolean {
-  return stage === "complete";
+/** The opening stage = first in pipeline order (where POs open + routing kicks off). */
+export function firstStage(order: readonly string[]): ProductionStage {
+  return order[0];
 }
 
-/** The next stage in the fixed progression, or null if already complete. */
-export function nextStage(stage: ProductionStage): ProductionStage | null {
-  const i = STAGES.indexOf(stage);
-  if (i === -1 || i >= STAGES.length - 1) return null;
-  return STAGES[i + 1];
+/** The terminal stage = last in pipeline order (reaching it triggers receive). */
+export function terminalStage(order: readonly string[]): ProductionStage {
+  return order[order.length - 1];
+}
+
+/** Whether `stage` is the terminal (last) stage in this order. */
+export function isTerminal(order: readonly string[], stage: ProductionStage): boolean {
+  return order.length > 0 && stage === order[order.length - 1];
+}
+
+/** The next stage in the given order, or null if already last/unknown. */
+export function nextStage(
+  order: readonly string[],
+  stage: ProductionStage,
+): ProductionStage | null {
+  const i = order.indexOf(stage);
+  if (i === -1 || i >= order.length - 1) return null;
+  return order[i + 1];
+}
+
+/** The previous stage in the given order, or null if already first/unknown. */
+export function prevStage(
+  order: readonly string[],
+  stage: ProductionStage,
+): ProductionStage | null {
+  const i = order.indexOf(stage);
+  if (i <= 0) return null;
+  return order[i - 1];
 }
 
 /**
@@ -64,23 +94,23 @@ interface LineItemStage {
 /**
  * Decide which line items move and to where when a PO is advanced.
  *
- * - Locked PO: every non-complete line item advances one stage together.
+ * - Locked PO: every non-terminal line item advances one stage together.
  * - Broken PO (lockStagesTogether=false): only the targeted line item advances;
  *   a lineItemId is required.
  *
- * Line items already at "complete" produce no transition. Returns the planned
- * transitions without mutating anything.
+ * Line items already at the terminal stage produce no transition.
  */
 export function planAdvance(params: {
+  order: readonly string[];
   lockStagesTogether: boolean;
   lineItems: LineItemStage[];
   lineItemId?: string;
 }): AdvanceTransition[] {
-  const { lockStagesTogether, lineItems, lineItemId } = params;
+  const { order, lockStagesTogether, lineItems, lineItemId } = params;
 
   if (lockStagesTogether) {
     return lineItems.flatMap((li) => {
-      const to = nextStage(li.currentStage);
+      const to = nextStage(order, li.currentStage);
       return to ? [{ lineItemId: li.id, from: li.currentStage, to }] : [];
     });
   }
@@ -94,7 +124,7 @@ export function planAdvance(params: {
   if (!li) {
     throw new Error(`line item ${lineItemId} not found on this PO`);
   }
-  const to = nextStage(li.currentStage);
+  const to = nextStage(order, li.currentStage);
   return to ? [{ lineItemId: li.id, from: li.currentStage, to }] : [];
 }
 

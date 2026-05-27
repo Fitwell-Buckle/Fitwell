@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth";
 import { getPoDetail, getSupplierLineCosts } from "@/lib/production/service";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { fmtMoney, fmtDate, STATUS_LABELS } from "@/lib/production/display";
-import { STAGES, type ProductionStage } from "@/lib/production/stages";
-import { getStageLabels, type StageLabels } from "@/lib/production/stage-labels";
+import { type ProductionStage } from "@/lib/production/stages";
+import { getStageLabels, getStageOrder, type StageLabels } from "@/lib/production/stage-labels";
 import { formatPoNumber, planSubPos } from "@/lib/production/sub-po";
 import {
   usesRawBlankSummary,
@@ -35,6 +35,7 @@ function buildPoEmailHtml(
   rawBlanks: RawBlankGroup[],
   supplierUnit: Map<string, number | null>,
   stageLabels: StageLabels,
+  order: readonly string[],
 ): string {
   const cell = "padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;";
   const th = "padding:6px 10px;border-bottom:2px solid #ddd;font-size:11px;text-transform:uppercase;color:#888;text-align:left;";
@@ -146,7 +147,7 @@ function buildPoEmailHtml(
     </table>
     ${tableHtml}
     ${po.notes ? `<p style="margin-top:16px;font-size:13px;color:#444;">${esc(po.notes)}</p>` : ""}
-    <p style="margin-top:20px;font-size:11px;color:#aaa;">Stages: ${STAGES.slice(0, 8).map((s) => stageLabels[s]).join(" → ")}</p>
+    <p style="margin-top:20px;font-size:11px;color:#aaa;">Stages: ${order.slice(0, -1).map((s) => stageLabels[s]).join(" → ")}</p>
   </div>`;
 }
 
@@ -179,6 +180,7 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const stageLabels = await getStageLabels();
+  const order = await getStageOrder();
 
   // A sub-PO carries no line items of its own — bill the master's items, and
   // flag the stages this supplier is responsible for (red, per line).
@@ -188,14 +190,15 @@ export async function POST(
   let stageKeys: ProductionStage[] = [];
   if (master) {
     const plan = planSubPos(
-      STAGES.filter((s) => s !== "complete"),
+      order,
+      order.slice(0, -1),
       master.stageAssignments,
       master.supplierId,
     );
     stageKeys = plan.find((p) => p.supplierId === po.supplierId)?.stages ?? [];
   }
   const stagePrefix = stageKeys
-    .filter((s) => s !== "supplier_po")
+    .filter((s) => s !== order[0])
     .map((s) => stageLabels[s])
     .join(", ");
 
@@ -235,7 +238,7 @@ export async function POST(
       to,
       cc,
       subject: `Purchase Order ${numberDisplay} — Fitwell Buckle Co.`,
-      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit, stageLabels),
+      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit, stageLabels, order),
     });
     return NextResponse.json({ data: { sentTo: to, cc } });
   } catch (err) {

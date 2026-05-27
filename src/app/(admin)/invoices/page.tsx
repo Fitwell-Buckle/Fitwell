@@ -13,6 +13,7 @@ import {
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { parseDateRange } from "@/lib/date-range";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
+import { getStageOrder } from "@/lib/production/stage-labels";
 import { aggregateIncoming, type IncomingLine } from "@/lib/production/inventory";
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { ListFilters } from "@/components/catalog/list-filters";
@@ -56,7 +57,7 @@ export default async function B2BOrdersPage({
   );
 
   // Production lines (for ETA) + invoices.
-  const [invoices, pos, estimates, billing] = await Promise.all([
+  const [invoices, pos, estimates, billing, order] = await Promise.all([
     db.query.invoice.findMany({
       orderBy: desc(invoice.createdAt),
       with: {
@@ -81,6 +82,7 @@ export default async function B2BOrdersPage({
     }),
     getStageEstimates(),
     getBillingSettings(),
+    getStageOrder(),
   ]);
 
   // Production ETA per SKU = soonest projected completion across in-production
@@ -96,7 +98,7 @@ export default async function B2BOrdersPage({
       currentStage: li.currentStage,
     }));
   const etaBySku = new Map(
-    aggregateIncoming(incomingLines, estimates, today).map((r) => [r.sku, r.nearestEta]),
+    aggregateIncoming(order, incomingLines, estimates, today).map((r) => [r.sku, r.nearestEta]),
   );
 
   const rows = invoices

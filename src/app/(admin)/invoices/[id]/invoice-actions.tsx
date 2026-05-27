@@ -10,12 +10,11 @@ import {
   type InvoiceStatus,
 } from "@/lib/invoicing/invoicing";
 import { fmtMoney } from "@/lib/production/display";
-import { STAGES, type ProductionStage } from "@/lib/production/stages";
-import { useStageLabels } from "@/components/production/stage-labels-provider";
+import { type ProductionStage } from "@/lib/production/stages";
+import { useStageLabels, useStageOrder } from "@/components/production/stage-labels-provider";
 
 const selectCls =
   "h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
-const ASSIGNABLE_STAGES = STAGES.filter((s) => s !== "complete");
 
 export function InvoiceActions({
   invoiceId,
@@ -42,6 +41,8 @@ export function InvoiceActions({
 }) {
   const router = useRouter();
   const stageLabels = useStageLabels();
+  // Assignable stages = every stage except the terminal (which triggers receive).
+  const ASSIGNABLE_STAGES = useStageOrder().slice(0, -1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");

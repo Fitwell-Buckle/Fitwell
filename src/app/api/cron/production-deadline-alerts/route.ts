@@ -11,6 +11,8 @@ import {
   type DueLine,
   type NagPo,
 } from "@/lib/production/alerts";
+import { getStageOrder } from "@/lib/production/stage-labels";
+import { terminalStage } from "@/lib/production/stages";
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -88,7 +90,8 @@ export async function GET(req: NextRequest) {
     })),
   );
 
-  const due = lineItemsNeedingAlert({ lineItems: alertLines, today, withinDays });
+  const terminal = terminalStage(await getStageOrder());
+  const due = lineItemsNeedingAlert({ lineItems: alertLines, today, withinDays, terminal });
 
   const nagInput: NagPo[] = pos.map((po) => ({
     id: po.id,
@@ -96,7 +99,7 @@ export async function GET(req: NextRequest) {
     lineStages: po.lineItems.map((item) => item.currentStage),
     receivedAt: po.shopifyReceivedAt,
   }));
-  const nags = posNeedingReceiveNag(nagInput);
+  const nags = posNeedingReceiveNag(nagInput, terminal);
 
   const adminEmails = (process.env.ADMIN_EMAILS ?? "")
     .split(",")

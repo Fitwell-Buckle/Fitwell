@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { setStage, notifySupplierHandoff } from "@/lib/production/service";
-import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { type ProductionStage } from "@/lib/production/stages";
+import { getStageOrder } from "@/lib/production/stage-labels";
 import { ensureSupplierMayActOnLineItem } from "@/lib/production/scope";
 
 const bodySchema = z.object({ stage: z.string() });
@@ -37,7 +38,8 @@ export async function POST(
     );
   }
 
-  if (!STAGES.includes(input.stage as ProductionStage)) {
+  const order = await getStageOrder();
+  if (!order.includes(input.stage)) {
     return NextResponse.json({ error: "Unknown stage" }, { status: 400 });
   }
 

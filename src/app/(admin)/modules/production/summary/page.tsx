@@ -14,8 +14,8 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { derivePoStage, STAGES } from "@/lib/production/stages";
-import { getStageLabels } from "@/lib/production/stage-labels";
+import { derivePoStage } from "@/lib/production/stages";
+import { getStageLabels, getStageOrder, getStages } from "@/lib/production/stage-labels";
 import { supplierForStage } from "@/lib/production/stage-owners";
 import { formatPoNumber } from "@/lib/production/sub-po";
 import { fmtDate } from "@/lib/production/display";
@@ -63,22 +63,25 @@ export default async function ProductionSummaryPage({
 
   // Load all non-cancelled POs once. The Incoming Inventory view needs the full
   // set; the Board / Timeline views filter this in memory (small data set).
-  const [allPos, suppliers, estimates, stageLabels] = await Promise.all([
-    db.query.productionPo.findMany({
-      where: ne(productionPo.status, "cancelled"),
-      orderBy: desc(productionPo.createdAt),
-      with: {
-        supplier: { columns: { name: true } },
-        stageAssignments: { columns: { stage: true, supplierId: true } },
-        lineItems: {
-          with: { stageEvents: { orderBy: asc(productionStageEvent.enteredAt) } },
+  const [allPos, suppliers, estimates, stageLabels, order, stageDefs] =
+    await Promise.all([
+      db.query.productionPo.findMany({
+        where: ne(productionPo.status, "cancelled"),
+        orderBy: desc(productionPo.createdAt),
+        with: {
+          supplier: { columns: { name: true } },
+          stageAssignments: { columns: { stage: true, supplierId: true } },
+          lineItems: {
+            with: { stageEvents: { orderBy: asc(productionStageEvent.enteredAt) } },
+          },
         },
-      },
-    }),
-    db.query.supplier.findMany({ columns: { id: true, name: true } }),
-    getStageEstimates(),
-    getStageLabels(),
-  ]);
+      }),
+      db.query.supplier.findMany({ columns: { id: true, name: true } }),
+      getStageEstimates(),
+      getStageLabels(),
+      getStageOrder(),
+      getStages(),
+    ]);
 
   // Owning-supplier resolution: a stage can belong to a different supplier than
   // the PO's primary, and each gets a sub-PO suffix. Map supplier names + the
@@ -95,7 +98,7 @@ export default async function ProductionSummaryPage({
     currentStage: import("@/lib/production/stages").ProductionStage,
   ): { ownerId: string; supplier: string; poNumber: string } => {
     const ownerId =
-      supplierForStage(po.stageAssignments, po.supplierId, currentStage) ?? po.supplierId;
+      supplierForStage(order, po.stageAssignments, po.supplierId, currentStage) ?? po.supplierId;
     const suffix = suffixByMasterSupplier.get(`${po.id}:${ownerId}`);
     return {
       ownerId,
@@ -105,6 +108,13 @@ export default async function ProductionSummaryPage({
   };
 
   const allLines = allPos.flatMap((po) => po.lineItems);
+
+  // How many line items currently sit in each stage — drives the editor's
+  // "move stranded items" prompt when deleting a stage.
+  const stageCounts: Record<string, number> = {};
+  for (const li of allLines) {
+    stageCounts[li.currentStage] = (stageCounts[li.currentStage] ?? 0) + 1;
+  }
 
   // ── Incoming inventory: produced-but-not-received lines for the chosen product ──
   const incomingLines: IncomingLine[] = allLines
@@ -116,7 +126,7 @@ export default async function ProductionSummaryPage({
       currentStage: li.currentStage,
     }));
   const today = new Date().toISOString().slice(0, 10);
-  const incomingRows = aggregateIncoming(incomingLines, estimates, today);
+  const incomingRows = aggregateIncoming(order, incomingLines, estimates, today);
   const totalIncoming = incomingRows.reduce((sum, r) => sum + r.incomingQty, 0);
 
   // ── Board / Timeline: in-progress work, any age (a PO matches if any line
@@ -126,7 +136,7 @@ export default async function ProductionSummaryPage({
   // (e.g. EPower on 00118-B) surfaces the lines they're responsible for.
   const filtered = allPos
     .filter((po) => !statusFilter || po.status === statusFilter)
-    .filter((po) => po.lineItems.some((li) => li.currentStage !== "complete"))
+    .filter((po) => po.lineItems.some((li) => li.currentStage !== order[order.length - 1]))
     .map((po) => ({
       ...po,
       derivedStage: derivePoStage(po.lineItems.map((li) => li.currentStage)),
@@ -187,7 +197,8 @@ export default async function ProductionSummaryPage({
         <PageHeader title="Production Summary" />
         <div className="flex items-center gap-2">
           <StageSetup
-            stages={STAGES.map((s) => ({ stage: s, label: stageLabels[s] }))}
+            stages={stageDefs.map((s) => ({ key: s.key, label: s.label }))}
+            counts={stageCounts}
           />
           <ProductionViewToggle view={view} />
         </div>
@@ -265,7 +276,7 @@ export default async function ProductionSummaryPage({
             {cards.length === 0 ? (
               <p className="text-sm text-zinc-400">No line items match.</p>
             ) : (
-              <KanbanBoard cards={cards} />
+              <KanbanBoard cards={cards} stages={order} />
             )}
           </div>
         </>
@@ -274,7 +285,7 @@ export default async function ProductionSummaryPage({
       {view === "timeline" && (
         <>
           {listFilters}
-          <ProductionTimeline pos={timelinePos} estimates={estimates} stageLabels={stageLabels} />
+          <ProductionTimeline pos={timelinePos} estimates={estimates} stageLabels={stageLabels} order={order} />
         </>
       )}
     </div>

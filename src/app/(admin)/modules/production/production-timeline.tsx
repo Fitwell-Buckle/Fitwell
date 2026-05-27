@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
-import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { isTerminal, type ProductionStage } from "@/lib/production/stages";
 import { STAGE_BAR, fmtDate, skuSize } from "@/lib/production/display";
 import { projectEta } from "@/lib/production/cycle-time";
 
@@ -46,10 +46,12 @@ export function ProductionTimeline({
   pos,
   estimates,
   stageLabels,
+  order,
 }: {
   pos: TimelinePo[];
   estimates: Record<ProductionStage, number>;
   stageLabels: Record<ProductionStage, string>;
+  order: readonly string[];
 }) {
   const todayIso = isoDay(new Date());
   const todayMs = utcMidnight(todayIso);
@@ -71,8 +73,8 @@ export function ProductionTimeline({
           });
 
           let etaMs: number | null = null;
-          if (li.currentStage !== "complete") {
-            etaMs = utcMidnight(projectEta(li.currentStage, todayIso, estimates));
+          if (!isTerminal(order, li.currentStage)) {
+            etaMs = utcMidnight(projectEta(order, li.currentStage, todayIso, estimates));
             if (etaMs > todayMs) {
               segs.push({
                 stage: li.currentStage,
@@ -115,9 +117,9 @@ export function ProductionTimeline({
       </p>
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-        {STAGES.map((s) => (
+        {order.map((s) => (
           <span key={s} className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <span className={`inline-block h-3 w-3 rounded-sm ${STAGE_BAR[s]}`} />
+            <span className={`inline-block h-3 w-3 rounded-sm ${STAGE_BAR[s] ?? "bg-zinc-300"}`} />
             {stageLabels[s]}
           </span>
         ))}
@@ -153,7 +155,7 @@ export function ProductionTimeline({
                   {t.segs.map((s, i) => (
                     <div
                       key={i}
-                      className={`absolute top-1 h-4 rounded-sm ${STAGE_BAR[s.stage]} ${
+                      className={`absolute top-1 h-4 rounded-sm ${STAGE_BAR[s.stage] ?? "bg-zinc-300"} ${
                         s.projected ? "opacity-30" : ""
                       }`}
                       style={{
@@ -166,8 +168,8 @@ export function ProductionTimeline({
                 </div>
 
                 <div className="w-24 shrink-0 text-right text-xs text-zinc-500">
-                  {t.currentStage === "complete"
-                    ? "Complete"
+                  {isTerminal(order, t.currentStage)
+                    ? stageLabels[t.currentStage]
                     : t.etaMs
                       ? `ETA ${fmtDate(isoDay(new Date(t.etaMs)))}`
                       : "—"}

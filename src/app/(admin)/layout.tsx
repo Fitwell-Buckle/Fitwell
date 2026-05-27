@@ -6,7 +6,7 @@ import { MobileHeader } from "@/components/layout/mobile-header";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { StageLabelsProvider } from "@/components/production/stage-labels-provider";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
-import { getStageLabels } from "@/lib/production/stage-labels";
+import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 
 export default async function AdminLayout({
   children,
@@ -19,11 +19,15 @@ export default async function AdminLayout({
     redirect("/auth/login");
   }
 
-  const [logoUrl, stageLabels] = await Promise.all([getStoreLogoUrl(), getStageLabels()]);
+  const [logoUrl, stageLabels, stageOrder] = await Promise.all([
+    getStoreLogoUrl(),
+    getStageLabels(),
+    getStageOrder(),
+  ]);
 
   return (
     <AuthSessionProvider>
-      <StageLabelsProvider value={stageLabels}>
+      <StageLabelsProvider labels={stageLabels} order={stageOrder}>
       <SidebarProvider>
         <div className="flex h-screen print:block print:h-auto">
           <div className="print:hidden">

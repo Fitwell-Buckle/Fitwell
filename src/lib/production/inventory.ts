@@ -23,6 +23,7 @@ export interface IncomingRow {
 }
 
 export function aggregateIncoming(
+  order: readonly string[],
   lines: IncomingLine[],
   estimates: Record<ProductionStage, number>,
   today: string,
@@ -43,7 +44,7 @@ export function aggregateIncoming(
     row.incomingQty += li.quantity;
     row.byStage[li.currentStage] = (row.byStage[li.currentStage] ?? 0) + li.quantity;
 
-    const eta = projectEta(li.currentStage, today, estimates);
+    const eta = projectEta(order, li.currentStage, today, estimates);
     if (row.nearestEta === null || eta < row.nearestEta) row.nearestEta = eta;
 
     bySku.set(li.sku, row);

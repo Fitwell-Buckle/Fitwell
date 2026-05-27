@@ -583,9 +583,9 @@ export const productionPoLineItem = pgTable(
     title: text("title").notNull(),
     quantity: integer("quantity").notNull(),
     unitCostCents: integer("unit_cost_cents"),
-    currentStage: productionStage("current_stage")
-      .notNull()
-      .default("supplier_po"),
+    // Dynamic stage key (references production_stage_def.key). Text, not the
+    // legacy enum, so stages can be added/removed at runtime.
+    currentStage: text("current_stage").notNull().default("supplier_po"),
     expectedCompletionDate: date("expected_completion_date"),
     actualCompletionDate: date("actual_completion_date"),
     // C2 receiving: set when this line's quantity has been pushed to Shopify as
@@ -622,7 +622,7 @@ export const productionStageEvent = pgTable(
     lineItemId: text("line_item_id")
       .notNull()
       .references(() => productionPoLineItem.id, { onDelete: "cascade" }),
-    stage: productionStage("stage").notNull(),
+    stage: text("stage").notNull(),
     enteredAt: timestamp("entered_at", { mode: "date" }).notNull().defaultNow(),
     exitedAt: timestamp("exited_at", { mode: "date" }),
     triggeredByUserId: text("triggered_by_user_id").references(() => user.id),
@@ -746,7 +746,7 @@ export const productionStageAssignment = pgTable(
     poId: text("po_id")
       .notNull()
       .references(() => productionPo.id, { onDelete: "cascade" }),
-    stage: productionStage("stage").notNull(),
+    stage: text("stage").notNull(),
     supplierId: text("supplier_id")
       .notNull()
       .references(() => supplier.id, { onDelete: "cascade" }),
@@ -1195,10 +1195,15 @@ export const billingSettings = pgTable("billing_settings", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
-// User-overridable display labels for the fixed production stages. Keyed by the
-// stage enum value; a missing row falls back to the hardcoded default label.
-export const productionStageLabel = pgTable("production_stage_label", {
-  stage: productionStage("stage").primaryKey(),
+// The production pipeline's stages — now data-driven (add / rename / delete /
+// reorder). `key` is the stable identifier stored on line items / events /
+// assignments; `position` defines pipeline order (0 = opening, highest =
+// terminal/receive); `active=false` is a soft delete that keeps history intact.
+export const productionStageDef = pgTable("production_stage_def", {
+  key: text("key").primaryKey(),
   label: text("label").notNull(),
+  position: integer("position").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });

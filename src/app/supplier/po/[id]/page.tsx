@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { derivePoStage } from "@/lib/production/stages";
-import { getStageLabels } from "@/lib/production/stage-labels";
+import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { supplierHasAnyStage, stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { subPoStageTargets } from "@/lib/production/service";
 import {
@@ -40,17 +40,17 @@ export default async function SupplierPoDetailPage({
 
   const { id } = await params;
   const po = await getPoDetail(id);
+  const [stageLabels, order] = await Promise.all([getStageLabels(), getStageOrder()]);
   // Scope: a supplier may open a PO only if they're its primary supplier OR own
   // at least one of its stages.
   if (
     !po ||
     (po.supplierId !== scope.supplierId &&
-      !supplierHasAnyStage(po.stageAssignments, po.supplierId, scope.supplierId))
+      !supplierHasAnyStage(order, po.stageAssignments, po.supplierId, scope.supplierId))
   ) {
     notFound();
   }
 
-  const stageLabels = await getStageLabels();
   const derivedStage = derivePoStage(po.lineItems.map((li) => li.currentStage));
   const sortedLineItems = [...po.lineItems].sort(
     (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
@@ -62,14 +62,15 @@ export default async function SupplierPoDetailPage({
 
   // The stages this supplier owns + the handoff target, for the stage dropdown.
   const ownedStages = stagesOwnedBySupplier(
+    order,
     po.stageAssignments,
     po.supplierId,
     scope.supplierId,
   );
   // Suppliers see only their own work stages + a single "Complete" (hand off to
   // the next team) — never the next team's stage name or the kickoff state.
-  const stageOptions = subPoStageTargets(ownedStages)
-    .filter((s) => s !== "supplier_po")
+  const stageOptions = subPoStageTargets(order, ownedStages)
+    .filter((s) => s !== order[0])
     .map((s) => ({
       value: s as string,
       label: ownedStages.includes(s) ? stageLabels[s] : "Complete",
