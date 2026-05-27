@@ -134,6 +134,13 @@
       "when": 1779839895609,
       "tag": "0018_dapper_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779898644189,
+      "tag": "0019_dynamic_stages",
+      "breakpoints": true
     }
   ]
 }
