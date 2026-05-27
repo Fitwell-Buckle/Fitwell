@@ -68,18 +68,21 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 ## 4. Critical Rules
 
 1. **DO NOT commit or push** unless the user explicitly asks.
-2. **Everyone works directly on `main`** — no feature branches or PRs. There are three contributors (Greg, Tom, Oliver), each with their own Neon database branch. Push when you have changes you're happy with. Pull before starting work (see Session Protocol).
-3. **Read specs before building** — don't reinvent what's already been decided. Start with `specs/current/contributing.md` for new sections.
-4. **Discuss major decisions with Greg before implementing** — new database tables, new external integrations, structural changes, and data model choices that affect multiple sections. See `specs/current/contributing.md` for the full list.
-5. **One shared schema** — all tables live in `src/lib/schema.ts`. Reuse existing entities (`customer`, `order`, `order_line_item`, `campaign`) rather than creating parallel tables. FK into existing tables instead of duplicating data.
-6. **All Shopify data sync must be idempotent** — use `shopify_id` as the dedup key.
-7. **Never store raw payment/card data** — Shopify handles checkout entirely.
-8. **Admin routes require authentication** — always check session via NextAuth.
-9. **Marketing pages are public** — no auth required.
-10. **Update docs with every major change** — when adding pages, tables, routes, or nav items, update the relevant specs (`specs/current/schema.md`, `specs/current/routes.md`, `specs/current/components.md`, etc.) in the same PR. These files render in the admin UI at `/docs` and are the team's shared reference. Don't let them drift.
-11. **Tests ship in the same phase as code** — never defer testing to a later phase.
-12. **Never use auto-memory for project state.** Blockers, follow-ups, decisions, technical context, and anything another team member might need must go into checked-in files (`specs/ops/PRIORITIES.md`, domain files, work plans, `AGENTS.md`). Auto-memory is invisible to other users and other machines. Only use it for genuinely user-personal preferences (collaboration style, not project facts).
-13. **Marketing work runs on the persona × funnel framework.** Every landing page, ad campaign, and PostHog event must declare a target persona and funnel stage. If you can't answer "which persona, which stage" for what you're about to build, read `specs/strategy/` first. Untagged events and unanchored pages create noise we can't analyze later.
+2. **Before any commit or push, run the migration pre-flight check.** Inspect `git status` and `git diff --staged --name-only` (plus `git log @{u}..HEAD --name-only` before a push) for two soft-block conditions. If either is true, **stop and ask the user before proceeding** — explain *why* so they can make an informed call, don't just block silently:
+   - **Schema edited without a generated migration** — `src/lib/schema.ts` is modified/staged but `drizzle/migrations/` has no new file. The schema file is the source of truth, but the database only knows about the generated SQL. Committing one without the other guarantees a code/DB mismatch for the next person who pulls. Ask: *"Should I run `npm run db:generate` first?"*
+   - **New migration file in the change about to be pushed** — a `drizzle/migrations/*.sql` is staged, or sits in unpushed commits. Vercel auto-deploys from `main` the instant the push lands, so if the migration isn't already applied to the production Neon branch, the new code hits a database without the new columns/tables → production 500s until someone runs it manually. Before pushing, run `npm run db:pending:prod` to check — it pulls the prod env from Vercel, queries `drizzle.__drizzle_migrations`, and lists anything unapplied (exit 0 = clean, exit 1 = pending). If pending, ask: *"X migration(s) aren't applied to prod yet — should I run `npm run db:migrate:prod` first?"* Don't push until prod is at parity with the migrations being pushed.
+3. **Everyone works directly on `main`** — no feature branches or PRs. There are three contributors (Greg, Tom, Oliver), each with their own Neon database branch. Push when you have changes you're happy with. Pull before starting work (see Session Protocol).
+4. **Read specs before building** — don't reinvent what's already been decided. Start with `specs/current/contributing.md` for new sections.
+5. **Discuss major decisions with Greg before implementing** — new database tables, new external integrations, structural changes, and data model choices that affect multiple sections. See `specs/current/contributing.md` for the full list.
+6. **One shared schema** — all tables live in `src/lib/schema.ts`. Reuse existing entities (`customer`, `order`, `order_line_item`, `campaign`) rather than creating parallel tables. FK into existing tables instead of duplicating data.
+7. **All Shopify data sync must be idempotent** — use `shopify_id` as the dedup key.
+8. **Never store raw payment/card data** — Shopify handles checkout entirely.
+9. **Admin routes require authentication** — always check session via NextAuth.
+10. **Marketing pages are public** — no auth required.
+11. **Update docs with every major change** — when adding pages, tables, routes, or nav items, update the relevant specs (`specs/current/schema.md`, `specs/current/routes.md`, `specs/current/components.md`, etc.) in the same PR. These files render in the admin UI at `/docs` and are the team's shared reference. Don't let them drift.
+12. **Tests ship in the same phase as code** — never defer testing to a later phase.
+13. **Never use auto-memory for project state.** Blockers, follow-ups, decisions, technical context, and anything another team member might need must go into checked-in files (`specs/ops/PRIORITIES.md`, domain files, work plans, `AGENTS.md`). Auto-memory is invisible to other users and other machines. Only use it for genuinely user-personal preferences (collaboration style, not project facts).
+14. **Marketing work runs on the persona × funnel framework.** Every landing page, ad campaign, and PostHog event must declare a target persona and funnel stage. If you can't answer "which persona, which stage" for what you're about to build, read `specs/strategy/` first. Untagged events and unanchored pages create noise we can't analyze later.
 
 ---
 
@@ -185,8 +188,19 @@ Open questions, risks, alternatives considered.
 3. Review the generated migration file
 4. `npm run db:migrate` — apply to your local dev DB
 5. Test thoroughly
-6. Commit the schema change + migration file together, push to main
-7. Apply migration to production before Vercel deploys the new code
+6. **Apply the migration to production first**: `npm run db:migrate:prod`. This pulls the production env from Vercel (`vercel env pull --environment=production`), runs `drizzle-kit migrate` against it, and removes the temp env file. Do this *before* the push, not after — Vercel deploys the moment the push lands, so any gap is a window where production is serving 500s.
+7. Commit the schema change + migration file together, push to main.
+
+For destructive migrations (drop column/table, rename, NOT NULL on existing column), the pre-apply order breaks currently-deployed code that still references the old shape. Use expand/contract: ship the additive migration + new code first, then a follow-up migration removes the old shape after the new code is live. Discuss with Greg before pushing a destructive migration.
+
+### Migration status commands:
+- `npm run db:pending` — read-only check against your dev branch. Lists any migration files on disk not yet applied. Exit 0 = clean, exit 1 = pending.
+- `npm run db:pending:prod` — same check against production. Pulls prod env from Vercel into a temp `.env.production.local`, queries `drizzle.__drizzle_migrations`, then deletes the temp file. Safe to run as often as you want — read-only.
+
+Both scripts compare `drizzle/migrations/meta/_journal.json` against rows in `drizzle.__drizzle_migrations`. They assume migrations are applied in journal order (which Drizzle guarantees) and that migrations are append-only (don't edit or delete migration files after they've shipped).
+
+### Pre-commit / pre-push gate (Critical Rule 2):
+Before any commit or push that touches `src/lib/schema.ts` or `drizzle/migrations/`, the agent must soft-block and confirm with the user. See Critical Rule 2 in §4 for the exact conditions and prompts. Don't skip this — it exists because the team has been bitten by both code/migration-out-of-sync commits and push-before-apply prod outages.
 
 ### Receiving migrations (for everyone else):
 When you pull and see new files in `drizzle/migrations/`, run `npm run db:migrate` to apply them to your local dev DB. The session startup protocol handles this automatically.
