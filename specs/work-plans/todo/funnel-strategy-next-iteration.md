@@ -53,17 +53,17 @@ this plan ships independent of that work.
 Phases are sequenced by ROI per hour of work. Each phase is
 independently shippable; no phase blocks the next.
 
-### Phase 1: Tier 1 quick wins (~half day total)
+### Phase 1: Tier 1 quick wins — ✅ shipped 2026-05-27 (commit `067d6be`)
 
 Sharpens the existing v1 page without new integrations.
 
-- [ ] **Wholesale / draft-order filter** on the strategy funnel queries. The strategy funnel is scoped to D2C per `funnel.md` — orders with `sourceName = 'shopify_draft_order'` should be excluded from `getAcquisitionFunnel`, `getRetentionLoop`, and `getChannelBreakdown`. (Trivial SQL filter; v1 oversight.)
-- [ ] **Meta campaign-name parsing**: extend the data layer to classify `metaAdsDaily` rows by campaign-name heuristic (`retarget`, `rt-` → retargeting; else → cold). Apply to `unaware` (cold only) and add a `considering` proxy from retargeting impressions. Adds a `mapMetaCampaign(campaignName)` pure helper in `src/lib/funnel/classify.ts`; covered by unit tests.
-- [ ] **GSC auth unblock** via OAuth Playground workaround. If it stays cheap (~2 hours), do it; otherwise defer and document. Unblocks branded vs. category vs. problem-search separation in `solution_aware` and `brand_aware`.
+- [x] **Wholesale / draft-order filter** on the strategy funnel queries. The strategy funnel is scoped to D2C per `funnel.md` — orders with `sourceName = 'shopify_draft_order'` excluded from `getAcquisitionFunnel`, `getRetentionLoop`, and `getChannelBreakdown`. `getRetentionLoop` and `getChannelBreakdown` also switched from the denormalized `customer.orderCount` / `customer.totalSpent` (drifty) to per-customer computed rollups from the order table.
+- [x] **Meta campaign-name parsing**: `mapMetaCampaign(name)` pure helper in `src/lib/funnel/classify.ts`. `unaware` now uses cold-only impressions; `considering` uses retargeting impressions (confidence: weak — still a proxy, but better than the previous "missing" marker). 7 new unit tests.
+- [ ] ~~**GSC auth unblock** via OAuth Playground workaround.~~ **Deferred 2026-05-27.** Not cheap — requires rewriting GSC auth from service account to OAuth tokens with refresh-token rotation plus user steps in OAuth Playground. 2-4h work, exceeds the half-day-total budget. Promote to its own work plan when ready.
 
 #### Tests
-- Unit: `mapMetaCampaign` covers cold, retargeting, broad-keyword, and ambiguous-name cases.
-- Smoke: hit `/funnel/strategy` against dev DB and verify wholesale orders are excluded from counts.
+- [x] Unit: `mapMetaCampaign` covers cold, retargeting, broad-keyword, ambiguous-name, and edge cases (case-insensitive, RT-word-boundary anti-false-match). 7 tests.
+- [ ] Smoke: hit `/funnel/strategy` against dev DB and verify wholesale orders are excluded from counts. *(Tom — please verify after refresh.)*
 
 ### Phase 2: Channel × persona cross-cut (~1 day)
 

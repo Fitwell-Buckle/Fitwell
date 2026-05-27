@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 ## Current Strategic Focus (2026-05-25)
 
@@ -198,16 +198,16 @@ deadline. Styled to mirror the B2B Orders/Brands system. Pricing = **gifting
 ---
 
 ### 9. 🔨 Strategic Funnel — Next Iteration (in flight)
-**Last worked**: 2026-05-26 (v1 shipped; iteration plan drafted)
+**Last worked**: 2026-05-27 (Phase 1 shipped, commit `067d6be`)
 **Source of truth**: `specs/work-plans/todo/funnel-strategy-next-iteration.md`
 **Owner**: Tom (planning), Greg (engineering)
 
-V1 of `/funnel/strategy` shipped (commits `81e4079`, `fd5f5bd`) — 6-stage acquisition + 5-stage retention loop + channel breakdown, with honest gap markers. Iteration plan covers:
-- Phase 1: Tier 1 quick wins (wholesale filter, Meta cold/retargeting split, GSC unblock)
-- Phase 2: Channel × persona cross-cut (click a channel → see persona mix; persona filter pills at top)
-- Phase 3: Klaviyo API integration (live email-side measurement)
-- Phase 4: Order sequence-position column (acquisition vs. retention discrimination)
-- Phase 5: Judge.me API integration (live advocate count)
+V1 of `/funnel/strategy` shipped 2026-05-26 (commits `81e4079`, `fd5f5bd`). Iteration plan progress:
+- [x] **Phase 1: Tier 1 quick wins** — D2C wholesale filter + Meta cold/retargeting split shipped 2026-05-27 (`067d6be`). GSC auth unblock deferred (not cheap; auth-stack rewrite + user OAuth Playground steps).
+- [ ] **Phase 2: Channel × persona cross-cut** — click a channel → see persona mix; persona filter pills at top
+- [ ] **Phase 3: Klaviyo API integration** — live email-side measurement
+- [ ] **Phase 4: Order sequence-position column** — acquisition vs. retention discrimination
+- [ ] **Phase 5: Judge.me API integration** — live advocate count
 
 PostHog client-side instrumentation (workstream 6) is the largest unblock for upper-funnel measurement but is independent of this plan.
 
