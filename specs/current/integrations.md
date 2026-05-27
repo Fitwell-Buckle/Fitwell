@@ -1,6 +1,6 @@
 # Integrations
 
-Last updated: 2026-05-07
+Last updated: 2026-05-26
 
 ## Shopify Admin API
 
@@ -8,10 +8,18 @@ Last updated: 2026-05-07
 
 | Detail | Value |
 |--------|-------|
-| Store | `fitwellbuckle.myshopify.com` |
-| Auth | Admin API access token (`SHOPIFY_ADMIN_API_TOKEN`) |
+| Store | `fitwell-buckles.myshopify.com` (env: `SHOPIFY_STORE_DOMAIN`) |
+| App | Fitwell Admin — Partner org `75387489`, app ID `360915140609` |
+| Auth | Admin API client credentials (`SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`) |
+| Webhook secret | `SHOPIFY_WEBHOOK_SECRET` |
 | Protocols | REST API (orders, customers) + GraphQL (bulk queries) |
 | Sync method | Cron polling (every 2h) + real-time webhooks |
+| App config source | `shopify.app.toml` at repo root |
+| Embedded in Shopify Admin | No (`embedded = false`) — app runs standalone at `admin.fitwellbuckle.co` |
+
+### App configuration (scopes, embed, deploy)
+
+App config — scopes, embed flag, app URL, declared webhooks — lives in `shopify.app.toml` at the repo root. The full workflow (CLI setup, deploy/release, merchant re-auth, troubleshooting, open scope questions) is documented in **[shopify-app-config.md](shopify-app-config.md)**. Don't edit the same fields in the Shopify Dev Dashboard UI — they'll be overwritten on the next deploy.
 
 ### Endpoints Used
 - `GET /admin/api/2024-10/orders.json` — paginated order fetch with `updated_at_min`

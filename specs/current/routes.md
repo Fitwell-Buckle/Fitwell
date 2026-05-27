@@ -42,7 +42,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/campaigns` | Campaign list — performance overview |
 | `/campaigns/[id]` | Campaign detail — spend, conversions, ROAS |
 | `/attribution` | UTM attribution analysis |
-| `/funnel` | Funnel visualization (landing → Shopify → purchase) |
+| `/funnel` | Funnel visualization (sessions → users → orders, operational end-state view) |
+| `/funnel/strategy` | Strategic / diagnostic funnel — 6-stage acquisition, 5-stage retention loop, channel breakdown. Aligned with `specs/strategy/funnel.md`, `retention-loop.md`, `personas.md`. |
 | `/influencers` | Influencer list (CRUD) — handle/platform, assigned collections, portal-login allowlist |
 | `/influencer-tracking` | Gifting orders + content-deadline tracking (approaching / missed / hit); inline-edit deadline, mark published, affiliate link |
 | `/influencer-tracking/new` | Create a gifting order (100% off draft order; product picker limited to the influencer's assigned collections; content due date + affiliate link) |

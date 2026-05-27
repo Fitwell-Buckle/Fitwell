@@ -15,6 +15,9 @@
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:prod": "vercel --global-config ~/.vercel-fitwell env pull .env.production.local --environment=production --yes && dotenv -e .env.production.local -- drizzle-kit migrate; rm -f .env.production.local",
+    "db:pending": "node --env-file=.env.local --import tsx/esm scripts/check-pending-migrations.ts",
+    "db:pending:prod": "vercel --global-config ~/.vercel-fitwell env pull .env.production.local --environment=production --yes && dotenv -e .env.production.local -- node --import tsx/esm scripts/check-pending-migrations.ts; rm -f .env.production.local",
     "db:studio": "drizzle-kit studio",
     "vc": "vercel --global-config ~/.vercel-fitwell",
     "shopify": "node --env-file=.env.local --import tsx/esm scripts/shopify-cli.ts",
@@ -60,9 +63,11 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "dotenv": "^17.4.2",
+    "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.30.0",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.0.0",
+    "tsx": "^4.22.3",
     "typescript": "^5.7.0",
     "vitest": "^4.1.2"
   }
