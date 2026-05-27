@@ -37,6 +37,7 @@ export default async function SuppliersPage() {
           name: s.name,
           contactName: s.contactName,
           contactEmail: s.contactEmail,
+          shippingAddress: s.shippingAddress,
           notes: s.notes,
           contacts: s.contacts.map((c) => ({
             id: c.id,

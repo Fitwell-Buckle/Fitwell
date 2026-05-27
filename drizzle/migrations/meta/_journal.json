@@ -120,6 +120,20 @@
       "when": 1779815761236,
       "tag": "0016_slim_blink",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1779838014231,
+      "tag": "0017_late_nextwave",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779839895609,
+      "tag": "0018_dapper_patriot",
+      "breakpoints": true
     }
   ]
 }

@@ -130,7 +130,9 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
               </div>
             ))}
             {billing!.instructions && (
-              <p className="mt-1 text-xs text-zinc-500">{billing!.instructions}</p>
+              <p className="mt-1 whitespace-pre-line font-semibold text-zinc-900">
+                {billing!.instructions}
+              </p>
             )}
           </div>
         )}

@@ -2,7 +2,8 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
-import { STAGES, STAGE_LABELS } from "@/lib/production/stages";
+import { STAGES } from "@/lib/production/stages";
+import { useStageLabels } from "@/components/production/stage-labels-provider";
 import { PO_STATUSES, STATUS_LABELS } from "@/lib/production/display";
 import { ProductCombobox, variantLabel } from "./product-combobox";
 import { useCatalog } from "./use-catalog";
@@ -40,6 +41,7 @@ export function ListFilters({ production }: { production?: ProductionFilterProps
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const stageLabels = useStageLabels();
   const { variants, collections, loading } = useCatalog();
 
   const skus = parseSkuFilter(searchParams.get("sku") ?? undefined);
@@ -139,7 +141,7 @@ export function ListFilters({ production }: { production?: ProductionFilterProps
             <option value="">All stages</option>
             {STAGES.map((s) => (
               <option key={s} value={s}>
-                {STAGE_LABELS[s]}
+                {stageLabels[s]}
               </option>
             ))}
           </select>

@@ -490,6 +490,8 @@ export const supplier = pgTable("supplier", {
   name: text("name").notNull(),
   contactEmail: text("contact_email"),
   contactName: text("contact_name"),
+  // Free-text address we ship to this supplier (raw materials / handoffs).
+  shippingAddress: text("shipping_address"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
@@ -1190,5 +1192,13 @@ export const billingSettings = pgTable("billing_settings", {
   swiftBic: text("swift_bic"),
   iban: text("iban"),
   instructions: text("instructions"),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// User-overridable display labels for the fixed production stages. Keyed by the
+// stage enum value; a missing row falls back to the hardcoded default label.
+export const productionStageLabel = pgTable("production_stage_label", {
+  stage: productionStage("stage").primaryKey(),
+  label: text("label").notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });

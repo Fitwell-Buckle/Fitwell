@@ -26,6 +26,7 @@ interface Supplier {
   name: string;
   contactName: string | null;
   contactEmail: string | null;
+  shippingAddress: string | null;
   notes: string | null;
   contacts: SupplierLogin[];
 }
@@ -34,6 +35,7 @@ interface Draft {
   name: string;
   contactName: string;
   contactEmail: string;
+  shippingAddress: string;
   notes: string;
 }
 
@@ -42,6 +44,7 @@ function toDraft(s?: Supplier): Draft {
     name: s?.name ?? "",
     contactName: s?.contactName ?? "",
     contactEmail: s?.contactEmail ?? "",
+    shippingAddress: s?.shippingAddress ?? "",
     notes: s?.notes ?? "",
   };
 }
@@ -96,6 +99,16 @@ function SupplierForm({
           <Input
             value={draft.notes}
             onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={fieldLabel}>Shipping address</label>
+          <textarea
+            value={draft.shippingAddress}
+            onChange={(e) => setDraft({ ...draft, shippingAddress: e.target.value })}
+            rows={3}
+            placeholder="Where we ship to this supplier"
+            className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
           />
         </div>
       </div>
@@ -243,6 +256,7 @@ export function SupplierManager({ suppliers }: { suppliers: Supplier[] }) {
           name: draft.name.trim(),
           contactName: draft.contactName.trim() || null,
           contactEmail: draft.contactEmail.trim() || null,
+          shippingAddress: draft.shippingAddress.trim() || null,
           notes: draft.notes.trim() || null,
         }),
       });

@@ -66,11 +66,14 @@ export function InvoiceForm({
   priceTiers = [],
   initial,
   invoiceId,
+  sourcePoId,
 }: {
   companies: InvoiceCompanyOption[];
   priceTiers?: PriceTierOption[];
   initial?: InvoiceFormInitial;
   invoiceId?: string;
+  /** When creating from a PO: links the invoice back + blocks a second one. */
+  sourcePoId?: string;
 }) {
   const router = useRouter();
   const isEdit = !!invoiceId;
@@ -215,7 +218,7 @@ export function InvoiceForm({
           method: isEdit ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...(isEdit ? {} : { companyId }),
+            ...(isEdit ? {} : { companyId, sourcePoId: sourcePoId ?? null }),
             issuedDate,
             dueDate: dueDate || null,
             notes: notes.trim() || null,

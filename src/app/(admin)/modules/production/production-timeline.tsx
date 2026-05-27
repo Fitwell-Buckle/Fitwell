@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
-import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { STAGES, type ProductionStage } from "@/lib/production/stages";
 import { STAGE_BAR, fmtDate, skuSize } from "@/lib/production/display";
 import { projectEta } from "@/lib/production/cycle-time";
 
@@ -45,9 +45,11 @@ export interface TimelinePo {
 export function ProductionTimeline({
   pos,
   estimates,
+  stageLabels,
 }: {
   pos: TimelinePo[];
   estimates: Record<ProductionStage, number>;
+  stageLabels: Record<ProductionStage, string>;
 }) {
   const todayIso = isoDay(new Date());
   const todayMs = utcMidnight(todayIso);
@@ -116,7 +118,7 @@ export function ProductionTimeline({
         {STAGES.map((s) => (
           <span key={s} className="flex items-center gap-1.5 text-xs text-zinc-500">
             <span className={`inline-block h-3 w-3 rounded-sm ${STAGE_BAR[s]}`} />
-            {STAGE_LABELS[s]}
+            {stageLabels[s]}
           </span>
         ))}
       </div>
@@ -158,7 +160,7 @@ export function ProductionTimeline({
                         left: `${pct(s.startMs)}%`,
                         width: `${Math.max(pct(s.endMs) - pct(s.startMs), 0.5)}%`,
                       }}
-                      title={`${STAGE_LABELS[s.stage]}${s.projected ? " (projected)" : ""}`}
+                      title={`${stageLabels[s.stage]}${s.projected ? " (projected)" : ""}`}
                     />
                   ))}
                 </div>

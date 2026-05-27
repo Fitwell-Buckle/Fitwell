@@ -18,10 +18,10 @@ import {
 } from "@/components/ui/table";
 import {
   STAGES,
-  STAGE_LABELS,
   derivePoStage,
   type ProductionStage,
 } from "@/lib/production/stages";
+import { getStageLabels } from "@/lib/production/stage-labels";
 import {
   STATUS_LABELS,
   statusBadgeClass,
@@ -39,6 +39,7 @@ export default async function SupplierHomePage() {
   const scope = await getSupplierScope();
   if (!scope) redirect("/supplier/login");
   const me = scope.supplierId;
+  const stageLabels = await getStageLabels();
 
   // POs this supplier is involved in: their own POs OR ones where they own a stage.
   const assigned = await db
@@ -167,7 +168,7 @@ export default async function SupplierHomePage() {
                       <Badge className={cn(stageBadgeClass(po.derivedStage))}>
                         {po.derivedStage === "mixed"
                           ? "Mixed"
-                          : STAGE_LABELS[po.derivedStage]}
+                          : stageLabels[po.derivedStage]}
                       </Badge>
                     ) : (
                       "—"

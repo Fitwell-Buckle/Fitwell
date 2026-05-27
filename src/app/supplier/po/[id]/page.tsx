@@ -6,7 +6,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { STAGE_LABELS, derivePoStage } from "@/lib/production/stages";
+import { derivePoStage } from "@/lib/production/stages";
+import { getStageLabels } from "@/lib/production/stage-labels";
 import { supplierHasAnyStage, stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { subPoStageTargets } from "@/lib/production/service";
 import {
@@ -49,6 +50,7 @@ export default async function SupplierPoDetailPage({
     notFound();
   }
 
+  const stageLabels = await getStageLabels();
   const derivedStage = derivePoStage(po.lineItems.map((li) => li.currentStage));
   const sortedLineItems = [...po.lineItems].sort(
     (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
@@ -70,7 +72,7 @@ export default async function SupplierPoDetailPage({
     .filter((s) => s !== "supplier_po")
     .map((s) => ({
       value: s as string,
-      label: ownedStages.includes(s) ? STAGE_LABELS[s] : "Complete",
+      label: ownedStages.includes(s) ? stageLabels[s] : "Complete",
     }));
 
   return (
@@ -90,7 +92,7 @@ export default async function SupplierPoDetailPage({
             <div className="mt-1">
               {derivedStage ? (
                 <Badge className={cn(stageBadgeClass(derivedStage))}>
-                  {derivedStage === "mixed" ? "Mixed" : STAGE_LABELS[derivedStage]}
+                  {derivedStage === "mixed" ? "Mixed" : stageLabels[derivedStage]}
                 </Badge>
               ) : (
                 "—"
@@ -147,7 +149,7 @@ export default async function SupplierPoDetailPage({
                     className="text-xs text-zinc-500"
                     title={ev.enteredAt?.toLocaleString("en-US")}
                   >
-                    {STAGE_LABELS[ev.stage]}
+                    {stageLabels[ev.stage]}
                     <span className="ml-1 text-zinc-400">
                       {ev.enteredAt?.toLocaleDateString("en-US", {
                         month: "short",

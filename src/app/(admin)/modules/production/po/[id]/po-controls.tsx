@@ -11,7 +11,8 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { useStageLabels } from "@/components/production/stage-labels-provider";
 import { PO_STATUSES, STATUS_LABELS, fmtMoney } from "@/lib/production/display";
 
 interface LineItem {
@@ -46,6 +47,7 @@ export function PoControls({
   totalCents: number;
 }) {
   const router = useRouter();
+  const stageLabels = useStageLabels();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -171,7 +173,7 @@ export function PoControls({
                   >
                     {STAGES.map((s) => (
                       <option key={s} value={s}>
-                        {STAGE_LABELS[s]}
+                        {stageLabels[s]}
                       </option>
                     ))}
                   </select>

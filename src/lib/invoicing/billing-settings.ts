@@ -41,17 +41,22 @@ export async function getBillingSettings(): Promise<BillingSettings | null> {
   return row ?? null;
 }
 
+// Merge only the fields actually present in `input` (undefined = "leave as-is"),
+// so partial editors like the Wire Info modal don't wipe the bank fields.
 export async function upsertBillingSettings(input: BillingSettingsInput): Promise<void> {
-  const fields = {
-    bankName: clean(input.bankName),
-    accountName: clean(input.accountName),
-    accountNumber: clean(input.accountNumber),
-    routingNumber: clean(input.routingNumber),
-    swiftBic: clean(input.swiftBic),
-    iban: clean(input.iban),
-    instructions: clean(input.instructions),
-    updatedAt: new Date(),
-  };
+  const fields: Partial<typeof billingSettings.$inferInsert> = { updatedAt: new Date() };
+  const keys = [
+    "bankName",
+    "accountName",
+    "accountNumber",
+    "routingNumber",
+    "swiftBic",
+    "iban",
+    "instructions",
+  ] as const;
+  for (const k of keys) {
+    if (input[k] !== undefined) fields[k] = clean(input[k]);
+  }
   await db
     .insert(billingSettings)
     .values({ id: "default", ...fields })

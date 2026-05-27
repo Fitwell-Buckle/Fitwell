@@ -9,7 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { ShopifyRef, ShopifyRefs } from "@/app/api/production/shopify-refs/route";
 import { fmtMoney } from "@/lib/production/display";
-import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { useStageLabels } from "@/components/production/stage-labels-provider";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { QuickAddSelect } from "@/components/forms/quick-add-select";
@@ -157,6 +158,7 @@ export function PoForm({
   poId?: string;
 }) {
   const router = useRouter();
+  const stageLabels = useStageLabels();
   const isEdit = !!poId;
 
   // Selected supplier(s). One = single-supplier PO; more than one = a
@@ -612,7 +614,7 @@ export function PoForm({
             {ASSIGNABLE_STAGES.map((stage) => (
               <div key={stage} className="flex items-center gap-2">
                 <label className="w-44 shrink-0 text-xs text-zinc-600">
-                  {STAGE_LABELS[stage as ProductionStage]}
+                  {stageLabels[stage as ProductionStage]}
                 </label>
                 <select
                   className={`${selectSm} min-w-0 flex-1`}

@@ -31,6 +31,7 @@ export async function POST(req: Request) {
         name: input.name,
         contactName: input.contactName || null,
         contactEmail: input.contactEmail || null,
+        shippingAddress: input.shippingAddress || null,
         notes: input.notes || null,
       })
       .returning({ id: supplier.id });

@@ -12,7 +12,8 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { type ProductionStage } from "@/lib/production/stages";
+import { useStageLabels } from "@/components/production/stage-labels-provider";
 import { stageBadgeClass, fmtMoney } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,7 @@ export function SupplierLineItems({
   stageOptions: { value: string; label: string }[];
 }) {
   const router = useRouter();
+  const stageLabels = useStageLabels();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const owned = new Set(ownedStages);
@@ -115,7 +117,7 @@ export function SupplierLineItems({
                     </select>
                   ) : (
                     <Badge className={cn(stageBadgeClass(li.currentStage))}>
-                      {STAGE_LABELS[li.currentStage]}
+                      {stageLabels[li.currentStage]}
                     </Badge>
                   )}
                 </TableCell>

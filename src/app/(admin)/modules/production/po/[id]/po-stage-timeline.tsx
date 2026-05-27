@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { type ProductionStage } from "@/lib/production/stages";
+import { useStageLabels } from "@/components/production/stage-labels-provider";
 import { fmtDate } from "@/lib/production/display";
 
 export interface TimelineEvent {
@@ -22,6 +23,7 @@ export interface TimelineLine {
 
 export function PoStageTimeline({ lines }: { lines: TimelineLine[] }) {
   const router = useRouter();
+  const stageLabels = useStageLabels();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export function PoStageTimeline({ lines }: { lines: TimelineLine[] }) {
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {li.events.map((ev) => (
                 <span key={ev.id} className="flex items-center gap-1 text-xs text-zinc-500">
-                  {STAGE_LABELS[ev.stage]}
+                  {stageLabels[ev.stage]}
                   {editing ? (
                     <input
                       type="date"

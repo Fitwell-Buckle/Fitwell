@@ -3,11 +3,13 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getPoDetail, getSubPos, getSupplierLineCosts } from "@/lib/production/service";
+import { invoiceForPo } from "@/lib/invoicing/service";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { STAGE_LABELS, STAGES, nextStage, derivePoStage, type ProductionStage } from "@/lib/production/stages";
+import { STAGES, nextStage, derivePoStage, type ProductionStage } from "@/lib/production/stages";
+import { getStageLabels } from "@/lib/production/stage-labels";
 import { formatPoNumber, planSubPos, subPoStageState } from "@/lib/production/sub-po";
 import { stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
@@ -59,6 +61,7 @@ export default async function PoDetailPage({
   const { id } = await params;
   const po = await getPoDetail(id);
   if (!po) notFound();
+  const stageLabels = await getStageLabels();
 
   // Multi-supplier framing: a PO with sub-POs is a master; a PO with a parent
   // is a sub-PO. The per-supplier stage split comes from the master's
@@ -66,6 +69,8 @@ export default async function PoDetailPage({
   const subPos = await getSubPos(po.id);
   const isMaster = subPos.length > 0;
   const isSubPo = !!po.parentPoId;
+  // One invoice per PO — if it's already been invoiced, link to it instead.
+  const existingInvoice = isSubPo ? null : await invoiceForPo(po.id);
   const workStages = STAGES.filter((s) => s !== "complete");
   const plan = isMaster ? planSubPos(workStages, po.stageAssignments, po.supplierId) : [];
   const stagesBySupplier = new Map(plan.map((p) => [p.supplierId, p.stages]));
@@ -82,7 +87,7 @@ export default async function PoDetailPage({
   // owned for routing but isn't a labelled step.
   const subStages = subStageKeys
     .filter((s) => s !== "supplier_po")
-    .map((s) => STAGE_LABELS[s]);
+    .map((s) => stageLabels[s]);
   const subItems = subMaster
     ? [...subMaster.lineItems].sort(
         (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
@@ -120,7 +125,7 @@ export default async function PoDetailPage({
     : null;
   const subStageOptions = isSubPo
     ? [
-        ...subWorkStages.map((s) => ({ value: s as string, label: STAGE_LABELS[s] })),
+        ...subWorkStages.map((s) => ({ value: s as string, label: stageLabels[s] })),
         ...(subHandoffStage ? [{ value: subHandoffStage as string, label: "Complete" }] : []),
       ]
     : [];
@@ -224,7 +229,7 @@ export default async function PoDetailPage({
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/modules/production/po/${po.id}/edit`}>Edit</Link>
               </Button>
-              <PoCreateInvoice poId={po.id} />
+              <PoCreateInvoice poId={po.id} existingInvoiceId={existingInvoice?.id ?? null} />
             </>
           )}
           <Button variant="ghost" size="sm" asChild>
@@ -264,7 +269,7 @@ export default async function PoDetailPage({
             <div className="mt-1">
               {displayStage ? (
                 <Badge className={cn(stageBadgeClass(displayStage))}>
-                  {displayStage === "mixed" ? "Mixed" : STAGE_LABELS[displayStage]}
+                  {displayStage === "mixed" ? "Mixed" : stageLabels[displayStage]}
                 </Badge>
               ) : (
                 "—"
@@ -327,7 +332,7 @@ export default async function PoDetailPage({
                   <div className="mt-0.5 truncate text-xs text-zinc-400">
                     {(stagesBySupplier.get(s.supplierId) ?? [])
                       .filter((st) => st !== "supplier_po")
-                      .map((st) => STAGE_LABELS[st])
+                      .map((st) => stageLabels[st])
                       .join(", ") || "—"}
                   </div>
                 </div>

@@ -51,6 +51,9 @@ export const createInvoiceSchema = z.object({
   issuedDate: dateString,
   dueDate: dateString.nullish(),
   notes: z.string().max(5000).nullish(),
+  // Set when the invoice is created from a PO — links it back and prevents
+  // creating a second invoice from the same PO.
+  sourcePoId: z.string().max(200).nullish(),
   lineItems: z.array(invoiceLineInputSchema).min(1, "an invoice needs at least one line"),
 });
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
@@ -75,6 +78,15 @@ async function companyDiscount(companyId: string): Promise<number> {
 export async function createInvoice(
   input: CreateInvoiceInput,
 ): Promise<{ id: string; invoiceNumber: string }> {
+  // One invoice per source PO — block a second create from the same PO.
+  if (input.sourcePoId) {
+    const existing = await db.query.invoice.findFirst({
+      where: eq(invoice.sourcePoId, input.sourcePoId),
+      columns: { id: true },
+    });
+    if (existing) throw new Error("An invoice already exists for this PO.");
+  }
+
   const discountPercent = await companyDiscount(input.companyId);
   const totals = computeInvoiceTotals(input.lineItems, discountPercent);
   const invoiceNumber = await nextInvoiceNumber();
@@ -88,6 +100,7 @@ export async function createInvoice(
       issuedDate: input.issuedDate,
       dueDate: input.dueDate ?? null,
       notes: input.notes ?? null,
+      sourcePoId: input.sourcePoId ?? null,
       discountPercent,
       ...totals,
     })
@@ -106,6 +119,17 @@ export async function createInvoice(
   );
 
   return { id: inv.id, invoiceNumber };
+}
+
+/** The invoice already created from this PO (for dedup + a "View invoice" link). */
+export async function invoiceForPo(
+  poId: string,
+): Promise<{ id: string; invoiceNumber: string } | null> {
+  const inv = await db.query.invoice.findFirst({
+    where: eq(invoice.sourcePoId, poId),
+    columns: { id: true, invoiceNumber: true },
+  });
+  return inv ?? null;
 }
 
 export interface InvoiceFromPoResult {

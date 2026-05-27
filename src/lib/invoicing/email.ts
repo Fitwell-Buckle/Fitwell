@@ -27,6 +27,14 @@ interface InvoiceEmailData {
   message?: string | null;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 /** Render the bank-wire block (shared by email + printable doc). */
 export function remittanceRows(r: InvoiceRemittance): { label: string; value: string }[] {
   const rows: { label: string; value: string }[] = [];
@@ -69,7 +77,7 @@ export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
                  `<div style="font-size:13px;color:#52525b"><span style="color:#a1a1aa">${r.label}:</span> ${r.value}</div>`,
              )
              .join("")}
-           ${inv.remittance.instructions ? `<div style="font-size:12px;color:#71717a;margin-top:4px">${inv.remittance.instructions}</div>` : ""}
+           ${inv.remittance.instructions ? `<div style="font-size:13px;color:#18181b;font-weight:700;margin-top:6px">${escapeHtml(inv.remittance.instructions).replace(/\n/g, "<br>")}</div>` : ""}
          </div>`
       : "";
 

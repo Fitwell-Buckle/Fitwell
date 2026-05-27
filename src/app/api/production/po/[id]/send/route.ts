@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import { getPoDetail, getSupplierLineCosts } from "@/lib/production/service";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { fmtMoney, fmtDate, STATUS_LABELS } from "@/lib/production/display";
-import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { getStageLabels, type StageLabels } from "@/lib/production/stage-labels";
 import { formatPoNumber, planSubPos } from "@/lib/production/sub-po";
 import {
   usesRawBlankSummary,
@@ -33,6 +34,7 @@ function buildPoEmailHtml(
   stagePrefix: string,
   rawBlanks: RawBlankGroup[],
   supplierUnit: Map<string, number | null>,
+  stageLabels: StageLabels,
 ): string {
   const cell = "padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;";
   const th = "padding:6px 10px;border-bottom:2px solid #ddd;font-size:11px;text-transform:uppercase;color:#888;text-align:left;";
@@ -144,7 +146,7 @@ function buildPoEmailHtml(
     </table>
     ${tableHtml}
     ${po.notes ? `<p style="margin-top:16px;font-size:13px;color:#444;">${esc(po.notes)}</p>` : ""}
-    <p style="margin-top:20px;font-size:11px;color:#aaa;">Stages: ${Object.values(STAGE_LABELS).slice(0, 8).join(" → ")}</p>
+    <p style="margin-top:20px;font-size:11px;color:#aaa;">Stages: ${STAGES.slice(0, 8).map((s) => stageLabels[s]).join(" → ")}</p>
   </div>`;
 }
 
@@ -176,6 +178,7 @@ export async function POST(
   if (!po) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const stageLabels = await getStageLabels();
 
   // A sub-PO carries no line items of its own — bill the master's items, and
   // flag the stages this supplier is responsible for (red, per line).
@@ -193,7 +196,7 @@ export async function POST(
   }
   const stagePrefix = stageKeys
     .filter((s) => s !== "supplier_po")
-    .map((s) => STAGE_LABELS[s])
+    .map((s) => stageLabels[s])
     .join(", ");
 
   // Pre-polishing supplier → summarize the email as raw blanks (size + material).
@@ -232,7 +235,7 @@ export async function POST(
       to,
       cc,
       subject: `Purchase Order ${numberDisplay} — Fitwell Buckle Co.`,
-      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit),
+      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit, stageLabels),
     });
     return NextResponse.json({ data: { sentTo: to, cc } });
   } catch (err) {

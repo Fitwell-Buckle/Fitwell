@@ -17,7 +17,8 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { STAGE_LABELS, derivePoStage } from "@/lib/production/stages";
+import { derivePoStage } from "@/lib/production/stages";
+import { getStageLabels } from "@/lib/production/stage-labels";
 import {
   STATUS_LABELS,
   statusBadgeClass,
@@ -68,7 +69,7 @@ export default async function ProductionPage({
   if (statusFilter) conditions.push(eq(productionPo.status, statusFilter));
   const where = and(...conditions);
 
-  const [pos, suppliers] = await Promise.all([
+  const [pos, suppliers, stageLabels] = await Promise.all([
     db.query.productionPo.findMany({
       where,
       orderBy: desc(productionPo.createdAt),
@@ -87,6 +88,7 @@ export default async function ProductionPage({
       },
     }),
     db.query.supplier.findMany({ columns: { id: true, name: true } }),
+    getStageLabels(),
   ]);
 
   // Which listed POs are masters (have sub-POs)? Their supplier shows as
@@ -163,7 +165,7 @@ export default async function ProductionPage({
                       <Badge className={cn(stageBadgeClass(po.derivedStage))}>
                         {po.derivedStage === "mixed"
                           ? "Mixed"
-                          : STAGE_LABELS[po.derivedStage]}
+                          : stageLabels[po.derivedStage]}
                       </Badge>
                     ) : (
                       "—"

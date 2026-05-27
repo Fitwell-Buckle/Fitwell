@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { supplier } from "@/lib/schema";
 import { getSupplierScope } from "@/lib/production/supplier-session";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
+import { getStageLabels } from "@/lib/production/stage-labels";
+import { StageLabelsProvider } from "@/components/production/stage-labels-provider";
 import { SupplierTopBar } from "./supplier-top-bar";
 
 export const metadata: Metadata = {
@@ -31,10 +33,14 @@ export default async function SupplierLayout({
     topBar = <SupplierTopBar logoUrl={logoUrl} supplierName={sup?.name ?? "Supplier"} />;
   }
 
+  const stageLabels = await getStageLabels();
+
   return (
-    <div className="flex min-h-screen flex-col bg-[#fafafa]">
-      {topBar}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
-    </div>
+    <StageLabelsProvider value={stageLabels}>
+      <div className="flex min-h-screen flex-col bg-[#fafafa]">
+        {topBar}
+        <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+      </div>
+    </StageLabelsProvider>
   );
 }

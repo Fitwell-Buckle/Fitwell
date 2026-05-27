@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Lock } from "lucide-react";
-import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { useStageLabels } from "@/components/production/stage-labels-provider";
 import { skuSize } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ export function KanbanBoard({
   poHrefBase?: string;
 }) {
   const router = useRouter();
+  const stageLabels = useStageLabels();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -96,7 +98,7 @@ export function KanbanBoard({
             >
               <div className="flex items-center justify-between border-b border-zinc-200/80 px-3 py-2">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                  {STAGE_LABELS[stage]}
+                  {stageLabels[stage]}
                 </span>
                 <span className="text-xs text-zinc-400">{items.length}</span>
               </div>

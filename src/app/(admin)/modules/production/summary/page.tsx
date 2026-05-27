@@ -14,7 +14,8 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { derivePoStage, STAGE_LABELS } from "@/lib/production/stages";
+import { derivePoStage, STAGES } from "@/lib/production/stages";
+import { getStageLabels } from "@/lib/production/stage-labels";
 import { supplierForStage } from "@/lib/production/stage-owners";
 import { formatPoNumber } from "@/lib/production/sub-po";
 import { fmtDate } from "@/lib/production/display";
@@ -24,6 +25,7 @@ import { ListFilters } from "@/components/catalog/list-filters";
 import { ProductionViewToggle } from "../view-toggle";
 import { KanbanBoard, type KanbanCard } from "../kanban/kanban-board";
 import { ProductionTimeline } from "../production-timeline";
+import { StageSetup } from "./stage-setup";
 
 export const metadata: Metadata = {
   title: "Production Summary | Fitwell Admin",
@@ -61,7 +63,7 @@ export default async function ProductionSummaryPage({
 
   // Load all non-cancelled POs once. The Incoming Inventory view needs the full
   // set; the Board / Timeline views filter this in memory (small data set).
-  const [allPos, suppliers, estimates] = await Promise.all([
+  const [allPos, suppliers, estimates, stageLabels] = await Promise.all([
     db.query.productionPo.findMany({
       where: ne(productionPo.status, "cancelled"),
       orderBy: desc(productionPo.createdAt),
@@ -75,6 +77,7 @@ export default async function ProductionSummaryPage({
     }),
     db.query.supplier.findMany({ columns: { id: true, name: true } }),
     getStageEstimates(),
+    getStageLabels(),
   ]);
 
   // Owning-supplier resolution: a stage can belong to a different supplier than
@@ -182,7 +185,12 @@ export default async function ProductionSummaryPage({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title="Production Summary" />
-        <ProductionViewToggle view={view} />
+        <div className="flex items-center gap-2">
+          <StageSetup
+            stages={STAGES.map((s) => ({ stage: s, label: stageLabels[s] }))}
+          />
+          <ProductionViewToggle view={view} />
+        </div>
       </div>
 
       {view === "inventory" && (
@@ -228,7 +236,7 @@ export default async function ProductionSummaryPage({
                                 key={stg}
                                 className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600"
                               >
-                                {STAGE_LABELS[stg as keyof typeof STAGE_LABELS]}: {qty}
+                                {stageLabels[stg as keyof typeof stageLabels]}: {qty}
                               </span>
                             ))}
                           </div>
@@ -266,7 +274,7 @@ export default async function ProductionSummaryPage({
       {view === "timeline" && (
         <>
           {listFilters}
-          <ProductionTimeline pos={timelinePos} estimates={estimates} />
+          <ProductionTimeline pos={timelinePos} estimates={estimates} stageLabels={stageLabels} />
         </>
       )}
     </div>

@@ -10,7 +10,8 @@ import {
   type InvoiceStatus,
 } from "@/lib/invoicing/invoicing";
 import { fmtMoney } from "@/lib/production/display";
-import { STAGES, STAGE_LABELS, type ProductionStage } from "@/lib/production/stages";
+import { STAGES, type ProductionStage } from "@/lib/production/stages";
+import { useStageLabels } from "@/components/production/stage-labels-provider";
 
 const selectCls =
   "h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
@@ -40,6 +41,7 @@ export function InvoiceActions({
   balanceInvoiceUrl: string | null;
 }) {
   const router = useRouter();
+  const stageLabels = useStageLabels();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
@@ -182,7 +184,7 @@ export function InvoiceActions({
               {ASSIGNABLE_STAGES.map((stage) => (
                 <div key={stage} className="flex items-center gap-2">
                   <label className="w-28 shrink-0 text-[11px] text-zinc-500">
-                    {STAGE_LABELS[stage as ProductionStage]}
+                    {stageLabels[stage as ProductionStage]}
                   </label>
                   <select
                     className={`${selectCls} min-w-0 flex-1`}

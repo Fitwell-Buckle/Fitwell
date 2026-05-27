@@ -29,6 +29,10 @@ export async function POST(req: Request) {
     const result = await createInvoice(input);
     return NextResponse.json({ data: result }, { status: 201 });
   } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    if (message.includes("already exists for this PO")) {
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
     console.error("Create invoice failed:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
