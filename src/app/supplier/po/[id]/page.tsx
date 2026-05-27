@@ -20,15 +20,8 @@ import {
 } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 import { SupplierLineItems } from "./supplier-line-items";
-import { SupplierComments } from "./supplier-comments";
-import { SupplierAttachments } from "./supplier-attachments";
-
-function fmtBytes(n: number | null): string {
-  if (!n) return "";
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
+import { PoTimeline } from "@/components/production/po-timeline";
+import { buildPoTimeline } from "@/lib/production/timeline";
 
 export default async function SupplierPoDetailPage({
   params,
@@ -166,29 +159,10 @@ export default async function SupplierPoDetailPage({
         </div>
       </Card>
 
-      <SupplierAttachments
+      <PoTimeline
         poId={po.id}
-        attachments={po.attachments.map((a) => ({
-          id: a.id,
-          filename: a.filename,
-          url: a.blobUrl,
-          size: fmtBytes(a.sizeBytes),
-        }))}
-      />
-
-      <SupplierComments
-        poId={po.id}
-        comments={po.comments.map((c) => ({
-          id: c.id,
-          body: c.body,
-          author: c.author?.name || c.author?.email || "Unknown",
-          when: c.createdAt.toLocaleString("en-US", {
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          }),
-        }))}
+        viewer="supplier"
+        entries={buildPoTimeline(po.comments, po.attachments)}
       />
     </div>
   );

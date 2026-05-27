@@ -32,19 +32,12 @@ import {
 } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 import { PoControls } from "./po-controls";
-import { PoComments } from "./po-comments";
-import { PoAttachments } from "./po-attachments";
 import { PoReceive } from "./po-receive";
 import { PoStageTimeline } from "./po-stage-timeline";
 import { PoCreateInvoice } from "./po-create-invoice";
 import { SubPoCovers, type SubPoCoverRow } from "./sub-po-covers";
-
-function fmtBytes(n: number | null): string {
-  if (!n) return "";
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
+import { PoTimeline } from "@/components/production/po-timeline";
+import { buildPoTimeline } from "@/lib/production/timeline";
 
 export const metadata: Metadata = {
   title: "Production PO | Fitwell Admin",
@@ -432,7 +425,7 @@ export default async function PoDetailPage({
             </Table>
           </div>
           <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
-            <span className="text-sm text-zinc-500">Total production cost</span>
+            <span className="text-sm text-zinc-500">Total production cost (USD)</span>
             <span className="ml-3 text-base font-semibold text-zinc-900">
               {fmtMoney(masterGrandTotalCents)}
             </span>
@@ -478,29 +471,10 @@ export default async function PoDetailPage({
         }))}
       />
 
-      <PoAttachments
+      <PoTimeline
         poId={po.id}
-        attachments={po.attachments.map((a) => ({
-          id: a.id,
-          filename: a.filename,
-          url: a.blobUrl,
-          size: fmtBytes(a.sizeBytes),
-        }))}
-      />
-
-      <PoComments
-        poId={po.id}
-        comments={po.comments.map((c) => ({
-          id: c.id,
-          body: c.body,
-          author: c.author?.name || c.author?.email || "Unknown",
-          when: c.createdAt.toLocaleString("en-US", {
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          }),
-        }))}
+        viewer="admin"
+        entries={buildPoTimeline(po.comments, po.attachments)}
       />
         </>
       )}

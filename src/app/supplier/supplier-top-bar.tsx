@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LogOut } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 
 export function SupplierTopBar({
   logoUrl,
@@ -11,6 +13,23 @@ export function SupplierTopBar({
   logoUrl: string;
   supplierName: string;
 }) {
+  const pathname = usePathname();
+  const [unread, setUnread] = useState(0);
+
+  // Unread notification badge; refetch on navigation.
+  useEffect(() => {
+    let active = true;
+    fetch("/api/supplier/notifications")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d) setUnread(d.count ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
+
   return (
     <header className="border-b border-zinc-200 bg-white print:hidden">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
@@ -21,6 +40,18 @@ export function SupplierTopBar({
         </Link>
         <div className="flex items-center gap-4">
           <span className="hidden text-sm text-zinc-600 sm:inline">{supplierName}</span>
+          <Link
+            href="/supplier/notifications"
+            aria-label="Notifications"
+            className="relative text-zinc-500 transition-colors hover:text-zinc-900"
+          >
+            <Bell className="h-5 w-5" />
+            {unread > 0 && (
+              <span className="absolute -right-2 -top-2 rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                {unread}
+              </span>
+            )}
+          </Link>
           <button
             onClick={() => signOut({ callbackUrl: "/supplier/login" })}
             className="flex items-center gap-2 text-sm text-zinc-500 transition-colors hover:text-zinc-900"

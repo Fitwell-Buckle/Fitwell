@@ -335,7 +335,7 @@ export default async function SendPoPage({
 
             <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
               <span className="text-sm text-zinc-500">
-                {isSubPo ? "Supplier total" : "Total"}
+                {isSubPo ? "Supplier total (USD)" : "Total (USD)"}
               </span>
               <span className="ml-3 text-base font-semibold text-zinc-900">
                 {isSubPo ? fmtMoney(supplierTotalCents) : fmtMoney(total)}

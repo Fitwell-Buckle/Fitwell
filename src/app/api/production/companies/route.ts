@@ -3,6 +3,10 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
+import {
+  detectCompanyConflict,
+  companyConflictMessage,
+} from "@/lib/b2b/company-conflict";
 import { companySchema } from "./_schema";
 
 export async function POST(req: Request) {
@@ -21,6 +25,25 @@ export async function POST(req: Request) {
         details: err instanceof z.ZodError ? err.issues : undefined,
       },
       { status: 400 },
+    );
+  }
+
+  const existing = await db
+    .select({
+      id: company.id,
+      name: company.name,
+      contactEmail: company.contactEmail,
+    })
+    .from(company);
+  const conflict = detectCompanyConflict(
+    { name: input.name, contactEmail: input.contactEmail || null },
+    existing,
+  );
+  if (conflict) {
+    const value = conflict === "name" ? input.name : input.contactEmail ?? "";
+    return NextResponse.json(
+      { error: companyConflictMessage(conflict, value) },
+      { status: 409 },
     );
   }
 

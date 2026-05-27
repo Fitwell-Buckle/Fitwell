@@ -794,9 +794,12 @@ export async function getPoDetail(poId: string) {
       },
       comments: {
         orderBy: asc(productionComment.createdAt),
-        with: { author: { columns: { name: true, email: true } } },
+        with: { author: { columns: { name: true, email: true, role: true } } },
       },
-      attachments: { orderBy: desc(productionAttachment.uploadedAt) },
+      attachments: {
+        orderBy: desc(productionAttachment.uploadedAt),
+        with: { uploadedBy: { columns: { name: true, email: true, role: true } } },
+      },
       stageAssignments: {
         columns: { stage: true, supplierId: true },
         with: { supplier: { columns: { name: true } } },

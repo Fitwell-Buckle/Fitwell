@@ -155,7 +155,7 @@ export async function POST(
         unitPriceCents: l.unitPriceCents,
       })),
       payUrl,
-      remittance: billing,
+      instructions: billing?.instructions ?? null,
       message: emailMessage,
     });
 

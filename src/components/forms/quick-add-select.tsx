@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CustomerSearchField } from "@/components/production/customer-search-field";
 
 export type QuickAddField =
   | {
@@ -17,6 +18,17 @@ export type QuickAddField =
       label: string;
       type: "select";
       options: { value: string; label: string }[];
+    }
+  | {
+      key: string;
+      label: string;
+      // Searches synced Shopify customers; picking a match fills the field and
+      // stores the matched customer id under `customerIdKey` (and name under
+      // `nameKey`, if set) in the draft.
+      type: "customer-search";
+      required?: boolean;
+      customerIdKey?: string;
+      nameKey?: string;
     };
 
 const ADD = "__add_new__";
@@ -103,6 +115,27 @@ export function QuickAddSelect({
                     </option>
                   ))}
                 </select>
+              ) : f.type === "customer-search" ? (
+                <CustomerSearchField
+                  label=""
+                  type="email"
+                  value={draft[f.key] ?? ""}
+                  onChange={(v) =>
+                    setDraft((d) => {
+                      const next = { ...d, [f.key]: v };
+                      if (f.customerIdKey) next[f.customerIdKey] = "";
+                      return next;
+                    })
+                  }
+                  onPick={(m) =>
+                    setDraft((d) => {
+                      const next = { ...d, [f.key]: m.email ?? "" };
+                      if (f.customerIdKey) next[f.customerIdKey] = m.id;
+                      if (f.nameKey) next[f.nameKey] = m.name;
+                      return next;
+                    })
+                  }
+                />
               ) : (
                 <Input
                   type={f.type === "email" ? "email" : "text"}

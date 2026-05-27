@@ -6,7 +6,8 @@ import {
   billingSettingsSchema,
 } from "@/lib/invoicing/billing-settings";
 
-// Update the remittance / bank-wire details shown on invoices. Admin-only.
+// Update the free-text bank-wire / payment instructions shown on invoices
+// (edited via the "Wire info" Setup modal on the B2B Orders page). Admin-only.
 export async function PATCH(req: Request) {
   const session = await auth();
   if (!session?.user) {

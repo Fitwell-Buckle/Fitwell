@@ -437,7 +437,7 @@ export function InvoiceForm({
             <span className="w-28 text-right text-zinc-700">−{fmtMoney(totals.discountCents)}</span>
           </div>
           <div className="flex justify-end gap-6 font-semibold text-zinc-900">
-            <span>Total</span>
+            <span>Total (USD)</span>
             <span className="w-28 text-right">{fmtMoney(totals.totalCents)}</span>
           </div>
         </div>

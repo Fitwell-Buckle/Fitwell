@@ -15,7 +15,20 @@ interface NotificationItem {
   createdAt: string;
 }
 
-export function NotificationsList({ items }: { items: NotificationItem[] }) {
+/**
+ * Shared notification inbox used by both the admin (`/notifications`) and the
+ * supplier portal (`/supplier/notifications`). `apiPath` is the mark-read
+ * endpoint; `poHrefBase` is the PO link prefix for each side.
+ */
+export function NotificationList({
+  items,
+  apiPath,
+  poHrefBase,
+}: {
+  items: NotificationItem[];
+  apiPath: string;
+  poHrefBase: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const unread = items.filter((n) => !n.readAt).length;
@@ -23,7 +36,7 @@ export function NotificationsList({ items }: { items: NotificationItem[] }) {
   async function mark(payload: { id?: string; all?: boolean }) {
     setBusy(true);
     try {
-      await fetch("/api/notifications", {
+      await fetch(apiPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -50,7 +63,9 @@ export function NotificationsList({ items }: { items: NotificationItem[] }) {
 
       <div className="mt-3 space-y-2">
         {items.length === 0 ? (
-          <p className="py-10 text-center text-sm text-zinc-400">No notifications yet.</p>
+          <p className="py-10 text-center text-sm text-zinc-400">
+            No notifications yet.
+          </p>
         ) : (
           items.map((n) => (
             <div
@@ -76,7 +91,7 @@ export function NotificationsList({ items }: { items: NotificationItem[] }) {
                 <div className="flex shrink-0 gap-2">
                   {n.poId && (
                     <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/modules/production/po/${n.poId}`}>Open PO</Link>
+                      <Link href={`${poHrefBase}/${n.poId}`}>Open PO</Link>
                     </Button>
                   )}
                   {!n.readAt && (

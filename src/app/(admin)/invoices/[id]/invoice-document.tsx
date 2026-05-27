@@ -68,21 +68,25 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
       <table className="mt-6 w-full text-sm">
         <thead>
           <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-400">
-            <th className="pb-2">Item</th>
-            <th className="pb-2 text-right">Qty</th>
-            <th className="pb-2 text-right">Unit</th>
-            <th className="pb-2 text-right">Total</th>
+            <th className="w-full pb-2 pr-6">Item</th>
+            <th className="whitespace-nowrap pb-2 pl-6 text-right">Qty</th>
+            <th className="whitespace-nowrap pb-2 pl-6 text-right">Unit</th>
+            <th className="whitespace-nowrap pb-2 pl-6 text-right">Total</th>
           </tr>
         </thead>
         <tbody>
           {inv.lineItems.map((l) => (
             <tr key={l.id} className="border-b border-zinc-100">
-              <td className="py-2 text-zinc-700">
+              <td className="py-2 pr-6 text-zinc-700">
                 <span className="font-mono text-xs text-zinc-500">{l.sku}</span> — {l.title}
               </td>
-              <td className="py-2 text-right text-zinc-500">{l.quantity}</td>
-              <td className="py-2 text-right text-zinc-500">{fmtMoney(l.unitPriceCents)}</td>
-              <td className="py-2 text-right text-zinc-700">
+              <td className="whitespace-nowrap py-2 pl-6 text-right text-zinc-500">
+                {l.quantity}
+              </td>
+              <td className="whitespace-nowrap py-2 pl-6 text-right text-zinc-500">
+                {fmtMoney(l.unitPriceCents)}
+              </td>
+              <td className="whitespace-nowrap py-2 pl-6 text-right text-zinc-700">
                 {fmtMoney(l.unitPriceCents * l.quantity)}
               </td>
             </tr>
@@ -100,7 +104,7 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           <span className="w-32 text-right text-zinc-700">−{fmtMoney(inv.discountCents)}</span>
         </div>
         <div className="flex justify-end gap-8 text-base font-semibold text-zinc-900">
-          <span>Total</span>
+          <span>Total (USD)</span>
           <span className="w-32 text-right">{fmtMoney(inv.totalCents)}</span>
         </div>
       </div>

@@ -6,8 +6,6 @@ import { customer, order, orderLineItem } from "@/lib/schema";
 import { count, max } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { getBillingSettings } from "@/lib/invoicing/billing-settings";
-import { BillingSettingsForm } from "./billing-settings-form";
 
 export const metadata: Metadata = {
   title: "Settings | Fitwell Admin",
@@ -17,14 +15,13 @@ export default async function SettingsPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
-  const [customerStats, orderStats, lineItemStats, lastOrder, lastCustomer, billing] =
+  const [customerStats, orderStats, lineItemStats, lastOrder, lastCustomer] =
     await Promise.all([
       db.select({ count: count() }).from(customer),
       db.select({ count: count() }).from(order),
       db.select({ count: count() }).from(orderLineItem),
       db.select({ latest: max(order.processedAt) }).from(order),
       db.select({ latest: max(customer.updatedAt) }).from(customer),
-      getBillingSettings(),
     ]);
 
   const adminEmails = process.env.ADMIN_EMAILS ?? "Not configured";
@@ -107,29 +104,6 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       </div>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle className="text-lg">Remittance / bank-wire details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-zinc-500">
-            Shown on invoices for buyers paying by bank wire / ACH (alongside the
-            online payment link).
-          </p>
-          <BillingSettingsForm
-            initial={{
-              bankName: billing?.bankName ?? "",
-              accountName: billing?.accountName ?? "",
-              accountNumber: billing?.accountNumber ?? "",
-              routingNumber: billing?.routingNumber ?? "",
-              swiftBic: billing?.swiftBic ?? "",
-              iban: billing?.iban ?? "",
-              instructions: billing?.instructions ?? "",
-            }}
-          />
-        </CardContent>
-      </Card>
     </div>
   );
 }

@@ -143,12 +143,18 @@ export function PoForm({
   priceTiers = [],
   initial,
   poId,
+  invoiceId,
+  submitLabel,
 }: {
   suppliers: { id: string; name: string }[];
   companies: CompanyOption[];
   priceTiers?: { id: string; name: string; discountPercent: number }[];
   initial?: PoFormInitial;
   poId?: string;
+  // When set, the created PO is linked back to this invoice (sets sourcePoId).
+  invoiceId?: string;
+  // Override the create-mode submit button label (default "Create PO").
+  submitLabel?: string;
 }) {
   const router = useRouter();
   const stageLabels = useStageLabels();
@@ -354,6 +360,7 @@ export function PoForm({
             shopifyLocationId: locationId || null,
             locationName: locationName || null,
             ...(isEdit ? {} : { lockStagesTogether }),
+            ...(!isEdit && invoiceId ? { invoiceId } : {}),
             ...(!isEdit && multiSupplier
               ? {
                   multiSupplier: true,
@@ -522,7 +529,12 @@ export function PoForm({
               addLabel="Add new customer"
               fields={[
                 { key: "name", label: "Customer name", required: true },
-                { key: "contactEmail", label: "Contact email", type: "email" },
+                {
+                  key: "contactEmail",
+                  label: "Contact email (search Shopify customers)",
+                  type: "customer-search",
+                  customerIdKey: "customerId",
+                },
                 {
                   key: "priceTierId",
                   label: "Price tier",
@@ -543,6 +555,7 @@ export function PoForm({
                   body: JSON.stringify({
                     name: vals.name?.trim(),
                     contactEmail: vals.contactEmail?.trim() || null,
+                    customerId: vals.customerId || null,
                     priceTierId: vals.priceTierId || null,
                   }),
                 });
@@ -792,7 +805,7 @@ export function PoForm({
             </span>
           ) : (
             <>
-              <span className="text-sm text-zinc-500">Total cost</span>
+              <span className="text-sm text-zinc-500">Total cost (USD)</span>
               <span className="ml-3 text-base font-semibold text-zinc-900">
                 {fmtMoney(totalCents)}
               </span>
@@ -805,7 +818,13 @@ export function PoForm({
 
       <div className="flex justify-end">
         <Button onClick={submit} disabled={submitting}>
-          {submitting ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save changes" : "Create PO"}
+          {submitting
+            ? isEdit
+              ? "Saving…"
+              : "Creating…"
+            : isEdit
+              ? "Save changes"
+              : (submitLabel ?? "Create PO")}
         </Button>
       </div>
     </div>

@@ -4,22 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  INVOICE_STATUSES,
-  INVOICE_STATUS_LABELS,
-  type InvoiceStatus,
-} from "@/lib/invoicing/invoicing";
 import { fmtMoney } from "@/lib/production/display";
-import { type ProductionStage } from "@/lib/production/stages";
-import { useStageLabels, useStageOrder } from "@/components/production/stage-labels-provider";
-
-const selectCls =
-  "h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
 
 export function InvoiceActions({
   invoiceId,
-  status,
-  suppliers,
   canPushShopify,
   shopifyInvoiceUrl,
   depositPercent,
@@ -29,8 +17,6 @@ export function InvoiceActions({
   balanceInvoiceUrl,
 }: {
   invoiceId: string;
-  status: string;
-  suppliers: { id: string; name: string }[];
   canPushShopify: boolean;
   shopifyInvoiceUrl: string | null;
   depositPercent: number | null;
@@ -40,14 +26,8 @@ export function InvoiceActions({
   balanceInvoiceUrl: string | null;
 }) {
   const router = useRouter();
-  const stageLabels = useStageLabels();
-  // Assignable stages = every stage except the terminal (which triggers receive).
-  const ASSIGNABLE_STAGES = useStageOrder().slice(0, -1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
-  const [multiSupplier, setMultiSupplier] = useState(false);
-  const [stageOwners, setStageOwners] = useState<Record<string, string>>({});
 
   async function fulfill() {
     setError(null);
@@ -67,147 +47,9 @@ export function InvoiceActions({
     }
   }
 
-  async function setStatus(next: string) {
-    setError(null);
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/invoices/${invoiceId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setError(d.error || "Couldn't update status.");
-      } else {
-        router.refresh();
-      }
-    } catch {
-      setError("Network error — please try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createPo() {
-    if (!supplierId) return setError("Pick a supplier.");
-    setError(null);
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/invoices/${invoiceId}/create-po`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          supplierId,
-          ...(multiSupplier
-            ? {
-                multiSupplier: true,
-                stageAssignments: Object.entries(stageOwners)
-                  .filter(([, v]) => v)
-                  .map(([stage, supplierId]) => ({ stage, supplierId })),
-              }
-            : {}),
-        }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(d.error || "Couldn't create PO.");
-        setBusy(false);
-        return;
-      }
-      router.push(`/modules/production/po/${d.data.poId}`);
-      router.refresh();
-    } catch {
-      setError("Network error — please try again.");
-      setBusy(false);
-    }
-  }
-
   return (
     <Card className="mt-5 p-6">
-      <h2 className="text-sm font-semibold text-zinc-900">Actions</h2>
-
-      <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-4">
-        <label className="flex flex-col gap-1 text-sm text-zinc-600">
-          <span className="text-xs text-zinc-500">Status</span>
-          <select
-            value={status}
-            disabled={busy}
-            onChange={(e) => setStatus(e.target.value)}
-            className={selectCls}
-          >
-            {INVOICE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {INVOICE_STATUS_LABELS[s as InvoiceStatus]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-zinc-500">
-            Create production PO {multiSupplier ? "(primary supplier)" : ""}
-          </span>
-          <div className="flex items-center gap-2">
-            <select
-              value={supplierId}
-              disabled={busy || suppliers.length === 0}
-              onChange={(e) => setSupplierId(e.target.value)}
-              className={selectCls}
-            >
-              {suppliers.length === 0 && <option value="">No suppliers</option>}
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy || suppliers.length === 0}
-              onClick={createPo}
-            >
-              Create PO
-            </Button>
-          </div>
-          <label className="mt-1 flex items-center gap-1.5 text-xs text-zinc-600">
-            <input
-              type="checkbox"
-              checked={multiSupplier}
-              onChange={(e) => setMultiSupplier(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-zinc-300"
-            />
-            Multiple suppliers — split by stage into sub-POs
-          </label>
-          {multiSupplier && (
-            <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {ASSIGNABLE_STAGES.map((stage) => (
-                <div key={stage} className="flex items-center gap-2">
-                  <label className="w-28 shrink-0 text-[11px] text-zinc-500">
-                    {stageLabels[stage as ProductionStage]}
-                  </label>
-                  <select
-                    className={`${selectCls} min-w-0 flex-1`}
-                    value={stageOwners[stage] ?? ""}
-                    onChange={(e) =>
-                      setStageOwners((o) => ({ ...o, [stage]: e.target.value }))
-                    }
-                  >
-                    <option value="">Primary supplier</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-      </div>
+      <h2 className="text-sm font-semibold text-zinc-900">Collect Payment</h2>
 
       {depositCents > 0 && (
         <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50 p-3 text-sm">

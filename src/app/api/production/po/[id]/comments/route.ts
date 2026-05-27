@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { addComment, commentSchema } from "@/lib/production/service";
+import { notifyPoActivity } from "@/lib/production/notifications";
 import { ensureSupplierMayActOnPo } from "@/lib/production/scope";
 
 export async function POST(
@@ -39,6 +40,16 @@ export async function POST(
       poId: id,
       authorUserId: session.user.id,
       body: input.body,
+    });
+    await notifyPoActivity({
+      poId: id,
+      kind: "note",
+      preview: input.body,
+      actor: {
+        role: session.user.role,
+        name: session.user.name,
+        supplierId: session.user.supplierId,
+      },
     });
     return NextResponse.json({ data: comment }, { status: 201 });
   } catch (err) {

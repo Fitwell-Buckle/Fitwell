@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import type { CustomerMatch } from "@/app/api/production/customer-search/route";
+import { CustomerSearchField } from "@/components/production/customer-search-field";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { DataTable } from "@/components/ui/data-table";
@@ -255,7 +255,7 @@ export function CompaniesManager({
       {/* Companies */}
       <div className="flex justify-end">
         {companyEditing !== "new" && (
-          <Button onClick={() => openCompany("new")}>Add brand</Button>
+          <Button onClick={() => openCompany("new")}>Add B2B customer</Button>
         )}
       </div>
 
@@ -398,78 +398,6 @@ interface CompanyDraft {
   assignedProductIds: string[];
   depositPercent: string; // form input; "" = 0 (pay in full)
   notes: string;
-}
-
-/** Contact field that searches the synced Shopify customer list as you type. */
-function CustomerSearchField({
-  label,
-  type,
-  value,
-  onChange,
-  onPick,
-}: {
-  label: string;
-  type?: string;
-  value: string;
-  onChange: (v: string) => void;
-  onPick: (m: CustomerMatch) => void;
-}) {
-  const [results, setResults] = useState<CustomerMatch[]>([]);
-  const [open, setOpen] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function handleType(v: string) {
-    onChange(v);
-    setOpen(true);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      if (v.trim().length < 2) return setResults([]);
-      try {
-        const res = await fetch(
-          `/api/production/customer-search?q=${encodeURIComponent(v.trim())}`,
-        );
-        const d = await res.json();
-        if (res.ok) setResults((d.data ?? []) as CustomerMatch[]);
-      } catch {
-        /* ignore */
-      }
-    }, 250);
-  }
-
-  return (
-    <div className="relative">
-      <label className={fieldLabel}>{label}</label>
-      <Input
-        type={type}
-        value={value}
-        autoComplete="off"
-        onChange={(e) => handleType(e.target.value)}
-        onFocus={() => results.length > 0 && setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-      />
-      {open && results.length > 0 && (
-        <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-zinc-200 bg-white py-1 shadow-md">
-          {results.map((m) => (
-            <li key={m.id}>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onPick(m);
-                  setOpen(false);
-                  setResults([]);
-                }}
-                className="flex w-full flex-col items-start px-3 py-1.5 text-left hover:bg-zinc-50"
-              >
-                <span className="text-sm text-zinc-900">{m.name}</span>
-                {m.email && <span className="text-xs text-zinc-400">{m.email}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
 }
 
 function CompanyForm({

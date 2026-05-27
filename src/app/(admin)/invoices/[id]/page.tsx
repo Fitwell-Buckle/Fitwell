@@ -4,19 +4,13 @@ import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { supplier } from "@/lib/schema";
+import { supplier, company, priceTier } from "@/lib/schema";
 import { getInvoiceDetail } from "@/lib/invoicing/service";
-import { getBillingSettings, hasRemittance } from "@/lib/invoicing/billing-settings";
-import { remittanceRows } from "@/lib/invoicing/email";
-import {
-  INVOICE_STATUS_LABELS,
-  invoiceStatusBadgeClass,
-  type InvoiceStatus,
-} from "@/lib/invoicing/invoicing";
+import { getBillingSettings } from "@/lib/invoicing/billing-settings";
+import { buildInvoiceHistory } from "@/lib/invoicing/history";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -26,8 +20,9 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
+import { PoForm, type PoFormInitial } from "../../modules/production/po/new/po-form";
 import { InvoiceActions } from "./invoice-actions";
+import { InvoiceStatusSelect } from "./invoice-status-select";
 
 export const metadata: Metadata = {
   title: "Invoice | Fitwell Admin",
@@ -42,11 +37,20 @@ export default async function InvoiceDetailPage({
   if (!session) redirect("/auth/login");
 
   const { id } = await params;
-  const [inv, suppliers, billing] = await Promise.all([
+  const [inv, suppliers, companies, tiers, billing] = await Promise.all([
     getInvoiceDetail(id),
     db.query.supplier.findMany({
       columns: { id: true, name: true },
       orderBy: asc(supplier.name),
+    }),
+    db.query.company.findMany({
+      columns: { id: true, name: true },
+      orderBy: asc(company.name),
+      with: { priceTier: { columns: { name: true, discountPercent: true } } },
+    }),
+    db.query.priceTier.findMany({
+      columns: { id: true, name: true, discountPercent: true },
+      orderBy: asc(priceTier.name),
     }),
     getBillingSettings(),
   ]);
@@ -54,22 +58,68 @@ export default async function InvoiceDetailPage({
 
   const editable = inv.status === "draft" || inv.status === "sent";
 
+  const companyOptions = companies.map((c) => ({
+    id: c.id,
+    name: c.name,
+    tierName: c.priceTier?.name ?? null,
+    tierDiscount: c.priceTier?.discountPercent ?? null,
+  }));
+
+  const history = buildInvoiceHistory(
+    {
+      createdAt: inv.createdAt,
+      sentAt: inv.sentAt,
+      depositPaidAt: inv.depositPaidAt,
+      fulfilledAt: inv.fulfilledAt,
+      balancePaidAt: inv.balancePaidAt,
+      paidAt: inv.paidAt,
+    },
+    { companyName: inv.company?.name ?? null },
+  );
+
+  // Prefill a new PO from this invoice's lines (production cost left blank).
+  const poInitial: PoFormInitial = {
+    supplierId: "",
+    shopifyPoNumber: "",
+    issuedDate: new Date().toISOString().slice(0, 10),
+    expectedDeliveryDate: "",
+    notes: `From invoice ${inv.invoiceNumber}`,
+    companyId: inv.companyId,
+    shopifyLocationId: "",
+    locationName: "",
+    lineItems: inv.lineItems.map((l) => ({
+      id: "",
+      sku: l.sku,
+      title: l.title,
+      quantity: l.quantity,
+      unitCostCents: null,
+      shopifyProductId: l.shopifyProductId,
+      shopifyVariantId: l.shopifyVariantId,
+      companyId: null,
+      shopifyLocationId: null,
+      locationName: null,
+    })),
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <PageHeader title={`Invoice ${inv.invoiceNumber}`} />
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/invoices/${inv.id}/send`}>Print &amp; Send</Link>
-          </Button>
-          {editable && (
+        <div className="flex items-center gap-3">
+          <InvoiceStatusSelect invoiceId={inv.id} status={inv.status} />
+          <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/invoices/${inv.id}/edit`}>Edit</Link>
+              <Link href={`/invoices/${inv.id}/send`}>Print &amp; Send</Link>
             </Button>
-          )}
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/invoices">Back</Link>
-          </Button>
+            {editable && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/invoices/${inv.id}/edit`}>Edit</Link>
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/invoices">Back</Link>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -89,29 +139,6 @@ export default async function InvoiceDetailPage({
                 {inv.company.priceTier.name} ({inv.company.priceTier.discountPercent}% off)
               </div>
             )}
-          </div>
-          <div>
-            <div className="text-xs text-zinc-400">Status</div>
-            <div className="mt-1">
-              <Badge className={cn(invoiceStatusBadgeClass(inv.status))}>
-                {INVOICE_STATUS_LABELS[inv.status as InvoiceStatus] ?? inv.status}
-              </Badge>
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-zinc-400">Source PO</div>
-            <div className="mt-1 text-zinc-700">
-              {inv.sourcePo ? (
-                <Link
-                  href={`/modules/production/po/${inv.sourcePo.id}`}
-                  className="underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
-                >
-                  {inv.sourcePo.shopifyPoNumber}
-                </Link>
-              ) : (
-                "—"
-              )}
-            </div>
           </div>
           <div>
             <div className="text-xs text-zinc-400">Issued</div>
@@ -166,7 +193,7 @@ export default async function InvoiceDetailPage({
             <span className="w-28 text-right text-zinc-700">−{fmtMoney(inv.discountCents)}</span>
           </div>
           <div className="flex justify-end gap-6 text-base font-semibold text-zinc-900">
-            <span>Total</span>
+            <span>Total (USD)</span>
             <span className="w-28 text-right">{fmtMoney(inv.totalCents)}</span>
           </div>
         </div>
@@ -193,25 +220,17 @@ export default async function InvoiceDetailPage({
           <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
             Pay by bank wire / ACH
           </div>
-          {hasRemittance(billing) ? (
-            <dl className="mt-2 grid grid-cols-1 gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
-              {remittanceRows(billing!).map((r) => (
-                <div key={r.label} className="flex justify-between gap-4">
-                  <dt className="text-zinc-500">{r.label}</dt>
-                  <dd className="text-zinc-800">{r.value}</dd>
-                </div>
-              ))}
-              {billing!.instructions && (
-                <p className="mt-1 text-xs text-zinc-500 sm:col-span-2">{billing!.instructions}</p>
-              )}
-            </dl>
+          {billing?.instructions ? (
+            <p className="mt-2 whitespace-pre-line text-sm font-medium text-zinc-800">
+              {billing.instructions}
+            </p>
           ) : (
             <p className="mt-2 text-sm text-zinc-400">
-              Add bank-wire details in{" "}
-              <Link href="/settings" className="underline underline-offset-2">
-                Settings
+              Add wire info via “Setup” on the{" "}
+              <Link href="/invoices" className="underline underline-offset-2">
+                B2B Orders
               </Link>{" "}
-              to show them here and on the invoice.
+              page to show it here and on the invoice.
             </p>
           )}
         </div>
@@ -219,8 +238,6 @@ export default async function InvoiceDetailPage({
 
       <InvoiceActions
         invoiceId={inv.id}
-        status={inv.status}
-        suppliers={suppliers}
         canPushShopify={!!inv.company?.customer?.shopifyId}
         shopifyInvoiceUrl={inv.shopifyInvoiceUrl}
         depositPercent={inv.depositPercent}
@@ -231,6 +248,71 @@ export default async function InvoiceDetailPage({
         }
         balanceInvoiceUrl={inv.shopifyBalanceInvoiceUrl}
       />
+
+      {inv.sourcePo ? (
+        <Card className="mt-5 p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-zinc-900">Linked Production POs</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              title="This invoice already has a linked PO"
+            >
+              Create Linked PO
+            </Button>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-zinc-100 pt-3">
+            <Link
+              href={`/modules/production/po/${inv.sourcePo.id}`}
+              className="font-mono text-sm font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+            >
+              {inv.sourcePo.shopifyPoNumber}
+            </Link>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/modules/production/po/${inv.sourcePo.id}`}>Open PO</Link>
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <div className="mt-5">
+          <h2 className="text-sm font-semibold text-zinc-900">Linked Production POs</h2>
+          <p className="mb-3 mt-1 text-xs text-zinc-500">
+            Prefilled from this invoice&apos;s line items (enter production costs).
+            Creating it links the PO back to this invoice.
+          </p>
+          <PoForm
+            suppliers={suppliers}
+            companies={companyOptions}
+            priceTiers={tiers}
+            invoiceId={inv.id}
+            initial={poInitial}
+            submitLabel="Create Linked PO"
+          />
+        </div>
+      )}
+
+      {history.length > 0 && (
+        <Card className="mt-5 p-6">
+          <h2 className="text-sm font-semibold text-zinc-900">History</h2>
+          <ol className="mt-4 space-y-3">
+            {history.map((h, i) => (
+              <li key={i} className="flex items-baseline gap-3 text-sm">
+                <span className="w-40 shrink-0 text-xs text-zinc-400">
+                  {new Date(h.at).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="text-zinc-700">{h.label}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      )}
     </div>
   );
 }

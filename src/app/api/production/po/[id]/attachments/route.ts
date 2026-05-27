@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { addAttachment } from "@/lib/production/service";
+import { notifyPoActivity } from "@/lib/production/notifications";
 import { ensureSupplierMayActOnPo } from "@/lib/production/scope";
 
 export const runtime = "nodejs";
@@ -64,6 +65,16 @@ export async function POST(
       contentType: file.type || null,
       sizeBytes: file.size,
       uploadedByUserId: session.user.id,
+    });
+    await notifyPoActivity({
+      poId: id,
+      kind: "document",
+      preview: file.name,
+      actor: {
+        role: session.user.role,
+        name: session.user.name,
+        supplierId: session.user.supplierId,
+      },
     });
     return NextResponse.json(
       { data: { id: attachment.id, url: blob.url, filename: file.name } },

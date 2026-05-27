@@ -271,15 +271,15 @@ export const guides: Guide[] = [
   {
     slug: "settings-remittance",
     title: "Set your bank-wire details",
-    summary: "Show remittance info on invoices for ACH/wire payers.",
+    summary: "Show wire info on invoices for ACH/wire payers.",
     category: "B2B & invoicing",
     steps: [
       {
-        text: "Go to Settings → “Remittance / bank-wire details”.",
-        shot: "The remittance details form in Settings.",
+        text: "Go to Customers → B2B Orders and click “Setup”.",
+        shot: "The Wire info Setup button on the B2B Orders page.",
       },
       {
-        text: "Fill in your bank name, account name/number, routing/ABA, SWIFT/IBAN, and any instructions, then Save. These appear on the invoice detail, the printable invoice, and the invoice email.",
+        text: "Enter your bank-wire / ACH details as free text (line breaks and bold are preserved), then Save. They appear on the invoice detail, the printable invoice, and the invoice email.",
       },
     ],
   },

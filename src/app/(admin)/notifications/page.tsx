@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { listAdminNotifications } from "@/lib/production/notifications";
 import { PageHeader } from "@/components/ui/page-header";
-import { NotificationsList } from "./notifications-list";
+import { NotificationList } from "@/components/production/notification-list";
 
 export const metadata: Metadata = {
   title: "Notifications | Fitwell Admin",
@@ -31,7 +31,11 @@ export default async function NotificationsPage() {
         Production handoffs and other alerts. Suppliers trigger one when they
         complete their stage on a shared PO.
       </p>
-      <NotificationsList items={items} />
+      <NotificationList
+        items={items}
+        apiPath="/api/notifications"
+        poHrefBase="/modules/production/po"
+      />
     </div>
   );
 }

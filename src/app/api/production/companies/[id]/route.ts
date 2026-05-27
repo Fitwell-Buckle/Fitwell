@@ -4,6 +4,10 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
+import {
+  detectCompanyConflict,
+  companyConflictMessage,
+} from "@/lib/b2b/company-conflict";
 import { companySchema } from "../_schema";
 
 export async function PATCH(
@@ -32,6 +36,28 @@ export async function PATCH(
 
   if (Object.keys(input).length === 0) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  }
+
+  if (input.name !== undefined || input.contactEmail !== undefined) {
+    const existing = await db
+      .select({
+        id: company.id,
+        name: company.name,
+        contactEmail: company.contactEmail,
+      })
+      .from(company);
+    const conflict = detectCompanyConflict(
+      { name: input.name, contactEmail: input.contactEmail || null },
+      existing,
+      id,
+    );
+    if (conflict) {
+      const value = conflict === "name" ? input.name ?? "" : input.contactEmail ?? "";
+      return NextResponse.json(
+        { error: companyConflictMessage(conflict, value) },
+        { status: 409 },
+      );
+    }
   }
 
   try {
