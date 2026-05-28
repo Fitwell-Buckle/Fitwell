@@ -79,7 +79,9 @@ export async function POST(
     : null;
   const emailMessage = [depositNote, message].filter(Boolean).join("\n\n") || null;
 
-  // 1) Optional Shopify draft order (gives a payment link we can include).
+  // 1) Shopify draft order — the payment link. Required for Shopify-linked
+  // companies: if it can't be created we abort the send below (block) rather
+  // than email a linkless invoice or mark it "sent".
   let payUrl: string | null = inv.shopifyInvoiceUrl ?? null;
   let pushedShopify = false;
   if (shopifyCustomerId) {
@@ -123,11 +125,18 @@ export async function POST(
           : "created a Shopify payment link",
       );
     } catch (err) {
+      // Block the send: a Shopify-linked company expects a payable invoice, so
+      // if the payment link can't be created we don't email or mark it sent.
       const message = err instanceof Error ? err.message : "";
-      notes.push(
-        isScopeError(message)
-          ? "Shopify draft order skipped — grant write_draft_orders and re-authorize"
-          : "Shopify draft order failed",
+      const scope = isScopeError(message);
+      console.error("Invoice draft order failed:", err);
+      return NextResponse.json(
+        {
+          error: scope
+            ? "Couldn't create the Shopify payment link — the app is missing the write_draft_orders scope. Grant it (deploy + re-authorize the app), then send again. The invoice was not sent."
+            : "Couldn't create the Shopify payment link — the Shopify draft order failed. The invoice was not sent.",
+        },
+        { status: scope ? 409 : 502 },
       );
     }
   }

@@ -51,6 +51,21 @@ Every unknown above is an opportunity. The goal of instrumentation is to convert
 
 ---
 
+## Blockers
+
+### ⚠️ Shopify `write_draft_orders` declared but not granted (2026-05-27)
+
+`write_draft_orders` is in `shopify.app.toml` (added 2026-05-26, on `main`) but the **installed app's token doesn't have it yet** — declaring a scope doesn't grant it, so Shopify returns access-denied. Confirmed live-blocking on 2026-05-27: a production B2B invoice send emailed fine but reported `Shopify draft order skipped — grant write_draft_orders and re-authorize`, so the invoice went out **with no payment link**. The same scope gates the deposit/balance billing flow and influencer gifting draft orders (workstream 8) — all of it is stuck until this is granted.
+
+**Fix — operational, not a code change** (full workflow in `specs/current/shopify-app-config.md`):
+1. **Greg** (Shopify CLI, his laptop): `shopify app deploy` → `shopify app release --version <name> --allow-updates`. Check the [Versions list](https://dev.shopify.com/dashboard/75387489/apps/360915140609/versions) first — a released version may already include the scope, in which case skip to step 2.
+2. **Store owner** re-authorizes: Shopify Admin → Apps → Fitwell Admin → approve the "update permissions" banner. Until approved, the scope stays *declared but not granted*.
+3. Re-test an invoice send — the Shopify draft order + payment link should now create.
+
+**Owner:** Greg (deploy/release) + store owner (merchant re-auth).
+
+---
+
 ## Active Workstreams
 
 ### 1. ✅ Project Scaffolding & Infrastructure Setup
@@ -166,12 +181,12 @@ Deferred — Shopify is the primary web property for now. Decision logged in `sp
 
 ---
 
-### 7. 📋 Resend Email Integration (deferred)
-**Last worked**: —
+### 7. 🔨 Resend Email Integration (transactional live; digests deferred)
+**Last worked**: 2026-05-27
 **Source of truth**: `specs/work-plans/todo/resend-email-integration.md`
 **Owner**: Greg
 
-Low priority until analytics pipeline is feeding data for digest emails.
+Transactional email is **live in production** as of 2026-05-27 — `RESEND_API_KEY` + `EMAIL_FROM` (`Fitwell Buckle Co. <info@portal.fitwellbuckle.co>`, on the verified `portal.fitwellbuckle.co` domain) set in Vercel and deployed. Powers supplier magic-link sign-in, PO handoff/activity notifications, invoice sends, and the deadline-alert cron. Verified by a production invoice send that emailed successfully. (Invoice *payment links* are a separate matter — still blocked by the `write_draft_orders` scope; see Blockers.) Digest/analytics emails remain low priority until the analytics pipeline is feeding data.
 
 ### 8. 🔨 Influencer Tracking (phase 1 — admin-managed)
 **Last worked**: 2026-05-25
