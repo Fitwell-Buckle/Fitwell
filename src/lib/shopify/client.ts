@@ -728,18 +728,10 @@ class ShopifyClient {
     const draftOrder = created.draftOrderCreate.draftOrder;
     if (!draftOrder) throw new Error("Draft order was not created");
 
-    // Send Shopify's invoice email (best-effort; the invoiceUrl already works).
-    try {
-      await this.graphql(
-        `mutation FitwellDraftSend($id: ID!) {
-          draftOrderInvoiceSend(id: $id) { draftOrder { id } userErrors { field message } }
-        }`,
-        { id: draftOrder.id },
-      );
-    } catch (err) {
-      console.error("draftOrderInvoiceSend failed (continuing):", err);
-    }
-
+    // We do NOT call draftOrderInvoiceSend here — Shopify would otherwise send
+    // its own branded invoice email to the customer, duplicating the one we
+    // send via Resend. The returned `invoiceUrl` is a fully-functional payment
+    // link without needing Shopify to email it.
     return { draftOrderId: draftOrder.id, invoiceUrl: draftOrder.invoiceUrl };
   }
 
