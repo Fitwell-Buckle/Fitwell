@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { supplier, company, priceTier } from "@/lib/schema";
 import { getInvoiceDetail } from "@/lib/invoicing/service";
+import { netLineDisplays } from "@/lib/invoicing/invoicing";
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { buildInvoiceHistory } from "@/lib/invoicing/history";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
@@ -23,6 +24,7 @@ import {
 import { PoForm, type PoFormInitial } from "../../modules/production/po/new/po-form";
 import { InvoiceActions } from "./invoice-actions";
 import { InvoiceStatusSelect } from "./invoice-status-select";
+import { InvoiceAttachments } from "@/components/invoicing/invoice-attachments";
 
 export const metadata: Metadata = {
   title: "Invoice | Fitwell Admin",
@@ -40,11 +42,30 @@ export default async function InvoiceDetailPage({
   const [inv, suppliers, companies, tiers, billing] = await Promise.all([
     getInvoiceDetail(id),
     db.query.supplier.findMany({
-      columns: { id: true, name: true },
+      columns: {
+        id: true,
+        name: true,
+        contactName: true,
+        contactEmail: true,
+        shippingAddress: true,
+        notes: true,
+      },
       orderBy: asc(supplier.name),
     }),
     db.query.company.findMany({
-      columns: { id: true, name: true },
+      columns: {
+        id: true,
+        name: true,
+        contactName: true,
+        contactEmail: true,
+        address: true,
+        customerId: true,
+        priceTierId: true,
+        depositPercent: true,
+        notes: true,
+        assignedCollectionIds: true,
+        assignedProductIds: true,
+      },
       orderBy: asc(company.name),
       with: { priceTier: { columns: { name: true, discountPercent: true } } },
     }),
@@ -57,12 +78,29 @@ export default async function InvoiceDetailPage({
   if (!inv) notFound();
 
   const editable = inv.status === "draft" || inv.status === "sent";
+  const discountPercent = inv.discountPercent ?? 0;
+  // Net (post-discount) prices the customer actually pays — shown instead of
+  // retail. Foots exactly to inv.totalCents (the charged amount).
+  const netLines = netLineDisplays(
+    inv.lineItems.map((l) => ({ quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
+    discountPercent,
+    inv.totalCents,
+  );
 
   const companyOptions = companies.map((c) => ({
     id: c.id,
     name: c.name,
+    contactName: c.contactName,
+    contactEmail: c.contactEmail,
+    address: c.address,
+    customerId: c.customerId,
+    priceTierId: c.priceTierId,
     tierName: c.priceTier?.name ?? null,
     tierDiscount: c.priceTier?.discountPercent ?? null,
+    depositPercent: c.depositPercent ?? 0,
+    notes: c.notes,
+    assignedCollectionIds: c.assignedCollectionIds ?? [],
+    assignedProductIds: c.assignedProductIds ?? [],
   }));
 
   const history = buildInvoiceHistory(
@@ -166,16 +204,16 @@ export default async function InvoiceDetailPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {inv.lineItems.map((l) => (
+              {inv.lineItems.map((l, i) => (
                 <TableRow key={l.id}>
                   <TableCell className="font-mono text-xs">{l.sku}</TableCell>
                   <TableCell>{l.title}</TableCell>
                   <TableCell className="text-right text-zinc-500">{l.quantity}</TableCell>
                   <TableCell className="text-right text-zinc-500">
-                    {fmtMoney(l.unitPriceCents)}
+                    {fmtMoney(netLines[i].netUnitPriceCents)}
                   </TableCell>
                   <TableCell className="text-right text-zinc-700">
-                    {fmtMoney(l.unitPriceCents * l.quantity)}
+                    {fmtMoney(netLines[i].netLineTotalCents)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -184,14 +222,11 @@ export default async function InvoiceDetailPage({
         </div>
 
         <div className="mt-4 space-y-1 border-t border-zinc-100 pt-3 text-sm">
-          <div className="flex justify-end gap-6 text-zinc-500">
-            <span>Subtotal</span>
-            <span className="w-28 text-right text-zinc-700">{fmtMoney(inv.subtotalCents)}</span>
-          </div>
-          <div className="flex justify-end gap-6 text-zinc-500">
-            <span>Discount ({inv.discountPercent ?? 0}%)</span>
-            <span className="w-28 text-right text-zinc-700">−{fmtMoney(inv.discountCents)}</span>
-          </div>
+          {discountPercent > 0 && (
+            <div className="flex justify-end gap-6 text-zinc-400">
+              <span>Includes {discountPercent}% partner pricing</span>
+            </div>
+          )}
           <div className="flex justify-end gap-6 text-base font-semibold text-zinc-900">
             <span>Total (USD)</span>
             <span className="w-28 text-right">{fmtMoney(inv.totalCents)}</span>
@@ -235,6 +270,8 @@ export default async function InvoiceDetailPage({
           )}
         </div>
       </Card>
+
+      <InvoiceAttachments invoiceId={inv.id} attachments={inv.attachments} />
 
       <InvoiceActions
         invoiceId={inv.id}

@@ -13,13 +13,41 @@ import { type ProductionStage } from "@/lib/production/stages";
 import { useStageLabels, useStageOrder } from "@/components/production/stage-labels-provider";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
-import { QuickAddSelect } from "@/components/forms/quick-add-select";
+import { SearchableSelectWithAdd } from "@/components/forms/searchable-select";
+import {
+  CompanyForm,
+  emptyCompanyDraft,
+  type CompanyDraft,
+} from "@/components/production/company-form";
+import {
+  SupplierForm,
+  emptySupplierDraft,
+  type SupplierDraft,
+} from "@/components/production/supplier-form";
 
 export interface CompanyOption {
   id: string;
   name: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  address: string | null;
+  customerId: string | null;
+  priceTierId: string | null;
   tierName: string | null;
   tierDiscount: number | null;
+  depositPercent: number;
+  notes: string | null;
+  assignedCollectionIds: string[];
+  assignedProductIds: string[];
+}
+
+export interface SupplierOption {
+  id: string;
+  name: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  shippingAddress: string | null;
+  notes: string | null;
 }
 
 export interface EditableLine {
@@ -92,6 +120,7 @@ function toRow(line: EditableLine): LineItemRow {
 }
 
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
+const rowLabel = "mb-1 block text-[11px] font-medium uppercase tracking-wider text-zinc-400";
 const inputBase =
   "flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 const selectSm =
@@ -145,8 +174,9 @@ export function PoForm({
   poId,
   invoiceId,
   submitLabel,
+  defaultSupplierId,
 }: {
-  suppliers: { id: string; name: string }[];
+  suppliers: SupplierOption[];
   companies: CompanyOption[];
   priceTiers?: { id: string; name: string; discountPercent: number }[];
   initial?: PoFormInitial;
@@ -155,6 +185,8 @@ export function PoForm({
   invoiceId?: string;
   // Override the create-mode submit button label (default "Create PO").
   submitLabel?: string;
+  /** Pre-select this supplier (e.g. "Create PO" from a supplier page). */
+  defaultSupplierId?: string;
 }) {
   const router = useRouter();
   const stageLabels = useStageLabels();
@@ -166,7 +198,7 @@ export function PoForm({
   // Selected supplier(s). One = single-supplier PO; more than one = a
   // multi-supplier (master) PO split by stage into sub-POs.
   const [supplierIds, setSupplierIds] = useState<string[]>(() => {
-    if (!initial) return [];
+    if (!initial) return defaultSupplierId ? [defaultSupplierId] : [];
     if (initial.isMaster) {
       return [
         ...new Set([
@@ -207,6 +239,191 @@ export function PoForm({
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Inline supplier form: shared for "+ Add new supplier" and "Edit supplier".
+  // null = closed, "new" = create mode, an id = edit mode for that supplier.
+  const [supplierEditing, setSupplierEditing] = useState<string | "new" | null>(null);
+  const [supplierDraft, setSupplierDraft] = useState<SupplierDraft>(emptySupplierDraft());
+  const [supplierBusy, setSupplierBusy] = useState(false);
+  const [supplierError, setSupplierError] = useState<string | null>(null);
+
+  function supplierOptionToDraft(s: SupplierOption): SupplierDraft {
+    return {
+      name: s.name,
+      contactName: s.contactName ?? "",
+      contactEmail: s.contactEmail ?? "",
+      shippingAddress: s.shippingAddress ?? "",
+      notes: s.notes ?? "",
+    };
+  }
+  function openNewSupplier() {
+    setSupplierDraft(emptySupplierDraft());
+    setSupplierError(null);
+    setSupplierEditing("new");
+  }
+  function openEditSupplier(id: string) {
+    const s = supplierList.find((x) => x.id === id);
+    if (!s) return;
+    setSupplierDraft(supplierOptionToDraft(s));
+    setSupplierError(null);
+    setSupplierEditing(id);
+  }
+  function closeSupplierForm() {
+    setSupplierEditing(null);
+    setSupplierError(null);
+  }
+
+  async function saveSupplier() {
+    setSupplierError(null);
+    if (!supplierDraft.name.trim()) return setSupplierError("Supplier name is required.");
+    if (supplierEditing == null) return;
+    const isNew = supplierEditing === "new";
+    setSupplierBusy(true);
+    try {
+      const url = isNew
+        ? "/api/production/suppliers"
+        : `/api/production/suppliers/${supplierEditing}`;
+      const body = JSON.stringify({
+        name: supplierDraft.name.trim(),
+        contactName: supplierDraft.contactName.trim() || null,
+        contactEmail: supplierDraft.contactEmail.trim() || null,
+        shippingAddress: supplierDraft.shippingAddress.trim() || null,
+        notes: supplierDraft.notes.trim() || null,
+      });
+      const res = await fetch(url, {
+        method: isNew ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSupplierError(d.error || "Couldn't save supplier.");
+        setSupplierBusy(false);
+        return;
+      }
+      const id = isNew ? (d.data.id as string) : (supplierEditing as string);
+      const next: SupplierOption = {
+        id,
+        name: supplierDraft.name.trim(),
+        contactName: supplierDraft.contactName.trim() || null,
+        contactEmail: supplierDraft.contactEmail.trim() || null,
+        shippingAddress: supplierDraft.shippingAddress.trim() || null,
+        notes: supplierDraft.notes.trim() || null,
+      };
+      setSupplierList((list) =>
+        isNew ? [...list, next] : list.map((s) => (s.id === id ? next : s)),
+      );
+      if (isNew) addSupplier(id);
+      setSupplierEditing(null);
+    } catch {
+      setSupplierError("Network error — please try again.");
+    } finally {
+      setSupplierBusy(false);
+    }
+  }
+
+  // Inline customer form: shared for "+ Add new customer" and "Edit customer".
+  const [customerEditing, setCustomerEditing] = useState<string | "new" | null>(null);
+  const [customerDraft, setCustomerDraft] = useState<CompanyDraft>(emptyCompanyDraft());
+  const [customerBusy, setCustomerBusy] = useState(false);
+  const [customerError, setCustomerError] = useState<string | null>(null);
+
+  function companyOptionToDraft(c: CompanyOption): CompanyDraft {
+    return {
+      name: c.name,
+      contactName: c.contactName ?? "",
+      contactEmail: c.contactEmail ?? "",
+      address: c.address ?? "",
+      customerId: c.customerId ?? "",
+      priceTierId: c.priceTierId ?? "",
+      assignedCollectionIds: c.assignedCollectionIds,
+      assignedProductIds: c.assignedProductIds,
+      depositPercent: c.depositPercent > 0 ? String(c.depositPercent) : "",
+      notes: c.notes ?? "",
+    };
+  }
+  function openNewCustomer() {
+    setCustomerDraft(emptyCompanyDraft());
+    setCustomerError(null);
+    setCustomerEditing("new");
+  }
+  function openEditCustomer() {
+    const c = companyList.find((x) => x.id === companyId);
+    if (!c) return;
+    setCustomerDraft(companyOptionToDraft(c));
+    setCustomerError(null);
+    setCustomerEditing(c.id);
+  }
+  function closeCustomerForm() {
+    setCustomerEditing(null);
+    setCustomerError(null);
+  }
+
+  async function saveCustomer() {
+    setCustomerError(null);
+    if (!customerDraft.name.trim()) return setCustomerError("Customer name is required.");
+    if (customerEditing == null) return;
+    const isNew = customerEditing === "new";
+    setCustomerBusy(true);
+    try {
+      const url = isNew
+        ? "/api/production/companies"
+        : `/api/production/companies/${customerEditing}`;
+      const body = JSON.stringify({
+        name: customerDraft.name.trim(),
+        contactName: customerDraft.contactName.trim() || null,
+        contactEmail: customerDraft.contactEmail.trim() || null,
+        address: customerDraft.address.trim() || null,
+        customerId: customerDraft.customerId || null,
+        priceTierId: customerDraft.priceTierId || null,
+        assignedCollectionIds: customerDraft.assignedCollectionIds,
+        assignedProductIds: customerDraft.assignedProductIds,
+        depositPercent: customerDraft.depositPercent.trim()
+          ? Number(customerDraft.depositPercent)
+          : 0,
+        notes: customerDraft.notes.trim() || null,
+      });
+      const res = await fetch(url, {
+        method: isNew ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCustomerError(d.error || "Couldn't save customer.");
+        setCustomerBusy(false);
+        return;
+      }
+      const tier = priceTiers.find((t) => t.id === customerDraft.priceTierId);
+      const id = isNew ? (d.data.id as string) : (customerEditing as string);
+      const next: CompanyOption = {
+        id,
+        name: customerDraft.name.trim(),
+        contactName: customerDraft.contactName.trim() || null,
+        contactEmail: customerDraft.contactEmail.trim() || null,
+        address: customerDraft.address.trim() || null,
+        customerId: customerDraft.customerId || null,
+        priceTierId: customerDraft.priceTierId || null,
+        tierName: tier?.name ?? null,
+        tierDiscount: tier?.discountPercent ?? null,
+        depositPercent: customerDraft.depositPercent.trim()
+          ? Number(customerDraft.depositPercent)
+          : 0,
+        notes: customerDraft.notes.trim() || null,
+        assignedCollectionIds: customerDraft.assignedCollectionIds,
+        assignedProductIds: customerDraft.assignedProductIds,
+      };
+      setCompanyList((list) =>
+        isNew ? [...list, next] : list.map((c) => (c.id === id ? next : c)),
+      );
+      if (isNew) setCompanyId(id);
+      setCustomerEditing(null);
+    } catch {
+      setCustomerError("Network error — please try again.");
+    } finally {
+      setCustomerBusy(false);
+    }
+  }
 
   // One supplier = single PO; more than one = a multi-supplier (master) PO.
   const multiSupplier = supplierIds.length > 1;
@@ -436,39 +653,31 @@ export function PoForm({
                 })}
               </div>
             )}
-            <QuickAddSelect
+            <SearchableSelectWithAdd
               value=""
               onChange={addSupplier}
-              options={[
-                {
-                  value: "",
-                  label: supplierIds.length
-                    ? "Add another supplier…"
-                    : "Select a supplier…",
-                },
-                ...supplierList
-                  .filter((s) => !supplierIds.includes(s.id))
-                  .map((s) => ({ value: s.id, label: s.name })),
-              ]}
-              addLabel="Add new supplier"
-              fields={[
-                { key: "name", label: "Supplier name", required: true },
-                { key: "contactEmail", label: "Contact email", type: "email" },
-              ]}
-              onCreate={async (vals) => {
-                const res = await fetch("/api/production/suppliers", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    name: vals.name?.trim(),
-                    contactEmail: vals.contactEmail?.trim() || null,
-                  }),
-                });
-                const d = await res.json().catch(() => ({}));
-                if (!res.ok) return { error: d.error || "Couldn't add supplier." };
-                setSupplierList((list) => [...list, { id: d.data.id, name: vals.name.trim() }]);
-                return { id: d.data.id };
-              }}
+              items={supplierList
+                .filter((s) => !supplierIds.includes(s.id))
+                .map((s) => ({
+                  id: s.id,
+                  label: s.name,
+                  detail: s.contactEmail || s.contactName || null,
+                  searchText: [
+                    s.name,
+                    s.contactName ?? "",
+                    s.contactEmail ?? "",
+                    s.shippingAddress ?? "",
+                  ]
+                    .join(" ")
+                    .toLowerCase(),
+                }))}
+              placeholder={
+                supplierIds.length ? "Add another supplier…" : "Select a supplier…"
+              }
+              addLabel="+ Add new supplier"
+              searchPlaceholder="Search by name, contact, email, address…"
+              disabled={supplierEditing !== null}
+              onAddNew={openNewSupplier}
             />
             <p className="mt-1 text-xs text-zinc-500">
               {multiSupplier
@@ -516,63 +725,28 @@ export function PoForm({
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={fieldLabel}>Customer (optional)</label>
-            <QuickAddSelect
+            <SearchableSelectWithAdd
               value={companyId}
               onChange={setCompanyId}
-              options={[
-                { value: "", label: "— none —" },
-                ...companyList.map((c) => ({
-                  value: c.id,
-                  label: c.tierName ? `${c.name} — ${c.tierName}` : c.name,
-                })),
-              ]}
-              addLabel="Add new customer"
-              fields={[
-                { key: "name", label: "Customer name", required: true },
-                {
-                  key: "contactEmail",
-                  label: "Contact email (search Shopify customers)",
-                  type: "customer-search",
-                  customerIdKey: "customerId",
-                },
-                {
-                  key: "priceTierId",
-                  label: "Price tier",
-                  type: "select",
-                  options: [
-                    { value: "", label: "— No tier —" },
-                    ...priceTiers.map((t) => ({
-                      value: t.id,
-                      label: `${t.name} (${t.discountPercent}% off)`,
-                    })),
-                  ],
-                },
-              ]}
-              onCreate={async (vals) => {
-                const res = await fetch("/api/production/companies", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    name: vals.name?.trim(),
-                    contactEmail: vals.contactEmail?.trim() || null,
-                    customerId: vals.customerId || null,
-                    priceTierId: vals.priceTierId || null,
-                  }),
-                });
-                const d = await res.json().catch(() => ({}));
-                if (!res.ok) return { error: d.error || "Couldn't add company." };
-                const tier = priceTiers.find((t) => t.id === vals.priceTierId);
-                setCompanyList((list) => [
-                  ...list,
-                  {
-                    id: d.data.id,
-                    name: vals.name.trim(),
-                    tierName: tier?.name ?? null,
-                    tierDiscount: tier?.discountPercent ?? 0,
-                  },
-                ]);
-                return { id: d.data.id };
-              }}
+              items={companyList.map((c) => ({
+                id: c.id,
+                label: c.name,
+                detail: [c.tierName, c.contactEmail].filter(Boolean).join(" · ") || null,
+                searchText: [
+                  c.name,
+                  c.contactName ?? "",
+                  c.contactEmail ?? "",
+                  c.address ?? "",
+                  c.tierName ?? "",
+                ]
+                  .join(" ")
+                  .toLowerCase(),
+              }))}
+              placeholder="Select a customer…"
+              addLabel="+ Add new customer"
+              searchPlaceholder="Search by name, contact, email…"
+              disabled={customerEditing !== null}
+              onAddNew={openNewCustomer}
             />
             {selectedCompany?.tierName && (
               <p className="mt-1 text-xs text-zinc-500">
@@ -600,16 +774,74 @@ export function PoForm({
           </p>
         )}
 
-        <div className="mt-4">
-          <label className={fieldLabel}>Notes (optional)</label>
+        {/* Selected-customer details (read-only) + Edit-customer button.
+            Lives inside the top card so all order-header context — suppliers,
+            customer, dates, warehouse, PO notes — is grouped together. */}
+        {customerEditing === null && selectedCompany && (
+          <CompanyDetailsSection
+            customer={selectedCompany}
+            onEdit={openEditCustomer}
+          />
+        )}
+        <div className="mt-6 border-t border-zinc-100 pt-5">
+          <label className={fieldLabel}>PO notes (optional)</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
           />
+          <p className="mt-1 text-xs text-zinc-500">
+            Notes for this PO only — not saved to the supplier or customer record.
+          </p>
         </div>
       </Card>
+
+      {/* Per-supplier read-only details card with Edit/Remove buttons. */}
+      {supplierEditing === null && supplierIds.length > 0 && (
+        <Card className="p-6">
+          <h2 className="text-sm font-semibold text-zinc-900">Supplier details</h2>
+          <div className="mt-3 space-y-3">
+            {supplierIds.map((id) => {
+              const s = supplierList.find((x) => x.id === id);
+              if (!s) return null;
+              return (
+                <SupplierDetailsRow
+                  key={id}
+                  supplier={s}
+                  onEdit={() => openEditSupplier(id)}
+                  onRemove={() => removeSupplier(id)}
+                />
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {supplierEditing !== null && (
+        <SupplierForm
+          title={supplierEditing === "new" ? "New supplier" : "Edit supplier"}
+          draft={supplierDraft}
+          setDraft={setSupplierDraft}
+          busy={supplierBusy}
+          error={supplierError}
+          onCancel={closeSupplierForm}
+          onSave={saveSupplier}
+        />
+      )}
+
+      {customerEditing !== null && (
+        <CompanyForm
+          title={customerEditing === "new" ? "New customer" : "Edit customer"}
+          draft={customerDraft}
+          setDraft={setCustomerDraft}
+          priceTiers={priceTiers}
+          busy={customerBusy}
+          error={customerError}
+          onCancel={closeCustomerForm}
+          onSave={saveCustomer}
+        />
+      )}
 
       {/* Shown only for a multi-supplier PO; assign every stage before adding lines. */}
       {multiSupplier && (
@@ -665,14 +897,7 @@ export function PoForm({
           </p>
         )}
 
-        <div className="mt-4 hidden items-center gap-2 px-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-400 sm:flex">
-          <span className="flex-1">Product</span>
-          <span className="w-20">Qty</span>
-          <span className="w-24">Unit cost</span>
-          <span className="w-10" />
-        </div>
-
-        <div className="mt-2 space-y-4">
+        <div className="mt-4 space-y-4">
           {rows.map((r, i) => {
             const taken = new Set(
               rows.filter((_, j) => j !== i).map((x) => x.variantKey).filter(Boolean),
@@ -682,68 +907,98 @@ export function PoForm({
               r.locationId && r.locationName && !locations.some((o) => o.id === r.locationId)
                 ? [{ id: r.locationId, name: r.locationName }, ...locations]
                 : locations;
+            // Per-row line total (qty × unit cost). Null = can't compute yet
+            // (multi-supplier sets cost per sub-PO, or the fields aren't valid).
+            const rowQty = Number(r.quantity);
+            const rowCost = Number(r.unitCost);
+            const lineCents =
+              !multiSupplier &&
+              Number.isFinite(rowQty) &&
+              rowQty > 0 &&
+              Number.isFinite(rowCost) &&
+              rowCost >= 0 &&
+              r.unitCost.trim() !== ""
+                ? Math.round(rowCost * 100) * rowQty
+                : null;
             return (
               <div key={r.id ?? `new-${i}`} className="space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  {catalogError ? (
-                    <>
-                      <Input
-                        className="w-32"
-                        placeholder="SKU"
-                        value={r.sku}
-                        onChange={(e) => updateRow(i, { sku: e.target.value })}
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-[200px] flex-1">
+                    <label className={rowLabel}>Product</label>
+                    {catalogError ? (
+                      <div className="flex gap-2">
+                        <Input
+                          className="w-32"
+                          placeholder="SKU"
+                          value={r.sku}
+                          onChange={(e) => updateRow(i, { sku: e.target.value })}
+                        />
+                        <Input
+                          className="min-w-[140px] flex-1"
+                          placeholder="Title"
+                          value={r.title}
+                          onChange={(e) => updateRow(i, { title: e.target.value })}
+                        />
+                      </div>
+                    ) : (
+                      <ProductCombobox
+                        variants={variants}
+                        collections={collections}
+                        value={r.variantKey}
+                        exclude={taken}
+                        disabled={catalogLoading}
+                        placeholder={catalogLoading ? "Loading catalog…" : "Search products…"}
+                        initialCollectionId={lastCollectionId}
+                        onCollectionChange={setLastCollectionId}
+                        onSelect={(v) =>
+                          updateRow(i, {
+                            variantKey: v.shopifyVariantId,
+                            shopifyProductId: v.shopifyProductId,
+                            sku: v.sku,
+                            title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
+                          })
+                        }
+                        onSelectMany={(vs) => addManyAt(i, vs)}
                       />
-                      <Input
-                        className="w-auto min-w-[180px] flex-1"
-                        placeholder="Title"
-                        value={r.title}
-                        onChange={(e) => updateRow(i, { title: e.target.value })}
-                      />
-                    </>
-                  ) : (
-                    <ProductCombobox
-                      variants={variants}
-                      collections={collections}
-                      value={r.variantKey}
-                      exclude={taken}
-                      disabled={catalogLoading}
-                      placeholder={catalogLoading ? "Loading catalog…" : "Search products…"}
-                      initialCollectionId={lastCollectionId}
-                      onCollectionChange={setLastCollectionId}
-                      onSelect={(v) =>
-                        updateRow(i, {
-                          variantKey: v.shopifyVariantId,
-                          shopifyProductId: v.shopifyProductId,
-                          sku: v.sku,
-                          title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
-                        })
-                      }
-                      onSelectMany={(vs) => addManyAt(i, vs)}
+                    )}
+                  </div>
+                  <div>
+                    <label className={rowLabel}>QTY</label>
+                    <Input
+                      className="w-20"
+                      type="number"
+                      min="1"
+                      placeholder="Qty"
+                      value={r.quantity}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onChange={(e) => updateRow(i, { quantity: e.target.value })}
                     />
-                  )}
-                  <Input
-                    className="w-20"
-                    type="number"
-                    min="1"
-                    placeholder="Qty"
-                    value={r.quantity}
-                    onChange={(e) => updateRow(i, { quantity: e.target.value })}
-                  />
-                  <Input
-                    className="w-24"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder={multiSupplier ? "—" : "Unit $"}
-                    title={
-                      multiSupplier
-                        ? "Set per sub-PO on a multi-supplier PO"
-                        : "Production cost per unit (not the Shopify retail price)"
-                    }
-                    value={multiSupplier ? "" : r.unitCost}
-                    disabled={multiSupplier}
-                    onChange={(e) => updateRow(i, { unitCost: e.target.value })}
-                  />
+                  </div>
+                  <div>
+                    <label className={rowLabel}>Unit cost</label>
+                    <Input
+                      className="w-24"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder={multiSupplier ? "—" : "Unit $"}
+                      title={
+                        multiSupplier
+                          ? "Set per sub-PO on a multi-supplier PO"
+                          : "Production cost per unit (not the Shopify retail price)"
+                      }
+                      value={multiSupplier ? "" : r.unitCost}
+                      disabled={multiSupplier}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onChange={(e) => updateRow(i, { unitCost: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className={rowLabel}>Line total</label>
+                    <div className="flex h-10 w-24 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-700">
+                      {lineCents == null ? <span className="text-zinc-300">—</span> : fmtMoney(lineCents)}
+                    </div>
+                  </div>
                   <Button
                     type="button"
                     variant="ghost"
@@ -826,6 +1081,113 @@ export function PoForm({
               ? "Save changes"
               : (submitLabel ?? "Create PO")}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function DetailField({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-zinc-400">{label}</div>
+      <div className="mt-0.5 whitespace-pre-line text-sm text-zinc-700">
+        {value && value.trim() ? value : <span className="text-zinc-300">—</span>}
+      </div>
+    </div>
+  );
+}
+
+/** One supplier's full info shown in the "Supplier details" card, with Edit
+ *  and Remove buttons. Multiple of these stack on a multi-supplier PO. */
+function SupplierDetailsRow({
+  supplier,
+  onEdit,
+  onRemove,
+}: {
+  supplier: SupplierOption;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-zinc-200 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-semibold text-zinc-900">{supplier.name}</div>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+            Edit supplier
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+            Remove
+          </Button>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <DetailField label="Contact name" value={supplier.contactName} />
+        <DetailField label="Contact email" value={supplier.contactEmail} />
+        <div className="sm:col-span-2">
+          <DetailField label="Shipping address" value={supplier.shippingAddress} />
+        </div>
+        <div className="sm:col-span-2">
+          <DetailField label="Supplier notes" value={supplier.notes} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Read-only summary of every saved field on the selected B2B customer + an
+ *  Edit button that opens the full CompanyForm pre-filled. Renders as a
+ *  section (no outer Card) so it can nest inside the PO header card. */
+function CompanyDetailsSection({
+  customer,
+  onEdit,
+}: {
+  customer: CompanyOption;
+  onEdit: () => void;
+}) {
+  const restrictionText =
+    customer.assignedCollectionIds.length === 0 && customer.assignedProductIds.length === 0
+      ? "Full catalog"
+      : [
+          customer.assignedCollectionIds.length > 0 &&
+            `${customer.assignedCollectionIds.length} collection${customer.assignedCollectionIds.length === 1 ? "" : "s"}`,
+          customer.assignedProductIds.length > 0 &&
+            `${customer.assignedProductIds.length} product${customer.assignedProductIds.length === 1 ? "" : "s"}`,
+        ]
+          .filter(Boolean)
+          .join(" + ");
+  return (
+    <div className="mt-6 border-t border-zinc-100 pt-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-zinc-900">Customer details</h3>
+        <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+          Edit customer
+        </Button>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <DetailField label="Name" value={customer.name} />
+        <DetailField
+          label="Price tier"
+          value={
+            customer.tierName
+              ? `${customer.tierName} (${customer.tierDiscount ?? 0}% off)`
+              : null
+          }
+        />
+        <DetailField label="Contact name" value={customer.contactName} />
+        <DetailField label="Contact email" value={customer.contactEmail} />
+        <DetailField
+          label="Deposit"
+          value={customer.depositPercent > 0 ? `${customer.depositPercent}%` : "Pay in full"}
+        />
+        <DetailField label="Shopify link" value={customer.customerId ? "✓ Linked" : null} />
+        <DetailField label="Order restriction" value={restrictionText} />
+        <div className="sm:col-span-2">
+          <DetailField label="Address" value={customer.address} />
+        </div>
+        <div className="sm:col-span-2">
+          <DetailField label="Customer notes" value={customer.notes} />
+        </div>
       </div>
     </div>
   );

@@ -5,6 +5,9 @@ name = "Fitwell Admin"
 application_url = "https://admin.fitwellbuckle.co"
 embedded = false
 
+[webhooks]
+api_version = "2026-04"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_content,read_customers,read_locations,read_marketing_events,read_markets,read_orders,read_products,read_script_tags,read_themes,write_draft_orders,write_inventory"
@@ -13,6 +16,3 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [ ]
-
-[webhooks]
-api_version = "2026-04"

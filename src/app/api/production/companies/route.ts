@@ -54,6 +54,7 @@ export async function POST(req: Request) {
         name: input.name,
         contactName: input.contactName || null,
         contactEmail: input.contactEmail || null,
+        address: input.address || null,
         customerId: input.customerId || null,
         priceTierId: input.priceTierId || null,
         assignedCollectionIds: input.assignedCollectionIds ?? [],

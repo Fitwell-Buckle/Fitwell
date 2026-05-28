@@ -152,9 +152,7 @@ export async function POST(
       companyName: inv.company?.name ?? "—",
       issuedDate: inv.issuedDate,
       dueDate: inv.dueDate,
-      subtotalCents: inv.subtotalCents,
       discountPercent: inv.discountPercent,
-      discountCents: inv.discountCents,
       totalCents: inv.totalCents,
       notes: inv.notes,
       lineItems: inv.lineItems.map((l) => ({

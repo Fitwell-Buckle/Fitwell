@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import {
   invoice,
   invoiceLineItem,
+  invoiceAttachment,
   company,
   productionPo,
 } from "@/lib/schema";
@@ -348,8 +349,42 @@ export async function getInvoiceDetail(invoiceId: string) {
       },
       lineItems: true,
       sourcePo: { columns: { id: true, shopifyPoNumber: true } },
+      attachments: {
+        columns: {
+          id: true,
+          blobUrl: true,
+          filename: true,
+          contentType: true,
+          sizeBytes: true,
+          uploadedAt: true,
+        },
+        orderBy: (a, { desc }) => desc(a.uploadedAt),
+      },
     },
   });
+}
+
+/** Record a customer document (e.g. their PDF purchase order) on an invoice. */
+export async function addInvoiceAttachment(input: {
+  invoiceId: string;
+  blobUrl: string;
+  filename: string;
+  contentType: string | null;
+  sizeBytes: number;
+  uploadedByUserId?: string | null;
+}): Promise<{ id: string }> {
+  const [row] = await db
+    .insert(invoiceAttachment)
+    .values({
+      invoiceId: input.invoiceId,
+      blobUrl: input.blobUrl,
+      filename: input.filename,
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+      uploadedByUserId: input.uploadedByUserId ?? null,
+    })
+    .returning({ id: invoiceAttachment.id });
+  return row;
 }
 
 /** Invoices for the list page, newest first, with company name + totals. */

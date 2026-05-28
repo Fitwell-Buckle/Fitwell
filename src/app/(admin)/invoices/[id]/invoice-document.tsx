@@ -1,5 +1,9 @@
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
-import { INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/lib/invoicing/invoicing";
+import {
+  INVOICE_STATUS_LABELS,
+  netLineDisplays,
+  type InvoiceStatus,
+} from "@/lib/invoicing/invoicing";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getShopifyClient } from "@/lib/shopify/client";
@@ -31,6 +35,15 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
     [shop?.city, shop?.province, shop?.zip].filter(Boolean).join(", "),
     shop?.country,
   ].filter(Boolean);
+
+  const discountPercent = inv.discountPercent ?? 0;
+  // Net (post-discount) prices the customer pays — shown instead of retail.
+  // Foots exactly to inv.totalCents.
+  const netLines = netLineDisplays(
+    inv.lineItems.map((l) => ({ quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
+    discountPercent,
+    inv.totalCents,
+  );
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-8 print:border-0 print:p-0">
@@ -75,7 +88,7 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           </tr>
         </thead>
         <tbody>
-          {inv.lineItems.map((l) => (
+          {inv.lineItems.map((l, i) => (
             <tr key={l.id} className="border-b border-zinc-100">
               <td className="py-2 pr-6 text-zinc-700">
                 <span className="font-mono text-xs text-zinc-500">{l.sku}</span> — {l.title}
@@ -84,10 +97,10 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
                 {l.quantity}
               </td>
               <td className="whitespace-nowrap py-2 pl-6 text-right text-zinc-500">
-                {fmtMoney(l.unitPriceCents)}
+                {fmtMoney(netLines[i].netUnitPriceCents)}
               </td>
               <td className="whitespace-nowrap py-2 pl-6 text-right text-zinc-700">
-                {fmtMoney(l.unitPriceCents * l.quantity)}
+                {fmtMoney(netLines[i].netLineTotalCents)}
               </td>
             </tr>
           ))}
@@ -95,14 +108,11 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
       </table>
 
       <div className="mt-4 space-y-1 text-sm">
-        <div className="flex justify-end gap-8 text-zinc-500">
-          <span>Subtotal</span>
-          <span className="w-32 text-right text-zinc-700">{fmtMoney(inv.subtotalCents)}</span>
-        </div>
-        <div className="flex justify-end gap-8 text-zinc-500">
-          <span>Discount ({inv.discountPercent ?? 0}%)</span>
-          <span className="w-32 text-right text-zinc-700">−{fmtMoney(inv.discountCents)}</span>
-        </div>
+        {discountPercent > 0 && (
+          <div className="flex justify-end gap-8 text-zinc-400">
+            <span>Includes {discountPercent}% partner pricing</span>
+          </div>
+        )}
         <div className="flex justify-end gap-8 text-base font-semibold text-zinc-900">
           <span>Total (USD)</span>
           <span className="w-32 text-right">{fmtMoney(inv.totalCents)}</span>

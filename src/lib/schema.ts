@@ -398,6 +398,8 @@ export const company = pgTable(
     name: text("name").notNull(),
     contactName: text("contact_name"),
     contactEmail: text("contact_email"),
+    // Free-text postal address for this brand (shipping / invoicing). Multi-line.
+    address: text("address"),
     // Optional link to a synced Shopify customer (the contact person).
     customerId: text("customer_id").references(() => customer.id),
     priceTierId: text("price_tier_id").references(() => priceTier.id),
@@ -1012,11 +1014,40 @@ export const invoiceRelations = relations(invoice, ({ one, many }) => ({
     references: [productionPo.id],
   }),
   lineItems: many(invoiceLineItem),
+  attachments: many(invoiceAttachment),
 }));
 
 export const invoiceLineItemRelations = relations(invoiceLineItem, ({ one }) => ({
   invoice: one(invoice, {
     fields: [invoiceLineItem.invoiceId],
+    references: [invoice.id],
+  }),
+}));
+
+// Customer-supplied documents attached to an invoice (e.g. the customer's own
+// PDF purchase order). Stored in Vercel Blob; the row keeps the metadata.
+export const invoiceAttachment = pgTable(
+  "invoice_attachment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => invoice.id, { onDelete: "cascade" }),
+    blobUrl: text("blob_url").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => user.id),
+    uploadedAt: timestamp("uploaded_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("invoice_attachment_invoice_id_idx").on(t.invoiceId)],
+);
+
+export const invoiceAttachmentRelations = relations(invoiceAttachment, ({ one }) => ({
+  invoice: one(invoice, {
+    fields: [invoiceAttachment.invoiceId],
     references: [invoice.id],
   }),
 }));

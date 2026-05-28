@@ -8,16 +8,32 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fmtMoney } from "@/lib/production/display";
-import { computeInvoiceTotals } from "@/lib/invoicing/invoicing";
+import {
+  computeInvoiceTotals,
+  netLineDisplays,
+  netUnitPriceCents,
+} from "@/lib/invoicing/invoicing";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
-import { QuickAddSelect } from "@/components/forms/quick-add-select";
+import {
+  CompanyForm,
+  emptyCompanyDraft,
+  type CompanyDraft,
+} from "@/components/production/company-form";
+import { SearchableSelectWithAdd } from "@/components/forms/searchable-select";
 
 export interface InvoiceCompanyOption {
   id: string;
   name: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  address: string | null;
+  customerId: string | null; // linked Shopify customer
+  priceTierId: string | null;
   tierName: string | null;
   tierDiscount: number; // percent
+  depositPercent: number;
+  notes: string | null;
   assignedCollectionIds: string[];
   assignedProductIds: string[];
 }
@@ -56,6 +72,7 @@ interface Row {
 }
 
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
+const rowLabel = "mb-1 block text-[11px] font-medium uppercase tracking-wider text-zinc-400";
 
 function emptyRow(): Row {
   return { variantKey: "", shopifyProductId: "", sku: "", title: "", quantity: "1", unitPrice: "" };
@@ -67,6 +84,7 @@ export function InvoiceForm({
   initial,
   invoiceId,
   sourcePoId,
+  defaultCompanyId,
 }: {
   companies: InvoiceCompanyOption[];
   priceTiers?: PriceTierOption[];
@@ -74,11 +92,15 @@ export function InvoiceForm({
   invoiceId?: string;
   /** When creating from a PO: links the invoice back + blocks a second one. */
   sourcePoId?: string;
+  /** Pre-select this customer (e.g. "Create B2B Order" from a brand page). */
+  defaultCompanyId?: string;
 }) {
   const router = useRouter();
   const isEdit = !!invoiceId;
 
-  const [companyId, setCompanyId] = useState(initial?.companyId ?? companies[0]?.id ?? "");
+  const [companyId, setCompanyId] = useState(
+    initial?.companyId ?? defaultCompanyId ?? companies[0]?.id ?? "",
+  );
   // Local, appendable copy so a newly-added company shows + selects inline.
   const [companyList, setCompanyList] = useState(companies);
   const [issuedDate, setIssuedDate] = useState(
@@ -102,6 +124,110 @@ export function InvoiceForm({
   const [lastCollectionId, setLastCollectionId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Inline customer form: shared for "+ Add new customer" and "Edit customer".
+  // null = closed, "new" = create mode, an id = edit mode for that customer.
+  const [customerEditing, setCustomerEditing] = useState<string | "new" | null>(null);
+  const [customerDraft, setCustomerDraft] = useState<CompanyDraft>(emptyCompanyDraft());
+  const [customerBusy, setCustomerBusy] = useState(false);
+  const [customerError, setCustomerError] = useState<string | null>(null);
+
+  function companyOptionToDraft(c: InvoiceCompanyOption): CompanyDraft {
+    return {
+      name: c.name,
+      contactName: c.contactName ?? "",
+      contactEmail: c.contactEmail ?? "",
+      address: c.address ?? "",
+      customerId: c.customerId ?? "",
+      priceTierId: c.priceTierId ?? "",
+      assignedCollectionIds: c.assignedCollectionIds,
+      assignedProductIds: c.assignedProductIds,
+      depositPercent: c.depositPercent > 0 ? String(c.depositPercent) : "",
+      notes: c.notes ?? "",
+    };
+  }
+  function openNewCustomer() {
+    setCustomerDraft(emptyCompanyDraft());
+    setCustomerError(null);
+    setCustomerEditing("new");
+  }
+  function openEditCustomer() {
+    const c = companyList.find((x) => x.id === companyId);
+    if (!c) return;
+    setCustomerDraft(companyOptionToDraft(c));
+    setCustomerError(null);
+    setCustomerEditing(c.id);
+  }
+  function closeCustomerForm() {
+    setCustomerEditing(null);
+    setCustomerError(null);
+  }
+
+  async function saveCustomer() {
+    setCustomerError(null);
+    if (!customerDraft.name.trim()) return setCustomerError("Customer name is required.");
+    if (customerEditing == null) return;
+    const isNew = customerEditing === "new";
+    setCustomerBusy(true);
+    try {
+      const url = isNew
+        ? "/api/production/companies"
+        : `/api/production/companies/${customerEditing}`;
+      const body = JSON.stringify({
+        name: customerDraft.name.trim(),
+        contactName: customerDraft.contactName.trim() || null,
+        contactEmail: customerDraft.contactEmail.trim() || null,
+        address: customerDraft.address.trim() || null,
+        customerId: customerDraft.customerId || null,
+        priceTierId: customerDraft.priceTierId || null,
+        assignedCollectionIds: customerDraft.assignedCollectionIds,
+        assignedProductIds: customerDraft.assignedProductIds,
+        depositPercent: customerDraft.depositPercent.trim()
+          ? Number(customerDraft.depositPercent)
+          : 0,
+        notes: customerDraft.notes.trim() || null,
+      });
+      const res = await fetch(url, {
+        method: isNew ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCustomerError(d.error || "Couldn't save customer.");
+        setCustomerBusy(false);
+        return;
+      }
+      const tier = priceTiers.find((t) => t.id === customerDraft.priceTierId);
+      const id = isNew ? (d.data.id as string) : (customerEditing as string);
+      const next: InvoiceCompanyOption = {
+        id,
+        name: customerDraft.name.trim(),
+        contactName: customerDraft.contactName.trim() || null,
+        contactEmail: customerDraft.contactEmail.trim() || null,
+        address: customerDraft.address.trim() || null,
+        customerId: customerDraft.customerId || null,
+        priceTierId: customerDraft.priceTierId || null,
+        tierName: tier?.name ?? null,
+        tierDiscount: tier?.discountPercent ?? 0,
+        depositPercent: customerDraft.depositPercent.trim()
+          ? Number(customerDraft.depositPercent)
+          : 0,
+        notes: customerDraft.notes.trim() || null,
+        assignedCollectionIds: customerDraft.assignedCollectionIds,
+        assignedProductIds: customerDraft.assignedProductIds,
+      };
+      setCompanyList((list) =>
+        isNew ? [...list, next] : list.map((c) => (c.id === id ? next : c)),
+      );
+      if (isNew) setCompanyId(id);
+      setCustomerEditing(null);
+    } catch {
+      setCustomerError("Network error — please try again.");
+    } finally {
+      setCustomerBusy(false);
+    }
+  }
 
   // Shared searchable product chooser (same component as the PO form).
   const { variants, collections, loading: catalogLoading, error: catalogError } =
@@ -138,13 +264,15 @@ export function InvoiceForm({
   const restricted = hasRestriction && allowedVariants.length > 0;
   const pickerVariants = restricted ? allowedVariants : variants;
 
-  const totals = computeInvoiceTotals(
-    rows.map((r) => ({
-      quantity: Math.max(0, Math.floor(Number(r.quantity) || 0)),
-      unitPriceCents: Math.max(0, Math.round(Number(r.unitPrice) * 100 || 0)),
-    })),
-    discount,
-  );
+  const totalsLines = rows.map((r) => ({
+    quantity: Math.max(0, Math.floor(Number(r.quantity) || 0)),
+    unitPriceCents: Math.max(0, Math.round(Number(r.unitPrice) * 100 || 0)),
+  }));
+  const totals = computeInvoiceTotals(totalsLines, discount);
+  // Per-line NET totals (post-discount, footing to totals.totalCents) — used
+  // to mirror the saved invoice view: line totals reflect what the customer
+  // pays, no separate Subtotal/Discount rows.
+  const netLines = netLineDisplays(totalsLines, discount, totals.totalCents);
 
   function updateRow(i: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -249,56 +377,28 @@ export function InvoiceForm({
             {isEdit ? (
               <Input value={initial?.companyName ?? ""} disabled />
             ) : (
-              <QuickAddSelect
+              <SearchableSelectWithAdd
                 value={companyId}
                 onChange={setCompanyId}
-                options={companyList.map((c) => ({
-                  value: c.id,
-                  label: c.tierName ? `${c.name} — ${c.tierName}` : c.name,
+                items={companyList.map((c) => ({
+                  id: c.id,
+                  label: c.name,
+                  detail: [c.tierName, c.contactEmail].filter(Boolean).join(" · ") || null,
+                  searchText: [
+                    c.name,
+                    c.contactName ?? "",
+                    c.contactEmail ?? "",
+                    c.address ?? "",
+                    c.tierName ?? "",
+                  ]
+                    .join(" ")
+                    .toLowerCase(),
                 }))}
-                addLabel="Add new customer"
-                fields={[
-                  { key: "name", label: "Customer name", required: true },
-                  { key: "contactEmail", label: "Contact email", type: "email" },
-                  {
-                    key: "priceTierId",
-                    label: "Price tier",
-                    type: "select",
-                    options: [
-                      { value: "", label: "— No tier —" },
-                      ...priceTiers.map((t) => ({
-                        value: t.id,
-                        label: `${t.name} (${t.discountPercent}% off)`,
-                      })),
-                    ],
-                  },
-                ]}
-                onCreate={async (vals) => {
-                  const res = await fetch("/api/production/companies", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      name: vals.name?.trim(),
-                      contactEmail: vals.contactEmail?.trim() || null,
-                      priceTierId: vals.priceTierId || null,
-                    }),
-                  });
-                  const d = await res.json().catch(() => ({}));
-                  if (!res.ok) return { error: d.error || "Couldn't add company." };
-                  const tier = priceTiers.find((t) => t.id === vals.priceTierId);
-                  setCompanyList((list) => [
-                    ...list,
-                    {
-                      id: d.data.id,
-                      name: vals.name.trim(),
-                      tierName: tier?.name ?? null,
-                      tierDiscount: tier?.discountPercent ?? 0,
-                      assignedCollectionIds: [],
-                      assignedProductIds: [],
-                    },
-                  ]);
-                  return { id: d.data.id };
-                }}
+                placeholder="Select a customer…"
+                addLabel="+ Add new customer"
+                searchPlaceholder="Search by name, contact, email…"
+                disabled={customerEditing !== null}
+                onAddNew={openNewCustomer}
               />
             )}
             <p className="mt-1 text-xs text-zinc-500">
@@ -325,16 +425,41 @@ export function InvoiceForm({
             </div>
           </div>
         </div>
-        <div className="mt-4">
-          <label className={fieldLabel}>Notes (optional)</label>
+        {/* Selected-customer details (read-only) + Edit-customer button.
+            Lives inside the top card so all order-header context — bill-to,
+            dates, customer info, invoice notes — is grouped together. */}
+        {customerEditing === null && selectedCompany && (
+          <CustomerDetailsSection
+            customer={selectedCompany}
+            onEdit={openEditCustomer}
+          />
+        )}
+        <div className="mt-6 border-t border-zinc-100 pt-5">
+          <label className={fieldLabel}>Invoice notes (optional)</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
           />
+          <p className="mt-1 text-xs text-zinc-500">
+            Notes for this invoice only — not saved to the customer record.
+          </p>
         </div>
       </Card>
+
+      {customerEditing !== null && (
+        <CompanyForm
+          title={customerEditing === "new" ? "New customer" : "Edit customer"}
+          draft={customerDraft}
+          setDraft={setCustomerDraft}
+          priceTiers={priceTiers}
+          busy={customerBusy}
+          error={customerError}
+          onCancel={closeCustomerForm}
+          onSave={saveCustomer}
+        />
+      )}
 
       <Card className="p-6">
         <div className="flex items-center justify-between">
@@ -350,67 +475,115 @@ export function InvoiceForm({
           </p>
         )}
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-3">
           {rows.map((r, i) => {
             const taken = new Set(
               rows.filter((_, j) => j !== i).map((x) => x.variantKey).filter(Boolean),
             );
+            // Per-row line total — NET (after partner-tier discount), to
+            // mirror the saved invoice view. Shown only when qty + unit price
+            // are valid.
+            const rowQty = Number(r.quantity);
+            const rowPrice = Number(r.unitPrice);
+            const rowValid =
+              Number.isFinite(rowQty) &&
+              rowQty > 0 &&
+              Number.isFinite(rowPrice) &&
+              rowPrice >= 0 &&
+              r.unitPrice.trim() !== "";
+            const lineCents = rowValid ? netLines[i].netLineTotalCents : null;
+            // Per-unit discount (retail unit − net unit), rounded the same
+            // way the net unit display is rounded so the math reconciles.
+            const rowUnitCents = rowValid ? Math.round(rowPrice * 100) : null;
+            const unitDiscountCents =
+              rowUnitCents != null
+                ? rowUnitCents - netUnitPriceCents(rowUnitCents, discount)
+                : null;
             return (
-              <div key={i} className="flex flex-wrap items-center gap-2">
-                {catalogError ? (
-                  <>
-                    <Input
-                      className="w-32"
-                      placeholder="SKU"
-                      value={r.sku}
-                      onChange={(e) => updateRow(i, { sku: e.target.value })}
+              <div key={i} className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[200px] flex-1">
+                  <label className={rowLabel}>Product</label>
+                  {catalogError ? (
+                    <div className="flex gap-2">
+                      <Input
+                        className="w-32"
+                        placeholder="SKU"
+                        value={r.sku}
+                        onChange={(e) => updateRow(i, { sku: e.target.value })}
+                      />
+                      <Input
+                        className="min-w-[140px] flex-1"
+                        placeholder="Title"
+                        value={r.title}
+                        onChange={(e) => updateRow(i, { title: e.target.value })}
+                      />
+                    </div>
+                  ) : (
+                    <ProductCombobox
+                      variants={pickerVariants}
+                      collections={allowedCollections}
+                      value={r.variantKey}
+                      exclude={taken}
+                      disabled={catalogLoading}
+                      placeholder={catalogLoading ? "Loading catalog…" : "Search products…"}
+                      initialCollectionId={lastCollectionId}
+                      onCollectionChange={setLastCollectionId}
+                      onSelect={(v) =>
+                        updateRow(i, {
+                          variantKey: v.shopifyVariantId,
+                          shopifyProductId: v.shopifyProductId,
+                          sku: v.sku,
+                          title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
+                          unitPrice: (v.priceCents / 100).toString(),
+                        })
+                      }
+                      onSelectMany={(vs) => addManyAt(i, vs)}
                     />
-                    <Input
-                      className="w-auto min-w-[180px] flex-1"
-                      placeholder="Title"
-                      value={r.title}
-                      onChange={(e) => updateRow(i, { title: e.target.value })}
-                    />
-                  </>
-                ) : (
-                  <ProductCombobox
-                    variants={pickerVariants}
-                    collections={allowedCollections}
-                    value={r.variantKey}
-                    exclude={taken}
-                    disabled={catalogLoading}
-                    placeholder={catalogLoading ? "Loading catalog…" : "Search products…"}
-                    initialCollectionId={lastCollectionId}
-                    onCollectionChange={setLastCollectionId}
-                    onSelect={(v) =>
-                      updateRow(i, {
-                        variantKey: v.shopifyVariantId,
-                        shopifyProductId: v.shopifyProductId,
-                        sku: v.sku,
-                        title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
-                        unitPrice: (v.priceCents / 100).toString(),
-                      })
-                    }
-                    onSelectMany={(vs) => addManyAt(i, vs)}
+                  )}
+                </div>
+                <div>
+                  <label className={rowLabel}>QTY</label>
+                  <Input
+                    className="w-20"
+                    type="number"
+                    min="1"
+                    placeholder="Qty"
+                    value={r.quantity}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => updateRow(i, { quantity: e.target.value })}
                   />
-                )}
-                <Input
-                  className="w-20"
-                  type="number"
-                  min="1"
-                  placeholder="Qty"
-                  value={r.quantity}
-                  onChange={(e) => updateRow(i, { quantity: e.target.value })}
-                />
-                <Input
-                  className="w-28"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Unit $ (retail)"
-                  value={r.unitPrice}
-                  onChange={(e) => updateRow(i, { unitPrice: e.target.value })}
-                />
+                </div>
+                <div>
+                  <label className={rowLabel}>Unit price</label>
+                  <Input
+                    className="w-28"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Unit $ (retail)"
+                    value={r.unitPrice}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => updateRow(i, { unitPrice: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className={rowLabel}>Unit discount</label>
+                  <div className="flex h-10 w-24 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-500">
+                    {unitDiscountCents == null ? (
+                      <span className="text-zinc-300">—</span>
+                    ) : unitDiscountCents === 0 ? (
+                      <span className="text-zinc-300">$0.00</span>
+                    ) : (
+                      `−${fmtMoney(unitDiscountCents)}`
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className={rowLabel}>Line total</label>
+                  <div className="flex h-10 w-28 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-700">
+                    {lineCents == null ? <span className="text-zinc-300">—</span> : fmtMoney(lineCents)}
+                  </div>
+                </div>
                 <Button
                   type="button"
                   variant="ghost"
@@ -427,15 +600,15 @@ export function InvoiceForm({
           })}
         </div>
 
+        {/* Mirrors the saved invoice view: line totals are already net, so we
+            show just the partner-pricing note + the final Total — no retail
+            Subtotal / Discount rows. */}
         <div className="mt-4 space-y-1 border-t border-zinc-100 pt-3 text-sm">
-          <div className="flex justify-end gap-6 text-zinc-500">
-            <span>Subtotal</span>
-            <span className="w-28 text-right text-zinc-700">{fmtMoney(totals.subtotalCents)}</span>
-          </div>
-          <div className="flex justify-end gap-6 text-zinc-500">
-            <span>Discount ({discount}%)</span>
-            <span className="w-28 text-right text-zinc-700">−{fmtMoney(totals.discountCents)}</span>
-          </div>
+          {discount > 0 && (
+            <div className="flex justify-end gap-6 text-zinc-400">
+              <span>Includes {discount}% partner pricing</span>
+            </div>
+          )}
           <div className="flex justify-end gap-6 font-semibold text-zinc-900">
             <span>Total (USD)</span>
             <span className="w-28 text-right">{fmtMoney(totals.totalCents)}</span>
@@ -449,6 +622,75 @@ export function InvoiceForm({
         <Button onClick={submit} disabled={submitting}>
           {submitting ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save changes" : "Create invoice"}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function DetailField({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-zinc-400">{label}</div>
+      <div className="mt-0.5 whitespace-pre-line text-sm text-zinc-700">
+        {value && value.trim() ? value : <span className="text-zinc-300">—</span>}
+      </div>
+    </div>
+  );
+}
+
+/** Read-only summary of every saved field on the selected B2B customer + an
+ *  Edit button that opens the full CompanyForm pre-filled. Renders as a
+ *  section (no outer Card) so it can nest inside the form's header card. */
+function CustomerDetailsSection({
+  customer,
+  onEdit,
+}: {
+  customer: InvoiceCompanyOption;
+  onEdit: () => void;
+}) {
+  const restrictionText =
+    customer.assignedCollectionIds.length === 0 && customer.assignedProductIds.length === 0
+      ? "Full catalog"
+      : [
+          customer.assignedCollectionIds.length > 0 &&
+            `${customer.assignedCollectionIds.length} collection${customer.assignedCollectionIds.length === 1 ? "" : "s"}`,
+          customer.assignedProductIds.length > 0 &&
+            `${customer.assignedProductIds.length} product${customer.assignedProductIds.length === 1 ? "" : "s"}`,
+        ]
+          .filter(Boolean)
+          .join(" + ");
+  return (
+    <div className="mt-6 border-t border-zinc-100 pt-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-zinc-900">Customer details</h3>
+        <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+          Edit customer
+        </Button>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <DetailField label="Name" value={customer.name} />
+        <DetailField
+          label="Price tier"
+          value={
+            customer.tierName
+              ? `${customer.tierName} (${customer.tierDiscount}% off)`
+              : null
+          }
+        />
+        <DetailField label="Contact name" value={customer.contactName} />
+        <DetailField label="Contact email" value={customer.contactEmail} />
+        <DetailField
+          label="Deposit"
+          value={customer.depositPercent > 0 ? `${customer.depositPercent}%` : "Pay in full"}
+        />
+        <DetailField label="Shopify link" value={customer.customerId ? "✓ Linked" : null} />
+        <DetailField label="Order restriction" value={restrictionText} />
+        <div className="sm:col-span-2">
+          <DetailField label="Address" value={customer.address} />
+        </div>
+        <div className="sm:col-span-2">
+          <DetailField label="Customer notes" value={customer.notes} />
+        </div>
       </div>
     </div>
   );

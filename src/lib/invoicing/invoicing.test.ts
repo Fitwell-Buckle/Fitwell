@@ -4,6 +4,8 @@ import {
   computeInvoiceTotals,
   groupByCompany,
   computeDeposit,
+  netUnitPriceCents,
+  netLineDisplays,
 } from "@/lib/invoicing/invoicing";
 
 describe("computeDeposit", () => {
@@ -23,6 +25,52 @@ describe("computeDeposit", () => {
   it("clamps out-of-range percentages", () => {
     expect(computeDeposit(10000, 150)).toEqual({ depositCents: 10000, balanceCents: 0 });
     expect(computeDeposit(10000, -10)).toEqual({ depositCents: 0, balanceCents: 10000 });
+  });
+});
+
+describe("netUnitPriceCents", () => {
+  it("returns retail when there is no discount", () => {
+    expect(netUnitPriceCents(5000, 0)).toBe(5000);
+    expect(netUnitPriceCents(5000, null as unknown as number)).toBe(5000);
+  });
+  it("applies the discount percentage and rounds to the nearest cent", () => {
+    expect(netUnitPriceCents(5000, 30)).toBe(3500);
+    expect(netUnitPriceCents(999, 33)).toBe(669); // round(669.33)
+  });
+  it("clamps out-of-range percentages", () => {
+    expect(netUnitPriceCents(5000, 150)).toBe(0);
+    expect(netUnitPriceCents(5000, -10)).toBe(5000);
+  });
+});
+
+describe("netLineDisplays", () => {
+  it("returns net unit + net line totals that foot to the invoice total", () => {
+    const lines = [
+      { quantity: 10, unitPriceCents: 5000 },
+      { quantity: 2, unitPriceCents: 2500 },
+    ];
+    const { totalCents } = computeInvoiceTotals(lines, 30);
+    const rows = netLineDisplays(lines, 30, totalCents);
+    expect(rows[0].netUnitPriceCents).toBe(3500); // 5000 − 30%
+    expect(rows.reduce((a, r) => a + r.netLineTotalCents, 0)).toBe(totalCents);
+  });
+
+  it("absorbs per-line rounding drift into the last line", () => {
+    // 4 × ($1.05, qty 1) at 10%: per-line net rounds to 95¢ each (Σ 380),
+    // but the order-level total is 378¢ — the last line absorbs the −2¢.
+    const lines = Array.from({ length: 4 }, () => ({ quantity: 1, unitPriceCents: 105 }));
+    const { totalCents } = computeInvoiceTotals(lines, 10);
+    expect(totalCents).toBe(378);
+    const rows = netLineDisplays(lines, 10, totalCents);
+    expect(rows.reduce((a, r) => a + r.netLineTotalCents, 0)).toBe(378);
+    expect(rows[3].netLineTotalCents).toBe(93); // 95 − 2 drift
+  });
+
+  it("is unchanged from retail when there is no discount", () => {
+    const lines = [{ quantity: 3, unitPriceCents: 1000 }];
+    const { totalCents } = computeInvoiceTotals(lines, 0);
+    const rows = netLineDisplays(lines, 0, totalCents);
+    expect(rows[0]).toEqual({ netUnitPriceCents: 1000, netLineTotalCents: 3000 });
   });
 });
 

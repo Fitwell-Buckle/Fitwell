@@ -59,6 +59,49 @@ export function computeInvoiceTotals(
   return { subtotalCents, discountCents, totalCents: subtotalCents - discountCents };
 }
 
+/**
+ * The net unit price a customer actually pays, after their tier discount
+ * (percentage, clamped 0–100) is applied to the retail unit price and rounded
+ * to the nearest cent. Used to show "the price they pay" on the invoice
+ * document instead of retail.
+ */
+export function netUnitPriceCents(
+  unitPriceCents: number,
+  discountPercent: number,
+): number {
+  const pct = Math.max(0, Math.min(100, discountPercent || 0));
+  return Math.round((unitPriceCents * (100 - pct)) / 100);
+}
+
+export interface NetLineDisplay {
+  netUnitPriceCents: number;
+  netLineTotalCents: number;
+}
+
+/**
+ * Per-line net prices (what the customer pays) for display on the invoice
+ * document. The discount is stored at the order level, so independently
+ * rounding each line can drift a cent or two from the authoritative invoice
+ * total; the drift is absorbed into the last line so the line-total column
+ * always foots exactly to `totalCents` (the amount actually charged).
+ */
+export function netLineDisplays(
+  lines: PricedLine[],
+  discountPercent: number,
+  totalCents: number,
+): NetLineDisplay[] {
+  const rows = lines.map((l) => ({
+    netUnitPriceCents: netUnitPriceCents(l.unitPriceCents, discountPercent),
+    netLineTotalCents: netUnitPriceCents(l.unitPriceCents * l.quantity, discountPercent),
+  }));
+  const sum = rows.reduce((acc, r) => acc + r.netLineTotalCents, 0);
+  const drift = totalCents - sum;
+  if (rows.length > 0 && drift !== 0) {
+    rows[rows.length - 1].netLineTotalCents += drift;
+  }
+  return rows;
+}
+
 export interface DepositSplit {
   depositCents: number;
   balanceCents: number;

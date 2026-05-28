@@ -141,6 +141,20 @@
       "when": 1779898644189,
       "tag": "0019_dynamic_stages",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779934711417,
+      "tag": "0020_curvy_starfox",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1779975846955,
+      "tag": "0021_optimal_khan",
+      "breakpoints": true
     }
   ]
 }

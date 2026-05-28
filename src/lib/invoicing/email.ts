@@ -1,13 +1,12 @@
 import { fmtDate, fmtMoney } from "@/lib/production/display";
+import { netLineDisplays } from "./invoicing";
 
 interface InvoiceEmailData {
   invoiceNumber: string;
   companyName: string;
   issuedDate: string;
   dueDate: string | null;
-  subtotalCents: number;
   discountPercent: number | null;
-  discountCents: number;
   totalCents: number;
   notes: string | null;
   lineItems: { sku: string; title: string; quantity: number; unitPriceCents: number }[];
@@ -28,14 +27,22 @@ function escapeHtml(s: string): string {
 
 /** Branded HTML for a B2B invoice email. */
 export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
+  const discountPercent = inv.discountPercent ?? 0;
+  // Net (post-discount) prices the customer pays — shown instead of retail.
+  // Foots exactly to inv.totalCents.
+  const netLines = netLineDisplays(
+    inv.lineItems.map((l) => ({ quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
+    discountPercent,
+    inv.totalCents,
+  );
   const rows = inv.lineItems
     .map(
-      (l) => `
+      (l, i) => `
       <tr>
         <td style="padding:6px 0;color:#52525b;font-size:13px">${l.sku} — ${l.title}</td>
         <td style="padding:6px 0;text-align:right;color:#52525b;font-size:13px">${l.quantity}</td>
-        <td style="padding:6px 0;text-align:right;color:#52525b;font-size:13px">${fmtMoney(l.unitPriceCents)}</td>
-        <td style="padding:6px 0;text-align:right;color:#18181b;font-size:13px">${fmtMoney(l.unitPriceCents * l.quantity)}</td>
+        <td style="padding:6px 0;text-align:right;color:#52525b;font-size:13px">${fmtMoney(netLines[i].netUnitPriceCents)}</td>
+        <td style="padding:6px 0;text-align:right;color:#18181b;font-size:13px">${fmtMoney(netLines[i].netLineTotalCents)}</td>
       </tr>`,
     )
     .join("");
@@ -78,8 +85,7 @@ export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
     </table>
 
     <div style="margin-top:16px;border-top:1px solid #e4e4e7;padding-top:12px;font-size:13px">
-      <div style="display:flex;justify-content:space-between;color:#71717a"><span>Subtotal</span><span>${fmtMoney(inv.subtotalCents)}</span></div>
-      <div style="display:flex;justify-content:space-between;color:#71717a"><span>Discount (${inv.discountPercent ?? 0}%)</span><span>−${fmtMoney(inv.discountCents)}</span></div>
+      ${discountPercent > 0 ? `<div style="display:flex;justify-content:space-between;color:#a1a1aa"><span>Includes ${discountPercent}% partner pricing</span><span></span></div>` : ""}
       <div style="display:flex;justify-content:space-between;font-weight:600;font-size:15px;margin-top:4px"><span>Total (USD)</span><span>${fmtMoney(inv.totalCents)}</span></div>
     </div>
 

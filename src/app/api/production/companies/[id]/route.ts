@@ -71,6 +71,9 @@ export async function PATCH(
         ...(input.contactEmail !== undefined
           ? { contactEmail: input.contactEmail || null }
           : {}),
+        ...(input.address !== undefined
+          ? { address: input.address || null }
+          : {}),
         ...(input.customerId !== undefined
           ? { customerId: input.customerId || null }
           : {}),

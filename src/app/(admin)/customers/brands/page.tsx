@@ -48,6 +48,7 @@ export default async function BrandsPage() {
           name: c.name,
           contactName: c.contactName,
           contactEmail: c.contactEmail,
+          address: c.address,
           customerId: c.customerId,
           notes: c.notes,
           priceTierId: c.priceTierId,
