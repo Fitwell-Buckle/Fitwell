@@ -94,3 +94,58 @@ export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
     ${remittance}
   </div>`;
 }
+
+interface BalanceEmailData {
+  invoiceNumber: string;
+  companyName: string;
+  balanceCents: number;
+  payUrl: string | null;
+  /** Free-text bank-wire / payment instructions (line breaks + bold preserved). */
+  instructions?: string | null;
+  /** Optional personal note from the sender, shown above the balance line. */
+  message?: string | null;
+}
+
+/**
+ * Branded HTML for the balance-due email sent when a B2B invoice is marked
+ * fulfilled. Simpler than buildInvoiceEmailHtml — no line items, just the
+ * remaining balance + pay link + wire fallback.
+ */
+export function buildBalanceEmailHtml(inv: BalanceEmailData): string {
+  const payBlock = inv.payUrl
+    ? `<p style="margin:20px 0 0">
+         <a href="${inv.payUrl}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:10px 20px;border-radius:6px">Pay balance online (Apple Pay, PayPal, card)</a>
+       </p>`
+    : "";
+
+  const remittance = inv.instructions
+    ? `<div style="margin-top:20px;border-top:1px solid #e4e4e7;padding-top:12px">
+           <div style="font-size:11px;color:#a1a1aa;text-transform:uppercase">Pay by bank wire / ACH</div>
+           <div style="font-size:13px;color:#18181b;font-weight:700;margin-top:6px">${escapeHtml(inv.instructions).replace(/\n/g, "<br>")}</div>
+         </div>`
+    : "";
+
+  return `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#18181b">
+    <h1 style="font-size:18px;font-weight:600;margin:0">Balance due — Invoice ${inv.invoiceNumber}</h1>
+    <p style="font-size:13px;color:#71717a;margin:4px 0 0">
+      Fitwell Buckle Co. · Billed to ${inv.companyName}
+    </p>
+    <p style="font-size:14px;color:#3f3f46;margin:18px 0 0">
+      Your order has been fulfilled. The remaining balance is due now.
+    </p>
+
+    ${inv.message ? `<p style="font-size:14px;color:#3f3f46;margin:12px 0 0;white-space:pre-wrap">${inv.message}</p>` : ""}
+
+    <div style="margin-top:18px;border-top:1px solid #e4e4e7;padding-top:14px">
+      <div style="display:flex;justify-content:space-between;font-weight:600;font-size:16px">
+        <span>Balance due (USD)</span>
+        <span>${fmtMoney(inv.balanceCents)}</span>
+      </div>
+    </div>
+
+    ${payBlock}
+    ${remittance}
+  </div>`;
+}
+

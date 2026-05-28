@@ -426,7 +426,17 @@ export async function snapshotInvoiceDeposit(
 }
 
 export type FulfillResult =
-  | { ok: true; balancePayUrl: string | null; note: string }
+  | {
+      ok: true;
+      balancePayUrl: string | null;
+      note: string;
+      /** Balance amount left to collect ($0 when no deposit was taken). */
+      balanceCents: number;
+      /** Surfaced so the route can build / send the balance-due email. */
+      invoiceNumber: string;
+      companyName: string | null;
+      contactEmail: string | null;
+    }
   | { ok: false; status: number; error: string };
 
 /**
@@ -450,6 +460,13 @@ export async function markInvoiceFulfilled(invoiceId: string): Promise<FulfillRe
 
   const now = new Date();
   const balanceCents = inv.depositCents > 0 ? inv.totalCents - inv.depositCents : 0;
+  // Common context the route uses to email the balance link.
+  const ctx = {
+    balanceCents,
+    invoiceNumber: inv.invoiceNumber,
+    companyName: inv.company?.name ?? null,
+    contactEmail: inv.company?.contactEmail ?? null,
+  };
 
   // No deposit (paid in full up front) or nothing left to bill → just stamp it.
   if (inv.depositCents <= 0 || balanceCents <= 0) {
@@ -457,7 +474,12 @@ export async function markInvoiceFulfilled(invoiceId: string): Promise<FulfillRe
       .update(invoice)
       .set({ fulfilledAt: now, updatedAt: now })
       .where(eq(invoice.id, invoiceId));
-    return { ok: true, balancePayUrl: null, note: "Marked fulfilled (no balance due)." };
+    return {
+      ok: true,
+      balancePayUrl: null,
+      note: "Marked fulfilled (no balance due).",
+      ...ctx,
+    };
   }
 
   // Bill the balance as a single custom-line draft order (the deposit already
@@ -501,7 +523,7 @@ export async function markInvoiceFulfilled(invoiceId: string): Promise<FulfillRe
       : "Marked fulfilled — balance draft order failed.";
     console.error("Balance draft order failed:", err);
   }
-  return { ok: true, balancePayUrl, note };
+  return { ok: true, balancePayUrl, note, ...ctx };
 }
 
 /**
