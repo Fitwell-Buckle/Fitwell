@@ -237,7 +237,14 @@ export default async function InvoiceDetailPage({
       <Card className="mt-5 p-6">
         <h2 className="text-sm font-semibold text-zinc-900">Payment</h2>
         <div className="mt-3">
-          {inv.shopifyInvoiceUrl ? (
+          {inv.status === "paid" ? (
+            <p className="text-sm text-emerald-700">
+              ✓ Paid in full
+              {inv.paidAt
+                ? ` ${fmtDate(inv.paidAt.toISOString().slice(0, 10))}`
+                : ""}
+            </p>
+          ) : inv.shopifyInvoiceUrl ? (
             <Button asChild>
               <a href={inv.shopifyInvoiceUrl} target="_blank" rel="noreferrer">
                 Pay online (Apple Pay, PayPal, card)
@@ -284,6 +291,20 @@ export default async function InvoiceDetailPage({
           inv.fulfilledAt ? fmtDate(inv.fulfilledAt.toISOString().slice(0, 10)) : null
         }
         balanceInvoiceUrl={inv.shopifyBalanceInvoiceUrl}
+        status={inv.status}
+        paidAt={
+          inv.paidAt ? fmtDate(inv.paidAt.toISOString().slice(0, 10)) : null
+        }
+        depositPaidAt={
+          inv.depositPaidAt
+            ? fmtDate(inv.depositPaidAt.toISOString().slice(0, 10))
+            : null
+        }
+        balancePaidAt={
+          inv.balancePaidAt
+            ? fmtDate(inv.balancePaidAt.toISOString().slice(0, 10))
+            : null
+        }
       />
 
       {inv.sourcePo ? (

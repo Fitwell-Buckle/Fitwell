@@ -526,6 +526,69 @@ export async function markInvoiceFulfilled(invoiceId: string): Promise<FulfillRe
   return { ok: true, balancePayUrl, note, ...ctx };
 }
 
+export type MarkPaidResult =
+  | { ok: true; fullyPaid: boolean }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Record that the deposit on a B2B invoice has been received. Stamps
+ * depositPaidAt; the overall invoice status stays "sent" until the balance
+ * lands too. Returns 409 if no deposit applies or the deposit was already
+ * marked paid.
+ */
+export async function markDepositPaid(invoiceId: string): Promise<MarkPaidResult> {
+  const inv = await db.query.invoice.findFirst({
+    where: eq(invoice.id, invoiceId),
+    columns: { id: true, depositPaidAt: true, depositCents: true },
+  });
+  if (!inv) return { ok: false, status: 404, error: "Not found" };
+  if (inv.depositCents <= 0) {
+    return { ok: false, status: 409, error: "No deposit to mark paid on this invoice." };
+  }
+  if (inv.depositPaidAt) {
+    return { ok: false, status: 409, error: "Deposit is already marked paid." };
+  }
+  const now = new Date();
+  await db
+    .update(invoice)
+    .set({ depositPaidAt: now, updatedAt: now })
+    .where(eq(invoice.id, invoiceId));
+  return { ok: true, fullyPaid: false };
+}
+
+/**
+ * Record that the balance / final payment on a B2B invoice has been received.
+ * Stamps balancePaidAt and — if the deposit is already complete (or there was
+ * none) — auto-flips the invoice's overall status to "paid" + stamps paidAt
+ * so list views and downstream consumers see the right state without a
+ * second click. Returns 409 if the balance was already marked paid.
+ */
+export async function markBalancePaid(invoiceId: string): Promise<MarkPaidResult> {
+  const inv = await db.query.invoice.findFirst({
+    where: eq(invoice.id, invoiceId),
+    columns: {
+      id: true,
+      status: true,
+      balancePaidAt: true,
+      depositPaidAt: true,
+      depositCents: true,
+    },
+  });
+  if (!inv) return { ok: false, status: 404, error: "Not found" };
+  if (inv.balancePaidAt) {
+    return { ok: false, status: 409, error: "Balance is already marked paid." };
+  }
+  const now = new Date();
+  const depositComplete = inv.depositCents <= 0 || !!inv.depositPaidAt;
+  const patch: Record<string, unknown> = { balancePaidAt: now, updatedAt: now };
+  if (depositComplete && inv.status !== "paid") {
+    patch.status = "paid";
+    patch.paidAt = now;
+  }
+  await db.update(invoice).set(patch).where(eq(invoice.id, invoiceId));
+  return { ok: true, fullyPaid: depositComplete };
+}
+
 /**
  * Record a self-serve company portal order: create the invoice (tier snapshot)
  * and mark it "sent" with the Shopify draft-order id + payment link. Called by
