@@ -1,9 +1,19 @@
 import { db } from "@/lib/db";
-import { customer, order, orderLineItem, utmAttribution } from "@/lib/schema";
+import {
+  customer,
+  customerAddress,
+  order,
+  orderLineItem,
+  utmAttribution,
+} from "@/lib/schema";
 import { getShopifyClient, toCents } from "./client";
 import { eq, sql } from "drizzle-orm";
 import { linkOrderToAttribution } from "@/lib/analytics/order-attribution";
-import type { ShopifyCustomer, ShopifyOrder } from "@/types/shopify";
+import type {
+  ShopifyAddress,
+  ShopifyCustomer,
+  ShopifyOrder,
+} from "@/types/shopify";
 
 export function parseUtmParams(
   landingSite: string | null,
@@ -71,7 +81,62 @@ export async function upsertCustomer(
     })
     .returning({ id: customer.id });
 
+  await syncCustomerAddresses(result.id, shopifyCustomer);
+
   return result.id;
+}
+
+/**
+ * Delete-and-replace sync of a customer's addresses from a Shopify payload.
+ *
+ * Shopify is the source of truth, and the payload's `addresses` array is
+ * authoritative — if Shopify removed an address, we remove it locally too.
+ * Falls back to `default_address` alone when the full array isn't present
+ * (e.g. older sync paths). No-op when neither is present.
+ */
+async function syncCustomerAddresses(
+  customerId: string,
+  shopifyCustomer: ShopifyCustomer,
+): Promise<void> {
+  const fromPayload: ShopifyAddress[] =
+    shopifyCustomer.addresses && shopifyCustomer.addresses.length > 0
+      ? shopifyCustomer.addresses
+      : shopifyCustomer.default_address
+        ? [{ ...shopifyCustomer.default_address, default: true }]
+        : [];
+
+  if (fromPayload.length === 0) return;
+
+  // Identify the default address by Shopify's `default_address.id` when the
+  // entries don't carry a `default` flag themselves.
+  const defaultId = shopifyCustomer.default_address?.id;
+
+  const rows = fromPayload.map((a) => ({
+    customerId,
+    shopifyAddressId: a.id != null ? String(a.id) : null,
+    firstName: a.first_name ?? null,
+    lastName: a.last_name ?? null,
+    company: a.company ?? null,
+    address1: a.address1 ?? null,
+    address2: a.address2 ?? null,
+    city: a.city ?? null,
+    province: a.province ?? null,
+    provinceCode: a.province_code ?? null,
+    country: a.country ?? null,
+    countryCode: a.country_code ?? null,
+    zip: a.zip ?? null,
+    phone: a.phone ?? null,
+    isDefault:
+      a.default === true || (defaultId != null && a.id === defaultId),
+    updatedAt: new Date(),
+  }));
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(customerAddress)
+      .where(eq(customerAddress.customerId, customerId));
+    await tx.insert(customerAddress).values(rows);
+  });
 }
 
 // ── Order upsert ────────────────────────────────────────────────────

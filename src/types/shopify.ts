@@ -1,13 +1,20 @@
 export interface ShopifyAddress {
-  first_name: string;
-  last_name: string;
-  address1: string;
+  /** Shopify's address id — present on saved customer addresses. */
+  id?: number;
+  first_name: string | null;
+  last_name: string | null;
+  company?: string | null;
+  address1: string | null;
   address2: string | null;
-  city: string;
-  province: string;
-  country: string;
-  zip: string;
+  city: string | null;
+  province: string | null;
+  province_code?: string | null;
+  country: string | null;
+  country_code?: string | null;
+  zip: string | null;
   phone: string | null;
+  /** Present on entries in `customer.addresses[]` — marks the default. */
+  default?: boolean;
 }
 
 export interface ShopifyLineItem {
@@ -33,6 +40,9 @@ export interface ShopifyCustomer {
   created_at: string;
   updated_at: string;
   default_address?: ShopifyAddress;
+  /** All saved addresses (including the default). REST returns this on the
+   *  customer endpoints. */
+  addresses?: ShopifyAddress[];
 }
 
 export interface ShopifyOrder {

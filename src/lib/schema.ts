@@ -111,6 +111,49 @@ export const customer = pgTable(
   ],
 );
 
+// Shopify customer addresses (multiple per customer). Populated by the customer
+// sync — Shopify's customer payload returns `default_address` + an `addresses`
+// array. Synced delete-and-replace on every customer upsert; Shopify is source
+// of truth.
+export const customerAddress = pgTable(
+  "customer_address",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customer.id, { onDelete: "cascade" }),
+    // Shopify's address id — unique per customer.
+    shopifyAddressId: text("shopify_address_id"),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    company: text("company"),
+    address1: text("address1"),
+    address2: text("address2"),
+    city: text("city"),
+    province: text("province"),
+    provinceCode: text("province_code"),
+    country: text("country"),
+    countryCode: text("country_code"),
+    zip: text("zip"),
+    phone: text("phone"),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("customer_address_customer_id_idx").on(t.customerId),
+  ],
+);
+
+export const customerAddressRelations = relations(customerAddress, ({ one }) => ({
+  customer: one(customer, {
+    fields: [customerAddress.customerId],
+    references: [customer.id],
+  }),
+}));
+
 export const order = pgTable(
   "order",
   {
@@ -699,6 +742,7 @@ export const productionComment = pgTable(
 export const customerRelations = relations(customer, ({ many }) => ({
   orders: many(order),
   events: many(customerEvent),
+  addresses: many(customerAddress),
 }));
 
 export const orderRelations = relations(order, ({ one, many }) => ({
