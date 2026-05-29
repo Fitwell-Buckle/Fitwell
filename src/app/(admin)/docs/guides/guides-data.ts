@@ -101,7 +101,7 @@ export const guides: Guide[] = [
         shot: "The Production Timeline view with coloured stage bars and ETA labels.",
       },
       {
-        text: "To advance one PO precisely, open it from Supplier POs → click the PO number, and use the Advance controls on its detail page.",
+        text: "To advance one PO precisely, open it from Supplier POs → click the PO number, and use the Advance controls on its detail page. The detail page groups its reference content into tabs at the bottom — Items (cost breakdown on a master), Progress (the stage timeline), and Activity (notes + uploaded documents). The Advance controls and any sub-PO list stay above the tabs so they're always visible.",
       },
     ],
   },
@@ -112,8 +112,8 @@ export const guides: Guide[] = [
     category: "Production",
     steps: [
       {
-        text: "Open the PO (Supplier POs → click the PO number) and find the “Stage timeline” card.",
-        shot: "The Stage timeline card on the PO detail page.",
+        text: "Open the PO (Supplier POs → click the PO number). The stage history lives in the Progress tab at the bottom of the page — click it.",
+        shot: "The Progress tab on the PO detail page.",
       },
       {
         text: "Click “Edit dates”. Each stage's date becomes editable.",
@@ -170,7 +170,11 @@ export const guides: Guide[] = [
         shot: "The supplier list with the Add supplier form.",
       },
       {
-        text: "Click “Edit” on the supplier. In the “Authorized logins” card, add the email of anyone at the vendor who should access the portal. Add as many as you like — one email maps to one supplier.",
+        text: "Don't remember the exact email? Use “Find this supplier in your Gmail” at the top of the form — type the company name, domain, or contact name, and pick from the matching results to fill the contact email (and contact name if it's still blank). It only searches your own mailbox, server-side, and only when you click Search.",
+        shot: "The Find this supplier in your Gmail block with a search query and a results list.",
+      },
+      {
+        text: "Click “Edit” on the supplier. In the “Authorized logins” card, add the email of anyone at the vendor who should access the portal. Add as many as you like — one email maps to one supplier. The same Gmail search is available here too if you don't have the address handy.",
         shot: "The Authorized logins card with an email being added.",
       },
       {
@@ -212,11 +216,15 @@ export const guides: Guide[] = [
         shot: "The Price tiers card with a tier being added.",
       },
       {
-        text: "Click “Add brand”. Enter the name, assign a price tier, and (optionally) link a Shopify customer by searching their name/email.",
-        shot: "The brand form with the price-tier dropdown and customer search.",
+        text: "Click “Add brand”. Enter the name, assign a price tier, and (optionally) link a Shopify customer by searching their name/email. You can also set a default deposit % here — that's the share of every invoice we collect up front; the remainder bills on fulfillment. Leave it at 0 to default to single-payment invoices for this brand.",
+        shot: "The brand form with the price-tier dropdown, customer search, and deposit % field.",
       },
       {
-        text: "The price tier you assign drives the pricing on that brand's invoices and in their B2B portal.",
+        text: "Once a brand is linked to a Shopify customer, its detail page shows a “Shopify addresses” card listing every saved address from Shopify, default first. That data syncs in automatically going forward; for brands linked before 2026-05-28, the addresses appear after the one-time Shopify address backfill runs.",
+        shot: "The Shopify addresses card on a brand's detail page.",
+      },
+      {
+        text: "The price tier you assign drives the pricing on that brand's invoices and in their B2B portal. The deposit % drives whether invoices to this brand are split into a deposit + balance — you can also override it on an individual invoice (see the invoicing guide).",
       },
     ],
   },
@@ -235,15 +243,34 @@ export const guides: Guide[] = [
         shot: "The Create invoice button on a PO.",
       },
       {
-        text: "On the invoice, click “Print & Send” (top right). On the preview you can add a personal message, then Send — it emails the brand a branded invoice (with a Pay online button) and, when the brand is linked to a Shopify customer, creates a Shopify payment link for Apple Pay / PayPal / card.",
+        text: "The form has a Deposit % (optional override) field next to Issued / Due. Leave it blank to follow the brand's default at send time, type 0 to waive the deposit on this invoice only, or set a different number to override just for this one — useful for a returning customer you're skipping the deposit for, or a new one you want to be stricter with.",
+        shot: "The Deposit % override field on the invoice form, with the placeholder showing the brand's current default.",
+      },
+      {
+        text: "While the invoice is a draft, the “Payment preview” card on its detail page shows what the customer will be billed when sent — the deposit due up front and the balance billed on fulfillment, or a single payment if no deposit applies. Once you Send, that card becomes “Collect Payment” with the deposit/balance rows and Mark-paid buttons.",
+        shot: "The Payment preview card on a draft invoice.",
+      },
+      {
+        text: "Click “Print & Send” (top right). On the preview you can edit the To address and add a personal message, then Send — it emails the brand a branded invoice (with a Pay online button) and, when the brand is linked to a Shopify customer, creates a Shopify payment link for Apple Pay / PayPal / card. If a deposit applies, the link bills only the deposit; the balance link is created later, when you mark the order fulfilled.",
         shot: "The Print & Send preview with the invoice document and message field.",
       },
       {
-        text: "The same Print & Send screen prints a copy (the document includes the bank-wire details for ACH payers). Mark the invoice Paid / Void from the Status dropdown in the Actions card.",
-        shot: "The printable invoice document.",
+        text: "The printable invoice document spells out the deposit terms for the customer (e.g. “A 50% deposit is due now via the payment link. The remaining balance will be billed when your order is fulfilled.”) and includes your bank-wire details for ACH payers. It's identical on both the Print and Send pages.",
+        shot: "The printable invoice document showing the deposit terms paragraph.",
       },
       {
-        text: "Need to produce what was ordered? On the invoice, click “Create PO” and pick a supplier — it drafts a production PO from the invoice's lines.",
+        text: "Reference content on the invoice detail page lives in three tabs at the bottom: Attachments (upload the customer's own PDF PO or any other doc), Linked POs (the production PO this invoice came from, or a form to create one), and History (the timeline of when it was sent / deposit paid / fulfilled / balance paid). Payment terms, line items, and the Collect Payment / Payment preview card stay above the tabs.",
+        shot: "The invoice detail page with the Attachments / Linked POs / History tabs.",
+      },
+      {
+        text: "Mark the invoice Paid / Void from the Status dropdown in the header. For finer-grained tracking, use the “Mark deposit paid” and “Mark balance paid” buttons inside the Collect Payment card — they stamp the deposit/balance dates separately on the History timeline.",
+      },
+      {
+        text: "Need to delete a mistaken invoice? The “Delete” button is in the top-right of the invoice detail page. A confirmation modal warns that the invoice's line items and attachments go with it, and that any linked Shopify draft order (the customer's pay link) is NOT auto-revoked — handle that in Shopify Admin if it matters.",
+        shot: "The Delete confirmation modal for an invoice.",
+      },
+      {
+        text: "Need to produce what was ordered? On the invoice's Linked POs tab, click “Create Linked PO” and pick a supplier — it drafts a production PO from the invoice's lines.",
       },
     ],
   },
