@@ -147,9 +147,10 @@ export default async function OnboardingPage() {
               the previous step
             </li>
             <li>
-              Ask Greg for the remaining values (Shopify credentials,
-              Google OAuth, etc.) — or copy them from the Vercel dashboard
-              if you have access
+              Pull the remaining values from Vercel:{" "}
+              <code>npm run vc env pull .env.local --environment=development</code>
+              . Then re-set <code>DATABASE_URL</code> to your dev branch
+              from the previous step (the pull overwrites it with prod).
             </li>
           </ol>
         </Section>
@@ -270,8 +271,10 @@ export default async function OnboardingPage() {
             </li>
             <li>
               Before deploying, the same migration needs to be applied
-              to the production database — Claude or Greg will handle
-              this
+              to production: <code>npm run db:migrate:prod</code>{" "}
+              (uses your Vercel access to pull the prod env, then runs
+              the migration against it). Do this <em>before</em> pushing
+              — Vercel auto-deploys the moment your push lands.
             </li>
           </ol>
           <p>

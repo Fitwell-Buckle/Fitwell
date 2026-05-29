@@ -8,9 +8,10 @@ How we change the Shopify app — scopes, embed flag, app URL, declared webhooks
 
 - Source of truth: `shopify.app.toml` at the repo root
 - Anyone with repo access can edit it
-- Greg deploys via `shopify app deploy && shopify app release --version <name> --allow-updates` on his laptop
+- Any contributor with Shopify Partner-org access deploys via `shopify app deploy && shopify app release --version <name> --allow-updates`
 - A merchant must re-authorize the app afterward whenever scopes change — manual, in Shopify Admin
 - **Never** edit the same fields in the Shopify Dev Dashboard UI; they'll be overwritten on the next deploy
+- First-time CLI install + Partner org login: see [`specs/ops/contributor-setup.md`](../ops/contributor-setup.md) §5
 
 ## What lives in the toml
 
@@ -33,7 +34,7 @@ How we change the Shopify app — scopes, embed flag, app URL, declared webhooks
 
 ## First-time CLI setup
 
-Only the person who deploys needs the CLI. Today that's Greg. Tom and Oliver can PR toml changes without installing anything.
+Every contributor can install the CLI and deploy — Oliver, Tom, and Greg all have Partner-org access. Walkthrough lives in [`specs/ops/contributor-setup.md`](../ops/contributor-setup.md) §5; the short version:
 
 ```bash
 npm install -g @shopify/cli        # @shopify/app is bundled in as of CLI v3.59
@@ -50,11 +51,11 @@ If `shopify app config link` is run from a non-TTY shell (Claude Code's `!` pref
 ```
 edit shopify.app.toml  →  PR review  →  merge to main
                                             ↓
-                                Greg: shopify app deploy
+                                  shopify app deploy
                                             ↓
                           (a new version appears in Dashboard)
                                             ↓
-                  Greg: shopify app release --version <name> --allow-updates
+                    shopify app release --version <name> --allow-updates
                                             ↓
                        Merchant approves re-auth in Shopify Admin
                                             ↓
@@ -101,14 +102,14 @@ Until the merchant approves, the new scopes are *declared* but not *granted* —
 
 The Dev Dashboard ships new apps with `embedded = true`. With embedding on, Shopify Admin tries to load `admin.fitwellbuckle.co` inside an iframe. Our app sets `frame-ancestors 'none'` (`next.config.ts`) and uses NextAuth — neither is compatible with embedding. Result: "refused to connect" inside the Shopify Admin app slot, and a half-stuck merchant install (this hit us 2026-05-24).
 
-**Keep `embedded = false`.** Flipping back requires wiring App Bridge + Shopify session token auth across the admin, which we don't have today. Discuss with Greg before attempting.
+**Keep `embedded = false`.** Flipping back requires wiring App Bridge + Shopify session token auth across the admin, which we don't have today — a substantial change, not a config flip.
 
 ## Why deploys aren't on CI / Vercel
 
 - Partner CLI tokens are a different secret from the runtime Admin API credentials — would mean managing another secret in Vercel/GitHub
 - Scope changes are rare (~monthly)
 - Merchant re-auth is manual either way, so CI wouldn't remove the bottleneck
-- Same shape as production database migrations (AGENTS.md §8) — fine to keep on Greg's laptop until volume justifies CI
+- Same shape as production database migrations (AGENTS.md §8) — fine to keep on a contributor's laptop until volume justifies CI
 
 If we ever do automate it, a GitHub Action triggered by `paths: [shopify.app.toml]` on `main` is the right shape — *not* coupling it to the Vercel build, since a Shopify config failure shouldn't fail a site deploy.
 

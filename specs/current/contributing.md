@@ -4,16 +4,16 @@ Last updated: 2026-05-28
 
 Guidelines for adding new features and sections to the Fitwell admin platform. Follow these conventions to keep the codebase consistent and avoid architectural conflicts.
 
-## Decisions That Require Discussion
+## Decisions Worth Surfacing Before Implementing
 
-Before implementing, discuss with Greg:
+These are sticky and expensive to undo — bring them up in the working session rather than silently shipping:
 
 - **New database tables** — especially anything involving products, customers, or orders. These are shared entities with existing relationships. See "Schema Rules" below.
 - **New external integrations** — any new API, service, or data source.
 - **Structural changes** — new route groups, middleware changes, auth changes, new npm dependencies that affect the architecture.
 - **Data model choices** that affect multiple sections — e.g., deciding how product state maps to order data.
 
-When in doubt, ask. The cost of a quick discussion is much lower than untangling a wrong assumption later.
+When in doubt, raise it. The cost of a quick discussion is much lower than untangling a wrong assumption later.
 
 ## Adding an Admin Page
 
@@ -203,22 +203,34 @@ Before creating a new table, check whether the data already exists in an existin
 
 ## Git Workflow
 
-**Never push directly to `main`.** Create a feature branch and open a pull request.
+**Default: work directly on `main`.** Each contributor has their own Neon dev branch, so local work can't break anyone else's database. Pull before starting (`git pull --rebase`); push when you have a change you're happy with. No approval gating.
+
+```bash
+git pull --rebase
+# ... make changes, commit ...
+git push
+```
+
+**When to branch instead.** Branches and PRs are available if you want them, just not required. Reach for one when:
+- The work is long-running and you want a checkpoint without shipping (e.g. a multi-day refactor mid-flight)
+- You want a Vercel preview URL to share for review before the change goes live
+- A collaborator (or Claude) explicitly asks for a branch / worktree to isolate the work
+- The change is risky enough that a self-merge after-the-fact review feels worth it
 
 ```bash
 git checkout -b your-feature-name
-# ... make changes, commit ...
+# ... commit, push ...
 git push -u origin your-feature-name
-# then open a PR on GitHub
+# open a PR on GitHub; self-merge when ready
 ```
 
-This doesn't slow you down — each developer has their own Neon database branch, so you can develop and test fully on your feature branch. PRs don't require approval gating — you can self-merge if you choose. The point is visibility: the team can see what changed and when.
+Worktrees (`git worktree add`) are fine when an agent needs an isolated checkout without disrupting your working tree — same rules apply, just on a separate path.
 
 ## Deploying
 
-- Merging a PR to `main` → Vercel auto-deploys (~40 seconds).
-- **Database migrations** must be applied to production before deploying code that depends on them. Coordinate with Greg.
-- Preview deployments are created automatically for pull requests — use them to verify your work before merging.
+- Pushing to `main` → Vercel auto-deploys (~40 seconds). Merging a PR to `main` does the same.
+- **Database migrations** must be applied to production before deploying code that depends on them — run `npm run db:migrate:prod` before pushing. Destructive migrations (drop/rename, NOT NULL on existing column) need a heads-up first; see AGENTS.md §8.
+- Preview deployments are created automatically for pull requests — use them when you want a shareable URL before merging.
 
 ## File Checklist
 
@@ -226,7 +238,7 @@ When adding a new section, you'll typically touch:
 
 - [ ] `src/app/(admin)/your-section/page.tsx` — the page
 - [ ] `src/components/layout/admin-sidebar.tsx` — nav item
-- [ ] `src/lib/schema.ts` — if adding tables (discuss with Greg first)
+- [ ] `src/lib/schema.ts` — if adding tables (surface the design first; see "Decisions Worth Surfacing")
 - [ ] `src/app/api/admin/your-section/route.ts` — if adding API routes
 - [ ] `specs/current/routes.md` — document the new routes
 - [ ] `specs/current/schema.md` — document any new tables

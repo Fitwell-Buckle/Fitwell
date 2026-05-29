@@ -50,6 +50,7 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 | Cron job changes | `specs/current/scheduled-jobs.md` + `vercel.json` |
 | Deciding what to work on | `specs/ops/PRIORITIES.md` |
 | Strategic context | `specs/ops/MISSION.md` + `specs/ops/SCORECARD.md` |
+| Setting up a new machine, installing CLIs, or troubleshooting service permissions | `specs/ops/contributor-setup.md` |
 | Data sync behavior | `specs/invariants/data-sync.md` |
 | Attribution logic | `specs/invariants/attribution.md` |
 | Writing marketing copy or landing pages | `specs/strategy/personas.md` + `specs/strategy/funnel.md` + `specs/strategy/landing-page-goals.md` |
@@ -71,9 +72,9 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 2. **Before any commit or push, run the migration pre-flight check.** Inspect `git status` and `git diff --staged --name-only` (plus `git log @{u}..HEAD --name-only` before a push) for two soft-block conditions. If either is true, **stop and ask the user before proceeding** — explain *why* so they can make an informed call, don't just block silently:
    - **Schema edited without a generated migration** — `src/lib/schema.ts` is modified/staged but `drizzle/migrations/` has no new file. The schema file is the source of truth, but the database only knows about the generated SQL. Committing one without the other guarantees a code/DB mismatch for the next person who pulls. Ask: *"Should I run `npm run db:generate` first?"*
    - **New migration file in the change about to be pushed** — a `drizzle/migrations/*.sql` is staged, or sits in unpushed commits. Vercel auto-deploys from `main` the instant the push lands, so if the migration isn't already applied to the production Neon branch, the new code hits a database without the new columns/tables → production 500s until someone runs it manually. Before pushing, run `npm run db:pending:prod` to check — it pulls the prod env from Vercel, queries `drizzle.__drizzle_migrations`, and lists anything unapplied (exit 0 = clean, exit 1 = pending). If pending, ask: *"X migration(s) aren't applied to prod yet — should I run `npm run db:migrate:prod` first?"* Don't push until prod is at parity with the migrations being pushed.
-3. **Everyone works directly on `main`** — no feature branches or PRs. There are three contributors (Greg, Tom, Oliver), each with their own Neon database branch. Push when you have changes you're happy with. Pull before starting work (see Session Protocol).
+3. **Default workflow is direct-to-`main`** — three contributors (Greg, Tom, Oliver), each with their own Neon database branch. Pull before starting (`git pull --rebase`); push when ready. No approval gating. Feature branches, worktrees, and PRs are available if requested (long-running work, preview URLs, isolated agent runs) — see `specs/current/contributing.md` → *Git Workflow*. Don't reach for them by default.
 4. **Read specs before building** — don't reinvent what's already been decided. Start with `specs/current/contributing.md` for new sections.
-5. **Discuss major decisions with Greg before implementing** — new database tables, new external integrations, structural changes, and data model choices that affect multiple sections. See `specs/current/contributing.md` for the full list.
+5. **Surface major architectural decisions before shipping** — new database tables, new external integrations, structural changes, and data model choices that affect multiple sections are expensive to undo. Bring them up in the working session rather than silently implementing. See `specs/current/contributing.md` for the full list.
 6. **One shared schema** — all tables live in `src/lib/schema.ts`. Reuse existing entities (`customer`, `order`, `order_line_item`, `campaign`) rather than creating parallel tables. FK into existing tables instead of duplicating data.
 7. **All Shopify data sync must be idempotent** — use `shopify_id` as the dedup key.
 8. **Never store raw payment/card data** — Shopify handles checkout entirely.
@@ -191,7 +192,7 @@ Open questions, risks, alternatives considered.
 6. **Apply the migration to production first**: `npm run db:migrate:prod`. This pulls the production env from Vercel (`vercel env pull --environment=production`), runs `drizzle-kit migrate` against it, and removes the temp env file. Do this *before* the push, not after — Vercel deploys the moment the push lands, so any gap is a window where production is serving 500s.
 7. Commit the schema change + migration file together, push to main.
 
-For destructive migrations (drop column/table, rename, NOT NULL on existing column), the pre-apply order breaks currently-deployed code that still references the old shape. Use expand/contract: ship the additive migration + new code first, then a follow-up migration removes the old shape after the new code is live. Discuss with Greg before pushing a destructive migration.
+For destructive migrations (drop column/table, rename, NOT NULL on existing column), the pre-apply order breaks currently-deployed code that still references the old shape. Use expand/contract: ship the additive migration + new code first, then a follow-up migration removes the old shape after the new code is live. Get engineering-owner sign-off before pushing a destructive migration (Greg, per `specs/ops/ROLES.md`).
 
 ### Migration status commands:
 - `npm run db:pending` — read-only check against your dev branch. Lists any migration files on disk not yet applied. Exit 0 = clean, exit 1 = pending.
@@ -229,8 +230,8 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 ## 9. Shopify Integration Rules
 
-- **App config in code**: Shopify app configuration (scopes, embed flag, app URL, declared webhook topics) lives in `shopify.app.toml` at the repo root. Edit like any other file; Greg deploys via the Shopify CLI from his laptop after merge. Never make app-config changes directly in the Shopify Dev Dashboard — they'll be overwritten on the next deploy. **Full workflow in `specs/current/shopify-app-config.md`** — read it before changing scopes or anything else in the toml.
-- **Not embedded**: The app runs standalone at `admin.fitwellbuckle.co`, not inside the Shopify Admin iframe (`embedded = false` in the toml, `frame-ancestors 'none'` in `next.config.ts`). Flipping either requires wiring App Bridge + Shopify session token auth — discuss with Greg before attempting.
+- **App config in code**: Shopify app configuration (scopes, embed flag, app URL, declared webhook topics) lives in `shopify.app.toml` at the repo root. Edit like any other file; any contributor with Shopify Partner-org access deploys via `shopify app deploy && shopify app release` from their laptop after merge. Never make app-config changes directly in the Shopify Dev Dashboard — they'll be overwritten on the next deploy. **Full workflow in `specs/current/shopify-app-config.md`** — read it before changing scopes or anything else in the toml. **CLI setup**: `specs/ops/contributor-setup.md` §5.
+- **Not embedded**: The app runs standalone at `admin.fitwellbuckle.co`, not inside the Shopify Admin iframe (`embedded = false` in the toml, `frame-ancestors 'none'` in `next.config.ts`). Flipping either requires wiring App Bridge + Shopify session token auth across the admin — a substantial change, not a config flip. Surface it in the working session before starting.
 - **Webhook verification**: All incoming webhooks verified via HMAC-SHA256 using `SHOPIFY_WEBHOOK_SECRET`.
 - **Sync is additive**: Never delete Shopify-sourced records. Update existing or soft-delete (set a `deleted_at` timestamp).
 - **Dedup key**: `shopify_id` fields are unique indexes — use upsert patterns.
@@ -278,7 +279,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 - **Platform**: Vercel, auto-deploys from `main` branch on every push.
 - **Project**: https://vercel.com/fitwellbuckle/fitwell
 - **Production URL**: https://admin.fitwellbuckle.co (fallback: https://fitwell-ashy.vercel.app)
-- **Vercel CLI**: uses a separate config dir (`~/.vercel-fitwell`) for the greg@fitwellbuckle.co account. All `vercel` commands in this repo must use `npm run vc` or `vercel --global-config ~/.vercel-fitwell`.
+- **Vercel CLI**: uses a separate config dir (`~/.vercel-fitwell`) so it doesn't collide with other Vercel projects on your machine. All `vercel` commands in this repo must use `npm run vc` or `vercel --global-config ~/.vercel-fitwell`. First-time setup (`npm run vc login` etc.) is in `specs/ops/contributor-setup.md` §3.
 - **Workflow**: Everyone works on `main`, pushes when ready. Vercel deploys automatically.
 - **Cron jobs**: Defined in `vercel.json` — health check (every 4h), Shopify extract (every 2h), GA4/Google Ads/GSC extract (daily morning), PostHog extract (every 3h).
 - **Environment variables**: Managed in Vercel dashboard, mirrored in `.env.example` for local dev.

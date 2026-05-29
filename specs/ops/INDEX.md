@@ -13,6 +13,8 @@ This directory is the operational backbone of the Fitwell project. It tracks wha
 | [SCORECARD.md](SCORECARD.md) | Key metrics dashboard | Weekly |
 | [proof-points.md](proof-points.md) | Stacked causes — how layers build on each other | Monthly |
 | [releases.yaml](releases.yaml) | Ship trail — what went live and when | On each release |
+| [ROLES.md](ROLES.md) | Who's who | When team composition changes |
+| [contributor-setup.md](contributor-setup.md) | First-time machine setup: CLIs, service access, permissions | When a new service or contributor is added |
 | [domains/](domains/) | Deep-dive knowledge by business domain | As questions arise |
 
 ### Workflow
