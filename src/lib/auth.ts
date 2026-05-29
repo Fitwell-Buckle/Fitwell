@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "./db";
 import {
   user as userTable,
@@ -99,7 +99,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account, email }) {
       // Admins sign in with Google — unchanged, gated by ADMIN_EMAILS.
       if (account?.provider === "google") {
-        return isAllowedAdmin(user.email, ADMIN_EMAILS);
+        if (!isAllowedAdmin(user.email, ADMIN_EMAILS)) return false;
+
+        // NextAuth's DrizzleAdapter calls linkAccount only on the FIRST
+        // sign-in for a (provider, providerAccountId) tuple. On every
+        // subsequent sign-in it just creates a session and never refreshes
+        // the stored access_token / refresh_token / scope / expires_at.
+        // That means scope changes (e.g. adding gmail.readonly) silently
+        // never take effect for already-linked admins — their account row
+        // keeps the original sign-in's scopes forever.
+        //
+        // Force-update the row here with whatever Google just issued. No-op
+        // for first-time sign-ins (the row doesn't exist yet — linkAccount
+        // runs next).
+        if (account.access_token && account.providerAccountId) {
+          await db
+            .update(accountTable)
+            .set({
+              access_token: account.access_token,
+              refresh_token: account.refresh_token ?? null,
+              expires_at: account.expires_at ?? null,
+              scope: account.scope ?? null,
+              token_type: account.token_type ?? null,
+              id_token: account.id_token ?? null,
+            })
+            .where(
+              and(
+                eq(accountTable.provider, "google"),
+                eq(accountTable.providerAccountId, account.providerAccountId),
+              ),
+            );
+        }
+        return true;
       }
 
       // Suppliers, companies (and, optionally, admins) sign in with the link.
