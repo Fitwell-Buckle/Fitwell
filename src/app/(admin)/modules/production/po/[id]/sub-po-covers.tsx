@@ -23,8 +23,9 @@ export interface SubPoCoverRow {
   sku?: string;
   /** per-SKU: product title. raw-blank: the blank label, e.g. "16mm Steel". */
   primary: string;
-  /** raw-blank: the finished SKUs this blank covers. */
-  covers?: string;
+  /** raw-blank: the finished SKUs this blank covers, with their product
+   *  titles so the supplier sees what each SKU actually is. */
+  covers?: { sku: string; title: string }[];
   /** master line items this row prices (one per SKU; many for a raw-blank group). */
   lineItemIds: string[];
   quantity: number;
@@ -199,7 +200,22 @@ export function SubPoCovers({
                         )}
                         <span className="font-medium text-zinc-900">{r.primary}</span>
                       </TableCell>
-                      <TableCell className="text-xs text-zinc-400">{r.covers}</TableCell>
+                      <TableCell className="text-xs text-zinc-500">
+                        {r.covers && r.covers.length > 0 ? (
+                          <ul className="space-y-0.5">
+                            {r.covers.map((c) => (
+                              <li key={c.sku}>
+                                <span className="font-mono text-zinc-600">{c.sku}</span>
+                                {c.title && (
+                                  <span className="ml-1 text-zinc-400">— {c.title}</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
                     </>
                   ) : (
                     <>

@@ -141,10 +141,13 @@ export default async function PoDetailPage({
         .map((c) => [c.lineItemId, c.unitCostCents]),
     );
     if (subRawBlanks.length > 0) {
+      // SKU → product title, so the printable shows what each SKU under the
+      // blank actually is.
+      const titleBySku = new Map(subItems.map((li) => [li.sku, li.title ?? ""]));
       subCoverRows = subRawBlanks.map((g) => ({
         key: g.label,
         primary: g.label,
-        covers: g.skus.join(", "),
+        covers: g.skus.map((sku) => ({ sku, title: titleBySku.get(sku) ?? "" })),
         lineItemIds: g.lineItemIds,
         quantity: g.quantity,
         // Every SKU in the blank shares one per-piece price; read the first.

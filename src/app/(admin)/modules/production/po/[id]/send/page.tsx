@@ -129,6 +129,9 @@ export default async function SendPoPage({
         )
       : [];
   const totalPieces = rawBlanks.reduce((s, g) => s + g.quantity, 0);
+  // SKU → title lookup so the raw-blank Covers cell can show what each
+  // finished SKU actually is, not just the code.
+  const titleBySku = new Map(items.map((li) => [li.sku, li.title ?? ""]));
   // On a sub-PO the figures are what we pay THIS supplier, per line — not the
   // master's internal production cost. Costs live on the master, keyed by
   // (supplier, line); look up this supplier's slice.
@@ -182,13 +185,11 @@ export default async function SendPoPage({
           </div>
           <div>
             <div className="text-xs uppercase tracking-wider text-zinc-400">Bill To</div>
-            <div className="mt-1 font-medium text-zinc-900">{po.company?.name ?? "—"}</div>
-            {po.company?.contactName && (
-              <div className="text-sm text-zinc-500">{po.company.contactName}</div>
-            )}
-            {po.company?.contactEmail && (
-              <div className="text-sm text-zinc-500">{po.company.contactEmail}</div>
-            )}
+            {/* PO is purchased by Fitwell from the supplier. Always Fitwell —
+             *  the linked B2B brand (po.company) is the downstream customer,
+             *  not the buyer in this PO transaction. */}
+            <div className="mt-1 font-medium text-zinc-900">Fitwell Buckle Co.</div>
+            <div className="text-sm text-zinc-500">hello@fitwellbuckle.co</div>
           </div>
           <div className="sm:text-right">
             <div className="text-xs uppercase tracking-wider text-zinc-400">Ship To</div>
@@ -245,8 +246,20 @@ export default async function SendPoPage({
                         )}
                         <span className="font-medium text-zinc-900">{g.label}</span>
                       </TableCell>
-                      <TableCell className="text-xs text-zinc-400">
-                        {g.skus.join(", ")}
+                      <TableCell className="text-xs text-zinc-500">
+                        <ul className="space-y-0.5">
+                          {g.skus.map((sku) => {
+                            const title = titleBySku.get(sku) ?? "";
+                            return (
+                              <li key={sku}>
+                                <span className="font-mono text-zinc-600">{sku}</span>
+                                {title && (
+                                  <span className="ml-1 text-zinc-400">— {title}</span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
                       </TableCell>
                       <TableCell className="text-right font-medium text-zinc-900">
                         {g.quantity}
