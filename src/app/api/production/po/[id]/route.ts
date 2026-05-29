@@ -104,3 +104,35 @@ export async function PUT(
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
+
+// Hard delete. Schema FKs cascade — line items, stage events, stage
+// assignments, supplier line costs, attachments, comments, and sub-POs are
+// removed along with the PO itself. Admin-only. Linked Shopify drafts and
+// invoices are NOT auto-revoked — handle those manually.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (session.user.role === "supplier") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  try {
+    const [deleted] = await db
+      .delete(productionPo)
+      .where(eq(productionPo.id, id))
+      .returning({ id: productionPo.id });
+    if (!deleted) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json({ data: { id: deleted.id } });
+  } catch (err) {
+    console.error("Delete production PO failed:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}

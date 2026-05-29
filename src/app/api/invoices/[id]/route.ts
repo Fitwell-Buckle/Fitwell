@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { invoice } from "@/lib/schema";
 import {
   updateInvoice,
   updateInvoiceStatus,
@@ -74,4 +77,36 @@ export async function PUT(
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
   return NextResponse.json({ data: { id } });
+}
+
+// Hard delete. Schema FKs cascade — invoice line items and invoice attachments
+// are removed with the invoice. Admin-only. Any linked Shopify draft order
+// (`shopifyDraftOrderId` / `shopifyBalanceDraftOrderId`) is NOT auto-revoked —
+// handle those manually in Shopify if they exist.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (session.user.role === "supplier") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  try {
+    const [deleted] = await db
+      .delete(invoice)
+      .where(eq(invoice.id, id))
+      .returning({ id: invoice.id });
+    if (!deleted) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json({ data: { id: deleted.id } });
+  } catch (err) {
+    console.error("Delete invoice failed:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
 }

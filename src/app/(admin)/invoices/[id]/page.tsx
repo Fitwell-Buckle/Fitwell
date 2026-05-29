@@ -7,7 +7,6 @@ import { db } from "@/lib/db";
 import { supplier, company, priceTier } from "@/lib/schema";
 import { getInvoiceDetail } from "@/lib/invoicing/service";
 import { netLineDisplays } from "@/lib/invoicing/invoicing";
-import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { buildInvoiceHistory } from "@/lib/invoicing/history";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { PageHeader } from "@/components/ui/page-header";
@@ -25,6 +24,8 @@ import { PoForm, type PoFormInitial } from "../../modules/production/po/new/po-f
 import { InvoiceActions } from "./invoice-actions";
 import { InvoiceStatusSelect } from "./invoice-status-select";
 import { InvoiceAttachments } from "@/components/invoicing/invoice-attachments";
+import { DetailTabs } from "@/components/ui/detail-tabs";
+import { DeleteButton } from "@/components/ui/delete-button";
 
 export const metadata: Metadata = {
   title: "Invoice | Fitwell Admin",
@@ -39,7 +40,7 @@ export default async function InvoiceDetailPage({
   if (!session) redirect("/auth/login");
 
   const { id } = await params;
-  const [inv, suppliers, companies, tiers, billing] = await Promise.all([
+  const [inv, suppliers, companies, tiers] = await Promise.all([
     getInvoiceDetail(id),
     db.query.supplier.findMany({
       columns: {
@@ -73,7 +74,6 @@ export default async function InvoiceDetailPage({
       columns: { id: true, name: true, discountPercent: true },
       orderBy: asc(priceTier.name),
     }),
-    getBillingSettings(),
   ]);
   if (!inv) notFound();
 
@@ -154,6 +154,12 @@ export default async function InvoiceDetailPage({
                 <Link href={`/invoices/${inv.id}/edit`}>Edit</Link>
               </Button>
             )}
+            <DeleteButton
+              entityKind="Invoice"
+              entityLabel={`Invoice ${inv.invoiceNumber}`}
+              deleteUrl={`/api/invoices/${inv.id}`}
+              redirectTo="/invoices"
+            />
             <Button variant="ghost" size="sm" asChild>
               <Link href="/invoices">Back</Link>
             </Button>
@@ -234,51 +240,9 @@ export default async function InvoiceDetailPage({
         </div>
       </Card>
 
-      <Card className="mt-5 p-6">
-        <h2 className="text-sm font-semibold text-zinc-900">Payment</h2>
-        <div className="mt-3">
-          {inv.status === "paid" ? (
-            <p className="text-sm text-emerald-700">
-              ✓ Paid in full
-              {inv.paidAt
-                ? ` ${fmtDate(inv.paidAt.toISOString().slice(0, 10))}`
-                : ""}
-            </p>
-          ) : inv.shopifyInvoiceUrl ? (
-            <Button asChild>
-              <a href={inv.shopifyInvoiceUrl} target="_blank" rel="noreferrer">
-                Pay online (Apple Pay, PayPal, card)
-              </a>
-            </Button>
-          ) : (
-            <p className="text-sm text-zinc-400">
-              Use “Print &amp; Send” (top right) to email this invoice with an
-              online payment link.
-            </p>
-          )}
-        </div>
-
-        <div className="mt-5 border-t border-zinc-100 pt-4">
-          <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
-            Pay by bank wire / ACH
-          </div>
-          {billing?.instructions ? (
-            <p className="mt-2 whitespace-pre-line text-sm font-medium text-zinc-800">
-              {billing.instructions}
-            </p>
-          ) : (
-            <p className="mt-2 text-sm text-zinc-400">
-              Add wire info via “Setup” on the{" "}
-              <Link href="/invoices" className="underline underline-offset-2">
-                B2B Orders
-              </Link>{" "}
-              page to show it here and on the invoice.
-            </p>
-          )}
-        </div>
-      </Card>
-
-      <InvoiceAttachments invoiceId={inv.id} attachments={inv.attachments} />
+      {/* Payment + wire/ACH info lives on the printable document
+       *  (invoice-document.tsx), used by /print and /send. The admin detail
+       *  view doesn't need to duplicate it. */}
 
       <InvoiceActions
         invoiceId={inv.id}
@@ -307,70 +271,85 @@ export default async function InvoiceDetailPage({
         }
       />
 
-      {inv.sourcePo ? (
-        <Card className="mt-5 p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-zinc-900">Linked Production POs</h2>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled
-              title="This invoice already has a linked PO"
-            >
-              Create Linked PO
-            </Button>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-zinc-100 pt-3">
-            <Link
-              href={`/modules/production/po/${inv.sourcePo.id}`}
-              className="font-mono text-sm font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
-            >
-              {inv.sourcePo.shopifyPoNumber}
-            </Link>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/modules/production/po/${inv.sourcePo.id}`}>Open PO</Link>
-            </Button>
-          </div>
-        </Card>
-      ) : (
-        <div className="mt-5">
-          <h2 className="text-sm font-semibold text-zinc-900">Linked Production POs</h2>
-          <p className="mb-3 mt-1 text-xs text-zinc-500">
-            Prefilled from this invoice&apos;s line items (enter production costs).
-            Creating it links the PO back to this invoice.
-          </p>
-          <PoForm
-            suppliers={suppliers}
-            companies={companyOptions}
-            priceTiers={tiers}
-            invoiceId={inv.id}
-            initial={poInitial}
-            submitLabel="Create Linked PO"
-          />
-        </div>
-      )}
-
-      {history.length > 0 && (
-        <Card className="mt-5 p-6">
-          <h2 className="text-sm font-semibold text-zinc-900">History</h2>
-          <ol className="mt-4 space-y-3">
-            {history.map((h, i) => (
-              <li key={i} className="flex items-baseline gap-3 text-sm">
-                <span className="w-40 shrink-0 text-xs text-zinc-400">
-                  {new Date(h.at).toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </span>
-                <span className="text-zinc-700">{h.label}</span>
-              </li>
-            ))}
-          </ol>
-        </Card>
-      )}
+      <DetailTabs
+        tabs={[
+          {
+            value: "attachments",
+            label: "Attachments",
+            content: (
+              <InvoiceAttachments
+                invoiceId={inv.id}
+                attachments={inv.attachments}
+              />
+            ),
+          },
+          {
+            value: "linked-pos",
+            label: "Linked POs",
+            content: inv.sourcePo ? (
+              <Card className="p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <Link
+                    href={`/modules/production/po/${inv.sourcePo.id}`}
+                    className="font-mono text-sm font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+                  >
+                    {inv.sourcePo.shopifyPoNumber}
+                  </Link>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/modules/production/po/${inv.sourcePo.id}`}>Open PO</Link>
+                  </Button>
+                </div>
+              </Card>
+            ) : (
+              <div>
+                <p className="mb-3 text-xs text-zinc-500">
+                  Prefilled from this invoice&apos;s line items (enter production
+                  costs). Creating it links the PO back to this invoice.
+                </p>
+                <PoForm
+                  suppliers={suppliers}
+                  companies={companyOptions}
+                  priceTiers={tiers}
+                  invoiceId={inv.id}
+                  initial={poInitial}
+                  submitLabel="Create Linked PO"
+                />
+              </div>
+            ),
+          },
+          ...(history.length > 0
+            ? [
+                {
+                  value: "history",
+                  label: "History",
+                  content: (
+                    <Card className="p-6">
+                      <ol className="space-y-3">
+                        {history.map((h, i) => (
+                          <li
+                            key={i}
+                            className="flex items-baseline gap-3 text-sm"
+                          >
+                            <span className="w-40 shrink-0 text-xs text-zinc-400">
+                              {new Date(h.at).toLocaleString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            <span className="text-zinc-700">{h.label}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </Card>
+                  ),
+                },
+              ]
+            : []),
+        ]}
+      />
     </div>
   );
 }

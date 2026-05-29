@@ -38,7 +38,8 @@ import { PoCreateInvoice } from "./po-create-invoice";
 import { SubPoCovers, type SubPoCoverRow } from "./sub-po-covers";
 import { PoTimeline } from "@/components/production/po-timeline";
 import { buildPoTimeline } from "@/lib/production/timeline";
-import { PoDetailsTabs } from "./po-details-tabs";
+import { DetailTabs } from "@/components/ui/detail-tabs";
+import { DeleteButton } from "@/components/ui/delete-button";
 
 export const metadata: Metadata = {
   title: "Production PO | Fitwell Admin",
@@ -226,6 +227,12 @@ export default async function PoDetailPage({
               <PoCreateInvoice poId={po.id} existingInvoiceId={existingInvoice?.id ?? null} />
             </>
           )}
+          <DeleteButton
+            entityKind="PO"
+            entityLabel={`PO ${formatPoNumber(po.shopifyPoNumber, { isMaster, suffix: po.poSuffix })}`}
+            deleteUrl={`/api/production/po/${po.id}`}
+            redirectTo="/modules/production"
+          />
           <Button variant="ghost" size="sm" asChild>
             <Link href="/modules/production">Back</Link>
           </Button>
@@ -397,7 +404,7 @@ export default async function PoDetailPage({
         />
       )}
 
-      <PoDetailsTabs
+      <DetailTabs
         tabs={[
           ...(isMaster
             ? [

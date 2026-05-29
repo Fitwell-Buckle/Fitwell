@@ -6,6 +6,7 @@ import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DeleteButton } from "@/components/ui/delete-button";
 import { DataTable, Mono } from "@/components/ui/data-table";
 import {
   Table,
@@ -101,12 +102,13 @@ export function InfluencerTrackingTable({
               <TableHead>Content due</TableHead>
               <TableHead>Published</TableHead>
               <TableHead>Affiliate link</TableHead>
+              <TableHead className="sr-only">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {ordered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-zinc-400">
+                <TableCell colSpan={8} className="py-8 text-center text-zinc-400">
                   No gifting orders match.
                 </TableCell>
               </TableRow>
@@ -306,6 +308,14 @@ function Row({ row, today }: { row: TrackingRow; today: string }) {
           </button>
         )}
         {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
+      </TableCell>
+      <TableCell className="text-right">
+        <DeleteButton
+          entityKind="Gifting order"
+          entityLabel={`Gifting order ${row.orderNumber}`}
+          deleteUrl={`/api/influencer-orders/${row.id}`}
+          iconOnly
+        />
       </TableCell>
     </TableRow>
   );

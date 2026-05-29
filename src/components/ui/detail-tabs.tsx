@@ -3,21 +3,28 @@
 import type { ReactNode } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-interface TabSpec {
+export interface DetailTabSpec {
   /** Stable id used for tab state. */
   value: string;
   /** Label shown in the tab strip. */
   label: string;
-  /** Tab body — already wrapped in a `<Card>` (or equivalent) by the caller. */
+  /** Tab body — wrap in `<Card>` (or equivalent) inside the caller if you want
+   *  framing, since `DetailTabs` itself only provides the tab strip + content
+   *  swap (no padded container). */
   content: ReactNode;
 }
 
 /**
- * Tabbed container for the PO detail page's reference/history sections (Costs,
- * Progress, Activity). The actionable bits (PoControls, PoReceive, SubPoCovers,
- * Sub-POs index) stay above the tabs so they remain visible at all times.
+ * Tabbed container for a detail page's reference/history sections. Action
+ * surfaces (forms, status toggles, primary buttons) should stay above the
+ * tabs so they're always visible — these tabs are for read-only/secondary
+ * content that benefits from one-at-a-time display.
+ *
+ * Used by:
+ *   - /modules/production/po/[id]      → Items / Progress / Activity
+ *   - /invoices/[id]                   → Attachments / Linked POs / History
  */
-export function PoDetailsTabs({ tabs }: { tabs: TabSpec[] }) {
+export function DetailTabs({ tabs }: { tabs: DetailTabSpec[] }) {
   if (tabs.length === 0) return null;
   return (
     <div className="mt-5">
