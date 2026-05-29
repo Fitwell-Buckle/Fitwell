@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Mail, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,12 @@ export interface SupplierLogin {
   id: string;
   email: string;
   name: string | null;
+}
+
+interface GmailMatch {
+  email: string;
+  name: string | null;
+  snippet: string;
 }
 
 /**
@@ -28,6 +35,37 @@ export function SupplierLogins({
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Gmail search: pulls candidate contact emails from the signed-in admin's
+  // mailbox so an exact address doesn't have to be remembered or copy-pasted.
+  const [gmailQuery, setGmailQuery] = useState("");
+  const [gmailMatches, setGmailMatches] = useState<GmailMatch[] | null>(null);
+  const [gmailBusy, setGmailBusy] = useState(false);
+  const [gmailError, setGmailError] = useState<string | null>(null);
+
+  async function searchGmail() {
+    const q = gmailQuery.trim();
+    if (!q) return;
+    setGmailError(null);
+    setGmailMatches(null);
+    setGmailBusy(true);
+    try {
+      const res = await fetch(`/api/gmail/search?q=${encodeURIComponent(q)}`);
+      const d = (await res.json().catch(() => ({}))) as {
+        data?: GmailMatch[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setGmailError(d.error || "Gmail search failed.");
+        return;
+      }
+      setGmailMatches(d.data ?? []);
+    } catch {
+      setGmailError("Network error.");
+    } finally {
+      setGmailBusy(false);
+    }
+  }
 
   async function add() {
     const e = email.trim().toLowerCase();
@@ -97,6 +135,69 @@ export function SupplierLogins({
           ))
         )}
       </div>
+      <div className="mt-4 border-t border-zinc-100 pt-4">
+        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
+          <Mail className="h-3 w-3" /> Search your Gmail
+        </div>
+        <div className="flex gap-2">
+          <Input
+            type="search"
+            placeholder="Supplier name, domain, or anything you'd search Gmail for"
+            value={gmailQuery}
+            onChange={(e) => setGmailQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void searchGmail();
+              }
+            }}
+          />
+          <Button
+            variant="outline"
+            onClick={() => void searchGmail()}
+            disabled={gmailBusy || !gmailQuery.trim()}
+          >
+            <Search className="h-4 w-4" />
+            {gmailBusy ? "Searching…" : "Search"}
+          </Button>
+        </div>
+        {gmailError && (
+          <p className="mt-2 text-xs text-red-600">{gmailError}</p>
+        )}
+        {gmailMatches && gmailMatches.length === 0 && (
+          <p className="mt-2 text-xs text-zinc-400">
+            No emails found in messages matching that query.
+          </p>
+        )}
+        {gmailMatches && gmailMatches.length > 0 && (
+          <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
+            {gmailMatches.map((m) => (
+              <li key={m.email}>
+                <button
+                  type="button"
+                  className="w-full rounded-md border border-zinc-100 px-3 py-1.5 text-left text-sm text-zinc-700 hover:border-zinc-200 hover:bg-zinc-50"
+                  onClick={() => {
+                    setEmail(m.email);
+                    setGmailMatches(null);
+                    setGmailQuery("");
+                  }}
+                >
+                  <span className="font-medium text-zinc-900">{m.email}</span>
+                  {m.name && (
+                    <span className="ml-2 text-xs text-zinc-500">{m.name}</span>
+                  )}
+                  {m.snippet && (
+                    <div className="truncate text-xs text-zinc-400">
+                      {m.snippet}
+                    </div>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div className="mt-3 flex gap-2">
         <Input
           type="email"

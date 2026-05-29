@@ -71,7 +71,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     sessionsTable: sessionTable,
     verificationTokensTable: verificationTokenTable,
   }),
-  providers: [Google, magicLink],
+  providers: [
+    // Request Gmail readonly so the admin's mailbox can be searched for
+    // matching contact emails from inside the supplier-contacts UI. Offline
+    // access gives us a refresh token; prompt=consent makes existing admins
+    // re-grant on next sign-in so the scope actually applies.
+    Google({
+      authorization: {
+        params: {
+          scope: [
+            "openid",
+            "email",
+            "profile",
+            "https://www.googleapis.com/auth/gmail.readonly",
+          ].join(" "),
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
+    }),
+    magicLink,
+  ],
   pages: {
     signIn: "/auth/login",
   },
