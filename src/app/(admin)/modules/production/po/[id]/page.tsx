@@ -38,6 +38,7 @@ import { PoCreateInvoice } from "./po-create-invoice";
 import { SubPoCovers, type SubPoCoverRow } from "./sub-po-covers";
 import { PoTimeline } from "@/components/production/po-timeline";
 import { buildPoTimeline } from "@/lib/production/timeline";
+import { PoDetailsTabs } from "./po-details-tabs";
 
 export const metadata: Metadata = {
   title: "Production PO | Fitwell Admin",
@@ -369,69 +370,7 @@ export default async function PoDetailPage({
         />
       )}
 
-      {isMaster ? (
-        <Card className="mt-5 p-6">
-          <h2 className="text-sm font-semibold text-zinc-900">Line items &amp; costs</h2>
-          <p className="mt-1 text-xs text-zinc-500">
-            Each supplier&apos;s unit cost per line; the line total is qty × the summed
-            unit cost. Stage advancement happens on each sub-PO above.
-          </p>
-          <div className="mt-4 overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Product</TableHead>
-                  {supplierColumns.map((col) => (
-                    <TableHead key={col.supplierId} className="text-right">
-                      {col.label}
-                    </TableHead>
-                  ))}
-                  <TableHead className="text-right">Unit cost</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Total cost</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedLineItems.map((li) => {
-                  const perSupplier = supplierColumns.map(
-                    (col) => masterCostMap.get(`${col.supplierId}:${li.id}`) ?? null,
-                  );
-                  const anyCost = perSupplier.some((c) => c != null);
-                  const unitSum = perSupplier.reduce<number>((s, c) => s + (c ?? 0), 0);
-                  return (
-                    <TableRow key={li.id}>
-                      <TableCell className="font-mono text-xs">{li.sku}</TableCell>
-                      <TableCell>{li.title}</TableCell>
-                      {perSupplier.map((c, i) => (
-                        <TableCell
-                          key={supplierColumns[i].supplierId}
-                          className="text-right text-zinc-500"
-                        >
-                          {fmtMoney(c)}
-                        </TableCell>
-                      ))}
-                      <TableCell className="text-right font-medium text-zinc-900">
-                        {anyCost ? fmtMoney(unitSum) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right text-zinc-500">{li.quantity}</TableCell>
-                      <TableCell className="text-right font-medium text-zinc-900">
-                        {anyCost ? fmtMoney(unitSum * li.quantity) : "—"}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
-            <span className="text-sm text-zinc-500">Total production cost (USD)</span>
-            <span className="ml-3 text-base font-semibold text-zinc-900">
-              {fmtMoney(masterGrandTotalCents)}
-            </span>
-          </div>
-        </Card>
-      ) : (
+      {!isMaster && (
         <PoControls
           poId={po.id}
           status={po.status}
@@ -458,23 +397,114 @@ export default async function PoDetailPage({
         />
       )}
 
-      <PoStageTimeline
-        lines={sortedLineItems.map((li) => ({
-          id: li.id,
-          sku: li.sku,
-          title: li.title,
-          events: li.stageEvents.map((ev) => ({
-            id: ev.id,
-            stage: ev.stage,
-            date: ev.enteredAt.toISOString().slice(0, 10),
-          })),
-        }))}
-      />
-
-      <PoTimeline
-        poId={po.id}
-        viewer="admin"
-        entries={buildPoTimeline(po.comments, po.attachments)}
+      <PoDetailsTabs
+        tabs={[
+          ...(isMaster
+            ? [
+                {
+                  value: "items",
+                  label: "Items",
+                  content: (
+                    <Card className="p-6">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>SKU</TableHead>
+                              <TableHead>Product</TableHead>
+                              {supplierColumns.map((col) => (
+                                <TableHead key={col.supplierId} className="text-right">
+                                  {col.label}
+                                </TableHead>
+                              ))}
+                              <TableHead className="text-right">Unit cost</TableHead>
+                              <TableHead className="text-right">Qty</TableHead>
+                              <TableHead className="text-right">Total cost</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sortedLineItems.map((li) => {
+                              const perSupplier = supplierColumns.map(
+                                (col) =>
+                                  masterCostMap.get(`${col.supplierId}:${li.id}`) ?? null,
+                              );
+                              const anyCost = perSupplier.some((c) => c != null);
+                              const unitSum = perSupplier.reduce<number>(
+                                (s, c) => s + (c ?? 0),
+                                0,
+                              );
+                              return (
+                                <TableRow key={li.id}>
+                                  <TableCell className="font-mono text-xs">
+                                    {li.sku}
+                                  </TableCell>
+                                  <TableCell>{li.title}</TableCell>
+                                  {perSupplier.map((c, i) => (
+                                    <TableCell
+                                      key={supplierColumns[i].supplierId}
+                                      className="text-right text-zinc-500"
+                                    >
+                                      {fmtMoney(c)}
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-right font-medium text-zinc-900">
+                                    {anyCost ? fmtMoney(unitSum) : "—"}
+                                  </TableCell>
+                                  <TableCell className="text-right text-zinc-500">
+                                    {li.quantity}
+                                  </TableCell>
+                                  <TableCell className="text-right font-medium text-zinc-900">
+                                    {anyCost ? fmtMoney(unitSum * li.quantity) : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <div className="mt-4 flex items-baseline justify-end border-t border-zinc-100 pt-3">
+                        <span className="text-sm text-zinc-500">
+                          Total production cost (USD)
+                        </span>
+                        <span className="ml-3 text-base font-semibold text-zinc-900">
+                          {fmtMoney(masterGrandTotalCents)}
+                        </span>
+                      </div>
+                    </Card>
+                  ),
+                },
+              ]
+            : []),
+          {
+            value: "progress",
+            label: "Progress",
+            content: (
+              <PoStageTimeline
+                lines={sortedLineItems.map((li) => ({
+                  id: li.id,
+                  sku: li.sku,
+                  title: li.title,
+                  events: li.stageEvents.map((ev) => ({
+                    id: ev.id,
+                    stage: ev.stage,
+                    date: ev.enteredAt.toISOString().slice(0, 10),
+                  })),
+                }))}
+              />
+            ),
+          },
+          {
+            value: "activity",
+            label: "Activity",
+            content: (
+              <PoTimeline
+                poId={po.id}
+                viewer="admin"
+                entries={buildPoTimeline(po.comments, po.attachments)}
+              />
+            ),
+          },
+        ]}
       />
         </>
       )}

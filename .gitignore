@@ -44,3 +44,4 @@ drizzle/meta
 # shopify cli
 .shopify
 data/
+.env*
