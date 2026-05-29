@@ -39,10 +39,10 @@ export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
     .map(
       (l, i) => `
       <tr>
-        <td style="padding:6px 0;color:#52525b;font-size:13px">${l.sku} — ${l.title}</td>
-        <td style="padding:6px 0;text-align:right;color:#52525b;font-size:13px">${l.quantity}</td>
-        <td style="padding:6px 0;text-align:right;color:#52525b;font-size:13px">${fmtMoney(netLines[i].netUnitPriceCents)}</td>
-        <td style="padding:6px 0;text-align:right;color:#18181b;font-size:13px">${fmtMoney(netLines[i].netLineTotalCents)}</td>
+        <td style="padding:6px 16px 6px 0;color:#52525b;font-size:13px">${l.sku} — ${l.title}</td>
+        <td style="padding:6px 0 6px 24px;text-align:right;color:#52525b;font-size:13px;white-space:nowrap">${l.quantity}</td>
+        <td style="padding:6px 0 6px 24px;text-align:right;color:#52525b;font-size:13px;white-space:nowrap">${fmtMoney(netLines[i].netUnitPriceCents)}</td>
+        <td style="padding:6px 0 6px 24px;text-align:right;color:#18181b;font-size:13px;white-space:nowrap">${fmtMoney(netLines[i].netLineTotalCents)}</td>
       </tr>`,
     )
     .join("");
@@ -75,10 +75,10 @@ export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
     <table style="width:100%;border-collapse:collapse;margin-top:20px">
       <thead>
         <tr style="border-bottom:1px solid #e4e4e7">
-          <th style="text-align:left;font-size:11px;color:#a1a1aa;text-transform:uppercase;padding-bottom:6px">Item</th>
-          <th style="text-align:right;font-size:11px;color:#a1a1aa;text-transform:uppercase;padding-bottom:6px">Qty</th>
-          <th style="text-align:right;font-size:11px;color:#a1a1aa;text-transform:uppercase;padding-bottom:6px">Unit</th>
-          <th style="text-align:right;font-size:11px;color:#a1a1aa;text-transform:uppercase;padding-bottom:6px">Total</th>
+          <th style="text-align:left;font-size:11px;color:#a1a1aa;text-transform:uppercase;padding:0 16px 6px 0">Item</th>
+          <th style="text-align:right;font-size:11px;color:#a1a1aa;text-transform:uppercase;padding:0 0 6px 24px">Qty</th>
+          <th style="text-align:right;font-size:11px;color:#a1a1aa;text-transform:uppercase;padding:0 0 6px 24px">Unit</th>
+          <th style="text-align:right;font-size:11px;color:#a1a1aa;text-transform:uppercase;padding:0 0 6px 24px">Total</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
