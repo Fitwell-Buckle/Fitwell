@@ -251,6 +251,18 @@ export default async function InvoiceDetailPage({
         depositPercent={inv.depositPercent}
         depositCents={inv.depositCents}
         balanceCents={inv.depositCents > 0 ? inv.totalCents - inv.depositCents : 0}
+        totalCents={inv.totalCents}
+        // Effective deposit at send time: invoice override wins, else brand
+        // default. Used to show the projection on drafts before any snapshot
+        // exists.
+        projectedDepositPercent={
+          inv.depositPercent ?? inv.company?.depositPercent ?? null
+        }
+        projectedDepositCents={Math.round(
+          (inv.totalCents *
+            (inv.depositPercent ?? inv.company?.depositPercent ?? 0)) /
+            100,
+        )}
         fulfilledAt={
           inv.fulfilledAt ? fmtDate(inv.fulfilledAt.toISOString().slice(0, 10)) : null
         }

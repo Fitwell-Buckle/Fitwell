@@ -47,11 +47,22 @@ export const invoiceLineInputSchema = z.object({
   shopifyVariantId: z.string().max(200).nullish(),
 });
 
+// Per-invoice deposit override. null/undefined = inherit the brand's default
+// at send time (current behavior). A number (incl. 0) = this invoice has its
+// own value and ignores the brand. 0 explicitly = no deposit on this invoice.
+const depositPercentInput = z
+  .number()
+  .min(0, "deposit % must be ≥ 0")
+  .max(100, "deposit % must be ≤ 100")
+  .nullish();
+
 export const createInvoiceSchema = z.object({
   companyId: z.string().min(1),
   issuedDate: dateString,
   dueDate: dateString.nullish(),
   notes: z.string().max(5000).nullish(),
+  /** Override the brand's default deposit % for this invoice. */
+  depositPercent: depositPercentInput,
   // Set when the invoice is created from a PO — links it back and prevents
   // creating a second invoice from the same PO.
   sourcePoId: z.string().max(200).nullish(),
@@ -63,6 +74,8 @@ export const updateInvoiceSchema = z.object({
   issuedDate: dateString,
   dueDate: dateString.nullable(),
   notes: z.string().max(5000).nullable(),
+  /** Per-invoice deposit override; null clears it (falls back to brand default). */
+  depositPercent: depositPercentInput,
   lineItems: z.array(invoiceLineInputSchema).min(1),
 });
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
@@ -103,6 +116,9 @@ export async function createInvoice(
       notes: input.notes ?? null,
       sourcePoId: input.sourcePoId ?? null,
       discountPercent,
+      // Pre-set the per-invoice deposit override if the caller provided one.
+      // Sent invoices still get depositCents recomputed by snapshotInvoiceDeposit.
+      depositPercent: input.depositPercent ?? null,
       ...totals,
     })
     .returning({ id: invoice.id });
@@ -290,6 +306,16 @@ export async function updateInvoice(
       issuedDate: input.issuedDate,
       dueDate: input.dueDate,
       notes: input.notes,
+      // Per-invoice deposit override (null clears, falling back to brand default).
+      // Recompute depositCents from the new % × new total so the snapshotted
+      // amount stays consistent if the lines changed. Only does work pre-send;
+      // sent invoices already had it set by snapshotInvoiceDeposit and an edit
+      // is only allowed when status ≠ paid/void anyway.
+      depositPercent: input.depositPercent ?? null,
+      depositCents:
+        input.depositPercent != null && input.depositPercent > 0
+          ? Math.round((totals.totalCents * input.depositPercent) / 100)
+          : 0,
       updatedAt: new Date(),
       ...totals,
     })

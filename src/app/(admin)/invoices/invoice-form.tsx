@@ -48,6 +48,8 @@ export interface InvoiceFormInitial {
   companyId: string;
   companyName: string;
   tierDiscount: number;
+  /** Per-invoice deposit override. null = follow the brand's default at send time. */
+  depositPercent: number | null;
   issuedDate: string;
   dueDate: string;
   notes: string;
@@ -108,6 +110,12 @@ export function InvoiceForm({
   );
   const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  // Per-invoice deposit override as a string so an empty field = "inherit from
+  // brand" (vs 0 = "explicitly no deposit on this invoice"). Pre-fills from
+  // the existing override; otherwise blank (inherit).
+  const [depositOverride, setDepositOverride] = useState(
+    initial?.depositPercent != null ? String(initial.depositPercent) : "",
+  );
   const [rows, setRows] = useState<Row[]>(
     initial
       ? initial.lineItems.map((l) => ({
@@ -350,6 +358,10 @@ export function InvoiceForm({
             issuedDate,
             dueDate: dueDate || null,
             notes: notes.trim() || null,
+            // Empty input = inherit the brand's default at send time. Any
+            // entered number (incl. 0) overrides for this invoice only.
+            depositPercent:
+              depositOverride.trim() === "" ? null : Number(depositOverride),
             lineItems,
           }),
         },
@@ -414,7 +426,7 @@ export function InvoiceForm({
               </p>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={fieldLabel}>Issued date</label>
               <Input type="date" value={issuedDate} onChange={(e) => setIssuedDate(e.target.value)} />
@@ -422,6 +434,29 @@ export function InvoiceForm({
             <div>
               <label className={fieldLabel}>Due date (optional)</label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+            <div>
+              <label className={fieldLabel}>
+                Deposit % (optional override)
+              </label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={100}
+                step={1}
+                placeholder={
+                  selectedCompany?.depositPercent
+                    ? `Brand default: ${selectedCompany.depositPercent}%`
+                    : "Brand default: none"
+                }
+                value={depositOverride}
+                onChange={(e) => setDepositOverride(e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-zinc-400">
+                Leave blank to use the brand&apos;s default at send time. Set to 0
+                to waive the deposit on this invoice only.
+              </p>
             </div>
           </div>
         </div>

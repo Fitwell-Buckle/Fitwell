@@ -19,6 +19,9 @@ export function InvoiceActions({
   paidAt,
   depositPaidAt,
   balancePaidAt,
+  projectedDepositPercent,
+  projectedDepositCents,
+  totalCents,
 }: {
   invoiceId: string;
   canPushShopify: boolean;
@@ -32,6 +35,13 @@ export function InvoiceActions({
   paidAt: string | null;
   depositPaidAt: string | null;
   balancePaidAt: string | null;
+  /** Effective deposit % at send time (invoice override or brand default).
+   *  Used to show the projection on drafts before any snapshot exists. */
+  projectedDepositPercent: number | null;
+  /** Projected deposit amount in cents at send time. */
+  projectedDepositCents: number;
+  /** Full invoice total — used to compute the projected balance. */
+  totalCents: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<null | "fulfill" | "deposit" | "balance">(null);
@@ -82,9 +92,49 @@ export function InvoiceActions({
   // status flip. Show a simple paid indicator above the (now hidden) link.
   const fullPaymentPaid = depositCents === 0 && isFullyPaid;
 
+  const isDraft = status === "draft";
+  const projectedBalanceCents = Math.max(0, totalCents - projectedDepositCents);
+
   return (
     <Card className="mt-5 p-6">
-      <h2 className="text-sm font-semibold text-zinc-900">Collect Payment</h2>
+      <h2 className="text-sm font-semibold text-zinc-900">
+        {isDraft ? "Payment preview" : "Collect Payment"}
+      </h2>
+
+      {/* Draft: show what the customer will see when sent. Nothing is collectable
+       *  yet, so no mark-paid buttons — purely informational. Hidden once sent. */}
+      {isDraft && (
+        <div className="mt-4 space-y-1 rounded-lg border border-dashed border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
+          <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+            When this invoice is sent
+          </div>
+          {projectedDepositCents > 0 ? (
+            <>
+              <div>
+                Deposit due up front
+                {projectedDepositPercent != null
+                  ? ` (${projectedDepositPercent}%)`
+                  : ""}
+                : <span className="font-medium text-zinc-900">{fmtMoney(projectedDepositCents)}</span>
+              </div>
+              <div>
+                Balance billed on fulfillment:{" "}
+                <span className="font-medium text-zinc-900">
+                  {fmtMoney(projectedBalanceCents)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div>
+              Single payment of{" "}
+              <span className="font-medium text-zinc-900">
+                {fmtMoney(totalCents)}
+              </span>{" "}
+              due on send.
+            </div>
+          )}
+        </div>
+      )}
 
       {depositCents > 0 && (
         <div className="mt-4 space-y-2 rounded-lg border border-zinc-100 bg-zinc-50 p-3 text-sm">

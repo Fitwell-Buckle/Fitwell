@@ -123,6 +123,27 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
 
       <div className="mt-8 border-t border-zinc-200 pt-4 text-sm">
         <div className="text-xs uppercase tracking-wider text-zinc-400">Payment</div>
+        {(() => {
+          // Effective deposit terms at print time: an explicit per-invoice
+          // override (snapshotted at send) wins; otherwise fall back to the
+          // brand's current default so drafts/previews also show terms.
+          const pct =
+            inv.depositPercent ?? inv.company?.depositPercent ?? 0;
+          if (pct <= 0) return null;
+          const depositCents =
+            inv.depositCents > 0
+              ? inv.depositCents
+              : Math.round((inv.totalCents * pct) / 100);
+          const balanceCents = Math.max(0, inv.totalCents - depositCents);
+          return (
+            <p className="mt-1 text-zinc-700">
+              A <span className="font-semibold">{pct}% deposit</span> (
+              {fmtMoney(depositCents)}) is due now via the payment link. The
+              remaining balance ({fmtMoney(balanceCents)}) will be billed when
+              your order is fulfilled.
+            </p>
+          );
+        })()}
         {inv.shopifyInvoiceUrl && (
           <p className="mt-1 text-zinc-700">
             Pay online (Apple Pay, PayPal, card):{" "}

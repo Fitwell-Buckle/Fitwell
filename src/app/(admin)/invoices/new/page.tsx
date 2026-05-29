@@ -90,6 +90,9 @@ export default async function NewInvoicePage({
         companyId: po.companyId ?? "",
         companyName: po.company?.name ?? "",
         tierDiscount: po.company?.priceTier?.discountPercent ?? 0,
+        // Inherit the brand's default deposit at send time; let the user
+        // override in the form if they want a one-off value.
+        depositPercent: null,
         issuedDate: new Date().toISOString().slice(0, 10),
         dueDate: "",
         notes: "",

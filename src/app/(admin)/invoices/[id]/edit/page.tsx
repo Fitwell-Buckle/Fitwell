@@ -79,6 +79,8 @@ export default async function EditInvoicePage({
     companyId: inv.companyId,
     companyName: inv.company?.name ?? "—",
     tierDiscount: inv.discountPercent ?? 0,
+    // Existing per-invoice override (null = inherit brand at send time).
+    depositPercent: inv.depositPercent,
     issuedDate: inv.issuedDate,
     dueDate: inv.dueDate ?? "",
     notes: inv.notes ?? "",

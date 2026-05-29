@@ -68,7 +68,11 @@ export async function POST(
 
   // Deposit terms (snapshot from the brand). When a deposit applies, the
   // payment link bills only the deposit now; the balance is billed at fulfillment.
-  const depositPercent = inv.company?.depositPercent ?? 0;
+  // Deposit %: invoice override wins, otherwise the brand's default. Lets an
+  // admin set a one-off deposit for a specific invoice (0% to waive, or a
+  // higher % for risk) without changing the brand's default.
+  const depositPercent =
+    inv.depositPercent ?? inv.company?.depositPercent ?? 0;
   const split = computeDeposit(inv.totalCents, depositPercent);
   const hasDeposit = split.depositCents > 0 && split.balanceCents > 0;
   if (depositPercent > 0) {
