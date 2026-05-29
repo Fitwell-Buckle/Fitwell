@@ -1,24 +1,25 @@
 # Components
 
-Last updated: 2026-05-23
+Last updated: 2026-05-28
 
 ## UI Primitives (`components/ui/`)
 
-Radix UI + Tailwind CSS. Styled with `class-variance-authority` for variants.
+Radix UI + Tailwind CSS. Styled with `class-variance-authority` (`button`) or hand-rolled Tailwind. Only the components actually in the repo are listed.
 
-| Component | Radix Primitive | Variants |
-|-----------|----------------|----------|
-| `button` | Slot | default, destructive, outline, secondary, ghost, link + sizes |
-| `card` | — | card, card-header, card-title, card-description, card-content, card-footer |
-| `dialog` | Dialog | — |
-| `dropdown-menu` | DropdownMenu | — |
-| `input` | — | default |
-| `label` | Label | — |
-| `select` | Select | — |
-| `separator` | Separator | — |
-| `tabs` | Tabs | — |
-| `tooltip` | Tooltip | — |
-| `table` | — | table, table-header, table-body, table-row, table-head, table-cell |
+| Component | Backed by | Notes |
+|---|---|---|
+| `button` | Radix Slot (for `asChild`) | Variants: default, destructive, outline, secondary, ghost. Sizes: default, sm, lg, icon |
+| `card` | — | Simple `<Card>` wrapper with rounded border + bg + padding |
+| `badge` | — | Status / pill labels |
+| `input` | — | Standard form input |
+| `table` | — | `<Table>` / `<TableHeader>` / `<TableBody>` / `<TableRow>` / `<TableHead>` / `<TableCell>` |
+| `data-table` | — | `<DataTable>` chrome (filter chips, summary) + `<Mono>` helper, wraps `<Table>` |
+| `page-header` | — | Page title strip |
+| `tabs` | `@radix-ui/react-tabs` | Underline-on-active tab strip — `<Tabs>` / `<TabsList>` / `<TabsTrigger>` / `<TabsContent>`. **New 2026-05-28** |
+| `detail-tabs` | composes `tabs` | `<DetailTabs tabs={[{ value, label, content }, …]} />` — generic wrapper used by the PO and invoice detail pages for their reference / history sections. **New 2026-05-28** |
+| `modal` | `@radix-ui/react-dialog` | Controlled dialog with title/description/X-close. Used by `delete-button` for the confirm step |
+| `delete-button` | composes `button` + `modal` | `<DeleteButton entityKind entityLabel deleteUrl redirectTo? iconOnly? />` — confirmation modal calls out that linked Shopify draft orders are NOT auto-revoked. Used on PO/invoice detail headers and the influencer tracking-table per row. **New 2026-05-28** |
+| `tooltip` | `@radix-ui/react-tooltip` | Hover help text |
 
 ## Layout (`components/layout/`)
 
@@ -69,7 +70,28 @@ unit-tested); display helpers in `lib/production/display.ts`.
 |-----------|-------|
 | `po/new/po-form` | Create-PO form with dynamic line-item rows |
 | `po/[id]/po-controls` | Line-item table, stage advance, status + lock toggles |
+| `po/[id]/po-stage-timeline` | Per-line-item stage-event timeline (used in the Progress tab) |
+| `po/[id]/sub-po-covers` | Sub-PO covers cell — `r.covers` is `{ sku, title }[]` so raw-blank suppliers see the finished SKUs *and* their product titles (not just bare codes) |
 | `suppliers/supplier-manager` | Supplier list with inline create/edit forms |
+| `components/production/supplier-form` | Shared create/edit supplier form; includes `<GmailContactSearch>` above the contact email field — pick fills email and, if blank, contact name |
+| `components/production/supplier-logins` | Authorized-logins (magic-link allowlist) card on the supplier detail page; uses the same `<GmailContactSearch>` |
+| `components/production/po-timeline` | Unified notes + documents feed (admin + supplier sides) |
+| `components/production/gmail-contact-search` | Reusable Gmail-search affordance — `<GmailContactSearch onPick={…} />`. Hits `GET /api/gmail/search?q=…`. Renders an input + button + results list (email, parsed name, snippet). Self-clears after a pick. Surfaces friendly errors inline. **New 2026-05-28** |
+
+## Invoicing Module (`app/(admin)/invoices/`, `components/invoicing/`)
+
+Invoice detail page composes inline cards (header, metadata, line items) with a
+`<DetailTabs>` (Attachments / Linked POs / History) for reference content;
+`<InvoiceActions>` stays inline above the tabs as the payment-collection
+surface.
+
+| Component | Usage |
+|-----------|-------|
+| `invoices/invoice-form` | Create/edit invoice form. Includes a "Deposit % (optional override)" field — leave blank to inherit the brand's default at send time, set 0 to waive, set a number to override on this invoice only. **2026-05-28** |
+| `invoices/[id]/invoice-actions` | The "Collect Payment" card. For drafts, renders a separate "Payment preview" block showing the projected deposit/balance breakdown (using `invoice.deposit_percent ?? company.deposit_percent`) — no buttons. For sent/partial: deposit row + balance row with mark-paid buttons. **2026-05-28** |
+| `invoices/[id]/invoice-document` | The shared printable document (used by `/print` and `/send`). Includes a deposit terms paragraph in the Payment block when an effective deposit applies (so the customer reads it on the document, not just on the screen). **2026-05-28** |
+| `invoices/[id]/invoice-status-select` | Status dropdown on the detail page header |
+| `components/invoicing/invoice-attachments` | Customer-document upload UI (Vercel Blob). Self-wraps in a `<Card>` so it composes uniformly inside `<DetailTabs>` |
 
 ## SEO (`components/seo/`)
 

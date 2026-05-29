@@ -1,6 +1,6 @@
 # Database Schema
 
-Last updated: 2026-05-23
+Last updated: 2026-05-28
 
 ## Design Principles
 
@@ -51,6 +51,28 @@ Synced from Shopify. One row per Shopify customer.
 | `created_at` | timestamptz | |
 | `updated_at` | timestamptz | |
 | `synced_at` | timestamptz | Last Shopify sync time |
+
+### `customer_address`
+
+Shopify customer addresses (multiple per customer — Shopify returns
+`default_address` + an `addresses[]` array). Populated by the customer sync;
+**delete-and-replace** on every `upsertCustomer` call so Shopify stays
+authoritative. Backfilled via `scripts/backfill-customer-addresses.ts`.
+Surfaced on the B2B customer page (`/customers/brands/[id]`), default first.
+Migration `0022_opposite_ink`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `customer_id` | text | FK → `customer` (cascade delete) |
+| `shopify_address_id` | text | Shopify's address id (nullable for synthetic rows) |
+| `first_name` / `last_name` / `company` | text | All nullable |
+| `address1` / `address2` | text | Nullable |
+| `city` / `province` / `province_code` | text | Nullable |
+| `country` / `country_code` | text | Nullable |
+| `zip` / `phone` | text | Nullable |
+| `is_default` | boolean | True for the entry matching `customer.default_address.id` |
+| `created_at` / `updated_at` | timestamp | Defaults now |
 
 ### `order`
 
@@ -395,6 +417,30 @@ holds the blob URL + metadata.
 
 Nullable text column added to `user`; set for users with `role='supplier'` so the
 supplier portal can scope queries to their own POs (Phase 3).
+
+## B2B Invoicing
+
+The invoice document for a B2B order. Created either manually (Customers →
+B2B Orders → New invoice) or generated from a production PO. Two-payment
+deposit billing is built in (see `company.deposit_percent` above and
+`computeDeposit()` in `lib/invoicing/invoicing.ts`). Sending an invoice
+emails it via Resend and — when the brand is linked to a Shopify customer
+and the app has `write_draft_orders` — pushes a Shopify draft order whose
+hosted invoice URL is the customer's payment link.
+
+| Table | Key columns |
+|-------|-------------|
+| `invoice` | `invoice_number` ("INV-00100", from `invoice_number_seq`), `company_id` (FK), `source_po_id?` (FK → production_po, links a PO-generated invoice), `status` (draft\|sent\|partial\|paid\|void), `issued_date`, `due_date?`, `subtotal_cents`, `discount_percent` (snapshotted at creation), `discount_cents`, `total_cents`, `deposit_percent?` / `deposit_cents` (per-invoice override; `null` = inherit `company.deposit_percent` at send time; snapshotted onto the invoice by `snapshotInvoiceDeposit` so terms don't drift if the brand default changes), `shopify_draft_order_id?` / `shopify_invoice_url?` (primary pay link — deposit's draft order when a deposit applies, else the full draft order), `shopify_balance_draft_order_id?` / `shopify_balance_invoice_url?` (second draft order created when marked fulfilled), `sent_at?`, `fulfilled_at?`, `paid_at?`, `deposit_paid_at?`, `balance_paid_at?` (granular vs. coarse status), `notes?` |
+| `invoice_line_item` | `invoice_id` (FK, cascade), `sku`, `title`, `quantity`, `unit_price_cents` (retail), `shopify_product_id?`, `shopify_variant_id?` |
+| `invoice_attachment` | `invoice_id` (FK, cascade), `blob_url`, `filename`, `content_type?`, `size_bytes?`, `uploaded_by_user_id?` — customer-supplied documents (e.g. their PDF purchase order) stored in Vercel Blob. Migration `0020_curvy_starfox` |
+
+Per-invoice deposit override (the optional `depositPercent` on
+create/update): `null` = inherit the brand's default at send; any number
+including `0` = explicit override for this invoice only (waive, or set
+higher for risk). The send route prefers `invoice.deposit_percent` over
+`company.deposit_percent`; the edit form pre-fills from the invoice's
+current value and the printable invoice document (`/print`, `/send`) shows
+the resulting deposit terms paragraph using whichever applies.
 
 ## Influencer Tracking
 

@@ -1,6 +1,6 @@
 # Shopify App Configuration
 
-Last updated: 2026-05-26
+Last updated: 2026-05-28
 
 How we change the Shopify app — scopes, embed flag, app URL, declared webhooks. For *runtime* Shopify integration (endpoints, sync, webhook verification), see [integrations.md](integrations.md).
 
@@ -115,6 +115,10 @@ If we ever do automate it, a GitHub Action triggered by `paths: [shopify.app.tom
 ## Open scope questions
 
 - **Store brand logo (`shop.brand.logo`).** Currently behind a fallback. `read_content` is in the toml as of 2026-05-26 on the theory it gates the `brand` field. If the logo still doesn't appear after merchant re-auth, try `read_online_store_pages` in a follow-up round and remove `read_content` if it's not actually doing anything.
+
+## Recently resolved
+
+- **`write_draft_orders` grant (2026-05-28).** The toml had it from 2026-05-26 but version `fitwell-admin-7` is the first released version that includes it. Merchant approved the "update permissions" banner on 2026-05-28; a `client_credentials` token exchange confirms `write_draft_orders` (plus `read_content`, `write_inventory`) is now in the granted scope set. Production was redeployed immediately to flush the 24h cached token on warm Vercel instances. End-to-end verified: a B2B invoice send creates the deposit draft order + payment link and stops hard-failing with 409. The same scope also unblocks the deposit/balance flow and influencer-gifting draft orders.
 
 ## Useful URLs
 

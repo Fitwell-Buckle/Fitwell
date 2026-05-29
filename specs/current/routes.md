@@ -1,6 +1,6 @@
 # Routes
 
-Last updated: 2026-05-23
+Last updated: 2026-05-28
 
 ## (marketing) — Public Pages
 
@@ -129,6 +129,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/production/po/[id]/comments` | Add a note to a PO. Notifies the other party — an internal note emails the supplier + adds a supplier-portal notification; a supplier note emails Fitwell + adds an admin notification |
 | POST | `/api/production/po/[id]/attachments` | Upload a document to a PO (Vercel Blob; multipart). Notifies the other party (same routing as notes) |
 | DELETE | `/api/production/attachments/[id]` | Delete an attachment (blob + row) |
+| DELETE | `/api/production/po/[id]` | Hard-delete a PO and its dependents (line items, stage events, costs, attachments, comments, sub-POs) via schema FK cascade; admin-only. Confirmation required in UI. Linked Shopify drafts / invoices are NOT auto-revoked |
 | POST | `/api/production/line-items/[id]/stage` | Set a line item's stage (kanban drag); locked POs move together |
 | GET | `/api/production/stages` | List the active production stages (key + label + position) for the editor |
 | PUT | `/api/production/stages` | Replace the pipeline — rename/add/delete/reorder stages. Deleting a stage with items in it requires a `{moves:{key:"forward"\|"back"}}` direction; it soft-deletes (history kept) and moves stranded line items. Admin-only. Drives the Production Summary "Setup" modal |
@@ -143,11 +144,17 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 ### Invoicing API (B2B; each handler checks `auth()`; admin-only — suppliers 403)
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/invoices` | Create an invoice (company tier discount snapshotted) |
+| POST | `/api/invoices` | Create an invoice (company tier discount snapshotted; accepts optional `depositPercent` override) |
 | PATCH | `/api/invoices/[id]` | Change status (draft → sent → paid / void) |
-| PUT | `/api/invoices/[id]` | Full edit — header + line items (blocked once paid/void) |
-| POST | `/api/invoices/[id]/send` | Email the invoice (Resend) + push a Shopify draft order with a payment link when the company is linked to a Shopify customer (`write_draft_orders`); marks "sent" |
+| PUT | `/api/invoices/[id]` | Full edit — header + line items (blocked once paid/void); accepts optional `depositPercent` override that beats the brand default at send |
+| DELETE | `/api/invoices/[id]` | Hard-delete the invoice + line items + attachments via FK cascade; admin-only; confirmation required in UI. Any linked Shopify draft order (deposit or balance) is NOT auto-revoked |
+| POST | `/api/invoices/[id]/send` | Email the invoice (Resend) + push a Shopify draft order with a payment link when the company is linked to a Shopify customer (`write_draft_orders`); marks "sent". **Blocks the send** if the payment link can't be created — 409 for missing scope, 502 for any other Shopify failure — so a linkless invoice never goes out to a Shopify-linked brand |
 | POST | `/api/invoices/[id]/create-po` | Create a draft production PO from the invoice (pick supplier) |
+| POST | `/api/invoices/[id]/fulfill` | Mark the invoice fulfilled; if a deposit was taken, also creates the second "balance" Shopify draft order for the remainder and stores `shopify_balance_draft_order_id` / `shopify_balance_invoice_url` |
+| POST | `/api/invoices/[id]/deposit-paid` | Granular: stamp `deposit_paid_at` (separate from the overall status flip) |
+| POST | `/api/invoices/[id]/balance-paid` | Granular: stamp `balance_paid_at` (separate from the overall status flip) |
+| POST | `/api/invoices/[id]/attachments` | Upload a customer document to an invoice (e.g. their PDF PO) — Vercel Blob, multipart. Returns a graceful 503 when `BLOB_READ_WRITE_TOKEN` isn't set |
+| DELETE | `/api/invoices/attachments/[id]` | Remove an invoice attachment (best-effort blob delete + always-on DB row delete) |
 | PATCH | `/api/settings/billing` | Update remittance / bank-wire details shown on invoices |
 
 ### Influencer API (each handler checks `auth()`; admin-only — suppliers/companies 403)
@@ -159,6 +166,15 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | DELETE | `/api/influencer-contacts/[id]` | Remove an influencer portal-login email |
 | POST | `/api/influencer-orders` | Create a gifting order — push a Shopify draft order at 100% off (`write_draft_orders`), record content due date + affiliate link; still records as `draft` (with a warning) if the Shopify push fails |
 | PATCH | `/api/influencer-orders/[id]` | Edit content deadline / published date / affiliate link / status |
+| DELETE | `/api/influencer-orders/[id]` | Hard-delete a gifting order + line items via FK cascade; admin-only; per-row icon button on the tracking table. Shopify gifting draft order is NOT auto-revoked |
+
+### Gmail API (admin-only)
+
+Uses the signed-in admin's stored Google OAuth access token (DrizzleAdapter's `account` row, `provider='google'`). Auto-refreshes via `refresh_token` when expired and writes the new token back. Requires the `gmail.readonly` scope on the admin's account — granted by the Google provider config in `lib/auth.ts` (`access_type: offline`, `prompt: consent`). Existing admins must sign out + back in once after the scope was added to pick it up; the `signIn` callback then force-writes the fresh tokens (NextAuth's `DrizzleAdapter` won't refresh them on re-sign-in by default).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/gmail/search?q=…` | Search the admin's mailbox for messages matching `q`, parse From/To/Cc headers, return distinct email addresses + names + most-recent-message snippet. Returns a friendly `error` string when the token's missing / scope isn't granted / Gmail API isn't enabled (caller renders inline, not as a 500) |
 
 ### Portal API (B2B; company-scoped via `role='company'`)
 | Method | Path | Description |

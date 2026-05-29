@@ -1,6 +1,6 @@
 # Integrations
 
-Last updated: 2026-05-26
+Last updated: 2026-05-28
 
 ## Shopify Admin API
 
@@ -42,6 +42,43 @@ All incoming webhooks verified via HMAC-SHA256:
 2. Upserts into `order` table on `shopify_id` conflict
 3. Recalculates customer aggregates (`order_count`, `total_spent`, `last_order_at`)
 4. Webhooks handle real-time updates between cron windows
+
+### Customer Addresses (`customer_address` table)
+`upsertCustomer` (`src/lib/shopify/sync.ts`) also calls `syncCustomerAddresses`, which **delete-and-replaces** every address from the Shopify payload (`addresses[]`, falling back to `default_address` alone if the array isn't present). Identifies the default by either `default: true` on a row or matching `default_address.id`. Surfaced on the B2B customer page (`/customers/brands/[id]`), default first. One-time backfill of all existing customers: `npx tsx scripts/backfill-customer-addresses.ts` (sequential, rate-limit-aware via the Shopify client; ~25 min for ~15K customers; idempotent).
+
+---
+
+## Gmail (admin's mailbox; per-admin OAuth)
+
+**Purpose**: Surface known contact emails when adding a supplier login / contact, so the admin doesn't have to remember an exact address.
+
+| Detail | Value |
+|---|---|
+| Library | Direct REST (`gmail.googleapis.com/gmail/v1`) — no SDK |
+| Auth | The signed-in admin's stored Google OAuth token (DrizzleAdapter's `account` row, `provider='google'`). Refreshed via `refresh_token` on demand and persisted back |
+| Scope | `https://www.googleapis.com/auth/gmail.readonly` — added to the Google provider in `src/lib/auth.ts` |
+| Server lib | `src/lib/gmail/search.ts` — `searchAdminGmailContacts(userId, query)` |
+| Parser | `src/lib/gmail/parse-addresses.ts` — pure RFC-5322-ish header parser (6 vitest cases) |
+| API route | `GET /api/gmail/search?q=…` — admin-only |
+| UI primitive | `<GmailContactSearch onPick={…} />` (`src/components/production/gmail-contact-search.tsx`) — used by `SupplierForm` (Contact email field) and `SupplierLogins` (Authorized logins card) |
+
+### Auth: tokens are not auto-refreshed on subsequent sign-ins
+
+A nuance worth remembering: NextAuth's `DrizzleAdapter` only calls `linkAccount` on a user's **first** Google sign-in. Subsequent sign-ins just create a session — they do not refresh `access_token` / `refresh_token` / `scope` / `expires_at`. So adding a scope to the Google provider config silently fails to apply to already-linked admins. The `signIn` callback in `src/lib/auth.ts` works around this by force-writing the fresh tokens onto the `account` row on every Google sign-in.
+
+After this fix lands, any future scope addition takes effect with one sign-out + sign-in per admin. Before it, scope additions are stuck forever on existing admins.
+
+### Setup: enable the Gmail API on the OAuth client's GCP project
+
+When a fresh token tries its first call, Google returns:
+
+> "Gmail API has not been used in project <project_number> before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=<n> then retry."
+
+The project is the one tied to `AUTH_GOOGLE_ID` (separate from `fitwell-496020` used by the Google Ads / GA4 service account; the OAuth client's project is owned by whoever set up `AUTH_GOOGLE_ID` originally). Once enabled, the call returns results within a minute or two.
+
+### Diagnostic: confirm a stored token is actually usable
+
+If the UI returns "Gmail search failed (403)" with the token present and scope granted, the most likely cause is "Gmail API not enabled on the OAuth project." A one-shot probe (bypasses the app — direct token → Gmail API) lives in the session transcript; tl;dr: pull the token from the `account` row for `provider='google'`, then `curl https://gmail.googleapis.com/gmail/v1/users/me/messages?q=test -H "Authorization: Bearer $token"`. Google's response body names the missing API directly.
 
 ---
 
@@ -158,12 +195,41 @@ Daily cron at 06:45 UTC:
 
 | Detail | Value |
 |--------|-------|
-| From address | `hello@fitwellbuckle.co` |
-| Auth | `RESEND_API_KEY` |
+| Verified domain | `portal.fitwellbuckle.co` |
+| `EMAIL_FROM` (Vercel prod) | `Fitwell Buckle Co. <info@portal.fitwellbuckle.co>` |
+| `RESEND_API_KEY` | Set in Vercel prod; if missing, every sender's `process.env.RESEND_API_KEY` check fails and the call is logged to the server console instead of sending (deliberate dev fallback) |
+| Server entry | `src/lib/email/resend.ts` — `sendEmail({ to, subject, html, … })` thin wrapper around the Resend SDK |
 
-### Use Cases
-- Admin notifications (sync failures, anomaly alerts)
-- Future: post-purchase emails, review requests
+### Use Cases (all live)
+- **Supplier-portal magic-link sign-in** (`src/lib/email/magic-link.ts`)
+- **PO handoff + activity notifications** (`src/lib/production/notifications.ts`) — stage handoff, note/document posts; routed to admins for supplier-side actions, to supplier contacts for internal posts
+- **B2B invoice send** (`src/app/api/invoices/[id]/send`) — emails the invoice document; CC'd to the sending admin
+- **Production deadline alert cron** (`src/app/api/cron/production-deadline-alerts`)
+- Future: post-purchase emails, review requests (deferred)
+
+### Watchpoints
+- Brand-new sending domains often land in spam for the first while; check the Resend dashboard's Emails log to confirm "Delivered" before debugging the app
+- `EMAIL_FROM` must be on the verified domain. The code defaults to `hello@fitwellbuckle.co` if unset, which is the apex domain (not verified) — sends would be rejected; we explicitly set `EMAIL_FROM` in Vercel to the `portal.` subdomain to avoid this
+
+---
+
+## Vercel Blob
+
+**Purpose**: File storage for customer- and PO-attached documents.
+
+| Detail | Value |
+|--------|-------|
+| Store name | `fitwell-attachments` (Vercel → Storage → Blob; team `fitwellbuckle`) |
+| Access | `public` (per-blob URLs use `addRandomSuffix: true` so they're not enumerable) |
+| Region | `iad1` (US East, matches the Neon DB region) |
+| Auth | `BLOB_READ_WRITE_TOKEN` (auto-injected when the store is connected to a project environment) |
+| SDK | `@vercel/blob` |
+
+Used by:
+- `POST /api/production/po/[id]/attachments` and `POST /api/invoices/[id]/attachments` for uploads
+- `DELETE /api/production/attachments/[id]` and `DELETE /api/invoices/attachments/[id]` for removals (best-effort blob delete + always-on DB row delete)
+
+Upload routes return a clean **503 "Blob storage not configured"** when `BLOB_READ_WRITE_TOKEN` is missing — the feature degrades gracefully rather than crashing. Same env-var name in dev `.env.local` (the `vercel blob create-store` CLI writes it there automatically when run from a linked project).
 
 ---
 

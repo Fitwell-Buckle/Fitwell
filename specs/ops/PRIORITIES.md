@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-05-27
+Last updated: 2026-05-28
 
 ## Current Strategic Focus (2026-05-25)
 
@@ -53,16 +53,11 @@ Every unknown above is an opportunity. The goal of instrumentation is to convert
 
 ## Blockers
 
-### ⚠️ Shopify `write_draft_orders` declared but not granted (2026-05-27)
+_None active. See "Recently resolved" below._
 
-`write_draft_orders` is in `shopify.app.toml` (added 2026-05-26, on `main`) but the **installed app's token doesn't have it yet** — declaring a scope doesn't grant it, so Shopify returns access-denied. Confirmed live-blocking on 2026-05-27: a production B2B invoice send emailed fine but reported `Shopify draft order skipped — grant write_draft_orders and re-authorize`, so the invoice went out **with no payment link**. The same scope gates the deposit/balance billing flow and influencer gifting draft orders (workstream 8) — all of it is stuck until this is granted.
+### Recently resolved
 
-**Fix — operational, not a code change** (full workflow in `specs/current/shopify-app-config.md`):
-1. **Greg** (Shopify CLI, his laptop): `shopify app deploy` → `shopify app release --version <name> --allow-updates`. Check the [Versions list](https://dev.shopify.com/dashboard/75387489/apps/360915140609/versions) first — a released version may already include the scope, in which case skip to step 2.
-2. **Store owner** re-authorizes: Shopify Admin → Apps → Fitwell Admin → approve the "update permissions" banner. Until approved, the scope stays *declared but not granted*.
-3. Re-test an invoice send — the Shopify draft order + payment link should now create.
-
-**Owner:** Greg (deploy/release) + store owner (merchant re-auth).
+- **Shopify `write_draft_orders` granted (2026-05-28)** — Oliver ran `shopify app deploy` + `shopify app release` (version `fitwell-admin-7`), then re-authorized the install from Shopify Admin. Token-exchange now returns all 11 declared scopes. Prod was redeployed to flush the cached 24h Shopify token so warm Vercel instances pick up the new scope immediately. Unblocked: B2B invoice payment links, deposit/balance flow, influencer gifting draft orders.
 
 ---
 
@@ -186,7 +181,7 @@ Deferred — Shopify is the primary web property for now. Decision logged in `sp
 **Source of truth**: `specs/work-plans/todo/resend-email-integration.md`
 **Owner**: Greg
 
-Transactional email is **live in production** as of 2026-05-27 — `RESEND_API_KEY` + `EMAIL_FROM` (`Fitwell Buckle Co. <info@portal.fitwellbuckle.co>`, on the verified `portal.fitwellbuckle.co` domain) set in Vercel and deployed. Powers supplier magic-link sign-in, PO handoff/activity notifications, invoice sends, and the deadline-alert cron. Verified by a production invoice send that emailed successfully. (Invoice *payment links* are a separate matter — still blocked by the `write_draft_orders` scope; see Blockers.) Digest/analytics emails remain low priority until the analytics pipeline is feeding data.
+Transactional email is **live in production** as of 2026-05-27 — `RESEND_API_KEY` + `EMAIL_FROM` (`Fitwell Buckle Co. <info@portal.fitwellbuckle.co>`, on the verified `portal.fitwellbuckle.co` domain) set in Vercel and deployed. Powers supplier magic-link sign-in, PO handoff/activity notifications, invoice sends, and the deadline-alert cron. Invoice *payment links* started working 2026-05-28 once `write_draft_orders` was granted (see Blockers → Recently resolved). Digest/analytics emails remain low priority until the analytics pipeline is feeding data.
 
 ### 8. 🔨 Influencer Tracking (phase 1 — admin-managed)
 **Last worked**: 2026-05-25
@@ -207,7 +202,7 @@ deadline. Styled to mirror the B2B Orders/Brands system. Pricing = **gifting
 **Remaining / handoff**:
 - [ ] **Migration-history reconciliation (carryover from the main-merge consolidation).** `drizzle-kit migrate` fails on this branch with `type "production_stage" already exists` — the DB physically has everything through `0010`, but drizzle's `__drizzle_migrations` table doesn't recognize the consolidated `0010` file, so it re-runs it. This blocks **any** `db:migrate` here and on production. Needs a deliberate reconciliation with Greg (consistent across all dev branches + prod).
 - [ ] **NOTE for that reconciliation:** Oliver's dev branch (`ep-icy-lake-aqix27gq`) already has the influencer tables created **directly** (via `/tmp/apply-influencer-tables.mjs`, bypassing drizzle tracking) to unblock local work. So `0011_sour_junta` is applied in the DB but **not recorded** in `__drizzle_migrations` — the reconciliation must mark it applied (or it'll try to recreate and fail with "already exists").
-- [ ] Grant Shopify `write_draft_orders` scope so gifting draft orders actually push (otherwise orders still save as `draft` with a warning)
+- [x] Grant Shopify `write_draft_orders` scope so gifting draft orders actually push — granted 2026-05-28 (see Blockers → Recently resolved)
 - [ ] **Phase 2 (next chunk): self-serve influencer portal** — `role='influencer'`, magic-link login (`influencer_contact` allowlist), browse only assigned collections, enter publish date at checkout
 
 ---
