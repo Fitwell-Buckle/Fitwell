@@ -178,7 +178,7 @@ Deferred — Shopify is the primary web property for now. Decision logged in `sp
 
 ### 7. 🔨 Resend Email Integration (transactional live; digests deferred)
 **Last worked**: 2026-05-27
-**Source of truth**: `specs/work-plans/todo/resend-email-integration.md`
+**Source of truth**: `specs/work-plans/completed/resend-email-integration.md`
 **Owner**: Greg
 
 Transactional email is **live in production** as of 2026-05-27 — `RESEND_API_KEY` + `EMAIL_FROM` (`Fitwell Buckle Co. <info@portal.fitwellbuckle.co>`, on the verified `portal.fitwellbuckle.co` domain) set in Vercel and deployed. Powers supplier magic-link sign-in, PO handoff/activity notifications, invoice sends, and the deadline-alert cron. Invoice *payment links* started working 2026-05-28 once `write_draft_orders` was granted (see Blockers → Recently resolved). Digest/analytics emails remain low priority until the analytics pipeline is feeding data.

@@ -1,6 +1,6 @@
 # Data Flows
 
-Last updated: 2026-05-07
+Last updated: 2026-05-28
 
 ## Overview
 
@@ -59,11 +59,14 @@ Last updated: 2026-05-07
 1. Shopify fires webhook on `orders/create`, `orders/updated`, `customers/update`
 2. Webhook handler verifies HMAC signature
 3. Upserts order/customer into database
-4. Cron job catches anything webhooks missed (pagination through recent updates)
-5. Customer aggregates recalculated on each sync
-6. Admin dashboard queries these tables for customer list, order list, individual customer views
+4. `upsertCustomer` also calls `syncCustomerAddresses` — delete-and-replaces every row in `customer_address` for that customer from the Shopify payload's `addresses[]` (falls back to `default_address` alone if the array isn't present)
+5. Cron job catches anything webhooks missed (pagination through recent updates)
+6. Customer aggregates recalculated on each sync
+7. Admin dashboard queries these tables for customer list, order list, individual customer views; B2B brand page (`/customers/brands/[id]`) reads `customer_address` for the linked customer
 
 **Latency**: Real-time via webhooks, max 2h gap filled by cron
+
+**Backfill**: `scripts/backfill-customer-addresses.ts` re-fetches every existing customer from Shopify so the new `customer_address` table catches up on legacy data — sequential, rate-limit-aware, idempotent (~25 min for ~15K customers).
 
 ## Flow 2: Landing Pages → Attribution
 
@@ -91,7 +94,27 @@ Last updated: 2026-05-07
 
 **Latency**: Daily data available by ~7:30 UTC; PostHog data within 3h
 
-## Flow 4: Unified Dashboard Views
+## Flow 4: B2B Invoice → Shopify Draft Order → Customer Payment
+
+**Trigger**: Admin clicks Print & Send on an invoice for a Shopify-linked brand
+
+1. Admin opens `/invoices/[id]/send`, optionally edits the To address + message
+2. Send route reads the effective deposit % (per-invoice override `invoice.deposit_percent` if set, else `company.deposit_percent`)
+3. `snapshotInvoiceDeposit` stamps `deposit_percent` + computed `deposit_cents` onto the invoice so terms are frozen
+4. `createDraftOrderInvoice` (`lib/shopify/client.ts`) is called with either the real line items (no-deposit case) **or** a single "Deposit (X%)" custom line at the deposit amount (deposit case) — requires the `write_draft_orders` scope on the granted app token
+5. Shopify creates a draft order; `draftOrderInvoiceSend` triggers Shopify's hosted-invoice email to the customer with a pay link
+6. Resend sends Fitwell's own branded invoice email (`buildInvoiceEmailHtml`), CC'd to the sending admin
+7. Customer pays the Shopify hosted invoice → Shopify completes the draft order → fires `orders/create` → our webhook upserts a real Order row
+8. Later: admin clicks Fulfill (`POST /api/invoices/[id]/fulfill`). If a deposit was taken, `markInvoiceFulfilled` creates a **second** Shopify draft order for the balance (custom line "Balance due — INV-N") and stores `shopify_balance_draft_order_id` / `shopify_balance_invoice_url`. That balance pay link is emailed to the customer
+9. Deposit/balance can be marked paid granularly via `POST /api/invoices/[id]/deposit-paid` and `.../balance-paid`, or coarsely by flipping the status dropdown to "paid"
+
+**Blocking semantics**: If step 4 fails (e.g. `write_draft_orders` not granted), the route returns 409 (scope) / 502 (other) and the invoice is **not** marked sent and **not** emailed — avoids handing a Shopify-linked customer a linkless invoice. For brands not linked to a Shopify customer, the invoice emails normally with no pay link.
+
+**Two-orders nuance**: A deposit-split invoice produces **two** Shopify orders (deposit + balance), each a custom-money line — neither carries the real product SKUs/variants. No-deposit invoices produce one draft order with the real line items.
+
+**Gap (not yet automated)**: `deposit_paid_at` is never written by `upsertOrder` — the webhook doesn't match the deposit payment back to the source invoice. Currently the only signal is the admin manually marking it paid.
+
+## Flow 5: Unified Dashboard Views
 
 **Consumers**: Admin dashboard pages
 

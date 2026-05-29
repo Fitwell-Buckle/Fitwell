@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-05-07
+Last updated: 2026-05-28
 
 ## Tech Stack
 
@@ -8,18 +8,21 @@ Last updated: 2026-05-07
 |-------|-----------|-------|
 | Framework | Next.js 15 (App Router) | React 19, Turbopack dev server |
 | Language | TypeScript (strict) | `noEmit` checks via `tsc` |
-| Database | NeonDB (PostgreSQL) | Serverless Postgres, connection pooling |
+| Database | NeonDB (PostgreSQL) | Serverless Postgres, per-dev branching |
 | ORM | Drizzle ORM | Type-safe schema, migrations via `drizzle-kit` |
 | Styling | Tailwind CSS 4 | PostCSS plugin, no config file |
-| UI Primitives | Radix UI | Unstyled accessible components |
-| Auth | NextAuth v5 (beta) | Google OAuth only, admin-only access |
+| UI Primitives | Radix UI | Hand-rolled wrappers in `components/ui/` (button, card, tabs, modal, table, tooltip, badge, input, page-header, data-table, detail-tabs, delete-button) |
+| Auth | NextAuth v5 (beta) | Google OAuth (admins; now also requests `gmail.readonly`) + custom email magic-link (suppliers, B2B brands) |
 | Hosting | Vercel | Serverless functions, edge middleware, cron |
+| File storage | Vercel Blob (`fitwell-attachments`) | Customer-supplied PO/invoice docs; public URLs with random suffix |
 | Analytics | PostHog | Client + server SDKs, event tracking, feature flags |
 | Web Analytics | GA4 | Measurement Protocol + Data API extraction |
 | Search | Google Search Console | Daily keyword/page data via API |
 | Ads | Google Ads API | Campaign spend and conversion data |
-| Commerce | Shopify Admin API | REST + GraphQL, order/customer sync |
-| Email | Resend | Transactional email |
+| Commerce | Shopify Admin API | REST + GraphQL, order/customer/address sync, draft orders for B2B/influencer payment + gifting |
+| Shopify app config | `shopify.app.toml` + Shopify CLI | Scopes, embed, webhooks declared in repo; deploy/release runs from a maintainer's laptop |
+| Email | Resend | Transactional email (magic links, PO/invoice notifications, deadline alerts) |
+| Gmail (admin's mailbox) | Direct REST + admin's OAuth token | Read-only contact-search; only on explicit user query |
 | Errors | Sentry | Error reporting and performance monitoring |
 | Charts | Recharts | React charting library for dashboard |
 

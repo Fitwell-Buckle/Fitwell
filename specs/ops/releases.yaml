@@ -19,3 +19,20 @@
   notes: "NeonDB (with dev branching), Vercel, admin.fitwellbuckle.co, Google OAuth, ADMIN_EMAILS lockdown. Sentry descoped."
   artifacts:
     - specs/work-plans/completed/infrastructure-setup.md
+
+- date: "2026-05-27"
+  title: "Resend transactional email live in production"
+  priority: 7
+  notes: |
+    RESEND_API_KEY + EMAIL_FROM=Fitwell Buckle Co. <info@portal.fitwellbuckle.co>
+    set in Vercel; portal.fitwellbuckle.co verified in Resend. Powers
+    supplier-portal magic-link sign-in, PO handoff + activity notifications,
+    invoice send, and the production deadline-alert cron. Digest / analytics
+    emails (the original v1 scope) remain deferred until the analytics
+    pipeline is feeding data.
+  artifacts:
+    - specs/work-plans/completed/resend-email-integration.md
+    - src/lib/email/resend.ts
+    - src/lib/email/magic-link.ts
+    - src/lib/production/notifications.ts
+    - src/app/api/invoices/[id]/send/route.ts

@@ -1,5 +1,23 @@
 # Resend Email Integration
 
+**Status: shipped 2026-05-27.** Transactional email live in production. The
+original "v1 scope" of digest/analytics emails is deferred (low priority
+until the analytics pipeline is feeding data); what shipped:
+
+- Magic-link sign-in for the supplier portal (`src/lib/email/magic-link.ts`)
+- PO handoff + activity notifications (`src/lib/production/notifications.ts`)
+- B2B invoice send (`src/app/api/invoices/[id]/send`)
+- Production deadline-alert cron
+
+Env: `RESEND_API_KEY` + `EMAIL_FROM="Fitwell Buckle Co. <info@portal.fitwellbuckle.co>"`
+on the verified `portal.fitwellbuckle.co` domain. Senders gracefully fall back
+to `console.log` when `RESEND_API_KEY` is unset (dev mode). See
+`specs/current/integrations.md` → Resend for the live-state details.
+
+Below is the original plan, preserved for context.
+
+---
+
 ## Context
 - We need transactional email capabilities for the admin platform: alerts, reports, and operational notifications
 - Resend is our email provider (already in deps) with React Email for templates

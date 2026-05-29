@@ -1,6 +1,6 @@
 # Contributing
 
-Last updated: 2026-05-22
+Last updated: 2026-05-28
 
 Guidelines for adding new features and sections to the Fitwell admin platform. Follow these conventions to keep the codebase consistent and avoid architectural conflicts.
 
@@ -101,6 +101,18 @@ Follow the same auth + PageHeader pattern.
 | `Button` | `@/components/ui/button` | Buttons (variants: default, destructive, outline, secondary, ghost) |
 | `MetricCard` | `@/components/charts/metric-card` | KPI cards with trend indicators |
 | `Input` | `@/components/ui/input` | Text inputs |
+| `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` | `@/components/ui/tabs` | Raw Radix tab strip — underline-on-active. Use `DetailTabs` for the typical detail-page case |
+| `DetailTabs` | `@/components/ui/detail-tabs` | `<DetailTabs tabs={[{ value, label, content }]} />` — wraps `Tabs` for the PO + invoice "reference/history" sections. Action surfaces stay above the tabs |
+| `Modal` | `@/components/ui/modal` | Controlled Radix Dialog with title/description/X-close. Used by `DeleteButton` |
+| `DeleteButton` | `@/components/ui/delete-button` | Destructive action with confirm modal. `<DeleteButton entityKind entityLabel deleteUrl redirectTo? iconOnly? />`. Confirm copy warns that linked Shopify draft orders are NOT auto-revoked |
+| `Tooltip` | `@/components/ui/tooltip` | Hover help |
+| `GmailContactSearch` | `@/components/production/gmail-contact-search` | `<GmailContactSearch onPick={(m) => …} />` — hits `GET /api/gmail/search` to surface matches from the signed-in admin's mailbox. Use on any contact-email form |
+
+### Patterns for new feature pages
+
+- **Action surface stays inline; history goes in tabs.** PO detail + invoice detail both follow this: action buttons (Print & Send, Edit, Delete) and interactive components (`PoControls`, `InvoiceActions`) live above the page's `DetailTabs`. The tabs themselves are read-only / reference content.
+- **Hard delete + confirm.** Transaction entities (PO, invoice, influencer order) use the `DeleteButton` pattern: a DELETE handler whose only safety check is auth + role, relying on schema FK cascade for dependents. UI confirms with a modal that names the entity. Linked Shopify drafts are NOT auto-revoked — the confirm text says so.
+- **Block, don't silently degrade, for Shopify-linked sends.** The B2B invoice send route hard-fails with 409 (missing scope) or 502 (other Shopify failure) when the payment link can't be created for a Shopify-linked brand — instead of mailing a linkless invoice and marking it "sent". Mirror this for any future send that depends on an external integration.
 
 ### Styling
 
