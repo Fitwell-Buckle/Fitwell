@@ -3,6 +3,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { GmailContactSearch } from "./gmail-contact-search";
 
 export interface SupplierDraft {
   name: string;
@@ -52,6 +53,22 @@ export function SupplierForm({
   return (
     <Card className="p-6">
       <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
+
+      <GmailContactSearch
+        className="mt-4 rounded-md border border-zinc-100 bg-zinc-50/50 p-3"
+        label="Find this supplier in your Gmail"
+        placeholder="Supplier name, domain, or contact name"
+        onPick={(m) =>
+          setDraft({
+            ...draft,
+            contactEmail: m.email,
+            // Only fill the contact name if it's currently empty — never
+            // overwrite something the user already typed.
+            contactName: draft.contactName.trim() || m.name || "",
+          })
+        }
+      />
+
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className={fieldLabel}>Name</label>
