@@ -62,7 +62,7 @@ export default async function B2BOrdersPage({
       orderBy: desc(invoice.createdAt),
       with: {
         company: { columns: { name: true } },
-        lineItems: { columns: { sku: true } },
+        lineItems: { columns: { sku: true, quantity: true } },
       },
     }),
     db.query.productionPo.findMany({
@@ -134,6 +134,8 @@ export default async function B2BOrdersPage({
               <TableHead>Order #</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Customer</TableHead>
+              <TableHead className="text-right">Qty</TableHead>
+              <TableHead>SKUs</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Due date</TableHead>
@@ -143,7 +145,7 @@ export default async function B2BOrdersPage({
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-zinc-400">
+                <TableCell colSpan={9} className="py-8 text-center text-zinc-400">
                   No B2B orders match.
                 </TableCell>
               </TableRow>
@@ -165,6 +167,17 @@ export default async function B2BOrdersPage({
                     </TableCell>
                     <TableCell className="text-zinc-500">{fmtDate(inv.issuedDate)}</TableCell>
                     <TableCell className="text-zinc-700">{inv.company?.name ?? "—"}</TableCell>
+                    <TableCell className="text-right text-zinc-500">
+                      {inv.lineItems.reduce((s, l) => s + l.quantity, 0)}
+                    </TableCell>
+                    <TableCell
+                      className="max-w-xs font-mono text-xs text-zinc-500"
+                      title={inv.lineItems.map((l) => l.sku).join(", ")}
+                    >
+                      <div className="truncate">
+                        {inv.lineItems.map((l) => l.sku).join(", ") || "—"}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right font-medium text-zinc-900">
                       {fmtMoney(inv.totalCents)}
                     </TableCell>

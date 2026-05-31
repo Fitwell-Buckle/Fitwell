@@ -105,7 +105,10 @@ export default async function ProductionPage({
     .map((po) => ({
       ...po,
       derivedStage: derivePoStage(po.lineItems.map((li) => li.currentStage)),
-      itemCount: po.lineItems.length,
+      // Total units across all lines (not distinct-SKU count) — so a PO of 200
+      // buckles across 3 SKUs reads "200" rather than "3".
+      qtyTotal: po.lineItems.reduce((s, li) => s + li.quantity, 0),
+      skuList: po.lineItems.map((li) => li.sku).join(", "),
       isMaster: masterIds.has(po.id),
     }))
     // Date filter on the PO's issued date (matches the B2B/Influencer lists).
@@ -134,7 +137,8 @@ export default async function ProductionPage({
               <TableHead>Supplier</TableHead>
               <TableHead>Stage</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Items</TableHead>
+              <TableHead className="text-right">Qty</TableHead>
+              <TableHead>SKUs</TableHead>
               <TableHead>Issued</TableHead>
               <TableHead>Expected delivery</TableHead>
             </TableRow>
@@ -142,7 +146,7 @@ export default async function ProductionPage({
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-zinc-400">
+                <TableCell colSpan={8} className="py-8 text-center text-zinc-400">
                   No POs match. Create one to start tracking.
                 </TableCell>
               </TableRow>
@@ -177,7 +181,13 @@ export default async function ProductionPage({
                         po.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-zinc-500">{po.itemCount}</TableCell>
+                  <TableCell className="text-right text-zinc-500">{po.qtyTotal}</TableCell>
+                  <TableCell
+                    className="max-w-xs font-mono text-xs text-zinc-500"
+                    title={po.skuList}
+                  >
+                    <div className="truncate">{po.skuList || "—"}</div>
+                  </TableCell>
                   <TableCell className="text-zinc-500">
                     {fmtDate(po.issuedDate)}
                   </TableCell>

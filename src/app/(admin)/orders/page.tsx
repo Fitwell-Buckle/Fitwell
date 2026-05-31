@@ -97,6 +97,28 @@ export default async function OrdersPage({
   ]);
 
   const total = totalResult[0]?.count ?? 0;
+
+  // Line items for the current page (one extra query, cheap — capped at `limit`
+  // orders). Aggregated in JS into a {qty, skus[]} per order for the row render.
+  const pageOrderIds = orders.map((o) => o.id);
+  const lines =
+    pageOrderIds.length > 0
+      ? await db
+          .select({
+            orderId: orderLineItem.orderId,
+            sku: orderLineItem.sku,
+            quantity: orderLineItem.quantity,
+          })
+          .from(orderLineItem)
+          .where(inArray(orderLineItem.orderId, pageOrderIds))
+      : [];
+  const linesByOrder = new Map<string, { qty: number; skus: string[] }>();
+  for (const l of lines) {
+    const cur = linesByOrder.get(l.orderId) ?? { qty: 0, skus: [] };
+    cur.qty += l.quantity ?? 0;
+    if (l.sku) cur.skus.push(l.sku);
+    linesByOrder.set(l.orderId, cur);
+  }
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -139,6 +161,8 @@ export default async function OrdersPage({
               <TableHead>Order #</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Customer</TableHead>
+              <TableHead className="text-right">Qty</TableHead>
+              <TableHead>SKUs</TableHead>
               <TableHead>Total</TableHead>
               <TableHead>Financial Status</TableHead>
               <TableHead>Fulfillment</TableHead>
@@ -148,7 +172,7 @@ export default async function OrdersPage({
             {orders.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={8}
                   className="py-8 text-center text-zinc-400"
                 >
                   {status
@@ -157,7 +181,10 @@ export default async function OrdersPage({
                 </TableCell>
               </TableRow>
             ) : (
-              orders.map((o) => (
+              orders.map((o) => {
+                const li = linesByOrder.get(o.id) ?? { qty: 0, skus: [] };
+                const skuList = li.skus.join(", ");
+                return (
                 <TableRow key={o.id}>
                   <TableCell>
                     <Muted>{o.shopifyOrderNumber}</Muted>
@@ -183,6 +210,15 @@ export default async function OrdersPage({
                       "—"
                     )}
                   </TableCell>
+                  <TableCell className="text-right text-zinc-500">
+                    {li.qty}
+                  </TableCell>
+                  <TableCell
+                    className="max-w-xs font-mono text-xs text-zinc-500"
+                    title={skuList}
+                  >
+                    <div className="truncate">{skuList || "—"}</div>
+                  </TableCell>
                   <TableCell>
                     <Mono>{fmt(o.totalPrice ?? 0)}</Mono>
                   </TableCell>
@@ -193,7 +229,8 @@ export default async function OrdersPage({
                     <Badge>{o.fulfillmentStatus ?? "unfulfilled"}</Badge>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>

@@ -136,7 +136,9 @@ export function InvoiceActions({
         </div>
       )}
 
-      {depositCents > 0 && (
+      {/* Deposit/balance billing UI — only after the invoice is sent (drafts
+       *  show the Payment-preview block above instead; nothing to collect yet). */}
+      {!isDraft && depositCents > 0 && (
         <div className="mt-4 space-y-2 rounded-lg border border-zinc-100 bg-zinc-50 p-3 text-sm">
           <div className="font-medium text-zinc-900">
             Deposit billing{depositPercent ? ` — ${depositPercent}%` : ""}
