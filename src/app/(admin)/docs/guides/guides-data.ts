@@ -184,24 +184,24 @@ export const guides: Guide[] = [
   },
   {
     slug: "supplier-portal",
-    title: "What suppliers can do (portal)",
-    summary: "Share this with your suppliers so they can self-serve.",
+    title: "What you can do",
+    summary: "Everything you can do in your supplier portal.",
     category: "Suppliers",
     steps: [
       {
-        text: "Suppliers go to /supplier/login and enter their authorized email. They receive a one-time sign-in link by email.",
-        shot: "The supplier login screen.",
+        text: "Go to /supplier/login and enter your authorized email — the one your Fitwell contact added for you. You'll get a one-time sign-in link by email; click it to sign in.",
+        shot: "Your sign-in screen.",
       },
       {
-        text: "After signing in they land on their production board — a kanban that shows only the stages they own (assigned per PO) with their line items in those stages, above the list of their POs. They never see pricing, customers, or other suppliers' work.",
-        shot: "The supplier's production board — their assigned stages only.",
+        text: "After signing in you land on your production board — a kanban that shows only the stages you own (assigned per PO), with your line items in those stages, above your list of POs. You won't see pricing, customers, or other suppliers' work.",
+        shot: "Your production board — your assigned stages only.",
       },
       {
-        text: "When a supplier finishes their stage, they drag the card into the next team's column to hand it off — that advances the line and notifies Fitwell (an in-app alert on the Notifications page plus an email).",
+        text: "When you finish your stage, drag the card into the next team's column to hand it off. That advances the line and notifies Fitwell automatically (an in-app alert plus an email) — no need to message anyone.",
       },
       {
-        text: "Opening a PO, a supplier can advance its stages, add comments, and upload attachments (e.g. photos, certs). They can't edit quantities or delete anything.",
-        shot: "A PO in the supplier portal with the advance + upload controls.",
+        text: "Open any PO to advance its stages, add comments, and upload attachments (photos, certs, and the like). You can't change quantities or delete anything — reach out to your Fitwell contact if something needs to change.",
+        shot: "A PO in your portal with the advance + upload controls.",
       },
     ],
   },

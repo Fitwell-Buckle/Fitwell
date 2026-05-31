@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
 import { getCompanyScope } from "@/lib/portal/company-session";
-import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { PortalTopBar } from "./portal-top-bar";
 
 export const metadata: Metadata = {
@@ -21,14 +20,11 @@ export default async function PortalLayout({
 
   let topBar = null;
   if (scope) {
-    const [logoUrl, comp] = await Promise.all([
-      getStoreLogoUrl(),
-      db.query.company.findFirst({
-        where: eq(company.id, scope.companyId),
-        columns: { name: true },
-      }),
-    ]);
-    topBar = <PortalTopBar logoUrl={logoUrl} companyName={comp?.name ?? "Your brand"} />;
+    const comp = await db.query.company.findFirst({
+      where: eq(company.id, scope.companyId),
+      columns: { name: true },
+    });
+    topBar = <PortalTopBar companyName={comp?.name ?? "Your brand"} />;
   }
 
   return (
