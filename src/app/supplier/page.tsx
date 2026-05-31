@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import {
   derivePoStage,
+  terminalStage,
   type ProductionStage,
 } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
@@ -75,32 +76,47 @@ export default async function SupplierHomePage() {
   );
 
   // Board: only the stages this supplier owns (+ the handoff target after each),
-  // and only the line items currently sitting in their owned stages.
+  // and only the line items currently sitting in their owned stages. Exclude the
+  // terminal stage (the done-state): it has no explicit assignment so it falls
+  // back to the primary supplier, which would otherwise pad the board with a
+  // "Complete" column (and every other unowned-but-defaulted stage).
+  const terminal = terminalStage(order);
   const ownedAll = new Set<ProductionStage>();
   const handoff = new Set<ProductionStage>();
   const cards: KanbanCard[] = [];
   for (const po of pos) {
-    const owned = stagesOwnedBySupplier(order, po.stageAssignments, po.supplierId, me);
+    const owned = stagesOwnedBySupplier(
+      order,
+      po.stageAssignments,
+      po.supplierId,
+      me,
+    ).filter((s) => s !== terminal);
     const ownedSet = new Set(owned);
+    // Cards = this PO's line items currently sitting in one of the supplier's
+    // owned stages.
+    const poCards = po.lineItems.filter((li) => ownedSet.has(li.currentStage));
+    // Only POs the supplier has ACTIVE work in contribute columns. A PO where
+    // they happen to own stages but have no items there (e.g. an empty draft
+    // where they're the sole supplier, so they "own" the whole pipeline by
+    // default) would otherwise pad the board with every stage.
+    if (poCards.length === 0) continue;
     for (const s of owned) {
       ownedAll.add(s);
       const next = order[order.indexOf(s) + 1];
       if (next && !ownedSet.has(next)) handoff.add(next);
     }
-    for (const li of po.lineItems) {
-      if (ownedSet.has(li.currentStage)) {
-        cards.push({
-          id: li.id,
-          sku: li.sku,
-          title: li.title,
-          quantity: li.quantity,
-          stage: li.currentStage,
-          poId: po.id,
-          poNumber: po.shopifyPoNumber,
-          supplier: po.supplier?.name ?? "—",
-          locked: po.lockStagesTogether,
-        });
-      }
+    for (const li of poCards) {
+      cards.push({
+        id: li.id,
+        sku: li.sku,
+        title: li.title,
+        quantity: li.quantity,
+        stage: li.currentStage,
+        poId: po.id,
+        poNumber: po.shopifyPoNumber,
+        supplier: po.supplier?.name ?? "—",
+        locked: po.lockStagesTogether,
+      });
     }
   }
   const boardStages = order.filter((s) => ownedAll.has(s) || handoff.has(s));

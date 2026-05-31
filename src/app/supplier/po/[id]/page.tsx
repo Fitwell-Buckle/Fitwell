@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { derivePoStage } from "@/lib/production/stages";
+import { derivePoStage, terminalStage } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { supplierHasAnyStage, stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { subPoStageTargets } from "@/lib/production/service";
@@ -54,12 +54,18 @@ export default async function SupplierPoDetailPage({
   );
 
   // The stages this supplier owns + the handoff target, for the stage dropdown.
+  // Exclude the terminal stage (e.g. "Complete"): it's the done-state, not a
+  // workable stage, and it has no explicit assignment so it would otherwise
+  // fall back to the primary supplier and show up as a duplicate "Complete"
+  // (alongside the relabeled handoff target). The handoff target after the
+  // supplier's last work stage already renders as "Complete".
+  const terminal = terminalStage(order);
   const ownedStages = stagesOwnedBySupplier(
     order,
     po.stageAssignments,
     po.supplierId,
     scope.supplierId,
-  );
+  ).filter((s) => s !== terminal);
   // Suppliers see only their own work stages + a single "Complete" (hand off to
   // the next team) — never the next team's stage name or the kickoff state.
   const stageOptions = subPoStageTargets(order, ownedStages)
