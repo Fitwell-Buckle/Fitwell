@@ -181,4 +181,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
+  events: {
+    // The signIn callback can't stamp the role on a brand-new contact's FIRST
+    // magic-link sign-in: the user row doesn't exist yet at that point (the
+    // adapter creates it AFTER signIn returns), so its `user.id` guard skips
+    // and the user is created with the default role="user" — which the app
+    // treats as admin (full dashboard). The role only self-corrected on a
+    // SECOND sign-in. This event fires right after the adapter creates the
+    // user (id now exists), so we stamp the supplier/company role here and
+    // first-time portal users land correctly instead of in the admin app.
+    async createUser({ user }) {
+      const addr = user.email?.toLowerCase() ?? "";
+      if (!addr || !user.id) return;
+      const supplierId = await supplierIdForEmail(addr);
+      if (supplierId) {
+        await db
+          .update(userTable)
+          .set({ role: "supplier", supplierId })
+          .where(eq(userTable.id, user.id));
+        return;
+      }
+      const companyId = await companyIdForEmail(addr);
+      if (companyId) {
+        await db
+          .update(userTable)
+          .set({ role: "company", companyId })
+          .where(eq(userTable.id, user.id));
+      }
+    },
+  },
 });

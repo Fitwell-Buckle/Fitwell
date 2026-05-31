@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { supplier } from "@/lib/schema";
 import { getSupplierScope } from "@/lib/production/supplier-session";
-import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { StageLabelsProvider } from "@/components/production/stage-labels-provider";
 import { SupplierTopBar } from "./supplier-top-bar";
@@ -23,14 +22,11 @@ export default async function SupplierLayout({
 
   let topBar = null;
   if (scope) {
-    const [logoUrl, sup] = await Promise.all([
-      getStoreLogoUrl(),
-      db.query.supplier.findFirst({
-        where: eq(supplier.id, scope.supplierId),
-        columns: { name: true },
-      }),
-    ]);
-    topBar = <SupplierTopBar logoUrl={logoUrl} supplierName={sup?.name ?? "Supplier"} />;
+    const sup = await db.query.supplier.findFirst({
+      where: eq(supplier.id, scope.supplierId),
+      columns: { name: true },
+    });
+    topBar = <SupplierTopBar supplierName={sup?.name ?? "Supplier"} />;
   }
 
   const [stageLabels, stageOrder] = await Promise.all([getStageLabels(), getStageOrder()]);
