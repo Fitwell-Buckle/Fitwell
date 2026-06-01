@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionTabs } from "@/components/ui/section-tabs";
 import { DataTable } from "@/components/ui/data-table";
+import { CUSTOMERS_TABS } from "@/lib/nav-tabs";
 
 export const metadata: Metadata = {
   title: "Consumer List | Fitwell Admin",
@@ -45,7 +47,8 @@ export default async function CustomersPage({
 
   return (
     <div>
-      <PageHeader title="Consumer List" />
+      <PageHeader title="Customers" />
+      <SectionTabs tabs={CUSTOMERS_TABS} />
 
       <form action="" method="GET" className="mt-6 flex gap-2">
         <input

@@ -27,7 +27,8 @@ Radix UI + Tailwind CSS. Styled with `class-variance-authority` (`button`) or ha
 |-----------|-------|
 | `header` | Marketing site header — logo, nav, CTA |
 | `footer` | Marketing site footer — links, legal |
-| `admin-sidebar` | Dashboard sidebar navigation. Customers group now includes a top-level **Leads** entry (CRM); Marketing group includes Influencer List + Influencer Orders |
+| `admin-sidebar` | Dashboard sidebar navigation. **Customers** group: B2B Leads, Customer List, Orders. **Products** group: Purchase Orders, Supplier List, Production Summary, Product List. Marketing group: Influencer List + Orders. Settings (bottom) hosts the consolidated config |
+| `ui/section-tabs` | Client tab bar that presents paired sibling routes as tabs (active by pathname). Used to group Consumer/B2B Customers, Consumer/B2B Orders, and B2B Leads/Messages to Send under one heading without merging the pages. Tab sets live in `lib/nav-tabs.ts` |
 
 ## CRM / Leads (`app/(admin)/leads/`)
 

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionTabs } from "@/components/ui/section-tabs";
 import {
   Table,
   TableBody,
@@ -21,6 +22,7 @@ import {
   stageBadgeClass,
   stageLabel,
 } from "@/lib/crm/display";
+import { LEADS_TABS } from "@/lib/nav-tabs";
 import { LeadsFilters } from "./leads-filters";
 
 export const metadata: Metadata = {
@@ -55,7 +57,7 @@ export default async function LeadsPage({
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
-        <PageHeader title="Leads" />
+        <PageHeader title="B2B Leads" />
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm">
             <Link href="/leads/new">+ Add lead</Link>
@@ -65,6 +67,8 @@ export default async function LeadsPage({
           </Button>
         </div>
       </div>
+
+      <SectionTabs tabs={LEADS_TABS} />
 
       <LeadsFilters />
 

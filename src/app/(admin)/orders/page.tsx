@@ -17,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionTabs } from "@/components/ui/section-tabs";
+import { ORDERS_TABS } from "@/lib/nav-tabs";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 
@@ -123,8 +125,10 @@ export default async function OrdersPage({
 
   return (
     <div>
-      <PageHeader title="Consumer Orders" />
+      <PageHeader title="Orders" />
+      <SectionTabs tabs={ORDERS_TABS} />
 
+      <div className="mt-6" />
       <ListFilters />
 
       <form action="" method="GET" className="mt-4 flex gap-2 items-center">

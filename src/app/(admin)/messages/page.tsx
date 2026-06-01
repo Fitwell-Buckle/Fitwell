@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { listOutboundMessages } from "@/lib/crm/messages";
 import { leadDisplayName } from "@/lib/crm/display";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionTabs } from "@/components/ui/section-tabs";
+import { LEADS_TABS } from "@/lib/nav-tabs";
 import { MessagesList } from "./messages-list";
 
 export const metadata: Metadata = {
@@ -33,8 +35,9 @@ export default async function MessagesPage() {
 
   return (
     <div>
-      <PageHeader title="Messages to Send" />
-      <p className="mt-2 text-sm text-zinc-500">
+      <PageHeader title="B2B Leads" />
+      <SectionTabs tabs={LEADS_TABS} />
+      <p className="mt-4 text-sm text-zinc-500">
         AI-drafted follow-ups, queued after each lead is captured. Review,
         edit, then send from your email and mark them done.
       </p>

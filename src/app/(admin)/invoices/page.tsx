@@ -15,10 +15,10 @@ import { parseDateRange } from "@/lib/date-range";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
 import { getStageOrder } from "@/lib/production/stage-labels";
 import { aggregateIncoming, type IncomingLine } from "@/lib/production/inventory";
-import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { ListFilters } from "@/components/catalog/list-filters";
-import { WireInfoSetup } from "./wire-info-setup";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionTabs } from "@/components/ui/section-tabs";
+import { ORDERS_TABS } from "@/lib/nav-tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, Mono } from "@/components/ui/data-table";
@@ -57,7 +57,7 @@ export default async function B2BOrdersPage({
   );
 
   // Production lines (for ETA) + invoices.
-  const [invoices, pos, estimates, billing, order] = await Promise.all([
+  const [invoices, pos, estimates, order] = await Promise.all([
     db.query.invoice.findMany({
       orderBy: desc(invoice.createdAt),
       with: {
@@ -81,7 +81,6 @@ export default async function B2BOrdersPage({
       },
     }),
     getStageEstimates(),
-    getBillingSettings(),
     getStageOrder(),
   ]);
 
@@ -116,15 +115,15 @@ export default async function B2BOrdersPage({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="B2B Orders" />
-        <div className="flex items-center gap-2">
-          <WireInfoSetup initialWireInfo={billing?.instructions ?? ""} />
-          <Button asChild>
-            <Link href="/invoices/new">New order</Link>
-          </Button>
-        </div>
+        <PageHeader title="Orders" />
+        <Button asChild>
+          <Link href="/invoices/new">New order</Link>
+        </Button>
       </div>
 
+      <SectionTabs tabs={ORDERS_TABS} />
+
+      <div className="mt-6" />
       <ListFilters />
 
       <DataTable className="mt-4">

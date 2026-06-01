@@ -15,7 +15,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { derivePoStage } from "@/lib/production/stages";
-import { getStageLabels, getStageOrder, getStages } from "@/lib/production/stage-labels";
+import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { supplierForStage } from "@/lib/production/stage-owners";
 import { formatPoNumber } from "@/lib/production/sub-po";
 import { fmtDate } from "@/lib/production/display";
@@ -25,7 +25,6 @@ import { ListFilters } from "@/components/catalog/list-filters";
 import { ProductionViewToggle } from "../view-toggle";
 import { KanbanBoard, type KanbanCard } from "../kanban/kanban-board";
 import { ProductionTimeline } from "../production-timeline";
-import { StageSetup } from "./stage-setup";
 
 export const metadata: Metadata = {
   title: "Production Summary | Fitwell Admin",
@@ -63,7 +62,7 @@ export default async function ProductionSummaryPage({
 
   // Load all non-cancelled POs once. The Incoming Inventory view needs the full
   // set; the Board / Timeline views filter this in memory (small data set).
-  const [allPos, suppliers, estimates, stageLabels, order, stageDefs] =
+  const [allPos, suppliers, estimates, stageLabels, order] =
     await Promise.all([
       db.query.productionPo.findMany({
         where: ne(productionPo.status, "cancelled"),
@@ -80,7 +79,6 @@ export default async function ProductionSummaryPage({
       getStageEstimates(),
       getStageLabels(),
       getStageOrder(),
-      getStages(),
     ]);
 
   // Owning-supplier resolution: a stage can belong to a different supplier than
@@ -108,13 +106,6 @@ export default async function ProductionSummaryPage({
   };
 
   const allLines = allPos.flatMap((po) => po.lineItems);
-
-  // How many line items currently sit in each stage — drives the editor's
-  // "move stranded items" prompt when deleting a stage.
-  const stageCounts: Record<string, number> = {};
-  for (const li of allLines) {
-    stageCounts[li.currentStage] = (stageCounts[li.currentStage] ?? 0) + 1;
-  }
 
   // ── Incoming inventory: produced-but-not-received lines for the chosen product ──
   const incomingLines: IncomingLine[] = allLines
@@ -195,13 +186,7 @@ export default async function ProductionSummaryPage({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title="Production Summary" />
-        <div className="flex items-center gap-2">
-          <StageSetup
-            stages={stageDefs.map((s) => ({ key: s.key, label: s.label }))}
-            counts={stageCounts}
-          />
-          <ProductionViewToggle view={view} />
-        </div>
+        <ProductionViewToggle view={view} />
       </div>
 
       {view === "inventory" && (

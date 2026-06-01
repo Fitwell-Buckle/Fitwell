@@ -30,20 +30,21 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | Path | Description |
 |------|-------------|
 | `/dashboard` | Overview — revenue, orders, traffic KPIs |
-| `/leads` | CRM lead list — name/company/stage/source/captured, with filters (stage, source, status, search) |
+| `/leads` | CRM lead list ("B2B Leads") — name/company/stage/source/captured, filters (stage, source, status, search). Tabbed with Messages to Send (SectionTabs) |
 | `/leads/new` | Manual lead entry form |
 | `/leads/capture` | Mobile-first 3-mode capture: photo (Claude vision OCR), live QR (vCard / MeCard / URL → fields), or type manually |
 | `/leads/[id]` | Lead detail — editable fields with stage/persona/source pickers, "Convert to Company" (sets `companyId` + `status='converted'`; does **not** materialize a Shopify `customer` row), drop (soft-delete), card image gallery + raw OCR text |
-| `/messages` | "Messages to Send" — queue of AI-drafted follow-up emails (one per captured lead). Edit subject/body, copy, mark sent, or dismiss |
-| `/customers` | Customer list with search, filter, sort |
+| `/messages` | "Messages to Send" tab (under B2B Leads) — queue of AI-drafted follow-up emails. Edit subject/body, copy, mark sent, or dismiss |
+| `/customers` | "Customers" → **Consumer** tab: consumer list with search/filter/sort. Tabbed with B2B (SectionTabs) |
 | `/customers/[id]` | Individual customer detail — orders, LTV, attribution |
-| `/customers/companies` | B2B companies + price tiers (CRUD) |
-| `/invoices` | B2B invoice list |
+| `/customers/brands` | "Customers" → **B2B** tab: B2B companies + price tiers (CRUD) |
+| `/customers/companies` | Redirect → `/customers/brands` |
+| `/invoices` | "Orders" → **B2B** tab: B2B invoice list. Tabbed with Consumer (SectionTabs) |
 | `/invoices/new` | Create an invoice (company + line items at retail − tier) |
 | `/invoices/[id]` | Invoice detail — status, send, create-PO actions |
 | `/invoices/[id]/edit` | Edit a draft/sent invoice (company is fixed) |
 | `/invoices/[id]/print` | Printable invoice document (pay link + bank-wire remittance) |
-| `/orders` | Order list with filters |
+| `/orders` | "Orders" → **Consumer** tab: consumer order list with filters. Tabbed with B2B (SectionTabs) |
 | `/campaigns` | Campaign list — performance overview |
 | `/campaigns/[id]` | Campaign detail — spend, conversions, ROAS |
 | `/attribution` | UTM attribution analysis |
@@ -63,7 +64,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/modules/production/po/[id]/send` | Printable PO preview; email it (HTML) to the customer |
 | `/modules/production/kanban` | Kanban board — drag line items across stage columns |
 | `/modules/production/suppliers` | Supplier CRUD |
-| `/settings` | Admin settings, sync status, API health |
+| `/settings` | Admin settings (nav bottom) — env/DB info **plus** the consolidated config: wire-transfer/billing details (moved from Orders) and production-stage editor (moved from Production Summary) |
 
 ## supplier — Supplier Portal
 

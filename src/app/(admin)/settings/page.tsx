@@ -2,10 +2,14 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { customer, order, orderLineItem } from "@/lib/schema";
+import { customer, order, orderLineItem, productionPoLineItem } from "@/lib/schema";
 import { count, max } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { getBillingSettings } from "@/lib/invoicing/billing-settings";
+import { getStages } from "@/lib/production/stage-labels";
+import { WireInfoSetup } from "@/app/(admin)/invoices/wire-info-setup";
+import { StageSetup } from "@/app/(admin)/modules/production/summary/stage-setup";
 
 export const metadata: Metadata = {
   title: "Settings | Fitwell Admin",
@@ -15,14 +19,34 @@ export default async function SettingsPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
-  const [customerStats, orderStats, lineItemStats, lastOrder, lastCustomer] =
-    await Promise.all([
-      db.select({ count: count() }).from(customer),
-      db.select({ count: count() }).from(order),
-      db.select({ count: count() }).from(orderLineItem),
-      db.select({ latest: max(order.processedAt) }).from(order),
-      db.select({ latest: max(customer.updatedAt) }).from(customer),
-    ]);
+  const [
+    customerStats,
+    orderStats,
+    lineItemStats,
+    lastOrder,
+    lastCustomer,
+    billing,
+    stages,
+    stageCountRows,
+  ] = await Promise.all([
+    db.select({ count: count() }).from(customer),
+    db.select({ count: count() }).from(order),
+    db.select({ count: count() }).from(orderLineItem),
+    db.select({ latest: max(order.processedAt) }).from(order),
+    db.select({ latest: max(customer.updatedAt) }).from(customer),
+    getBillingSettings(),
+    getStages(),
+    db
+      .select({
+        stage: productionPoLineItem.currentStage,
+        n: count(),
+      })
+      .from(productionPoLineItem)
+      .groupBy(productionPoLineItem.currentStage),
+  ]);
+
+  const stageCounts: Record<string, number> = {};
+  for (const r of stageCountRows) stageCounts[r.stage] = r.n;
 
   const adminEmails = process.env.ADMIN_EMAILS ?? "Not configured";
   const customerCount = customerStats[0]?.count ?? 0;
@@ -36,6 +60,36 @@ export default async function SettingsPage() {
       <PageHeader title="Settings" />
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Wire transfer details</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-zinc-500">
+              Bank-wire remittance instructions shown on every B2B invoice
+              (print + email).
+            </p>
+            <WireInfoSetup initialWireInfo={billing?.instructions ?? ""} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Production stages</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-zinc-500">
+              Add, rename, reorder, or remove the production pipeline stages.
+            </p>
+            <StageSetup
+              stages={stages.map((s) => ({ key: s.key, label: s.label }))}
+              counts={stageCounts}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Admin Access</CardTitle>
