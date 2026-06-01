@@ -315,3 +315,96 @@ export async function draftFollowupEmail(
 }
 
 export const DRAFT_MODEL_NAME = TEXT_MODEL;
+
+// ─── Reply drafting (compose a response to an inbound email) ─────────
+
+const REPLY_TOOL_NAME = "record_reply_email";
+
+export interface DraftReplyInput {
+  // The sender we're replying to (their display name, if known).
+  contactName?: string | null;
+  // What they sent us.
+  theirSubject?: string | null;
+  theirMessage?: string | null;
+  // Who they are to us — tunes the tone.
+  relationship?: "customer" | "b2b_customer" | "lead";
+  // The Fitwell rep's name for the sign-off, if known.
+  fromName?: string | null;
+}
+
+const REPLY_SYSTEM_PROMPT = [
+  "You help Fitwell Buckle Co. (maker of precision micro-adjust watch buckles)",
+  "write a reply to an email someone sent us. Ground the reply in THEIR message",
+  "— answer what they asked or acknowledge what they said. Keep it concise,",
+  "warm and plain (under ~140 words), with one clear next step when appropriate.",
+  "Do NOT invent prices, order details, ship dates, or commitments not present in",
+  "their message — if you don't know something, say you'll check and follow up.",
+  "Address them by first name if known. Sign off from the rep's name if given,",
+  "otherwise 'The Fitwell Buckle Co. team'. `subject` should be the reply subject",
+  "(use 'Re: <their subject>' when their subject is given); `body` is plain text.",
+].join("\n");
+
+function replySummary(input: DraftReplyInput): string {
+  return [
+    `From: ${input.contactName || "(unknown)"}`,
+    `They are: ${input.relationship ?? "customer"}`,
+    `Rep's name (sign-off): ${input.fromName || "(unknown — use the team sign-off)"}`,
+    `Their subject: ${input.theirSubject || "(none)"}`,
+    "",
+    "Their message:",
+    input.theirMessage?.trim() || "(no body available — write a brief, helpful acknowledgement)",
+  ].join("\n");
+}
+
+async function callReplyOnce(input: DraftReplyInput): Promise<unknown> {
+  const result = await getAnthropic().messages.create({
+    model: TEXT_MODEL,
+    max_tokens: 1024,
+    system: REPLY_SYSTEM_PROMPT,
+    tools: [
+      {
+        name: REPLY_TOOL_NAME,
+        description: "Record the drafted reply email (subject + body).",
+        input_schema: DRAFT_TOOL_INPUT_SCHEMA,
+      },
+    ],
+    tool_choice: { type: "tool", name: REPLY_TOOL_NAME },
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Draft a reply and call ${REPLY_TOOL_NAME}.\n\n${replySummary(input)}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const toolUse = result.content.find(
+    (block) => block.type === "tool_use" && block.name === REPLY_TOOL_NAME,
+  );
+  if (!toolUse || toolUse.type !== "tool_use") {
+    throw new Error(
+      `Anthropic response did not include a ${REPLY_TOOL_NAME} tool_use block`,
+    );
+  }
+  return toolUse.input;
+}
+
+// Draft a reply to an inbound email. Retries once on validation failure.
+export async function draftReply(
+  input: DraftReplyInput,
+): Promise<FollowupEmail> {
+  let firstError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await callReplyOnce(input);
+    const parsed = FollowupEmailSchema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    if (firstError === null) firstError = parsed.error;
+  }
+  throw firstError instanceof Error
+    ? firstError
+    : new Error("draftReply: validation failed");
+}

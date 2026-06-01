@@ -225,6 +225,24 @@ export async function setLeadRepliesSeen(id: string): Promise<void> {
     .where(eq(lead.id, id));
 }
 
+// Hide a specific inbound reply (by Gmail message id) from the lead's Replies
+// tab. The email stays in Gmail — we only record that it was dismissed.
+export async function dismissLeadReply(
+  leadId: string,
+  gmailMessageId: string,
+): Promise<void> {
+  const row = await db.query.lead.findFirst({
+    where: eq(lead.id, leadId),
+    columns: { dismissedReplyIds: true },
+  });
+  const ids = row?.dismissedReplyIds ?? [];
+  if (ids.includes(gmailMessageId)) return;
+  await db
+    .update(lead)
+    .set({ dismissedReplyIds: [...ids, gmailMessageId], updatedAt: new Date() })
+    .where(eq(lead.id, leadId));
+}
+
 // Active leads with an email + an owner to check for inbound replies. Used by
 // the reply-detection cron. Capped; newest first.
 export interface ReplyCheckLead {

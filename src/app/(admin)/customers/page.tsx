@@ -16,6 +16,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { DataTable } from "@/components/ui/data-table";
 import { CUSTOMERS_TABS } from "@/lib/nav-tabs";
+import {
+  countNewCustomerMessages,
+  listCustomerMessages,
+} from "@/lib/crm/customer-messages";
+import { CustomerMessagesPanel } from "@/components/crm/customer-messages-panel";
 
 export const metadata: Metadata = {
   title: "Consumer List | Fitwell Admin",
@@ -40,15 +45,39 @@ export default async function CustomersPage({
   const page = Number(params.page) || 1;
   const search = typeof params.search === "string" ? params.search : undefined;
 
-  const { data: customers, pagination } = await getCustomers(
-    { page, limit: 20 },
-    { search },
+  const [{ data: customers, pagination }, messages, counts] = await Promise.all(
+    [
+      getCustomers({ page, limit: 20 }, { search }),
+      listCustomerMessages("consumer"),
+      countNewCustomerMessages(),
+    ],
   );
+
+  const tabs = CUSTOMERS_TABS.map((t) => ({
+    ...t,
+    dot:
+      (t.href === "/customers/brands" ? counts.b2b : counts.consumer) > 0,
+  }));
 
   return (
     <div>
       <PageHeader title="Customers" />
-      <SectionTabs tabs={CUSTOMERS_TABS} />
+      <SectionTabs tabs={tabs} />
+
+      <CustomerMessagesPanel
+        audience="consumer"
+        messages={messages.map((m) => ({
+          id: m.id,
+          threadId: m.threadId,
+          fromEmail: m.fromEmail,
+          displayName: m.displayName,
+          subject: m.subject,
+          snippet: m.snippet,
+          receivedAt: m.receivedAt ? m.receivedAt.toISOString() : null,
+          mailboxLabel: m.mailboxLabel,
+          mailboxEmail: m.mailboxEmail,
+        }))}
+      />
 
       <form action="" method="GET" className="mt-6 flex gap-2">
         <input

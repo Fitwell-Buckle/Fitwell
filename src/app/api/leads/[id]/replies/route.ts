@@ -33,10 +33,13 @@ export async function GET(
     return NextResponse.json({ data: { replies: [], mailboxes: [] } });
   }
 
-  const [replies, mailboxes] = await Promise.all([
+  const [allReplies, mailboxes] = await Promise.all([
     listInboundFromAllMailboxes(lead.email),
     listConnectedMailboxes(),
   ]);
+  // Drop replies the user dismissed from this lead's tab.
+  const dismissed = new Set(lead.dismissedReplyIds ?? []);
+  const replies = allReplies.filter((r) => !dismissed.has(r.id));
   return NextResponse.json({
     data: { replies, mailboxes: mailboxes.map((m) => m.label) },
   });

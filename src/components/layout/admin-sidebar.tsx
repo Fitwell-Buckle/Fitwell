@@ -127,6 +127,7 @@ function SidebarContent({
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [notifCount, setNotifCount] = useState(0);
   const [pendingDrafts, setPendingDrafts] = useState(0);
+  const [customerMsgs, setCustomerMsgs] = useState(0);
 
   // Unread admin-notification badge. Stays in sync three ways: on navigation,
   // when a notification is marked read elsewhere (the notifications page
@@ -166,8 +167,30 @@ function SidebarContent({
     };
   }, [pathname]);
 
+  // New (undismissed) customer messages → blue dot on the Customer group.
+  // Polls every 60s (+ on navigation) like the notification badge.
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      fetch("/api/customer-messages/count")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (active && d?.data) setCustomerMsgs(d.data.total ?? 0);
+        })
+        .catch(() => {});
+    };
+    load();
+    const poll = setInterval(load, 60_000);
+    return () => {
+      active = false;
+      clearInterval(poll);
+    };
+  }, [pathname]);
+
   // Nav hrefs that should show a blue dot.
-  const dotHrefs = new Set<string>(pendingDrafts > 0 ? ["/leads"] : []);
+  const dotHrefs = new Set<string>();
+  if (pendingDrafts > 0) dotHrefs.add("/leads");
+  if (customerMsgs > 0) dotHrefs.add("/customers/brands");
 
   function toggle(label: string, fallback: boolean) {
     setOpen((o) => ({ ...o, [label]: !(o[label] ?? fallback) }));

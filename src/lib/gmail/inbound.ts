@@ -71,6 +71,73 @@ export async function listConnectedMailboxes(): Promise<Mailbox[]> {
     }));
 }
 
+// Fetch metadata (From/Subject/Date/snippet/threadId) for a set of message
+// refs and return them newest-first. Shared by the from-sender and recent-
+// inbound listers.
+async function hydrateMessages(
+  token: string,
+  refs: { id: string }[],
+): Promise<InboundMessage[]> {
+  const msgs = await Promise.all(
+    refs.map(async ({ id }) => {
+      const r = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!r.ok) return null;
+      const m = (await r.json()) as {
+        id: string;
+        threadId?: string;
+        snippet?: string;
+        internalDate?: string;
+        payload?: { headers?: { name: string; value: string }[] };
+      };
+      const header = (n: string) =>
+        m.payload?.headers?.find((h) => h.name === n)?.value ?? "";
+      return {
+        id: m.id,
+        threadId: m.threadId ?? m.id,
+        from: header("From"),
+        subject: header("Subject"),
+        snippet: m.snippet ?? "",
+        dateMs: m.internalDate ? Number(m.internalDate) : 0,
+      } satisfies InboundMessage;
+    }),
+  );
+  return msgs
+    .filter((m): m is InboundMessage => m !== null)
+    .sort((a, b) => b.dateMs - a.dateMs);
+}
+
+// Recent inbound messages (any sender) in a mailbox — used to match senders
+// against known customers. Returns [] on any failure / no Google connection.
+export async function listRecentInbound(
+  userId: string,
+  max = 25,
+): Promise<InboundMessage[]> {
+  try {
+    const acc = await getGoogleAccount(userId);
+    if (!acc?.access_token) return [];
+    const token = await ensureFreshAccessToken(acc);
+    if (!token) return [];
+
+    const q = "in:inbox newer_than:7d";
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=${max}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!listRes.ok) return [];
+    const listData = (await listRes.json()) as {
+      messages?: { id: string }[];
+    };
+    const refs = listData.messages ?? [];
+    if (refs.length === 0) return [];
+    return hydrateMessages(token, refs);
+  } catch {
+    return [];
+  }
+}
+
 // Fetch up to `max` recent messages from `fromEmail` in `userId`'s Gmail
 // (newest first). Returns [] on any failure / no Google connection — the
 // caller treats that as "no replies to show".
@@ -93,40 +160,11 @@ export async function listInboundFrom(
     );
     if (!listRes.ok) return [];
     const listData = (await listRes.json()) as {
-      messages?: { id: string; threadId: string }[];
+      messages?: { id: string }[];
     };
     const refs = listData.messages ?? [];
     if (refs.length === 0) return [];
-
-    const msgs = await Promise.all(
-      refs.map(async ({ id }) => {
-        const r = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (!r.ok) return null;
-        const m = (await r.json()) as {
-          id: string;
-          threadId?: string;
-          snippet?: string;
-          internalDate?: string;
-          payload?: { headers?: { name: string; value: string }[] };
-        };
-        const header = (n: string) =>
-          m.payload?.headers?.find((h) => h.name === n)?.value ?? "";
-        return {
-          id: m.id,
-          threadId: m.threadId ?? m.id,
-          from: header("From"),
-          subject: header("Subject"),
-          snippet: m.snippet ?? "",
-          dateMs: m.internalDate ? Number(m.internalDate) : 0,
-        } satisfies InboundMessage;
-      }),
-    );
-    return msgs
-      .filter((m): m is InboundMessage => m !== null)
-      .sort((a, b) => b.dateMs - a.dateMs);
+    return hydrateMessages(token, refs);
   } catch {
     return [];
   }

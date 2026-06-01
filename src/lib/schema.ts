@@ -856,6 +856,10 @@ export const adminNotification = pgTable(
     leadId: text("lead_id"),
     lineItemId: text("line_item_id"),
     supplierId: text("supplier_id"),
+    // Optional deep-link target for the in-app inbox "Open" button (e.g. a
+    // customer-message alert links to /customers). Generic so any notification
+    // type can point somewhere without a dedicated FK column.
+    href: text("href"),
     readAt: timestamp("read_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
@@ -1338,6 +1342,10 @@ export const lead = pgTable(
     // When the reply-detection cron last raised a "lead replied" notification.
     // A reply newer than this triggers a fresh notification (dedup guard).
     repliesNotifiedAt: timestamp("replies_notified_at", { mode: "date" }),
+    // Gmail message ids of replies the user dismissed from the Replies tab, so
+    // they stop showing. The emails live in Gmail — we only store which ids
+    // were hidden.
+    dismissedReplyIds: text("dismissed_reply_ids").array(),
     ownerUserId: text("owner_user_id").references(() => user.id),
     notes: text("notes"),
     cardImageUrl: text("card_image_url"),
@@ -1440,6 +1448,42 @@ export const leadCommentRelations = relations(leadComment, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+// Inbound emails from existing customers (matched to a stored customer/company
+// by sender email) detected across the team's connected Gmail inboxes. Surfaced
+// at the top of the Customers B2B/Consumer tabs. One row per Gmail message
+// (dedup on gmail_message_id); `dismissed_at` hides it once handled.
+export const customerMessage = pgTable(
+  "customer_message",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    gmailMessageId: text("gmail_message_id").notNull().unique(),
+    threadId: text("thread_id"),
+    // Which connected inbox the message was found in.
+    mailboxUserId: text("mailbox_user_id").references(() => user.id),
+    mailboxLabel: text("mailbox_label"),
+    fromEmail: text("from_email").notNull(),
+    fromName: text("from_name"),
+    subject: text("subject"),
+    snippet: text("snippet"),
+    receivedAt: timestamp("received_at", { mode: "date" }),
+    // 'b2b' (matched a company contact) | 'consumer' (matched a customer row).
+    audience: text("audience").notNull(),
+    customerId: text("customer_id").references(() => customer.id),
+    companyId: text("company_id").references(() => company.id),
+    dismissedAt: timestamp("dismissed_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("customer_message_audience_idx").on(t.audience),
+    index("customer_message_dismissed_at_idx").on(t.dismissedAt),
+    index("customer_message_received_at_idx").on(t.receivedAt),
+    index("customer_message_customer_id_idx").on(t.customerId),
+    index("customer_message_company_id_idx").on(t.companyId),
+  ],
+);
 
 // Drafted follow-up emails awaiting human review/send. Auto-generated from a
 // lead's notes when the lead is created (the "Messages to Send" queue).

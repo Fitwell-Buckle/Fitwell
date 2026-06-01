@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ComposeMessageButton } from "@/components/crm/compose-message";
+import { parseDisplayName, parseEmailAddress } from "@/lib/crm/customer-match";
 
 interface Reply {
   id: string;
@@ -60,6 +63,21 @@ export function RepliesTab({ leadId }: { leadId: string }) {
   const [mailboxes, setMailboxes] = useState<string[]>([]);
   // Active mailbox filter (null = all inboxes).
   const [filter, setFilter] = useState<string | null>(null);
+  // Optimistically hide dismissed replies.
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+
+  async function dismiss(id: string) {
+    setHidden((h) => new Set(h).add(id));
+    try {
+      await fetch(`/api/leads/${leadId}/replies/dismiss`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ gmailMessageId: id }),
+      });
+    } catch {
+      /* best-effort; it's hidden locally regardless */
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -88,9 +106,11 @@ export function RepliesTab({ leadId }: { leadId: string }) {
     counts.set(k, (counts.get(k) ?? 0) + 1);
   }
   const filterable = [...counts.keys()];
-  const shown = filter
-    ? replies.filter((r) => (r.mailbox ?? "Unknown") === filter)
-    : replies;
+  const shown = (
+    filter
+      ? replies.filter((r) => (r.mailbox ?? "Unknown") === filter)
+      : replies
+  ).filter((r) => !hidden.has(r.id));
 
   const chip =
     "rounded-full px-2.5 py-1 text-xs font-medium transition-colors";
@@ -153,15 +173,18 @@ export function RepliesTab({ leadId }: { leadId: string }) {
             {shown.map((r) => {
               const c = r.mailbox ? colorFor(r.mailbox) : null;
               return (
-                <li key={`${r.mailbox ?? ""}-${r.id}`}>
+                <li
+                  key={`${r.mailbox ?? ""}-${r.id}`}
+                  className={cn(
+                    "rounded-r-md border-l-4 py-3 pl-3 pr-2",
+                    c ? c.stripe : "border-l-transparent",
+                  )}
+                >
                   <a
                     href={gmailThreadUrl(r)}
                     target="_blank"
                     rel="noreferrer"
-                    className={cn(
-                      "group block rounded-r-md border-l-4 py-3 pl-3 pr-2 transition-colors hover:bg-zinc-50",
-                      c ? c.stripe : "border-l-transparent",
-                    )}
+                    className="group block transition-colors hover:bg-zinc-50"
                     title="Open this conversation in Gmail"
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -183,17 +206,35 @@ export function RepliesTab({ leadId }: { leadId: string }) {
                     </div>
                     <p className="mt-0.5 text-xs text-zinc-500">{r.from}</p>
                     <p className="mt-1 text-sm text-zinc-600">{r.snippet}</p>
+                  </a>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <ComposeMessageButton
+                      target={{
+                        to: parseEmailAddress(r.from) ?? "",
+                        contactName: parseDisplayName(r.from),
+                        theirSubject: r.subject,
+                        theirMessage: r.snippet,
+                        relationship: "lead",
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => dismiss(r.id)}
+                    >
+                      Dismiss
+                    </Button>
                     {r.mailbox && c && (
                       <span
                         className={cn(
-                          "mt-1.5 inline-block rounded px-1.5 py-0.5 text-xs font-medium",
+                          "ml-auto inline-block rounded px-1.5 py-0.5 text-xs font-medium",
                           c.tag,
                         )}
                       >
                         {r.mailbox}&apos;s inbox
                       </span>
                     )}
-                  </a>
+                  </div>
                 </li>
               );
             })}

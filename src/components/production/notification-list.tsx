@@ -12,6 +12,7 @@ interface NotificationItem {
   body: string | null;
   poId: string | null;
   leadId: string | null;
+  href: string | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -137,6 +138,11 @@ export function NotificationList({
                   {n.leadId && leadHrefBase && (
                     <Button variant="ghost" size="sm" asChild>
                       <Link href={`${leadHrefBase}/${n.leadId}`}>Open lead</Link>
+                    </Button>
+                  )}
+                  {n.href && !n.poId && !n.leadId && (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={n.href}>Open</Link>
                     </Button>
                   )}
                   {!n.readAt && (

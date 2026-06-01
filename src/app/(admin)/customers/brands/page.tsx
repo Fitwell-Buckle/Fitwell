@@ -7,6 +7,11 @@ import { company, priceTier } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { CUSTOMERS_TABS } from "@/lib/nav-tabs";
+import {
+  countNewCustomerMessages,
+  listCustomerMessages,
+} from "@/lib/crm/customer-messages";
+import { CustomerMessagesPanel } from "@/components/crm/customer-messages-panel";
 import { CompaniesManager } from "./companies-manager";
 
 export const metadata: Metadata = {
@@ -17,7 +22,7 @@ export default async function BrandsPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
-  const [tiers, companies] = await Promise.all([
+  const [tiers, companies, messages, counts] = await Promise.all([
     db.query.priceTier.findMany({ orderBy: asc(priceTier.name) }),
     db.query.company.findMany({
       orderBy: asc(company.name),
@@ -26,12 +31,34 @@ export default async function BrandsPage() {
         contacts: { columns: { id: true, email: true, name: true } },
       },
     }),
+    listCustomerMessages("b2b"),
+    countNewCustomerMessages(),
   ]);
+
+  const tabs = CUSTOMERS_TABS.map((t) => ({
+    ...t,
+    dot: (t.href === "/customers/brands" ? counts.b2b : counts.consumer) > 0,
+  }));
 
   return (
     <div>
       <PageHeader title="Customers" />
-      <SectionTabs tabs={CUSTOMERS_TABS} />
+      <SectionTabs tabs={tabs} />
+
+      <CustomerMessagesPanel
+        audience="b2b"
+        messages={messages.map((m) => ({
+          id: m.id,
+          threadId: m.threadId,
+          fromEmail: m.fromEmail,
+          displayName: m.displayName,
+          subject: m.subject,
+          snippet: m.snippet,
+          receivedAt: m.receivedAt ? m.receivedAt.toISOString() : null,
+          mailboxLabel: m.mailboxLabel,
+          mailboxEmail: m.mailboxEmail,
+        }))}
+      />
 
       <div className="mt-6">
         <CompaniesManager
