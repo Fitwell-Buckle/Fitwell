@@ -3,7 +3,12 @@ import { ensureFreshAccessToken, getGoogleAccount } from "./token";
 export interface SendResult {
   ok: boolean;
   // Reason codes the caller can map to a user message / status.
-  error?: "no_account" | "no_token" | "insufficient_scope" | "send_failed";
+  error?:
+    | "no_account"
+    | "no_token"
+    | "insufficient_scope"
+    | "api_disabled"
+    | "send_failed";
 }
 
 // RFC 2047 "encoded-word" for a possibly-non-ASCII subject line.
@@ -58,6 +63,16 @@ export async function sendGmail(
     );
     if (res.ok) return { ok: true };
     if (res.status === 403 || res.status === 401) {
+      // A 403 can mean the Gmail API is disabled for the project (account-
+      // level) OR the token lacks gmail.send (scope). Distinguish so the user
+      // gets the right fix.
+      const text = await res.text().catch(() => "");
+      if (
+        /accessNotConfigured/i.test(text) ||
+        /has not been used in project/i.test(text)
+      ) {
+        return { ok: false, error: "api_disabled" };
+      }
       return { ok: false, error: "insufficient_scope" };
     }
     return { ok: false, error: "send_failed" };

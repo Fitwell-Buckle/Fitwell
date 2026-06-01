@@ -46,6 +46,15 @@ export async function POST(
   });
 
   if (!result.ok) {
+    if (result.error === "api_disabled") {
+      return NextResponse.json(
+        {
+          error:
+            "The Gmail API isn't enabled for this Google Cloud project. An admin needs to enable it in the Cloud Console, then try again.",
+        },
+        { status: 409 },
+      );
+    }
     if (result.error === "insufficient_scope" || result.error === "no_account") {
       return NextResponse.json(
         {
