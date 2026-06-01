@@ -4,6 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, ImageUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+// Business-card viewfinder aspect ratio (landscape, ~8:5 — between the
+// US 3.5×2 card and the EU/ID-1 85.6×54mm card). The live preview and the
+// captured image both use this so what you frame is what gets saved.
+const CARD_W = 8;
+const CARD_H = 5;
+const CARD_ASPECT = CARD_W / CARD_H;
+
 // Live rear-camera viewfinder for capturing a business card. Uses
 // getUserMedia for a true in-app shutter experience. When a live camera
 // isn't available — getUserMedia needs a secure context (HTTPS or
@@ -78,13 +85,32 @@ export function CardCamera({
 
   function shoot() {
     const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
+    const vw = video?.videoWidth ?? 0;
+    const vh = video?.videoHeight ?? 0;
+    if (!video || !vw || !vh) return;
+
+    // Center-crop the camera frame to the card aspect ratio — the same region
+    // the object-cover preview shows — so the saved image is WYSIWYG.
+    let sw: number;
+    let sh: number;
+    if (vw / vh > CARD_ASPECT) {
+      // Source is wider than the card window → crop the sides.
+      sh = vh;
+      sw = Math.round(vh * CARD_ASPECT);
+    } else {
+      // Source is taller (e.g. a portrait phone feed) → crop top/bottom.
+      sw = vw;
+      sh = Math.round(vw / CARD_ASPECT);
+    }
+    const sx = Math.round((vw - sw) / 2);
+    const sy = Math.round((vh - sh) / 2);
+
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = sw;
+    canvas.height = sh;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
@@ -131,17 +157,23 @@ export function CardCamera({
 
       {showVideo && (
         <div className="mt-3">
-          <div className="relative flex min-h-[40vh] items-center justify-center overflow-hidden rounded-md bg-black">
+          {/* Card-shaped viewfinder window — frame the card to fill it. */}
+          <div
+            className="relative w-full overflow-hidden rounded-md bg-black"
+            style={{ aspectRatio: `${CARD_W} / ${CARD_H}` }}
+          >
             {/* Always mounted while starting/live so the stream can attach. */}
             <video
               ref={videoRef}
-              className="max-h-[60vh] w-full object-contain"
+              className="h-full w-full object-cover"
               autoPlay
               playsInline
               muted
             />
             {status === "starting" && (
-              <p className="absolute text-sm text-white/80">Starting camera…</p>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className="text-sm text-white/80">Starting camera…</p>
+              </div>
             )}
           </div>
           <div className="mt-3 flex items-center justify-center gap-3">
