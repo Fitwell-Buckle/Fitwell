@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { Toaster } from "sonner";
 import { auth } from "@/lib/auth";
 import { AdminSidebar, SidebarProvider } from "@/components/layout/admin-sidebar";
 import { MobileHeader } from "@/components/layout/mobile-header";
@@ -44,6 +45,7 @@ export default async function AdminLayout({
             </main>
           </div>
         </div>
+        <Toaster richColors position="top-center" />
       </SidebarProvider>
       </StageLabelsProvider>
     </AuthSessionProvider>

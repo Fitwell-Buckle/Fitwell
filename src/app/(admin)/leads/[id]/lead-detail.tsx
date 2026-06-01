@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -72,7 +73,9 @@ export function LeadDetail({
     setDraft((d) => ({ ...d, [key]: value }));
   }
 
-  async function patch(body: Record<string, unknown>): Promise<boolean> {
+  // Returns null on success, or the error message on failure (so callers can
+  // toast the actual message — reading the `error` state here would be stale).
+  async function patch(body: Record<string, unknown>): Promise<string | null> {
     setBusy(true);
     setError(null);
     try {
@@ -83,20 +86,22 @@ export function LeadDetail({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(json?.error ?? `Save failed (${res.status})`);
-        return false;
+        const msg = json?.error ?? `Save failed (${res.status})`;
+        setError(msg);
+        return msg;
       }
-      return true;
+      return null;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
-      return false;
+      const msg = err instanceof Error ? err.message : "Save failed";
+      setError(msg);
+      return msg;
     } finally {
       setBusy(false);
     }
   }
 
   async function saveOverview() {
-    const ok = await patch({
+    const err = await patch({
       firstName: draft.firstName,
       lastName: draft.lastName,
       email: draft.email,
@@ -108,24 +113,40 @@ export function LeadDetail({
       sourceChannel: draft.sourceChannel,
       meetingDate: draft.meetingDate || null,
     });
-    if (ok) router.refresh();
+    if (!err) {
+      toast.success("Lead saved");
+      router.refresh();
+    } else {
+      toast.error(err);
+    }
   }
 
   async function saveNotes() {
-    const ok = await patch({ notes: draft.notes });
-    if (ok) router.refresh();
+    const err = await patch({ notes: draft.notes });
+    if (!err) {
+      toast.success("Notes saved");
+      router.refresh();
+    } else {
+      toast.error(err);
+    }
   }
 
   async function convertToCompany() {
     if (!convertCompanyId) {
       setError("Pick a company to convert into.");
+      toast.error("Pick a company to convert into.");
       return;
     }
-    const ok = await patch({
+    const err = await patch({
       companyId: convertCompanyId,
       status: "converted",
     });
-    if (ok) router.refresh();
+    if (!err) {
+      toast.success("Lead converted to company");
+      router.refresh();
+    } else {
+      toast.error(err);
+    }
   }
 
   async function dropLead() {
@@ -138,9 +159,12 @@ export function LeadDetail({
       const res = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        setError(json?.error ?? `Drop failed (${res.status})`);
+        const msg = json?.error ?? `Drop failed (${res.status})`;
+        setError(msg);
+        toast.error(msg);
         return;
       }
+      toast.success("Lead dropped");
       router.push("/leads");
       router.refresh();
     } finally {
