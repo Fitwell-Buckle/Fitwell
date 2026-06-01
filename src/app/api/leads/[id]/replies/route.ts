@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getLead } from "@/lib/crm/service";
-import { listInboundFrom } from "@/lib/gmail/inbound";
+import { listInboundFromAllMailboxes } from "@/lib/gmail/inbound";
 
 export const runtime = "nodejs";
 
-// The lead's replies to us — fetched live from the lead owner's (fallback:
-// the signed-in admin's) Gmail. Returns [] when there's no email or no
-// connected Google account.
+// The contact's emails to us — fetched live across ALL connected team inboxes
+// (not just the lead owner's), so a contact who emailed a colleague still
+// shows up. Each reply is tagged with the inbox it was found in. Returns []
+// when there's no email or no connected Google account.
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -29,8 +30,6 @@ export async function GET(
     return NextResponse.json({ data: { replies: [] } });
   }
 
-  const mailboxUserId =
-    lead.ownerUserId ?? lead.capturedByUserId ?? session.user.id;
-  const replies = await listInboundFrom(mailboxUserId, lead.email);
+  const replies = await listInboundFromAllMailboxes(lead.email);
   return NextResponse.json({ data: { replies } });
 }

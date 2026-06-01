@@ -1407,6 +1407,40 @@ export const leadCardImageRelations = relations(leadCardImage, ({ one }) => ({
   }),
 }));
 
+// Free-text notes a team member adds to a lead over time. Distinct from
+// `lead.notes` (the single capture-time scratch field): these are timestamped,
+// attributed timeline entries that show up in the lead's History tab alongside
+// drafted/sent follow-up emails.
+export const leadComment = pgTable(
+  "lead_comment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    leadId: text("lead_id")
+      .notNull()
+      .references(() => lead.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id").references(() => user.id),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("lead_comment_lead_id_idx").on(t.leadId),
+    index("lead_comment_created_at_idx").on(t.createdAt),
+  ],
+);
+
+export const leadCommentRelations = relations(leadComment, ({ one }) => ({
+  lead: one(lead, {
+    fields: [leadComment.leadId],
+    references: [lead.id],
+  }),
+  author: one(user, {
+    fields: [leadComment.authorUserId],
+    references: [user.id],
+  }),
+}));
+
 // Drafted follow-up emails awaiting human review/send. Auto-generated from a
 // lead's notes when the lead is created (the "Messages to Send" queue).
 // status: 'draft' (in queue) | 'sent' | 'dismissed'.

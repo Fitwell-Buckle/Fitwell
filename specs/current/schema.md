@@ -482,6 +482,7 @@ dropped in migration 0026 — replaced by the editable `meeting_date`.)
 |-------|-------------|
 | `lead` | `captured_at` (default now), `captured_by_user_id?` (FK → user), `first_name?`, `last_name?` (both title-cased on save), `email?`, `phone?`, `title?`, `company_name?` (free-text; defaults to the email domain at capture), `address_line1?`, `address_line2?`, `city?`, `region?` (state/province/region), `postal_code?`, `country?` (all free-text so foreign/international addresses fit; auto-filled from card OCR when present), `stage` (text, default `'prospect'` — one of the 6 b2b-pipeline stages), `persona_tag?` (coarse buyer type: `watch_oem` / `strap_oem` / `retailer` / `distributor`), `source_channel` (one of the 7 B2B entry channels), `meeting_date?` (date — when we met them, editable, defaults to today), `owner_user_id?` (FK → user), `notes?`, `card_image_url?` (latest card scan), `card_raw_text?` (raw Claude OCR fallback), `ocr_confidence?` (jsonb: per-field 0–1), `company_id?` (FK → company, set on conversion), `customer_id?` (FK → customer, populated only when a Shopify order materializes), `status` (`active`/`converted`/`dropped`, default `active` — `dropped` is the soft-delete state), `replied_at?` (set when the lead emails back — detected from the owner's Gmail or marked manually; stops the follow-up nudge) |
 | `lead_card_image` | `lead_id` (FK → lead, cascade), `blob_url`, `content_type?`, `size_bytes?`, `uploaded_by_user_id?` (FK → user), `uploaded_at`. One row per scanned card — re-captures accumulate; `lead.card_image_url` mirrors the most recent |
+| `lead_comment` | `lead_id` (FK → lead, cascade), `author_user_id?` (FK → user), `body`, `created_at`. Free-text timeline notes a team member adds to a lead over time (distinct from `lead.notes`, the single capture-time field). Surface in the lead **History** tab interleaved with drafted/sent follow-up emails. Indexes: `lead_id`, `created_at` |
 | `outbound_message` | `lead_id` (FK → lead, cascade), `channel` (default `email`), `sequence_step` (int, default 1 — `1`=initial follow-up, `2`=two-week nudge), `to_email?`, `subject?`, `body`, `status` (`draft`/`sent`/`dismissed`, default `draft`), `generated_by_model?`, `created_by_user_id?` (FK → user), `created_at`, `updated_at`, `sent_at?`. AI-drafted follow-up emails queued in the "Messages to Send" view; step 1 is auto-drafted when the lead is created, step 2 by the `lead-followups` cron when there's no reply after 14 days |
 
 Indexes on `lead`: `email`, `stage`, `source_channel`, `status`,
@@ -496,6 +497,14 @@ Every drafted message also raises an in-app `admin_notification`
 ("Draft follow-up ready for X") and shows in the lead detail **History**
 tab. Drafts can be sent from Messages to Send via the admin's Gmail
 (`gmail.send` scope) or "Mark as sent" if sent manually.
+
+Cross-mailbox email history: the lead's **Replies** tab
+(`GET /api/leads/[id]/replies`) searches the contact's address across **every
+connected team Google inbox** (all `account` rows with `provider='google'`
+belonging to admins), not just the lead owner's — so a contact who emailed a
+colleague still shows up, each email tagged with whose inbox it was found in.
+The "new replies" dot uses the same cross-mailbox check. (Both no-op until the
+Gmail API is enabled on the GCP project.)
 
 Follow-up drafting: when a lead is created, the form fires
 `POST /api/leads/[id]/draft-followup`, which uses Claude Sonnet 4.5 to draft

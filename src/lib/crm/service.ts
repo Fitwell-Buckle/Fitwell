@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { and, desc, eq, ilike, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { company, companyContact, lead, leadCardImage } from "@/lib/schema";
+import {
+  company,
+  companyContact,
+  lead,
+  leadCardImage,
+  leadComment,
+  user as userTable,
+} from "@/lib/schema";
 import {
   LEAD_PERSONA_TAGS,
   LEAD_SOURCE_CHANNELS,
@@ -473,6 +480,51 @@ export async function listLeadCardImages(leadId: string) {
     .from(leadCardImage)
     .where(eq(leadCardImage.leadId, leadId))
     .orderBy(desc(leadCardImage.uploadedAt));
+}
+
+// ─── Lead comments (manual timeline notes) ─────────────────────────
+
+export const createLeadCommentSchema = z.object({
+  body: z.string().trim().min(1, "Comment can't be empty").max(5000),
+});
+export type CreateLeadCommentInput = z.infer<typeof createLeadCommentSchema>;
+
+export async function addLeadComment(
+  leadId: string,
+  input: CreateLeadCommentInput,
+  authorUserId: string,
+): Promise<{ id: string }> {
+  const [row] = await db
+    .insert(leadComment)
+    .values({ leadId, body: input.body.trim(), authorUserId })
+    .returning({ id: leadComment.id });
+  return { id: row.id };
+}
+
+export interface LeadCommentRow {
+  id: string;
+  body: string;
+  createdAt: Date;
+  authorName: string | null;
+  authorEmail: string | null;
+}
+
+// A lead's comments, newest first, with the author's name/email resolved.
+export async function listLeadComments(
+  leadId: string,
+): Promise<LeadCommentRow[]> {
+  return db
+    .select({
+      id: leadComment.id,
+      body: leadComment.body,
+      createdAt: leadComment.createdAt,
+      authorName: userTable.name,
+      authorEmail: userTable.email,
+    })
+    .from(leadComment)
+    .leftJoin(userTable, eq(leadComment.authorUserId, userTable.id))
+    .where(eq(leadComment.leadId, leadId))
+    .orderBy(desc(leadComment.createdAt));
 }
 
 export async function listLeads(filters: ListLeadsFilters = {}) {

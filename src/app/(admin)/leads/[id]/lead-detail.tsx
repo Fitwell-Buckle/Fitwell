@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { MessagesList, type MessageView } from "@/app/(admin)/messages/messages-list";
 import { RepliesTab } from "./replies-tab";
 import { formatAddress } from "@/lib/crm/address";
+import { buildLeadTimeline } from "@/lib/crm/timeline";
 import {
   LEAD_PERSONA_TAGS,
   LEAD_SOURCE_CHANNELS,
@@ -70,11 +71,19 @@ export interface LeadMessageView {
   sentAt: Date | null;
 }
 
+export interface LeadCommentView {
+  id: string;
+  body: string;
+  createdAt: Date;
+  author: string | null;
+}
+
 export function LeadDetail({
   lead,
   companies,
   cardImages,
   messages,
+  comments,
   draftMessages,
   hasNewReplies,
 }: {
@@ -82,6 +91,7 @@ export function LeadDetail({
   companies: { id: string; name: string }[];
   cardImages: LeadCardImageView[];
   messages: LeadMessageView[];
+  comments: LeadCommentView[];
   draftMessages: MessageView[];
   hasNewReplies: boolean;
 }) {
@@ -97,6 +107,9 @@ export function LeadDetail({
   const [convertCompanyId, setConvertCompanyId] = useState(
     lead.companyId ?? "",
   );
+  // History-tab "Add comment" composer.
+  const [comment, setComment] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
 
   function set<K extends keyof LeadView>(key: K, value: LeadView[K]) {
     setSavedKey(null);
@@ -201,6 +214,34 @@ export function LeadDetail({
       toast.error(e instanceof Error ? e.message : "Couldn't draft the email");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function addComment() {
+    const body = comment.trim();
+    if (!body) return;
+    setCommentBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/comments`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = json?.error ?? `Couldn't add comment (${res.status})`;
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
+      setComment("");
+      toast.success("Comment added");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't add comment");
+    } finally {
+      setCommentBusy(false);
     }
   }
 
@@ -519,42 +560,80 @@ export function LeadDetail({
 
   const overview = editing ? overviewEdit : overviewReadonly;
 
+  const timeline = buildLeadTimeline(comments, messages);
+
+  const fmtDate = (d: Date) =>
+    d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+
   const history = (
     <Card>
       <CardContent>
-        {messages.length === 0 ? (
+        {/* Add comment composer */}
+        <div className="mb-4">
+          <label className={LBL}>Add a comment</label>
+          <textarea
+            className="min-h-[72px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Log a call, a next step, anything worth remembering…"
+          />
+          <div className="mt-2 flex justify-end">
+            <Button
+              onClick={addComment}
+              disabled={commentBusy || !comment.trim()}
+            >
+              {commentBusy ? "Adding…" : "Add comment"}
+            </Button>
+          </div>
+        </div>
+
+        {timeline.length === 0 ? (
           <p className="py-6 text-center text-sm text-zinc-400">
-            No follow-up emails yet. Drafts appear here (and in Messages to
-            Send) once created.
+            Nothing yet. Add a comment above — drafted follow-up emails show up
+            here too.
           </p>
         ) : (
           <ul className="divide-y divide-zinc-100">
-            {messages.map((m) => (
-              <li key={m.id} className="flex items-start gap-3 py-3">
-                <Badge className={statusBadgeClass(m.status)}>
-                  {m.status}
-                </Badge>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-zinc-900">
-                    {m.sequenceStep >= 2
-                      ? "Two-week follow-up nudge"
-                      : "Initial follow-up"}
-                    {m.subject ? ` — ${m.subject}` : ""}
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    Drafted{" "}
-                    {m.createdAt.toLocaleString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                    {m.sentAt
-                      ? ` · sent ${m.sentAt.toLocaleDateString("en-US")}`
-                      : ""}
-                  </p>
-                </div>
-              </li>
-            ))}
+            {timeline.map((item) =>
+              item.kind === "comment" ? (
+                <li key={`c-${item.id}`} className="flex items-start gap-3 py-3">
+                  <Badge className="bg-zinc-100 text-zinc-700">Comment</Badge>
+                  <div className="min-w-0 flex-1">
+                    <p className="whitespace-pre-wrap text-sm text-zinc-900">
+                      {item.body}
+                    </p>
+                    <p className="mt-0.5 text-xs text-zinc-500">
+                      {item.author ? `${item.author} · ` : ""}
+                      {fmtDate(item.createdAt)}
+                    </p>
+                  </div>
+                </li>
+              ) : (
+                <li key={`m-${item.id}`} className="flex items-start gap-3 py-3">
+                  <Badge className={statusBadgeClass(item.status)}>
+                    {item.status}
+                  </Badge>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-zinc-900">
+                      {item.sequenceStep >= 2
+                        ? "Two-week follow-up nudge"
+                        : "Initial follow-up"}
+                      {item.subject ? ` — ${item.subject}` : ""}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      Drafted {fmtDate(item.createdAt)}
+                      {item.sentAt
+                        ? ` · sent ${item.sentAt.toLocaleDateString("en-US")}`
+                        : ""}
+                    </p>
+                  </div>
+                </li>
+              ),
+            )}
           </ul>
         )}
       </CardContent>

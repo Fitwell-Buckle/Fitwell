@@ -9,11 +9,14 @@ interface Reply {
   subject: string;
   snippet: string;
   dateMs: number;
+  // Which team inbox this was found in (cross-mailbox search).
+  mailbox?: string;
 }
 
-// Fetches the lead's email replies (from the owner's Gmail) on mount — i.e.
-// when the user opens the Replies tab (Radix only mounts the active tab). Also
-// marks replies as seen so the "new" dot clears on the next page load.
+// Fetches the contact's emails on mount — across every connected team inbox,
+// not just the lead owner's, so a contact who emailed a colleague still shows
+// up (Radix only mounts the active tab). Also marks replies as seen so the
+// "new" dot clears on the next page load.
 export function RepliesTab({ leadId }: { leadId: string }) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [replies, setReplies] = useState<Reply[]>([]);
@@ -53,13 +56,14 @@ export function RepliesTab({ leadId }: { leadId: string }) {
         )}
         {state === "ready" && replies.length === 0 && (
           <p className="py-6 text-center text-sm text-zinc-400">
-            No replies from this lead yet.
+            No emails from this contact yet — checked everyone&apos;s connected
+            inbox.
           </p>
         )}
         {state === "ready" && replies.length > 0 && (
           <ul className="divide-y divide-zinc-100">
             {replies.map((r) => (
-              <li key={r.id} className="py-3">
+              <li key={`${r.mailbox ?? ""}-${r.id}`} className="py-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="truncate text-sm font-medium text-zinc-900">
                     {r.subject || "(no subject)"}
@@ -76,6 +80,11 @@ export function RepliesTab({ leadId }: { leadId: string }) {
                 </div>
                 <p className="mt-0.5 text-xs text-zinc-500">{r.from}</p>
                 <p className="mt-1 text-sm text-zinc-600">{r.snippet}</p>
+                {r.mailbox && (
+                  <p className="mt-1 text-xs text-zinc-400">
+                    In {r.mailbox}&apos;s inbox
+                  </p>
+                )}
               </li>
             ))}
           </ul>

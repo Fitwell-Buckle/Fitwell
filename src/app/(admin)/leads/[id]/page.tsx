@@ -5,9 +5,13 @@ import { asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
-import { getLead, listLeadCardImages } from "@/lib/crm/service";
+import {
+  getLead,
+  listLeadCardImages,
+  listLeadComments,
+} from "@/lib/crm/service";
 import { listMessagesForLead, listOutboundMessages } from "@/lib/crm/messages";
-import { hasInboundEmailFrom } from "@/lib/gmail/inbound";
+import { hasInboundFromAnyMailbox } from "@/lib/gmail/inbound";
 import { PageHeader } from "@/components/ui/page-header";
 import { leadDisplayName } from "@/lib/crm/display";
 import { LeadDetail } from "./lead-detail";
@@ -28,23 +32,25 @@ export default async function LeadDetailPage({
   const lead = await getLead(id);
   if (!lead) notFound();
 
-  const [companies, cardImages, messages, draftRows] = await Promise.all([
-    db
-      .select({ id: company.id, name: company.name })
-      .from(company)
-      .orderBy(asc(company.name)),
-    listLeadCardImages(id),
-    listMessagesForLead(id),
-    listOutboundMessages({ status: "draft", leadId: id }),
-  ]);
+  const [companies, cardImages, messages, draftRows, comments] =
+    await Promise.all([
+      db
+        .select({ id: company.id, name: company.name })
+        .from(company)
+        .orderBy(asc(company.name)),
+      listLeadCardImages(id),
+      listMessagesForLead(id),
+      listOutboundMessages({ status: "draft", leadId: id }),
+      listLeadComments(id),
+    ]);
 
-  // Cheap (maxResults=1) check: any reply newer than the last Replies-tab
-  // view → the tab gets a blue dot. Skipped when there's no email.
+  // Cheap (maxResults=1) check across every connected team inbox: any reply
+  // newer than the last Replies-tab view → the tab gets a blue dot. Skipped
+  // when there's no email.
   let hasNewReplies = false;
   if (lead.email) {
     const since = lead.repliesSeenAt ?? lead.createdAt ?? new Date(0);
-    const mailbox = lead.ownerUserId ?? lead.capturedByUserId ?? session.user.id;
-    const { replied } = await hasInboundEmailFrom(mailbox, lead.email, since);
+    const { replied } = await hasInboundFromAnyMailbox(lead.email, since);
     hasNewReplies = replied;
   }
 
@@ -110,6 +116,12 @@ export default async function LeadDetailPage({
           status: m.status,
           createdAt: m.createdAt,
           sentAt: m.sentAt,
+        }))}
+        comments={comments.map((c) => ({
+          id: c.id,
+          body: c.body,
+          createdAt: c.createdAt,
+          author: c.authorName || c.authorEmail || null,
         }))}
         draftMessages={draftMessages}
         hasNewReplies={hasNewReplies}

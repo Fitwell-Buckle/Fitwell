@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { account, user as userTable } from "@/lib/schema";
 import { buildReplyQuery } from "./reply-query";
 import { ensureFreshAccessToken, getGoogleAccount } from "./token";
 
@@ -18,6 +21,34 @@ export interface InboundMessage {
   snippet: string;
   // Epoch ms of the message's internal date (for "new" comparison + display).
   dateMs: number;
+  // Which team inbox this message was found in (set by the cross-mailbox
+  // search). Undefined for single-mailbox results.
+  mailbox?: string;
+}
+
+// Every team member who has connected a Google account, so we can search their
+// inbox. Used to show a contact's full email history across the whole team —
+// e.g. when the contact emailed a colleague instead of the lead owner.
+export interface Mailbox {
+  userId: string;
+  label: string; // whose inbox (name / email)
+}
+
+export async function listConnectedMailboxes(): Promise<Mailbox[]> {
+  const rows = await db
+    .select({
+      userId: account.userId,
+      name: userTable.name,
+      email: userTable.email,
+      role: userTable.role,
+    })
+    .from(account)
+    .innerJoin(userTable, eq(account.userId, userTable.id))
+    .where(eq(account.provider, "google"));
+  return rows
+    // Internal/admin inboxes only — never a supplier's or company's.
+    .filter((r) => r.role !== "supplier" && r.role !== "company")
+    .map((r) => ({ userId: r.userId, label: r.name || r.email || "Inbox" }));
 }
 
 // Fetch up to `max` recent messages from `fromEmail` in `userId`'s Gmail
@@ -103,4 +134,44 @@ export async function hasInboundEmailFrom(
   } catch {
     return { replied: false, checked: false };
   }
+}
+
+// Every message from `fromEmail` across ALL connected team inboxes (not just
+// the lead owner's), newest first, each tagged with the inbox it was found in.
+// Lets the Replies tab show a contact's full history even when they emailed a
+// colleague. Returns [] when no Google accounts are connected.
+export async function listInboundFromAllMailboxes(
+  fromEmail: string,
+  maxPerMailbox = 10,
+): Promise<InboundMessage[]> {
+  if (!fromEmail) return [];
+  const mailboxes = await listConnectedMailboxes();
+  if (mailboxes.length === 0) return [];
+  const perBox = await Promise.all(
+    mailboxes.map(async (mb) => {
+      const msgs = await listInboundFrom(mb.userId, fromEmail, maxPerMailbox);
+      return msgs.map((m) => ({ ...m, mailbox: mb.label }));
+    }),
+  );
+  return perBox.flat().sort((a, b) => b.dateMs - a.dateMs);
+}
+
+// Does `fromEmail` appear in ANY connected team inbox since `since`? Used for
+// the lead's "new replies" dot so it lights up even if the contact replied to
+// a colleague. {checked:true} as soon as one mailbox confirms; {checked:false}
+// only when no mailbox could be checked at all.
+export async function hasInboundFromAnyMailbox(
+  fromEmail: string,
+  since: Date,
+): Promise<ReplyCheck> {
+  if (!fromEmail) return { replied: false, checked: false };
+  const mailboxes = await listConnectedMailboxes();
+  if (mailboxes.length === 0) return { replied: false, checked: false };
+  const results = await Promise.all(
+    mailboxes.map((mb) => hasInboundEmailFrom(mb.userId, fromEmail, since)),
+  );
+  return {
+    replied: results.some((r) => r.replied),
+    checked: results.some((r) => r.checked),
+  };
 }
