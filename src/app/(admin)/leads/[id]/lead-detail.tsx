@@ -65,11 +65,15 @@ export function LeadDetail({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<LeadView>(lead);
+  // Which section was just saved — drives the inline "✓ Saved" button state.
+  // Cleared as soon as the user edits anything again.
+  const [savedKey, setSavedKey] = useState<null | "overview" | "notes">(null);
   const [convertCompanyId, setConvertCompanyId] = useState(
     lead.companyId ?? "",
   );
 
   function set<K extends keyof LeadView>(key: K, value: LeadView[K]) {
+    setSavedKey(null);
     setDraft((d) => ({ ...d, [key]: value }));
   }
 
@@ -114,6 +118,7 @@ export function LeadDetail({
       meetingDate: draft.meetingDate || null,
     });
     if (!err) {
+      setSavedKey("overview");
       toast.success("Lead saved");
       router.refresh();
     } else {
@@ -124,6 +129,7 @@ export function LeadDetail({
   async function saveNotes() {
     const err = await patch({ notes: draft.notes });
     if (!err) {
+      setSavedKey("notes");
       toast.success("Notes saved");
       router.refresh();
     } else {
@@ -307,9 +313,26 @@ export function LeadDetail({
           </div>
         )}
 
-        <div className="mt-6 flex justify-end gap-2">
-          <Button onClick={saveOverview} disabled={busy}>
-            {busy ? "Saving…" : "Save overview"}
+        <div className="mt-6 flex items-center justify-end gap-3">
+          {savedKey === "overview" && !busy && (
+            <span className="text-sm font-medium text-emerald-600">
+              ✓ Saved
+            </span>
+          )}
+          <Button
+            onClick={saveOverview}
+            disabled={busy}
+            className={
+              savedKey === "overview" && !busy
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : undefined
+            }
+          >
+            {busy
+              ? "Saving…"
+              : savedKey === "overview"
+                ? "✓ Saved"
+                : "Save overview"}
           </Button>
         </div>
       </CardContent>
@@ -332,9 +355,22 @@ export function LeadDetail({
             </pre>
           </div>
         )}
-        <div className="mt-4 flex justify-end">
-          <Button onClick={saveNotes} disabled={busy}>
-            {busy ? "Saving…" : "Save notes"}
+        <div className="mt-4 flex items-center justify-end gap-3">
+          {savedKey === "notes" && !busy && (
+            <span className="text-sm font-medium text-emerald-600">
+              ✓ Saved
+            </span>
+          )}
+          <Button
+            onClick={saveNotes}
+            disabled={busy}
+            className={
+              savedKey === "notes" && !busy
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : undefined
+            }
+          >
+            {busy ? "Saving…" : savedKey === "notes" ? "✓ Saved" : "Save notes"}
           </Button>
         </div>
       </CardContent>
