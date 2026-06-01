@@ -177,6 +177,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/leads/[id]/draft-followup` | Draft a follow-up email from the lead's notes/context via Claude Sonnet 4.5 and queue it in `outbound_message` (status `draft`). Called fire-and-forget by the capture/create flow after a lead is saved. 503 if `ANTHROPIC_API_KEY` unset |
 | GET | `/api/messages` | List queued outbound messages (joined with lead name). Defaults to `status='draft'`; `?status=sent\|dismissed` for the others |
 | PATCH | `/api/messages/[id]` | Edit a queued message (subject/body/toEmail) or change status (`sent` stamps `sent_at`, `dismissed` removes it from the queue) |
+| POST | `/api/messages/[id]/send` | Send the message through the signed-in admin's Gmail (From = their account) then mark it sent. Needs the `gmail.send` scope — 409 with a re-sign-in prompt if not yet authorized |
 
 ### Influencer API (each handler checks `auth()`; admin-only — suppliers/companies 403)
 | Method | Path | Description |

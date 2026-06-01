@@ -52,19 +52,32 @@ export interface LeadCardImageView {
   uploadedAt: Date;
 }
 
+export interface LeadMessageView {
+  id: string;
+  sequenceStep: number;
+  subject: string | null;
+  status: string;
+  createdAt: Date;
+  sentAt: Date | null;
+}
+
 export function LeadDetail({
   lead,
   companies,
   cardImages,
+  messages,
 }: {
   lead: LeadView;
   companies: { id: string; name: string }[];
   cardImages: LeadCardImageView[];
+  messages: LeadMessageView[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<LeadView>(lead);
+  // Overview is read-only until the user clicks Edit.
+  const [editing, setEditing] = useState(false);
   // Which section was just saved — drives the inline "✓ Saved" button state.
   // Cleared as soon as the user edits anything again.
   const [savedKey, setSavedKey] = useState<null | "overview" | "notes">(null);
@@ -121,10 +134,17 @@ export function LeadDetail({
       // Confirmation is the inline green "✓ Saved" button — no toast, to
       // avoid a duplicate notification for the same action.
       setSavedKey("overview");
+      setEditing(false);
       router.refresh();
     } else {
       toast.error(err);
     }
+  }
+
+  function cancelEdit() {
+    setDraft(lead);
+    setEditing(false);
+    setError(null);
   }
 
   async function saveNotes() {
@@ -206,7 +226,85 @@ export function LeadDetail({
     }
   }
 
-  const overview = (
+  const readonlyRow = (label: string, value: React.ReactNode) => (
+    <div>
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-sm text-zinc-900">{value || "—"}</dd>
+    </div>
+  );
+
+  const overviewReadonly = (
+    <Card>
+      <CardContent>
+        <div className="flex items-start justify-between">
+          <dl className="grid flex-1 gap-4 sm:grid-cols-2">
+            {readonlyRow(
+              "Name",
+              [draft.firstName, draft.lastName].filter(Boolean).join(" "),
+            )}
+            {readonlyRow("Email", draft.email)}
+            {readonlyRow("Phone", draft.phone)}
+            {readonlyRow("Title", draft.title)}
+            {readonlyRow("Company", draft.companyName)}
+            {readonlyRow("Stage", stageLabel(draft.stage))}
+            {readonlyRow(
+              "Persona",
+              draft.personaTag ? personaLabel(draft.personaTag) : null,
+            )}
+            {readonlyRow("Source", sourceChannelLabel(draft.sourceChannel))}
+            {readonlyRow("Meeting date", draft.meetingDate)}
+          </dl>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSavedKey(null);
+              setEditing(true);
+            }}
+          >
+            Edit
+          </Button>
+        </div>
+
+        {cardImages.length > 0 && (
+          <div className="mt-6">
+            <p className={LBL}>Business-card photos ({cardImages.length})</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {cardImages.map((c) => (
+                <a
+                  key={c.id}
+                  href={c.blobUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group block"
+                >
+                  <Image
+                    src={c.blobUrl}
+                    alt="Business card"
+                    width={320}
+                    height={200}
+                    unoptimized
+                    className="aspect-[5/3] w-full rounded-md border border-zinc-200 object-cover transition-opacity group-hover:opacity-90"
+                  />
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {c.uploadedAt.toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </p>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const overviewEdit = (
     <Card>
       <CardContent>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -306,63 +404,58 @@ export function LeadDetail({
           </div>
         </div>
 
-        {cardImages.length > 0 && (
-          <div className="mt-6">
-            <p className={LBL}>
-              Business-card photos ({cardImages.length})
-            </p>
-            <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {cardImages.map((c) => (
-                <a
-                  key={c.id}
-                  href={c.blobUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group block"
-                >
-                  <Image
-                    src={c.blobUrl}
-                    alt="Business card"
-                    width={320}
-                    height={200}
-                    unoptimized
-                    className="aspect-[5/3] w-full rounded-md border border-zinc-200 object-cover transition-opacity group-hover:opacity-90"
-                  />
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {c.uploadedAt.toLocaleDateString("en-US", {
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <Button variant="ghost" onClick={cancelEdit} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={saveOverview} disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const overview = editing ? overviewEdit : overviewReadonly;
+
+  const history = (
+    <Card>
+      <CardContent>
+        {messages.length === 0 ? (
+          <p className="py-6 text-center text-sm text-zinc-400">
+            No follow-up emails yet. Drafts appear here (and in Messages to
+            Send) once created.
+          </p>
+        ) : (
+          <ul className="divide-y divide-zinc-100">
+            {messages.map((m) => (
+              <li key={m.id} className="flex items-start gap-3 py-3">
+                <Badge className={statusBadgeClass(m.status)}>
+                  {m.status}
+                </Badge>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-zinc-900">
+                    {m.sequenceStep >= 2
+                      ? "Two-week follow-up nudge"
+                      : "Initial follow-up"}
+                    {m.subject ? ` — ${m.subject}` : ""}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    Drafted{" "}
+                    {m.createdAt.toLocaleString("en-US", {
                       month: "short",
                       day: "numeric",
                       year: "numeric",
                     })}
+                    {m.sentAt
+                      ? ` · sent ${m.sentAt.toLocaleDateString("en-US")}`
+                      : ""}
                   </p>
-                </a>
-              ))}
-            </div>
-          </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
-
-        <div className="mt-6 flex items-center justify-end gap-3">
-          {savedKey === "overview" && !busy && (
-            <span className="text-sm font-medium text-emerald-600">
-              ✓ Saved
-            </span>
-          )}
-          <Button
-            onClick={saveOverview}
-            disabled={busy}
-            className={
-              savedKey === "overview" && !busy
-                ? "bg-emerald-600 hover:bg-emerald-700"
-                : undefined
-            }
-          >
-            {busy
-              ? "Saving…"
-              : savedKey === "overview"
-                ? "✓ Saved"
-                : "Save overview"}
-          </Button>
-        </div>
       </CardContent>
     </Card>
   );
@@ -472,6 +565,7 @@ export function LeadDetail({
         tabs={[
           { value: "overview", label: "Overview", content: overview },
           { value: "notes", label: "Notes", content: notes },
+          { value: "history", label: "History", content: history },
         ]}
       />
     </div>

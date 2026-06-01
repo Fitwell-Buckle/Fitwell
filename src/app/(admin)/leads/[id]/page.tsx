@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
 import { getLead, listLeadCardImages } from "@/lib/crm/service";
+import { listMessagesForLead } from "@/lib/crm/messages";
 import { PageHeader } from "@/components/ui/page-header";
 import { leadDisplayName } from "@/lib/crm/display";
 import { LeadDetail } from "./lead-detail";
@@ -26,12 +27,13 @@ export default async function LeadDetailPage({
   const lead = await getLead(id);
   if (!lead) notFound();
 
-  const [companies, cardImages] = await Promise.all([
+  const [companies, cardImages, messages] = await Promise.all([
     db
       .select({ id: company.id, name: company.name })
       .from(company)
       .orderBy(asc(company.name)),
     listLeadCardImages(id),
+    listMessagesForLead(id),
   ]);
 
   return (
@@ -71,6 +73,14 @@ export default async function LeadDetailPage({
           id: c.id,
           blobUrl: c.blobUrl,
           uploadedAt: c.uploadedAt,
+        }))}
+        messages={messages.map((m) => ({
+          id: m.id,
+          sequenceStep: m.sequenceStep,
+          subject: m.subject,
+          status: m.status,
+          createdAt: m.createdAt,
+          sentAt: m.sentAt,
         }))}
       />
     </div>

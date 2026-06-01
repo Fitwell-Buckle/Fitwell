@@ -492,6 +492,11 @@ Email-domain matching: the capture-confirm step calls `GET /api/leads/match`
 to link a lead to an existing company by email domain (free-provider domains
 excluded) and to flag a duplicate active lead with the same email.
 
+Every drafted message also raises an in-app `admin_notification`
+("Draft follow-up ready for X") and shows in the lead detail **History**
+tab. Drafts can be sent from Messages to Send via the admin's Gmail
+(`gmail.send` scope) or "Mark as sent" if sent manually.
+
 Follow-up drafting: when a lead is created, the form fires
 `POST /api/leads/[id]/draft-followup`, which uses Claude Sonnet 4.5 to draft
 a follow-up email from the lead's notes and queues it in `outbound_message`.

@@ -84,6 +84,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             "email",
             "profile",
             "https://www.googleapis.com/auth/gmail.readonly",
+            // Send follow-up emails from "Messages to Send" via the admin's
+            // own Gmail. Adding this scope requires admins to sign out + back
+            // in once to re-consent before Send works.
+            "https://www.googleapis.com/auth/gmail.send",
           ].join(" "),
           access_type: "offline",
           prompt: "consent",

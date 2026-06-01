@@ -58,6 +58,50 @@ function MessageCard({ message }: { message: MessageView }) {
     }
   }
 
+  async function send() {
+    if (!message.toEmail) {
+      toast.error("This lead has no email address.");
+      return;
+    }
+    if (
+      !confirm(
+        `Send this email to ${message.toEmail} from your Gmail?` +
+          (dirty ? "\n\nUnsaved edits will be saved and sent." : ""),
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      // Persist any edits first so what's sent matches what's on screen.
+      if (dirty) {
+        const save = await fetch(`/api/messages/${message.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ subject: subject || null, body }),
+        });
+        if (!save.ok) {
+          toast.error("Couldn't save edits before sending");
+          return;
+        }
+      }
+      const res = await fetch(`/api/messages/${message.id}/send`, {
+        method: "POST",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json?.error ?? `Send failed (${res.status})`);
+        return;
+      }
+      toast.success(`Sent to ${message.toEmail}`);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Send failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card>
       <CardContent>
@@ -112,10 +156,18 @@ function MessageCard({ message }: { message: MessageView }) {
           </Button>
           <Button
             size="sm"
+            variant="outline"
             disabled={busy}
             onClick={() => patch({ status: "sent" }, "Marked as sent")}
           >
             Mark as sent
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy || !message.toEmail}
+            onClick={send}
+          >
+            Send via Gmail
           </Button>
         </div>
       </CardContent>

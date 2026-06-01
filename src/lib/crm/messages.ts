@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { and, desc, eq, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { lead, outboundMessage } from "@/lib/schema";
+import { adminNotification, lead, outboundMessage } from "@/lib/schema";
+import { leadDisplayName } from "./display";
 
 export const MESSAGE_STATUSES = ["draft", "sent", "dismissed"] as const;
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
@@ -32,7 +33,49 @@ export async function createOutboundMessage(
       createdByUserId: input.createdByUserId ?? null,
     })
     .returning({ id: outboundMessage.id });
+
+  // Raise an in-app alert (bell + /notifications) so a queued draft isn't
+  // missed. Best-effort — never block draft creation on the notification.
+  try {
+    const who = await db.query.lead.findFirst({
+      where: eq(lead.id, input.leadId),
+      columns: { firstName: true, lastName: true, companyName: true, email: true },
+    });
+    const name = who ? leadDisplayName(who) : "a lead";
+    const kind = (input.sequenceStep ?? 1) >= 2 ? "follow-up nudge" : "follow-up";
+    await db.insert(adminNotification).values({
+      type: "lead_followup_drafted",
+      title: `Draft ${kind} ready for ${name}`,
+      body: input.subject ?? null,
+    });
+  } catch (err) {
+    console.error("createOutboundMessage: notification insert failed", err);
+  }
+
   return { id: row.id };
+}
+
+export async function getOutboundMessage(id: string) {
+  return db.query.outboundMessage.findFirst({
+    where: eq(outboundMessage.id, id),
+  });
+}
+
+// All messages for one lead (any status), newest first — drives the lead
+// detail "History" tab.
+export async function listMessagesForLead(leadId: string) {
+  return db
+    .select({
+      id: outboundMessage.id,
+      sequenceStep: outboundMessage.sequenceStep,
+      subject: outboundMessage.subject,
+      status: outboundMessage.status,
+      createdAt: outboundMessage.createdAt,
+      sentAt: outboundMessage.sentAt,
+    })
+    .from(outboundMessage)
+    .where(eq(outboundMessage.leadId, leadId))
+    .orderBy(desc(outboundMessage.createdAt));
 }
 
 // Leads due for a two-week nudge: their initial follow-up (step 1) was marked
