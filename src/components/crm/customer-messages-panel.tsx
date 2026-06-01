@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ExternalLink, Mail } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +40,8 @@ export function CustomerMessagesPanel({
   audience: "b2b" | "consumer" | "supplier";
 }) {
   const router = useRouter();
+  // "Open in Gmail" only works for the signed-in user's own inbox.
+  const myEmail = useSession().data?.user?.email?.toLowerCase() ?? null;
   const [dismissing, setDismissing] = useState<string | null>(null);
   // Optimistically hide dismissed items before the refresh lands.
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -126,13 +129,15 @@ export function CustomerMessagesPanel({
                     }}
                     onSent={() => dismiss(m.id)}
                   />
-                  {url && (
-                    <Button asChild variant="ghost" size="sm">
-                      <a href={url} target="_blank" rel="noreferrer">
-                        <ExternalLink className="h-3.5 w-3.5" /> Open in Gmail
-                      </a>
-                    </Button>
-                  )}
+                  {url &&
+                    (!m.mailboxEmail ||
+                      (!!myEmail && m.mailboxEmail.toLowerCase() === myEmail)) && (
+                      <Button asChild variant="ghost" size="sm">
+                        <a href={url} target="_blank" rel="noreferrer">
+                          <ExternalLink className="h-3.5 w-3.5" /> Open in Gmail
+                        </a>
+                      </Button>
+                    )}
                   <Button
                     variant="ghost"
                     size="sm"

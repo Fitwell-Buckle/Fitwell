@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,11 @@ export function InboundMessages({
   const [replies, setReplies] = useState<Reply[]>([]);
   const [mailboxes, setMailboxes] = useState<string[]>([]);
   const [filter, setFilter] = useState<string | null>(null);
+  // A message can only be opened in Gmail if it's in MY inbox — you can't open
+  // a teammate's mailbox. Compare against the signed-in user's email.
+  const myEmail = useSession().data?.user?.email?.toLowerCase() ?? null;
+  const canOpen = (r: Reply) =>
+    !r.mailboxEmail || (!!myEmail && r.mailboxEmail.toLowerCase() === myEmail);
 
   const param = emails.filter(Boolean).join(",");
 
@@ -162,33 +168,52 @@ export function InboundMessages({
                     c ? c.stripe : "border-l-transparent",
                   )}
                 >
-                  <a
-                    href={gmailThreadUrl(r)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="group block transition-colors hover:bg-zinc-50"
-                    title="Open this conversation in Gmail"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-zinc-900">
-                        <span className="truncate">
-                          {r.subject || "(no subject)"}
-                        </span>
-                        <ExternalLink className="h-3.5 w-3.5 shrink-0 text-zinc-300 group-hover:text-zinc-500" />
-                      </p>
-                      <p className="shrink-0 text-xs text-zinc-400">
-                        {r.dateMs
-                          ? new Date(r.dateMs).toLocaleString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })
-                          : ""}
-                      </p>
-                    </div>
-                    <p className="mt-0.5 text-xs text-zinc-500">{r.from}</p>
-                    <p className="mt-1 text-sm text-zinc-600">{r.snippet}</p>
-                  </a>
+                  {(() => {
+                    const open = canOpen(r);
+                    const body = (
+                      <>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-zinc-900">
+                            <span className="truncate">
+                              {r.subject || "(no subject)"}
+                            </span>
+                            {open && (
+                              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-zinc-300 group-hover:text-zinc-500" />
+                            )}
+                          </p>
+                          <p className="shrink-0 text-xs text-zinc-400">
+                            {r.dateMs
+                              ? new Date(r.dateMs).toLocaleString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })
+                              : ""}
+                          </p>
+                        </div>
+                        <p className="mt-0.5 text-xs text-zinc-500">{r.from}</p>
+                        <p className="mt-1 text-sm text-zinc-600">{r.snippet}</p>
+                      </>
+                    );
+                    return open ? (
+                      <a
+                        href={gmailThreadUrl(r)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group block transition-colors hover:bg-zinc-50"
+                        title="Open this conversation in Gmail"
+                      >
+                        {body}
+                      </a>
+                    ) : (
+                      <div
+                        className="block"
+                        title={`In ${r.mailbox ?? "a teammate"}'s inbox — only they can open it`}
+                      >
+                        {body}
+                      </div>
+                    );
+                  })()}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <ComposeMessageButton
                       target={{
