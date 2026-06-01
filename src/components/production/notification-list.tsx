@@ -34,7 +34,12 @@ export function NotificationList({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<"unread" | "read">("unread");
   const unread = items.filter((n) => !n.readAt).length;
+  const readCount = items.length - unread;
+  const shown = items.filter((n) =>
+    tab === "unread" ? !n.readAt : !!n.readAt,
+  );
 
   async function mark(payload: { id?: string; all?: boolean }) {
     setBusy(true);
@@ -50,27 +55,52 @@ export function NotificationList({
     }
   }
 
+  const tabCls = (active: boolean) =>
+    cn(
+      "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+      active
+        ? "border-zinc-900 text-zinc-900"
+        : "border-transparent text-zinc-500 hover:text-zinc-800",
+    );
+
   return (
     <div className="mt-6">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-zinc-500">{unread} unread</p>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy || unread === 0}
-          onClick={() => mark({ all: true })}
-        >
-          Mark all read
-        </Button>
+      <div className="flex items-center justify-between border-b border-zinc-200">
+        <div className="flex gap-1">
+          <button
+            type="button"
+            className={tabCls(tab === "unread")}
+            onClick={() => setTab("unread")}
+          >
+            Unread{unread > 0 ? ` (${unread})` : ""}
+          </button>
+          <button
+            type="button"
+            className={tabCls(tab === "read")}
+            onClick={() => setTab("read")}
+          >
+            Read{readCount > 0 ? ` (${readCount})` : ""}
+          </button>
+        </div>
+        {tab === "unread" && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy || unread === 0}
+            onClick={() => mark({ all: true })}
+          >
+            Mark all read
+          </Button>
+        )}
       </div>
 
       <div className="mt-3 space-y-2">
-        {items.length === 0 ? (
+        {shown.length === 0 ? (
           <p className="py-10 text-center text-sm text-zinc-400">
-            No notifications yet.
+            {tab === "unread" ? "Nothing unread." : "Nothing read yet."}
           </p>
         ) : (
-          items.map((n) => (
+          shown.map((n) => (
             <div
               key={n.id}
               className={cn(

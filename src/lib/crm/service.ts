@@ -176,6 +176,53 @@ export async function setLeadRepliesSeen(id: string): Promise<void> {
     .where(eq(lead.id, id));
 }
 
+// Active leads with an email + an owner to check for inbound replies. Used by
+// the reply-detection cron. Capped; newest first.
+export interface ReplyCheckLead {
+  id: string;
+  email: string | null;
+  ownerUserId: string | null;
+  capturedByUserId: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  companyName: string | null;
+  createdAt: Date | null;
+  repliesNotifiedAt: Date | null;
+}
+
+export async function listLeadsForReplyCheck(
+  limit = 50,
+): Promise<ReplyCheckLead[]> {
+  const rows = await db
+    .select({
+      id: lead.id,
+      email: lead.email,
+      ownerUserId: lead.ownerUserId,
+      capturedByUserId: lead.capturedByUserId,
+      firstName: lead.firstName,
+      lastName: lead.lastName,
+      companyName: lead.companyName,
+      createdAt: lead.createdAt,
+      repliesNotifiedAt: lead.repliesNotifiedAt,
+    })
+    .from(lead)
+    .where(and(eq(lead.status, "active"), sql`${lead.email} is not null`))
+    .orderBy(desc(lead.capturedAt))
+    .limit(limit);
+  return rows;
+}
+
+// Record that we notified about a reply for this lead (and that it replied).
+export async function markLeadReplyNotified(
+  id: string,
+  when: Date,
+): Promise<void> {
+  await db
+    .update(lead)
+    .set({ repliesNotifiedAt: when, repliedAt: when, updatedAt: new Date() })
+    .where(eq(lead.id, id));
+}
+
 // Soft delete: flip status to 'dropped'. History is preserved.
 export async function dropLead(id: string): Promise<{ id: string } | null> {
   const [row] = await db

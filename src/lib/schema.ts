@@ -1326,6 +1326,9 @@ export const lead = pgTable(
     // When the user last viewed this lead's Replies tab — a reply newer than
     // this counts as "new" (drives the Replies tab's blue dot).
     repliesSeenAt: timestamp("replies_seen_at", { mode: "date" }),
+    // When the reply-detection cron last raised a "lead replied" notification.
+    // A reply newer than this triggers a fresh notification (dedup guard).
+    repliesNotifiedAt: timestamp("replies_notified_at", { mode: "date" }),
     ownerUserId: text("owner_user_id").references(() => user.id),
     notes: text("notes"),
     cardImageUrl: text("card_image_url"),

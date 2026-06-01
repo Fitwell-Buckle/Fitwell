@@ -213,6 +213,7 @@ Uses the signed-in admin's stored Google OAuth access token (DrizzleAdapter's `a
 | GET | `/api/cron/extract-posthog` | `0 */3 * * *` | PostHog event aggregation |
 | GET | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Email owner + suppliers about line items due soon / overdue, and complete POs ready to receive |
 | GET | `/api/cron/lead-followups` | `0 14 * * *` | Draft a 2nd follow-up for leads whose first follow-up was sent ≥14d ago with no Gmail reply; queues into "Messages to Send" (never sends) |
+| GET | `/api/cron/lead-replies` | `0 */6 * * *` | Detect new lead replies (owner Gmail) and raise an admin notification ("X replied"); de-duped via `lead.replies_notified_at` |
 | GET | `/api/cron/health` | `0 */4 * * *` | Infrastructure health check |
 
 ### Webhooks

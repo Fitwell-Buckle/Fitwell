@@ -211,6 +211,13 @@
       "when": 1780324647743,
       "tag": "0029_remarkable_sabra",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1780326068856,
+      "tag": "0030_stale_kang",
+      "breakpoints": true
     }
   ]
 }

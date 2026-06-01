@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/lead-followups",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/lead-replies",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

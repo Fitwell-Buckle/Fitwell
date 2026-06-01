@@ -1,0 +1,1 @@
+ALTER TABLE "lead" ADD COLUMN "replies_notified_at" timestamp;
