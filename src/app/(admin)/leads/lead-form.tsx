@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,6 +56,12 @@ export interface LeadFormProps {
   // Where to send the user after a successful save. Defaults to the new
   // lead's detail page.
   onSuccess?: (newLeadId: string) => void;
+  // Optional second save button. Saves the lead exactly like the primary
+  // submit but runs this callback afterwards instead of `onSuccess` (e.g. the
+  // capture flow uses it for a plain "Save" that goes to the leads list while
+  // the primary loops back to the camera). Hidden when not provided.
+  secondaryLabel?: string;
+  onSecondary?: (newLeadId: string) => void;
   // Booth-capture mode: collapse the stage/persona/source/date fields (their
   // defaults are already right) so the screen is just identity + notes + save.
   rapid?: boolean;
@@ -112,6 +118,8 @@ export function LeadForm({
   confidence,
   submitLabel = "Save lead",
   onSuccess,
+  secondaryLabel,
+  onSecondary,
   rapid = false,
 }: LeadFormProps) {
   const router = useRouter();
@@ -146,13 +154,23 @@ export function LeadForm({
   // Set when the server reports a same-email duplicate (409); offers the user
   // "open existing" vs "create anyway".
   const [dupLeadId, setDupLeadId] = useState<string | null>(null);
+  // Which post-save behavior the in-flight save should run. Remembered so the
+  // 409 "Create anyway" retry (which carries no callback) reuses whichever
+  // button started it.
+  const onDoneRef = useRef<((id: string) => void) | undefined>(undefined);
 
-  async function save(allowDuplicate: boolean) {
+  async function save(allowDuplicate: boolean, onDone?: (id: string) => void) {
     setError(null);
     if (!firstName && !lastName && !email && !phone && !companyName) {
       setError("Provide at least one of name, email, phone, or company.");
       return;
     }
+    // Record the completion behavior for this save. A fresh primary submit
+    // (no callback, not a dup-retry) clears any prior secondary intent so it
+    // falls back to onSuccess; "Create anyway" (allowDuplicate, no callback)
+    // keeps whatever the originating button set.
+    if (onDone !== undefined) onDoneRef.current = onDone;
+    else if (!allowDuplicate) onDoneRef.current = undefined;
     setBusy(true);
     setDupLeadId(null);
     try {
@@ -202,7 +220,8 @@ export function LeadForm({
       void fetch(`/api/leads/${newId}/draft-followup`, { method: "POST" }).catch(
         () => {},
       );
-      if (onSuccess) onSuccess(newId);
+      const finish = onDoneRef.current ?? onSuccess;
+      if (finish) finish(newId);
       else {
         router.push(`/leads/${newId}`);
         router.refresh();
@@ -516,7 +535,7 @@ export function LeadForm({
             </p>
           )}
 
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button
               type="button"
               variant="outline"
@@ -524,6 +543,16 @@ export function LeadForm({
             >
               Cancel
             </Button>
+            {onSecondary && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void save(false, onSecondary)}
+              >
+                {secondaryLabel ?? "Save"}
+              </Button>
+            )}
             <Button type="submit" disabled={busy}>
               {busy ? "Saving…" : submitLabel}
             </Button>

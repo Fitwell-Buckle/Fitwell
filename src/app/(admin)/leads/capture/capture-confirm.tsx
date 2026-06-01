@@ -219,6 +219,12 @@ export function CaptureConfirm({
             toast.success("Saved");
             onSavedNext();
           }}
+          secondaryLabel="Save"
+          onSecondary={() => {
+            toast.success("Lead saved");
+            router.push("/leads");
+            router.refresh();
+          }}
         />
       </div>
     </div>
