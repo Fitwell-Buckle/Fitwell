@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Mono, Muted } from "@/components/ui/data-table";
 import { MetricCard } from "@/components/charts/metric-card";
+import { InboundMessages } from "@/components/crm/inbound-messages";
 
 export const metadata: Metadata = {
   title: "Customer Detail | Fitwell Admin",
@@ -69,6 +70,11 @@ export default async function CustomerDetailPage({
           />
         </div>
       )}
+
+      <InboundMessages
+        emails={cust.email ? [cust.email] : []}
+        relationship="customer"
+      />
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
         <Card>

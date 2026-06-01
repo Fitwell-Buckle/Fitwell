@@ -8,6 +8,7 @@ import { company, customerAddress, priceTier } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { InboundMessages } from "@/components/crm/inbound-messages";
 import { CustomerDetailView } from "./customer-detail-view";
 
 export const metadata: Metadata = {
@@ -78,6 +79,14 @@ export default async function CustomerDetailPage({
           name: c.name,
         }))}
         priceTiers={tiers}
+      />
+
+      <InboundMessages
+        emails={[
+          companyRow.contactEmail,
+          ...companyRow.contacts.map((c) => c.email),
+        ].filter((e): e is string => Boolean(e))}
+        relationship="b2b_customer"
       />
 
       {companyRow.customerId && (
