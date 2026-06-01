@@ -50,17 +50,17 @@ All incoming webhooks verified via HMAC-SHA256:
 
 ## Gmail (admin's mailbox; per-admin OAuth)
 
-**Purpose**: Surface known contact emails when adding a supplier login / contact, so the admin doesn't have to remember an exact address.
+**Purpose**: (1) Surface known contact emails when adding a supplier login / contact. (2) CRM: detect lead replies, list a lead's replies (Replies tab), and **send** follow-up emails from "Messages to Send" via the admin's own Gmail.
 
 | Detail | Value |
 |---|---|
 | Library | Direct REST (`gmail.googleapis.com/gmail/v1`) — no SDK |
-| Auth | The signed-in admin's stored Google OAuth token (DrizzleAdapter's `account` row, `provider='google'`). Refreshed via `refresh_token` on demand and persisted back |
-| Scope | `https://www.googleapis.com/auth/gmail.readonly` — added to the Google provider in `src/lib/auth.ts` |
-| Server lib | `src/lib/gmail/search.ts` — `searchAdminGmailContacts(userId, query)` |
+| Auth | The signed-in admin's stored Google OAuth token (DrizzleAdapter's `account` row, `provider='google'`). Refreshed via `refresh_token` on demand and persisted back. Shared token helper: `src/lib/gmail/token.ts` |
+| Scopes | `gmail.readonly` (search + read replies) **and** `gmail.send` (send follow-ups) — both added to the Google provider in `src/lib/auth.ts`. Adding a scope needs one sign-out + sign-in per admin to re-consent (see below) |
+| Server libs | `src/lib/gmail/search.ts` (`searchAdminGmailContacts`), `src/lib/gmail/inbound.ts` (`hasInboundEmailFrom`, `listInboundFrom` — reply detection + Replies tab), `src/lib/gmail/send.ts` (`sendGmail` — RFC-822 → base64url → `users/me/messages/send`) |
 | Parser | `src/lib/gmail/parse-addresses.ts` — pure RFC-5322-ish header parser (6 vitest cases) |
-| API route | `GET /api/gmail/search?q=…` — admin-only |
-| UI primitive | `<GmailContactSearch onPick={…} />` (`src/components/production/gmail-contact-search.tsx`) — used by `SupplierForm` (Contact email field) and `SupplierLogins` (Authorized logins card) |
+| API routes | `GET /api/gmail/search?q=…`; `GET /api/leads/[id]/replies` + `POST /api/leads/[id]/replies-seen`; `POST /api/messages/[id]/send` — all admin-only |
+| UI | `<GmailContactSearch>` (supplier forms); lead-detail **Replies** tab; **Send via Gmail** in Messages to Send |
 
 ### Auth: tokens are not auto-refreshed on subsequent sign-ins
 
@@ -68,17 +68,33 @@ A nuance worth remembering: NextAuth's `DrizzleAdapter` only calls `linkAccount`
 
 After this fix lands, any future scope addition takes effect with one sign-out + sign-in per admin. Before it, scope additions are stuck forever on existing admins.
 
-### Setup: enable the Gmail API on the OAuth client's GCP project
+### Setup: enable the Gmail API on the OAuth client's GCP project ⚠️ REQUIRED
 
-When a fresh token tries its first call, Google returns:
+**Every Gmail feature (contact search, lead reply detection, the Replies tab,
+and Send via Gmail) needs the Gmail API enabled on the OAuth client's Google
+Cloud project.** Granting the OAuth scopes is NOT enough — the API itself must
+be turned on. Until it is, all Gmail calls return 403:
 
 > "Gmail API has not been used in project <project_number> before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=<n> then retry."
 
-The project is the one tied to `AUTH_GOOGLE_ID` (separate from `fitwell-496020` used by the Google Ads / GA4 service account; the OAuth client's project is owned by whoever set up `AUTH_GOOGLE_ID` originally). Once enabled, the call returns results within a minute or two.
+The project is the one tied to `AUTH_GOOGLE_ID` — currently **`992120641760`**
+(separate from `fitwell-496020`, used by the Google Ads / GA4 service account).
+Enable it here, then wait ~1–2 min:
+**https://console.cloud.google.com/apis/api/gmail.googleapis.com/overview?project=992120641760**
+
+The app distinguishes this case: `sendGmail` parses the 403 body and the Send
+route shows *"The Gmail API isn't enabled for this Google Cloud project…"*
+(rather than a misleading "re-consent" message). Owner: coordinate with Greg —
+this is a one-click Console toggle on the project that owns `AUTH_GOOGLE_ID`.
 
 ### Diagnostic: confirm a stored token is actually usable
 
-If the UI returns "Gmail search failed (403)" with the token present and scope granted, the most likely cause is "Gmail API not enabled on the OAuth project." A one-shot probe (bypasses the app — direct token → Gmail API) lives in the session transcript; tl;dr: pull the token from the `account` row for `provider='google'`, then `curl https://gmail.googleapis.com/gmail/v1/users/me/messages?q=test -H "Authorization: Bearer $token"`. Google's response body names the missing API directly.
+If a Gmail feature 403s with the token present and scope granted (confirm the
+stored `scope` includes `gmail.send`/`gmail.readonly` by querying the
+`account` row), the cause is almost always "Gmail API not enabled on the OAuth
+project" — fix above. A one-shot probe (bypasses the app — direct token →
+Gmail API): pull `access_token` from the `account` row for `provider='google'`,
+then `curl https://gmail.googleapis.com/gmail/v1/users/me/messages?q=test -H "Authorization: Bearer $token"`. Google's response body names the missing API directly.
 
 ---
 
