@@ -35,7 +35,7 @@ export default async function MessagesPage() {
 
   return (
     <div>
-      <PageHeader title="B2B Leads" />
+      <PageHeader title="Leads" />
       <SectionTabs tabs={LEADS_TABS} />
       <p className="mt-4 text-sm text-zinc-500">
         AI-drafted follow-ups, queued after each lead is captured. Review,

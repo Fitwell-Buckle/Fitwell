@@ -121,7 +121,7 @@ export default async function ProductionPage({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Supplier POs" />
+        <PageHeader title="Purchase Orders" />
         <Button asChild>
           <Link href="/modules/production/po/new">New PO</Link>
         </Button>

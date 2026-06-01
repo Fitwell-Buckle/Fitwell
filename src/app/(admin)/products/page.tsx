@@ -82,7 +82,7 @@ export default async function ProductsPage({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Product List" />
+        <PageHeader title="Products" />
         <RefreshCatalogButton />
       </div>
 

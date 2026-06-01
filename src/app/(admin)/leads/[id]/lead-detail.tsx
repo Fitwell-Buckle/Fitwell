@@ -137,6 +137,34 @@ export function LeadDetail({
     }
   }
 
+  // Save the current notes, then ask Claude to draft a follow-up from them and
+  // queue it in Messages to Send. Lets the user generate a draft after adding
+  // notes they forgot at capture time.
+  async function draftFollowupFromNotes() {
+    const err = await patch({ notes: draft.notes });
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    setSavedKey("notes");
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/draft-followup`, {
+        method: "POST",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json?.error ?? "Couldn't draft the email");
+        return;
+      }
+      toast.success("Draft follow-up added to Messages to Send");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't draft the email");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function convertToCompany() {
     if (!convertCompanyId) {
       setError("Pick a company to convert into.");
@@ -355,12 +383,15 @@ export function LeadDetail({
             </pre>
           </div>
         )}
-        <div className="mt-4 flex items-center justify-end gap-3">
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
           {savedKey === "notes" && !busy && (
             <span className="text-sm font-medium text-emerald-600">
               ✓ Saved
             </span>
           )}
+          <Button variant="outline" onClick={draftFollowupFromNotes} disabled={busy}>
+            Draft follow-up email
+          </Button>
           <Button
             onClick={saveNotes}
             disabled={busy}
@@ -373,6 +404,10 @@ export function LeadDetail({
             {busy ? "Saving…" : savedKey === "notes" ? "✓ Saved" : "Save notes"}
           </Button>
         </div>
+        <p className="mt-2 text-right text-xs text-zinc-500">
+          Drafts an AI follow-up from these notes into Customers → Leads →
+          Messages to Send.
+        </p>
       </CardContent>
     </Card>
   );

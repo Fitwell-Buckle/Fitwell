@@ -25,7 +25,7 @@ export default async function SuppliersPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Supplier List" />
+        <PageHeader title="Suppliers" />
         <Button variant="ghost" size="sm" asChild>
           <Link href="/modules/production">Back</Link>
         </Button>

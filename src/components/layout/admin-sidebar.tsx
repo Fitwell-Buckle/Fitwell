@@ -49,22 +49,22 @@ type NavItem = NavLeaf | NavGroup;
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   {
-    label: "Customers",
+    label: "Customer",
     icon: Users,
     children: [
-      { href: "/leads", label: "B2B Leads" },
-      { href: "/customers", label: "Customer List" },
-      { href: "/orders", label: "Orders", icon: ShoppingBag },
+      { href: "/leads", label: "Leads" },
+      { href: "/customers/brands", label: "Customers" },
+      { href: "/invoices", label: "Orders", icon: ShoppingBag },
     ],
   },
   {
-    label: "Products",
+    label: "Product",
     icon: Package,
     children: [
       { href: "/modules/production", label: "Purchase Orders", icon: ClipboardList },
-      { href: "/modules/production/suppliers", label: "Supplier List" },
+      { href: "/modules/production/suppliers", label: "Suppliers" },
       { href: "/modules/production/summary", label: "Production Summary" },
-      { href: "/products", label: "Product List" },
+      { href: "/products", label: "Products" },
     ],
   },
   {
@@ -180,9 +180,9 @@ function SidebarContent({
           }
 
           // Children render alphabetically by label within their parent.
-          const children = [...item.children].sort((a, b) =>
-            a.label.localeCompare(b.label),
-          );
+          // Display in the order declared in navItems (not alphabetical) so
+          // each group's sequence is intentional.
+          const children = item.children;
           // Active child = the longest href that prefixes the current path.
           const matchPath = (href: string) =>
             pathname === href || pathname.startsWith(`${href}/`);
