@@ -49,6 +49,13 @@ export function NotificationList({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      // Tell other surfaces (the sidebar unread badge) to re-read the count so
+      // marking read here clears the badge everywhere immediately — not just
+      // after the next navigation. router.refresh() only re-renders this page's
+      // server components, not the persistent sidebar.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("admin-notifications-changed"));
+      }
       router.refresh();
     } finally {
       setBusy(false);

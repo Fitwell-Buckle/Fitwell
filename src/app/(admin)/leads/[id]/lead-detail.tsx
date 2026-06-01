@@ -107,6 +107,9 @@ export function LeadDetail({
   const [convertCompanyId, setConvertCompanyId] = useState(
     lead.companyId ?? "",
   );
+  // When the convert dropdown is set to "__new__", this holds the name for the
+  // company we'll create on the fly. Prefilled from the lead's free-text company.
+  const [newCompanyName, setNewCompanyName] = useState(lead.companyName ?? "");
   // History-tab "Add comment" composer.
   const [comment, setComment] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
@@ -251,12 +254,55 @@ export function LeadDetail({
       toast.error("Pick a company to convert into.");
       return;
     }
-    const err = await patch({
-      companyId: convertCompanyId,
-      status: "converted",
-    });
+
+    // "+ Add a new company…": create it first, then convert into the new id.
+    let companyId = convertCompanyId;
+    if (convertCompanyId === "__new__") {
+      const name = newCompanyName.trim();
+      if (!name) {
+        setError("Enter a name for the new company.");
+        toast.error("Enter a name for the new company.");
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/production/companies", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name,
+            contactName:
+              [draft.firstName, draft.lastName].filter(Boolean).join(" ") ||
+              null,
+            contactEmail: draft.email || "",
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = json?.error ?? `Couldn't create company (${res.status})`;
+          setError(msg);
+          toast.error(msg);
+          setBusy(false);
+          return;
+        }
+        companyId = json.data.id as string;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Couldn't create company";
+        setError(msg);
+        toast.error(msg);
+        setBusy(false);
+        return;
+      }
+    }
+
+    const err = await patch({ companyId, status: "converted" });
     if (!err) {
-      toast.success("Lead converted to company");
+      toast.success(
+        convertCompanyId === "__new__"
+          ? `Created ${newCompanyName.trim()} and converted the lead`
+          : "Lead converted to company",
+      );
       router.refresh();
     } else {
       toast.error(err);
@@ -711,11 +757,16 @@ export function LeadDetail({
                     {c.name}
                   </option>
                 ))}
+                <option value="__new__">+ Add a new company…</option>
               </select>
             </div>
             <Button
               onClick={convertToCompany}
-              disabled={busy || !convertCompanyId}
+              disabled={
+                busy ||
+                !convertCompanyId ||
+                (convertCompanyId === "__new__" && !newCompanyName.trim())
+              }
             >
               Convert
             </Button>
@@ -734,6 +785,23 @@ export function LeadDetail({
               Delete
             </Button>
           </div>
+
+          {convertCompanyId === "__new__" && (
+            <div className="mt-3 max-w-md">
+              <label className={LBL}>New company name</label>
+              <Input
+                value={newCompanyName}
+                onChange={(e) => setNewCompanyName(e.target.value)}
+                placeholder="Company name"
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                We&apos;ll create this company
+                {draft.email ? ` with ${draft.email} as the contact` : ""} and
+                convert the lead into it.
+              </p>
+            </div>
+          )}
+
           <p className="mt-2 text-xs text-zinc-500">
             Converting links this lead to the chosen company and marks it{" "}
             <strong>converted</strong>. A Shopify customer record is only
