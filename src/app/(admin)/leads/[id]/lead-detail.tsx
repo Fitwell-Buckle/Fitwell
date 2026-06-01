@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DetailTabs } from "@/components/ui/detail-tabs";
 import { Input } from "@/components/ui/input";
+import { MessagesList, type MessageView } from "@/app/(admin)/messages/messages-list";
 import {
   LEAD_PERSONA_TAGS,
   LEAD_SOURCE_CHANNELS,
@@ -66,11 +67,13 @@ export function LeadDetail({
   companies,
   cardImages,
   messages,
+  draftMessages,
 }: {
   lead: LeadView;
   companies: { id: string; name: string }[];
   cardImages: LeadCardImageView[];
   messages: LeadMessageView[];
+  draftMessages: MessageView[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -565,6 +568,25 @@ export function LeadDetail({
         tabs={[
           { value: "overview", label: "Overview", content: overview },
           { value: "notes", label: "Notes", content: notes },
+          {
+            value: "messages",
+            label: "Messages to Send",
+            dot: draftMessages.length > 0,
+            content:
+              draftMessages.length > 0 ? (
+                <div className="mt-2">
+                  <MessagesList messages={draftMessages} />
+                </div>
+              ) : (
+                <Card>
+                  <CardContent>
+                    <p className="py-6 text-center text-sm text-zinc-400">
+                      Nothing to send. Draft a follow-up from the Notes tab.
+                    </p>
+                  </CardContent>
+                </Card>
+              ),
+          },
           { value: "history", label: "History", content: history },
         ]}
       />

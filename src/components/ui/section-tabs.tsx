@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 export interface SectionTab {
   href: string;
   label: string;
+  // Show a small blue dot next to the label (e.g. unsent drafts pending).
+  dot?: boolean;
 }
 
 // A horizontal tab bar that presents sibling routes as tabs. The active tab is
@@ -38,7 +40,15 @@ export function SectionTabs({
                 : "border-transparent text-zinc-500 hover:text-zinc-800",
             )}
           >
-            {t.label}
+            <span className="inline-flex items-center gap-1.5">
+              {t.label}
+              {t.dot && (
+                <span
+                  className="h-2 w-2 rounded-full bg-blue-500"
+                  aria-label="pending"
+                />
+              )}
+            </span>
           </Link>
         );
       })}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { listOutboundMessages } from "@/lib/crm/messages";
+import { countDraftMessages, listOutboundMessages } from "@/lib/crm/messages";
 import { leadDisplayName } from "@/lib/crm/display";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionTabs } from "@/components/ui/section-tabs";
@@ -17,6 +17,9 @@ export default async function MessagesPage() {
   if (!session) redirect("/auth/login");
 
   const rows = await listOutboundMessages();
+  const tabs = LEADS_TABS.map((t) =>
+    t.href === "/messages" ? { ...t, dot: rows.length > 0 } : t,
+  );
 
   const messages = rows.map((m) => ({
     id: m.id,
@@ -36,7 +39,7 @@ export default async function MessagesPage() {
   return (
     <div>
       <PageHeader title="Leads" />
-      <SectionTabs tabs={LEADS_TABS} />
+      <SectionTabs tabs={tabs} />
       <p className="mt-4 text-sm text-zinc-500">
         AI-drafted follow-ups, queued after each lead is captured. Review,
         edit, then send from your email and mark them done.

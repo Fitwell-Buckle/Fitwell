@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
 import { getLead, listLeadCardImages } from "@/lib/crm/service";
-import { listMessagesForLead } from "@/lib/crm/messages";
+import { listMessagesForLead, listOutboundMessages } from "@/lib/crm/messages";
 import { PageHeader } from "@/components/ui/page-header";
 import { leadDisplayName } from "@/lib/crm/display";
 import { LeadDetail } from "./lead-detail";
@@ -27,14 +27,26 @@ export default async function LeadDetailPage({
   const lead = await getLead(id);
   if (!lead) notFound();
 
-  const [companies, cardImages, messages] = await Promise.all([
+  const [companies, cardImages, messages, draftRows] = await Promise.all([
     db
       .select({ id: company.id, name: company.name })
       .from(company)
       .orderBy(asc(company.name)),
     listLeadCardImages(id),
     listMessagesForLead(id),
+    listOutboundMessages({ status: "draft", leadId: id }),
   ]);
+
+  const leadName = leadDisplayName(lead);
+  const draftMessages = draftRows.map((m) => ({
+    id: m.id,
+    leadId: m.leadId,
+    toEmail: m.toEmail,
+    subject: m.subject,
+    body: m.body,
+    status: m.status,
+    leadName,
+  }));
 
   return (
     <div>
@@ -82,6 +94,7 @@ export default async function LeadDetailPage({
           createdAt: m.createdAt,
           sentAt: m.sentAt,
         }))}
+        draftMessages={draftMessages}
       />
     </div>
   );

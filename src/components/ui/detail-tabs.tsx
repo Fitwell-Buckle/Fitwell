@@ -8,6 +8,8 @@ export interface DetailTabSpec {
   value: string;
   /** Label shown in the tab strip. */
   label: string;
+  /** Show a small blue dot next to the label (e.g. items need action). */
+  dot?: boolean;
   /** Tab body — wrap in `<Card>` (or equivalent) inside the caller if you want
    *  framing, since `DetailTabs` itself only provides the tab strip + content
    *  swap (no padded container). */
@@ -32,7 +34,15 @@ export function DetailTabs({ tabs }: { tabs: DetailTabSpec[] }) {
         <TabsList>
           {tabs.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
-              {t.label}
+              <span className="inline-flex items-center gap-1.5">
+                {t.label}
+                {t.dot && (
+                  <span
+                    className="h-2 w-2 rounded-full bg-blue-500"
+                    aria-label="pending"
+                  />
+                )}
+              </span>
             </TabsTrigger>
           ))}
         </TabsList>

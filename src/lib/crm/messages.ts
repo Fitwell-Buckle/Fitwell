@@ -156,11 +156,15 @@ export async function findLeadsNeedingNudge(
 }
 
 // List messages joined with their lead's display fields. Defaults to the
-// pending queue (status='draft'); pass status to view sent/dismissed.
-export async function listOutboundMessages(filters: { status?: string } = {}) {
+// pending queue (status='draft'); pass status to view sent/dismissed, and/or
+// leadId to scope to one lead.
+export async function listOutboundMessages(
+  filters: { status?: string; leadId?: string } = {},
+) {
   const conds: SQL[] = [
     eq(outboundMessage.status, filters.status ?? "draft"),
   ];
+  if (filters.leadId) conds.push(eq(outboundMessage.leadId, filters.leadId));
   return db
     .select({
       id: outboundMessage.id,

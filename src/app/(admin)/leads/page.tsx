@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { listLeads } from "@/lib/crm/service";
+import { countDraftMessages } from "@/lib/crm/messages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -52,7 +53,13 @@ export default async function LeadsPage({
     search: strParam(params.search),
   };
 
-  const leads = await listLeads(filters);
+  const [leads, draftCount] = await Promise.all([
+    listLeads(filters),
+    countDraftMessages(),
+  ]);
+  const tabs = LEADS_TABS.map((t) =>
+    t.href === "/messages" ? { ...t, dot: draftCount > 0 } : t,
+  );
 
   return (
     <div>
@@ -68,7 +75,7 @@ export default async function LeadsPage({
         </div>
       </div>
 
-      <SectionTabs tabs={LEADS_TABS} />
+      <SectionTabs tabs={tabs} />
 
       <LeadsFilters />
 
