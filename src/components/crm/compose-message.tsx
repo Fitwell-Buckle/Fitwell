@@ -12,7 +12,7 @@ export interface ComposeTarget {
   contactName?: string | null;
   theirSubject?: string | null;
   theirMessage?: string | null;
-  relationship?: "customer" | "b2b_customer" | "lead";
+  relationship?: "customer" | "b2b_customer" | "lead" | "supplier";
 }
 
 // "Compose Message" button + AI-assisted reply modal. Drafts a reply via Claude

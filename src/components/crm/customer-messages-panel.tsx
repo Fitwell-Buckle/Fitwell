@@ -36,7 +36,7 @@ export function CustomerMessagesPanel({
   audience,
 }: {
   messages: CustomerMessageItem[];
-  audience: "b2b" | "consumer";
+  audience: "b2b" | "consumer" | "supplier";
 }) {
   const router = useRouter();
   const [dismissing, setDismissing] = useState<string | null>(null);
@@ -73,7 +73,8 @@ export function CustomerMessagesPanel({
       <CardContent>
         <p className="flex items-center gap-2 text-sm font-semibold text-zinc-900">
           <Mail className="h-4 w-4 text-sky-600" />
-          New messages from customers ({shown.length})
+          New messages from {audience === "supplier" ? "suppliers" : "customers"}{" "}
+          ({shown.length})
         </p>
         <ul className="mt-3 divide-y divide-zinc-100">
           {shown.map((m) => {
@@ -116,7 +117,12 @@ export function CustomerMessagesPanel({
                       contactName: m.displayName,
                       theirSubject: m.subject,
                       theirMessage: m.snippet,
-                      relationship: audience === "b2b" ? "b2b_customer" : "customer",
+                      relationship:
+                        audience === "b2b"
+                          ? "b2b_customer"
+                          : audience === "supplier"
+                            ? "supplier"
+                            : "customer",
                     }}
                     onSent={() => dismiss(m.id)}
                   />

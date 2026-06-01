@@ -6,6 +6,8 @@ import {
   companyContact,
   customer,
   customerMessage,
+  supplier,
+  supplierContact,
   user as userTable,
 } from "@/lib/schema";
 import {
@@ -20,13 +22,18 @@ import { buildInternalEmailMatcher } from "./internal-email";
 
 // Build the email→customer / email→company index from stored records.
 export async function buildCustomerEmailIndex(): Promise<CustomerEmailIndex> {
-  const [companyRows, contactRows, customerRows] = await Promise.all([
-    db.select({ id: company.id, email: company.contactEmail }).from(company),
-    db
-      .select({ companyId: companyContact.companyId, email: companyContact.email })
-      .from(companyContact),
-    db.select({ id: customer.id, email: customer.email }).from(customer),
-  ]);
+  const [companyRows, contactRows, customerRows, supplierRows, supContactRows] =
+    await Promise.all([
+      db.select({ id: company.id, email: company.contactEmail }).from(company),
+      db
+        .select({ companyId: companyContact.companyId, email: companyContact.email })
+        .from(companyContact),
+      db.select({ id: customer.id, email: customer.email }).from(customer),
+      db.select({ id: supplier.id, email: supplier.contactEmail }).from(supplier),
+      db
+        .select({ supplierId: supplierContact.supplierId, email: supplierContact.email })
+        .from(supplierContact),
+    ]);
 
   const companyByEmail = new Map<string, string>();
   for (const r of companyRows) {
@@ -39,7 +46,14 @@ export async function buildCustomerEmailIndex(): Promise<CustomerEmailIndex> {
   for (const r of customerRows) {
     if (r.email) customerByEmail.set(r.email.toLowerCase(), r.id);
   }
-  return { companyByEmail, customerByEmail };
+  const supplierByEmail = new Map<string, string>();
+  for (const r of supplierRows) {
+    if (r.email) supplierByEmail.set(r.email.toLowerCase(), r.id);
+  }
+  for (const r of supContactRows) {
+    if (r.email) supplierByEmail.set(r.email.toLowerCase(), r.supplierId);
+  }
+  return { companyByEmail, customerByEmail, supplierByEmail };
 }
 
 // Scan each connected team inbox for recent inbound mail, match senders to
@@ -51,7 +65,11 @@ export async function scanCustomerMessages(): Promise<{
   inserted: number;
 }> {
   const index = await buildCustomerEmailIndex();
-  if (index.companyByEmail.size === 0 && index.customerByEmail.size === 0) {
+  if (
+    index.companyByEmail.size === 0 &&
+    index.customerByEmail.size === 0 &&
+    (index.supplierByEmail?.size ?? 0) === 0
+  ) {
     return { scanned: 0, inserted: 0 };
   }
   const mailboxes = await listConnectedMailboxes();
@@ -86,6 +104,7 @@ export async function scanCustomerMessages(): Promise<{
           audience: match.audience,
           customerId: match.customerId,
           companyId: match.companyId,
+          supplierId: match.supplierId,
         })
         .onConflictDoNothing({ target: customerMessage.gmailMessageId })
         .returning({ id: customerMessage.id });
@@ -94,11 +113,17 @@ export async function scanCustomerMessages(): Promise<{
       inserted++;
 
       const who = match.name || match.email;
+      const href =
+        match.audience === "supplier"
+          ? "/modules/production/suppliers"
+          : match.audience === "b2b"
+            ? "/customers/brands"
+            : "/customers";
       await db.insert(adminNotification).values({
         type: "customer_message",
         title: `New message from ${who}`,
         body: m.subject || m.snippet || null,
-        href: match.audience === "b2b" ? "/customers/brands" : "/customers",
+        href,
       });
     }
   }
@@ -119,12 +144,13 @@ export interface CustomerMessageView {
   mailboxEmail: string | null;
   customerId: string | null;
   companyId: string | null;
+  supplierId: string | null;
 }
 
 // Undismissed customer messages for an audience, newest first, with a resolved
-// display name (company name / customer name / sender name / email).
+// display name (company / supplier / customer name / sender name / email).
 export async function listCustomerMessages(
-  audience: "b2b" | "consumer",
+  audience: "b2b" | "consumer" | "supplier",
 ): Promise<CustomerMessageView[]> {
   const rows = await db
     .select({
@@ -141,13 +167,16 @@ export async function listCustomerMessages(
       mailboxEmail: userTable.email,
       customerId: customerMessage.customerId,
       companyId: customerMessage.companyId,
+      supplierId: customerMessage.supplierId,
       custFirst: customer.firstName,
       custLast: customer.lastName,
       coName: company.name,
+      supName: supplier.name,
     })
     .from(customerMessage)
     .leftJoin(customer, eq(customerMessage.customerId, customer.id))
     .leftJoin(company, eq(customerMessage.companyId, company.id))
+    .leftJoin(supplier, eq(customerMessage.supplierId, supplier.id))
     .leftJoin(userTable, eq(customerMessage.mailboxUserId, userTable.id))
     .where(
       and(
@@ -159,7 +188,8 @@ export async function listCustomerMessages(
 
   return rows.map((r) => {
     const custName = [r.custFirst, r.custLast].filter(Boolean).join(" ").trim();
-    const displayName = r.coName || custName || r.fromName || r.fromEmail;
+    const displayName =
+      r.supName || r.coName || custName || r.fromName || r.fromEmail;
     return {
       id: r.id,
       gmailMessageId: r.gmailMessageId,
@@ -174,6 +204,7 @@ export async function listCustomerMessages(
       mailboxEmail: r.mailboxEmail,
       customerId: r.customerId,
       companyId: r.companyId,
+      supplierId: r.supplierId,
     };
   });
 }
@@ -193,6 +224,7 @@ export async function dismissCustomerMessage(
 export async function countNewCustomerMessages(): Promise<{
   b2b: number;
   consumer: number;
+  supplier: number;
   total: number;
 }> {
   const rows = await db
@@ -202,5 +234,6 @@ export async function countNewCustomerMessages(): Promise<{
     .groupBy(customerMessage.audience);
   const b2b = rows.find((r) => r.audience === "b2b")?.n ?? 0;
   const consumer = rows.find((r) => r.audience === "consumer")?.n ?? 0;
-  return { b2b, consumer, total: b2b + consumer };
+  const supplier = rows.find((r) => r.audience === "supplier")?.n ?? 0;
+  return { b2b, consumer, supplier, total: b2b + consumer + supplier };
 }

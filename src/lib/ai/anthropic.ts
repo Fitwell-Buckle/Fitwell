@@ -327,7 +327,7 @@ export interface DraftReplyInput {
   theirSubject?: string | null;
   theirMessage?: string | null;
   // Who they are to us — tunes the tone.
-  relationship?: "customer" | "b2b_customer" | "lead";
+  relationship?: "customer" | "b2b_customer" | "lead" | "supplier";
   // The Fitwell rep's name for the sign-off, if known.
   fromName?: string | null;
 }

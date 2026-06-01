@@ -7,7 +7,9 @@ const schema = z.object({
   contactName: z.string().max(200).nullish(),
   theirSubject: z.string().max(500).nullish(),
   theirMessage: z.string().max(10_000).nullish(),
-  relationship: z.enum(["customer", "b2b_customer", "lead"]).optional(),
+  relationship: z
+    .enum(["customer", "b2b_customer", "lead", "supplier"])
+    .optional(),
 });
 
 // AI-draft a reply to an inbound email. Returns { subject, body } for the

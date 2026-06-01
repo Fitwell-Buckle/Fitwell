@@ -53,7 +53,7 @@ export function InboundMessages({
   title = "Messages",
 }: {
   emails: string[];
-  relationship: "customer" | "b2b_customer";
+  relationship: "customer" | "b2b_customer" | "supplier";
   title?: string;
 }) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");

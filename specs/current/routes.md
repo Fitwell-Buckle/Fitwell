@@ -181,7 +181,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | PATCH | `/api/messages/[id]` | Edit a queued message (subject/body/toEmail) or change status (`sent` stamps `sent_at`, `dismissed` removes it from the queue) |
 | POST | `/api/messages/[id]/send` | Send the message through the signed-in admin's Gmail (From = their account) then mark it sent. Needs the `gmail.send` scope — 409 with a re-sign-in prompt if not yet authorized |
 | POST | `/api/leads/[id]/replies/dismiss` | Hide one inbound reply from the lead's Replies tab — JSON `{ gmailMessageId }`, appended to `lead.dismissed_reply_ids` |
-| GET | `/api/customer-messages/count` | `{ b2b, consumer, total }` of undismissed customer messages (nav dot) |
+| GET | `/api/customer-messages/count` | `{ b2b, consumer, supplier, total }` of undismissed customer/supplier messages (nav dots) |
 | GET | `/api/inbound?emails=a,b` | Inbound email history for one or more addresses (comma-separated), searched across all connected team inboxes, merged + deduped by gmail id. **Only messages FROM the external contact** — senders that are internal (a connected mailbox, an admin address, or anyone on the team domain) are filtered out (`lib/crm/internal-email.ts`). Returns `{ replies, mailboxes }`. Powers the per-customer / per-company **Messages** view |
 | POST | `/api/customer-messages/[id]/dismiss` | Mark a customer message dismissed (`dismissed_at = now`) |
 | POST | `/api/compose/draft` | AI-draft a reply to an inbound email — JSON `{ contactName?, theirSubject?, theirMessage?, relationship? }` → `{ subject, body }`. 503 if `ANTHROPIC_API_KEY` unset |
@@ -222,7 +222,7 @@ Uses the signed-in admin's stored Google OAuth access token (DrizzleAdapter's `a
 | GET | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Email owner + suppliers about line items due soon / overdue, and complete POs ready to receive |
 | GET | `/api/cron/lead-followups` | `0 14 * * *` | Draft a 2nd follow-up for leads whose first follow-up was sent ≥14d ago with no Gmail reply; queues into "Messages to Send" (never sends) |
 | GET | `/api/cron/lead-replies` | `*/5 * * * *` | Detect new lead replies (owner Gmail, bounded-concurrency) and raise an admin notification ("X replied"); de-duped via `lead.replies_notified_at` |
-| GET | `/api/cron/customer-messages` | `*/15 * * * *` | Scan connected team inboxes for recent inbound mail from existing customers (matched by stored email), record new ones in `customer_message` (dedup on gmail id), and raise a `customer_message` notification per match |
+| GET | `/api/cron/customer-messages` | `*/15 * * * *` | Scan connected team inboxes for recent inbound mail from existing customers **or suppliers** (matched by stored email), record new ones in `customer_message` (dedup on gmail id), and raise a `customer_message` notification per match |
 | GET | `/api/cron/health` | `0 */4 * * *` | Infrastructure health check |
 
 ### Webhooks

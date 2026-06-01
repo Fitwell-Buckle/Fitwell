@@ -1469,10 +1469,12 @@ export const customerMessage = pgTable(
     subject: text("subject"),
     snippet: text("snippet"),
     receivedAt: timestamp("received_at", { mode: "date" }),
-    // 'b2b' (matched a company contact) | 'consumer' (matched a customer row).
+    // 'b2b' (company contact) | 'consumer' (customer row) | 'supplier'
+    // (supplier contact). Drives which tab/list the message surfaces on.
     audience: text("audience").notNull(),
     customerId: text("customer_id").references(() => customer.id),
     companyId: text("company_id").references(() => company.id),
+    supplierId: text("supplier_id").references(() => supplier.id),
     dismissedAt: timestamp("dismissed_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
@@ -1482,6 +1484,7 @@ export const customerMessage = pgTable(
     index("customer_message_received_at_idx").on(t.receivedAt),
     index("customer_message_customer_id_idx").on(t.customerId),
     index("customer_message_company_id_idx").on(t.companyId),
+    index("customer_message_supplier_id_idx").on(t.supplierId),
   ],
 );
 

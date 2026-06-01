@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { supplier } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { InboundMessages } from "@/components/crm/inbound-messages";
 import { SupplierDetailView } from "./supplier-detail-view";
 
 export const metadata: Metadata = {
@@ -50,6 +51,14 @@ export default async function SupplierDetailPage({
           email: c.email,
           name: c.name,
         }))}
+      />
+
+      <InboundMessages
+        emails={[
+          supplierRow.contactEmail,
+          ...supplierRow.contacts.map((c) => c.email),
+        ].filter((e): e is string => Boolean(e))}
+        relationship="supplier"
       />
     </div>
   );

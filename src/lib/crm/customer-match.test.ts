@@ -8,7 +8,15 @@ import {
 
 const index: CustomerEmailIndex = {
   companyByEmail: new Map([["buyer@acme.com", "co_1"]]),
-  customerByEmail: new Map([["jane@gmail.com", "cust_1"], ["buyer@acme.com", "cust_9"]]),
+  customerByEmail: new Map([
+    ["jane@gmail.com", "cust_1"],
+    ["buyer@acme.com", "cust_9"],
+    ["dual@x.com", "cust_dual"],
+  ]),
+  supplierByEmail: new Map([
+    ["vendor@epowercorp.com", "sup_1"],
+    ["dual@x.com", "sup_dual"],
+  ]),
 };
 
 describe("parseEmailAddress", () => {
@@ -44,6 +52,13 @@ describe("matchCustomerSender", () => {
   it("matches a consumer customer", () => {
     const m = matchCustomerSender("Jane <jane@gmail.com>", index);
     expect(m).toMatchObject({ audience: "consumer", customerId: "cust_1", companyId: null });
+  });
+  it("matches a supplier contact", () => {
+    const m = matchCustomerSender("Vendor <vendor@epowercorp.com>", index);
+    expect(m).toMatchObject({ audience: "supplier", supplierId: "sup_1" });
+  });
+  it("prefers supplier over a plain consumer match (same email in both)", () => {
+    expect(matchCustomerSender("dual@x.com", index)?.audience).toBe("supplier");
   });
   it("returns null for an unknown sender", () => {
     expect(matchCustomerSender("stranger@nowhere.com", index)).toBeNull();

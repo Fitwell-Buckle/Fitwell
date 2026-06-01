@@ -7,6 +7,8 @@ import { db } from "@/lib/db";
 import { supplier } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { listCustomerMessages } from "@/lib/crm/customer-messages";
+import { CustomerMessagesPanel } from "@/components/crm/customer-messages-panel";
 import { SupplierManager } from "./supplier-manager";
 
 export const metadata: Metadata = {
@@ -17,10 +19,13 @@ export default async function SuppliersPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
-  const suppliers = await db.query.supplier.findMany({
-    orderBy: asc(supplier.name),
-    with: { contacts: { columns: { id: true, email: true, name: true } } },
-  });
+  const [suppliers, messages] = await Promise.all([
+    db.query.supplier.findMany({
+      orderBy: asc(supplier.name),
+      with: { contacts: { columns: { id: true, email: true, name: true } } },
+    }),
+    listCustomerMessages("supplier"),
+  ]);
 
   return (
     <div>
@@ -30,6 +35,21 @@ export default async function SuppliersPage() {
           <Link href="/modules/production">Back</Link>
         </Button>
       </div>
+
+      <CustomerMessagesPanel
+        audience="supplier"
+        messages={messages.map((m) => ({
+          id: m.id,
+          threadId: m.threadId,
+          fromEmail: m.fromEmail,
+          displayName: m.displayName,
+          subject: m.subject,
+          snippet: m.snippet,
+          receivedAt: m.receivedAt ? m.receivedAt.toISOString() : null,
+          mailboxLabel: m.mailboxLabel,
+          mailboxEmail: m.mailboxEmail,
+        }))}
+      />
 
       <SupplierManager
         suppliers={suppliers.map((s) => ({
