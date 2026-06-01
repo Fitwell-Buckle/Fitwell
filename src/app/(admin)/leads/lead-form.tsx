@@ -27,6 +27,12 @@ export interface LeadFormInitial {
   title?: string | null;
   companyName?: string | null;
   website?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  region?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
   stage?: string;
   personaTag?: string | null;
   sourceChannel?: string;
@@ -117,6 +123,16 @@ export function LeadForm({
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [companyName, setCompanyName] = useState(initial?.companyName ?? "");
+  const [addressLine1, setAddressLine1] = useState(
+    initial?.addressLine1 ?? "",
+  );
+  const [addressLine2, setAddressLine2] = useState(
+    initial?.addressLine2 ?? "",
+  );
+  const [city, setCity] = useState(initial?.city ?? "");
+  const [region, setRegion] = useState(initial?.region ?? "");
+  const [postalCode, setPostalCode] = useState(initial?.postalCode ?? "");
+  const [country, setCountry] = useState(initial?.country ?? "");
   const [stage, setStage] = useState(initial?.stage ?? "prospect");
   const [personaTag, setPersonaTag] = useState(initial?.personaTag ?? "");
   const [sourceChannel, setSourceChannel] = useState(
@@ -150,6 +166,12 @@ export function LeadForm({
           phone: phone || null,
           title: title || null,
           companyName: companyName || null,
+          addressLine1: addressLine1 || null,
+          addressLine2: addressLine2 || null,
+          city: city || null,
+          region: region || null,
+          postalCode: postalCode || null,
+          country: country || null,
           stage,
           personaTag: personaTag || null,
           sourceChannel,
@@ -196,6 +218,118 @@ export function LeadForm({
     void save(false);
   }
 
+  // Persona — pulled to the very top of the form (the first thing you set
+  // when capturing a lead at a booth).
+  const personaField = (
+    <div>
+      <FieldLabel htmlFor="personaTag">Persona</FieldLabel>
+      <select
+        id="personaTag"
+        className={SEL}
+        value={personaTag}
+        onChange={(e) => setPersonaTag(e.target.value)}
+      >
+        <option value="">— pick a persona —</option>
+        {LEAD_PERSONA_TAGS.map((p) => (
+          <option key={p} value={p}>
+            {personaLabel(p)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  // Quick note — directly under persona.
+  const notesField = (
+    <div>
+      <div className="mb-1 flex items-center justify-between">
+        <FieldLabel htmlFor="notes">Quick note</FieldLabel>
+        {dictation.supported && (
+          <button
+            type="button"
+            onClick={dictation.toggle}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ${
+              dictation.listening
+                ? "bg-red-100 text-red-700"
+                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+            }`}
+            aria-pressed={dictation.listening}
+          >
+            <Mic className="h-3.5 w-3.5" />
+            {dictation.listening ? "Listening… tap to stop" : "Dictate"}
+          </button>
+        )}
+      </div>
+      <textarea
+        id="notes"
+        className="min-h-[120px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Quick note — or tap Dictate and speak"
+      />
+    </div>
+  );
+
+  // Mailing address. Free-text everything (incl. country) so foreign /
+  // international formats fit without a fixed picker.
+  const addressFields = (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="sm:col-span-2">
+        <FieldLabel htmlFor="addressLine1">Street address</FieldLabel>
+        <Input
+          id="addressLine1"
+          value={addressLine1}
+          onChange={(e) => setAddressLine1(e.target.value)}
+          placeholder="Street name and number"
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <FieldLabel htmlFor="addressLine2">
+          Address line 2 (optional)
+        </FieldLabel>
+        <Input
+          id="addressLine2"
+          value={addressLine2}
+          onChange={(e) => setAddressLine2(e.target.value)}
+          placeholder="Suite, unit, floor, building"
+        />
+      </div>
+      <div>
+        <FieldLabel htmlFor="city">City</FieldLabel>
+        <Input
+          id="city"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+        />
+      </div>
+      <div>
+        <FieldLabel htmlFor="region">State / Province / Region</FieldLabel>
+        <Input
+          id="region"
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+        />
+      </div>
+      <div>
+        <FieldLabel htmlFor="postalCode">ZIP / Postal code</FieldLabel>
+        <Input
+          id="postalCode"
+          value={postalCode}
+          onChange={(e) => setPostalCode(e.target.value)}
+        />
+      </div>
+      <div>
+        <FieldLabel htmlFor="country">Country</FieldLabel>
+        <Input
+          id="country"
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+          placeholder="e.g. United States"
+        />
+      </div>
+    </div>
+  );
+
   const advancedFields = (
     <div className="grid gap-4 sm:grid-cols-2">
       <div>
@@ -209,22 +343,6 @@ export function LeadForm({
           {LEAD_STAGES.map((s) => (
             <option key={s} value={s}>
               {stageLabel(s)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <FieldLabel htmlFor="personaTag">Persona (optional)</FieldLabel>
-        <select
-          id="personaTag"
-          className={SEL}
-          value={personaTag}
-          onChange={(e) => setPersonaTag(e.target.value)}
-        >
-          <option value="">—</option>
-          {LEAD_PERSONA_TAGS.map((p) => (
-            <option key={p} value={p}>
-              {personaLabel(p)}
             </option>
           ))}
         </select>
@@ -280,6 +398,12 @@ export function LeadForm({
           </div>
         )}
         <form onSubmit={submit} className="space-y-4">
+          {/* Persona first, then the quick note — the two things you set by
+              hand at a booth before anything else. */}
+          {personaField}
+
+          {notesField}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <FieldLabel htmlFor="firstName" confidence={confidence?.firstName}>
@@ -347,44 +471,29 @@ export function LeadForm({
             </div>
           </div>
 
-          {/* In rapid (booth) mode the defaults are right, so collapse these. */}
-          {!rapid && advancedFields}
-
-          <div>
-            <div className="mb-1 flex items-center justify-between">
-              <FieldLabel htmlFor="notes">Notes</FieldLabel>
-              {dictation.supported && (
-                <button
-                  type="button"
-                  onClick={dictation.toggle}
-                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ${
-                    dictation.listening
-                      ? "bg-red-100 text-red-700"
-                      : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                  }`}
-                  aria-pressed={dictation.listening}
-                >
-                  <Mic className="h-3.5 w-3.5" />
-                  {dictation.listening ? "Listening… tap to stop" : "Dictate"}
-                </button>
-              )}
-            </div>
-            <textarea
-              id="notes"
-              className="min-h-[120px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Quick note — or tap Dictate and speak"
-            />
-          </div>
-
-          {rapid && (
+          {/* Address: inline in full mode; one tap away in rapid booth mode. */}
+          {rapid ? (
             <details className="rounded-md border border-zinc-200 p-3">
               <summary className="cursor-pointer text-sm font-medium text-zinc-600">
-                More details (stage, persona, source, date)
+                Address (optional)
+              </summary>
+              <div className="mt-3">{addressFields}</div>
+            </details>
+          ) : (
+            addressFields
+          )}
+
+          {/* Stage / source / meeting date: collapsed in rapid mode — the
+              defaults are already right for booth capture. */}
+          {rapid ? (
+            <details className="rounded-md border border-zinc-200 p-3">
+              <summary className="cursor-pointer text-sm font-medium text-zinc-600">
+                More details (stage, source, date)
               </summary>
               <div className="mt-3">{advancedFields}</div>
             </details>
+          ) : (
+            advancedFields
           )}
 
           {initial?.cardImageUrl && (

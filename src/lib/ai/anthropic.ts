@@ -30,6 +30,14 @@ export const BusinessCardSchema = z.object({
   title: z.string().nullable(),
   companyName: z.string().nullable(),
   website: z.string().nullable(),
+  // Mailing address (often printed on the card). Optional so callers /
+  // fixtures without these keys still validate; `region` = state/province.
+  addressLine1: z.string().nullish(),
+  addressLine2: z.string().nullish(),
+  city: z.string().nullish(),
+  region: z.string().nullish(),
+  postalCode: z.string().nullish(),
+  country: z.string().nullish(),
   confidence: z.object({
     firstName: z.number().min(0).max(1).optional(),
     lastName: z.number().min(0).max(1).optional(),
@@ -56,7 +64,7 @@ export interface ExtractBusinessCardInput {
 }
 
 const SYSTEM_PROMPT =
-  "Extract business-card fields from the provided image. Use null for any field that is not clearly visible or unreadable. Never invent values. Provide a 0–1 confidence per field (0 = missing/illegible, 1 = certain). Include the raw text you read off the card in `rawText` so a human reviewer can verify.";
+  "Extract business-card fields from the provided image. Use null for any field that is not clearly visible or unreadable. Never invent values. If a mailing address is printed on the card, split it into addressLine1 (street name + number), addressLine2 (suite/unit/floor, if any), city, region (state/province/region), postalCode, and country — leave any address part null when it isn't present, and keep the values exactly as printed so non-US/foreign addresses are preserved. Provide a 0–1 confidence per field (0 = missing/illegible, 1 = certain). Include the raw text you read off the card in `rawText` so a human reviewer can verify.";
 
 const EXTRACT_TOOL_INPUT_SCHEMA = {
   type: "object" as const,
@@ -68,6 +76,12 @@ const EXTRACT_TOOL_INPUT_SCHEMA = {
     title: { type: ["string", "null"] },
     companyName: { type: ["string", "null"] },
     website: { type: ["string", "null"] },
+    addressLine1: { type: ["string", "null"] },
+    addressLine2: { type: ["string", "null"] },
+    city: { type: ["string", "null"] },
+    region: { type: ["string", "null"] },
+    postalCode: { type: ["string", "null"] },
+    country: { type: ["string", "null"] },
     confidence: {
       type: "object",
       properties: {
@@ -91,6 +105,12 @@ const EXTRACT_TOOL_INPUT_SCHEMA = {
     "title",
     "companyName",
     "website",
+    "addressLine1",
+    "addressLine2",
+    "city",
+    "region",
+    "postalCode",
+    "country",
     "confidence",
     "rawText",
   ],

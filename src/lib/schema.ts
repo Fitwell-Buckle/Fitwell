@@ -1308,6 +1308,15 @@ export const lead = pgTable(
     title: text("title"),
     // Free-text until/unless promoted to a real `company` row via companyId.
     companyName: text("company_name"),
+    // Mailing address. All free-text (no state/country enum) so foreign /
+    // international formats fit. Auto-filled from the card OCR when present,
+    // editable on the lead. `region` = state / province / region.
+    addressLine1: text("address_line1"),
+    addressLine2: text("address_line2"),
+    city: text("city"),
+    region: text("region"),
+    postalCode: text("postal_code"),
+    country: text("country"),
     // 'prospect' | 'lead' | 'sample' | 'pilot_order' | 'recurring_order' |
     // 'partnership'. Default 'prospect' per b2b-pipeline.md anti-pattern:
     // a booth scan alone isn't a `lead` until a named decision-maker is

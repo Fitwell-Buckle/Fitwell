@@ -1,6 +1,6 @@
 # Components
 
-Last updated: 2026-05-31
+Last updated: 2026-06-01
 
 ## UI Primitives (`components/ui/`)
 
@@ -38,10 +38,10 @@ classes, QR payload parsing) live in `lib/crm/` and are unit-tested.
 
 | Component | Usage |
 |-----------|-------|
-| `leads/lead-form` | Client — shared editable form used by `/leads/new` and the capture confirm step. Accepts `initial`, `confidence` (per-field 0–1 from OCR), `submitLabel`, `onSuccess`. Renders a colored confidence dot beside each input when `confidence` is supplied (green ≥0.8 / amber 0.4–0.8 / red <0.4). POSTs to `/api/leads` |
+| `leads/lead-form` | Client — shared editable form used by `/leads/new` and the capture confirm step. **Field order: Persona → Quick note → identity (name/email/phone/title/company) → Address → stage/source/date.** Address is six free-text fields (street, line 2, city, region, postal, country) so foreign addresses fit. Accepts `initial`, `confidence` (per-field 0–1 from OCR), `submitLabel`, `onSuccess`, `rapid`. In `rapid` (booth) mode the Address and stage/source/date blocks collapse under `<details>`. Renders a colored confidence dot beside each input when `confidence` is supplied (green ≥0.8 / amber 0.4–0.8 / red <0.4). POSTs to `/api/leads` |
 | `leads/leads-filters` | Client — query-string-backed filter strip (stage / source / status / search) on the list page |
 | `leads/new/new-lead-form` | Thin wrapper around `lead-form` for the manual-entry route |
-| `leads/[id]/lead-detail` | Client editor — stage/status/persona badges, "Convert to Company" picker + button (PATCH sets `companyId` + `status='converted'`), Drop button (DELETE → soft-delete), DetailTabs (Overview / Notes); shows the business-card photo via `next/image` and the raw OCR text under Notes when present |
+| `leads/[id]/lead-detail` | Client editor — stage/status/persona badges, "Convert to Company" picker + button (PATCH sets `companyId` + `status='converted'`), Drop button (DELETE → soft-delete), DetailTabs (Overview / Notes); Overview is read-only until Edit and shows a formatted mailing **Address** block (via `lib/crm/address.ts` `formatAddress`) editable as six fields; shows the business-card photo via `next/image` and the raw OCR text under Notes when present |
 | `leads/capture/capture-client` | Client — mobile-first capture state machine. **Opens straight into the camera** (Cancel → 3-mode picker: Scan card / Scan QR / Type it in). After save it loops back to the camera ("Save & capture another") for rapid booth capture. Feeds the shared `lead-form` (in `rapid` mode) |
 | `ui/use-dictation` | Client hook wrapping the Web Speech API (`webkitSpeechRecognition`) for push-to-dictate. Used by `lead-form`'s Notes field (mic button); hidden when the browser doesn't support it |
 | `leads/capture/card-camera` | Client — live rear-camera viewfinder (`getUserMedia`, `facingMode: environment`) with a shutter that grabs a frame to canvas → JPEG `File`. Auto-falls-back to an `<input capture="environment">` (OS camera hand-off) when a live camera isn't available — e.g. a phone hitting the dev server over plain-HTTP LAN, where `getUserMedia` is blocked as an insecure context |

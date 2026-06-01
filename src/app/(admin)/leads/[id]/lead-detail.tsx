@@ -11,6 +11,7 @@ import { DetailTabs } from "@/components/ui/detail-tabs";
 import { Input } from "@/components/ui/input";
 import { MessagesList, type MessageView } from "@/app/(admin)/messages/messages-list";
 import { RepliesTab } from "./replies-tab";
+import { formatAddress } from "@/lib/crm/address";
 import {
   LEAD_PERSONA_TAGS,
   LEAD_SOURCE_CHANNELS,
@@ -36,6 +37,12 @@ export interface LeadView {
   phone: string | null;
   title: string | null;
   companyName: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  country: string | null;
   stage: string;
   personaTag: string | null;
   sourceChannel: string;
@@ -131,6 +138,12 @@ export function LeadDetail({
       phone: draft.phone,
       title: draft.title,
       companyName: draft.companyName,
+      addressLine1: draft.addressLine1,
+      addressLine2: draft.addressLine2,
+      city: draft.city,
+      region: draft.region,
+      postalCode: draft.postalCode,
+      country: draft.country,
       stage: draft.stage,
       personaTag: draft.personaTag || null,
       sourceChannel: draft.sourceChannel,
@@ -283,6 +296,14 @@ export function LeadDetail({
             {readonlyRow("Phone", draft.phone)}
             {readonlyRow("Title", draft.title)}
             {readonlyRow("Company", draft.companyName)}
+            <div className="sm:col-span-2">
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                Address
+              </dt>
+              <dd className="mt-0.5 whitespace-pre-line text-sm text-zinc-900">
+                {formatAddress(draft) || "—"}
+              </dd>
+            </div>
             {readonlyRow("Stage", stageLabel(draft.stage))}
             {readonlyRow(
               "Persona",
@@ -384,6 +405,51 @@ export function LeadDetail({
             <Input
               value={draft.companyName ?? ""}
               onChange={(e) => set("companyName", e.target.value || null)}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={LBL}>Street address</label>
+            <Input
+              value={draft.addressLine1 ?? ""}
+              onChange={(e) => set("addressLine1", e.target.value || null)}
+              placeholder="Street name and number"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={LBL}>Address line 2 (optional)</label>
+            <Input
+              value={draft.addressLine2 ?? ""}
+              onChange={(e) => set("addressLine2", e.target.value || null)}
+              placeholder="Suite, unit, floor, building"
+            />
+          </div>
+          <div>
+            <label className={LBL}>City</label>
+            <Input
+              value={draft.city ?? ""}
+              onChange={(e) => set("city", e.target.value || null)}
+            />
+          </div>
+          <div>
+            <label className={LBL}>State / Province / Region</label>
+            <Input
+              value={draft.region ?? ""}
+              onChange={(e) => set("region", e.target.value || null)}
+            />
+          </div>
+          <div>
+            <label className={LBL}>ZIP / Postal code</label>
+            <Input
+              value={draft.postalCode ?? ""}
+              onChange={(e) => set("postalCode", e.target.value || null)}
+            />
+          </div>
+          <div>
+            <label className={LBL}>Country</label>
+            <Input
+              value={draft.country ?? ""}
+              onChange={(e) => set("country", e.target.value || null)}
+              placeholder="e.g. United States"
             />
           </div>
           <div>

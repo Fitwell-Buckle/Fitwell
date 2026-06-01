@@ -29,6 +29,12 @@ export const createLeadSchema = z
     phone: z.string().max(50).nullish(),
     title: z.string().max(200).nullish(),
     companyName: z.string().max(200).nullish(),
+    addressLine1: z.string().max(300).nullish(),
+    addressLine2: z.string().max(300).nullish(),
+    city: z.string().max(200).nullish(),
+    region: z.string().max(200).nullish(),
+    postalCode: z.string().max(40).nullish(),
+    country: z.string().max(120).nullish(),
     stage: z.enum(LEAD_STAGES).optional(),
     personaTag: z.enum(LEAD_PERSONA_TAGS).nullish(),
     sourceChannel: z.enum(LEAD_SOURCE_CHANNELS),
@@ -65,6 +71,12 @@ export const updateLeadSchema = z.object({
   phone: z.string().max(50).nullish(),
   title: z.string().max(200).nullish(),
   companyName: z.string().max(200).nullish(),
+  addressLine1: z.string().max(300).nullish(),
+  addressLine2: z.string().max(300).nullish(),
+  city: z.string().max(200).nullish(),
+  region: z.string().max(200).nullish(),
+  postalCode: z.string().max(40).nullish(),
+  country: z.string().max(120).nullish(),
   stage: z.enum(LEAD_STAGES).optional(),
   personaTag: z.enum(LEAD_PERSONA_TAGS).nullish(),
   sourceChannel: z.enum(LEAD_SOURCE_CHANNELS).optional(),
@@ -101,6 +113,12 @@ export async function createLead(
       phone: input.phone || null,
       title: input.title || null,
       companyName: input.companyName || null,
+      addressLine1: input.addressLine1 || null,
+      addressLine2: input.addressLine2 || null,
+      city: input.city || null,
+      region: input.region || null,
+      postalCode: input.postalCode || null,
+      country: input.country || null,
       stage: input.stage ?? "prospect",
       personaTag: input.personaTag || null,
       sourceChannel: input.sourceChannel,
@@ -139,6 +157,15 @@ export async function updateLead(
   if (input.title !== undefined) patch.title = input.title || null;
   if (input.companyName !== undefined)
     patch.companyName = input.companyName || null;
+  if (input.addressLine1 !== undefined)
+    patch.addressLine1 = input.addressLine1 || null;
+  if (input.addressLine2 !== undefined)
+    patch.addressLine2 = input.addressLine2 || null;
+  if (input.city !== undefined) patch.city = input.city || null;
+  if (input.region !== undefined) patch.region = input.region || null;
+  if (input.postalCode !== undefined)
+    patch.postalCode = input.postalCode || null;
+  if (input.country !== undefined) patch.country = input.country || null;
   if (input.stage !== undefined) patch.stage = input.stage;
   if (input.personaTag !== undefined)
     patch.personaTag = input.personaTag || null;

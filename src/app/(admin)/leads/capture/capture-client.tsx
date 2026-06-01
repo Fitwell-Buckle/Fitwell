@@ -93,6 +93,12 @@ export function CaptureClient() {
         title: string | null;
         companyName: string | null;
         website: string | null;
+        addressLine1?: string | null;
+        addressLine2?: string | null;
+        city?: string | null;
+        region?: string | null;
+        postalCode?: string | null;
+        country?: string | null;
         confidence?: Record<string, number>;
         rawText: string;
         cardImageUrl: string;
@@ -108,6 +114,12 @@ export function CaptureClient() {
         // falling back to any company name the model read off the card.
         companyName: extractEmailDomain(d.email) ?? d.companyName,
         website: d.website,
+        addressLine1: d.addressLine1 ?? null,
+        addressLine2: d.addressLine2 ?? null,
+        city: d.city ?? null,
+        region: d.region ?? null,
+        postalCode: d.postalCode ?? null,
+        country: d.country ?? null,
         cardImageUrl: d.cardImageUrl,
         cardRawText: d.rawText,
       });

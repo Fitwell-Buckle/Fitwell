@@ -218,6 +218,13 @@
       "when": 1780326068856,
       "tag": "0030_stale_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1780338137124,
+      "tag": "0031_sparkling_dracula",
+      "breakpoints": true
     }
   ]
 }

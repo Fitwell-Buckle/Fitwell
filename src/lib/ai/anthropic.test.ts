@@ -130,6 +130,22 @@ describe("BusinessCardSchema", () => {
       BusinessCardSchema.safeParse({ ...validToolInput, email: 42 }).success,
     ).toBe(false);
   });
+
+  it("parses the optional mailing-address fields when present", () => {
+    const withAddress = {
+      ...validToolInput,
+      addressLine1: "221B Baker Street",
+      addressLine2: null,
+      city: "London",
+      region: null,
+      postalCode: "NW1 6XE",
+      country: "United Kingdom",
+    };
+    const parsed = BusinessCardSchema.parse(withAddress);
+    expect(parsed.addressLine1).toBe("221B Baker Street");
+    expect(parsed.city).toBe("London");
+    expect(parsed.country).toBe("United Kingdom");
+  });
 });
 
 describe("extractBusinessCard", () => {
