@@ -71,6 +71,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     sessionsTable: sessionTable,
     verificationTokensTable: verificationTokenTable,
   }),
+  // Keep people signed in for ~3 months so they aren't re-logging in on their
+  // phones (e.g. capturing leads at a trade show). The session refreshes on
+  // each use (updateAge), so active users effectively never get logged out;
+  // the session-token cookie inherits this maxAge, so it survives app/tab
+  // restarts. (Default was 30 days.)
+  session: {
+    maxAge: 60 * 60 * 24 * 90, // 90 days
+    updateAge: 60 * 60 * 24, // refresh at most once per day on use
+  },
   providers: [
     // Request Gmail readonly so the admin's mailbox can be searched for
     // matching contact emails from inside the supplier-contacts UI. Offline
