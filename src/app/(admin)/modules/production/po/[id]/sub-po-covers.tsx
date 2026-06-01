@@ -179,13 +179,14 @@ export function SubPoCovers({
                 </>
               )}
               <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">Supplier price / unit</TableHead>
+              <TableHead className="text-right">Unit cost</TableHead>
+              <TableHead className="text-right">Line total</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="py-6 text-center text-zinc-400">
+                <TableCell colSpan={5} className="py-6 text-center text-zinc-400">
                   No items on the master.
                 </TableCell>
               </TableRow>
@@ -245,6 +246,16 @@ export function SubPoCovers({
                         }}
                       />
                     </div>
+                  </TableCell>
+                  <TableCell className="text-right font-medium text-zinc-900">
+                    {(() => {
+                      const v = Number(prices[r.key]);
+                      return (prices[r.key] ?? "").trim() !== "" &&
+                        Number.isFinite(v) &&
+                        v >= 0
+                        ? fmtMoney(Math.round(v * 100) * r.quantity)
+                        : "—";
+                    })()}
                   </TableCell>
                 </TableRow>
               ))

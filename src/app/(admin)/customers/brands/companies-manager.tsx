@@ -112,6 +112,16 @@ export function CompaniesManager({
   // ── Companies ──
   const [companyEditing, setCompanyEditing] = useState<string | "new" | null>(null);
   const [draft, setDraft] = useState<CompanyDraft>(emptyCompanyDraft());
+  // Client-side filter by company name / contact name / contact email.
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const filteredCompanies = q
+    ? companies.filter((c) =>
+        [c.name, c.contactName, c.contactEmail].some((v) =>
+          v?.toLowerCase().includes(q),
+        ),
+      )
+    : companies;
 
   function openCompany(id: string | "new", c?: Company) {
     setError(null);
@@ -260,6 +270,16 @@ export function CompaniesManager({
         />
       )}
 
+      <div className="mt-6 flex gap-2">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or email..."
+          className="flex h-9 w-full max-w-xs rounded-lg border border-zinc-200 bg-white px-3 text-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
+        />
+      </div>
+
       <DataTable>
         <Table>
           <TableHeader>
@@ -272,14 +292,16 @@ export function CompaniesManager({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {companies.length === 0 ? (
+            {filteredCompanies.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="py-8 text-center text-zinc-400">
-                  No brands yet.
+                  {companies.length === 0
+                    ? "No brands yet."
+                    : "No brands match your search."}
                 </TableCell>
               </TableRow>
             ) : (
-              companies.map((c) => (
+              filteredCompanies.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">
                     <Link
