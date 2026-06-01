@@ -1,6 +1,6 @@
 # Scheduled Jobs
 
-Last updated: 2026-05-07
+Last updated: 2026-05-31
 
 All cron jobs run as Vercel Cron serverless functions. Schedules defined in `vercel.json`.
 
@@ -14,6 +14,25 @@ All cron jobs run as Vercel Cron serverless functions. Schedules defined in `ver
 | Extract GSC | `/api/cron/extract-gsc` | `0 7 * * *` | Daily 7:00 UTC | Search data (3-day lag) |
 | Extract PostHog | `/api/cron/extract-posthog` | `0 */3 * * *` | Every 3h | Aggregate event counts |
 | Health Check | `/api/cron/health` | `0 */4 * * *` | Every 4h | Verify DB, API connections |
+| Production deadline alerts | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Daily 13:00 UTC | Email owner + suppliers re: items due/overdue, complete POs ready to receive |
+| Lead follow-up nudges | `/api/cron/lead-followups` | `0 14 * * *` | Daily 14:00 UTC | Draft a 2nd follow-up for leads whose first follow-up was sent ≥14d ago with no reply |
+
+## Lead follow-up nudges — Detail
+
+1. Find candidate leads (`findLeadsNeedingNudge`): an initial follow-up
+   (`outbound_message` `sequence_step=1`) was marked **sent** ≥14 days ago,
+   the lead is `active`, `replied_at` is null, and no `sequence_step>=2`
+   message exists yet. Capped at 25 per run.
+2. For each, check whether the lead emailed back: Gmail
+   `from:<lead email> after:<sent date>` via the lead owner's (fallback:
+   capturer's) stored Google token (`src/lib/gmail/inbound.ts`).
+   - Reply found → set `lead.replied_at`, skip (no nudge).
+   - No reply (or Gmail not connected → "not checked") → draft a gentle
+     second follow-up (`draftFollowupEmail({isNudge:true})`) and queue it as
+     a `sequence_step=2` `outbound_message` (status `draft`).
+3. Drafts are reviewed/sent from **Customers → Messages to Send** — the cron
+   never sends email itself.
+4. Returns `{candidates, drafted, skippedReplied, failed}`.
 
 ## Authentication
 

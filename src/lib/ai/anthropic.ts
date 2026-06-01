@@ -183,6 +183,9 @@ export interface DraftFollowupInput {
   notes?: string | null;
   // The Fitwell rep's name, for the sign-off, if known.
   fromName?: string | null;
+  // When true, this is a 2nd follow-up (~2 weeks later, no reply yet): a
+  // shorter, gentle nudge that acknowledges the prior unanswered email.
+  isNudge?: boolean;
 }
 
 const DRAFT_SYSTEM_PROMPT = [
@@ -226,11 +229,22 @@ function contactSummary(input: DraftFollowupInput): string {
   return lines.join("\n");
 }
 
+const NUDGE_GUIDANCE = [
+  "",
+  "THIS IS A SECOND FOLLOW-UP, ~2 weeks after the first email, which went",
+  "unanswered. Keep it especially short and low-pressure: briefly reference the",
+  "earlier note, make it easy to reply, and offer a graceful out (e.g. 'if now",
+  "isn't the right time, just let me know'). Do not guilt-trip or repeat the",
+  "whole pitch.",
+].join("\n");
+
 async function callDraftOnce(input: DraftFollowupInput): Promise<unknown> {
   const result = await getAnthropic().messages.create({
     model: TEXT_MODEL,
     max_tokens: 1024,
-    system: DRAFT_SYSTEM_PROMPT,
+    system: input.isNudge
+      ? DRAFT_SYSTEM_PROMPT + "\n" + NUDGE_GUIDANCE
+      : DRAFT_SYSTEM_PROMPT,
     tools: [
       {
         name: DRAFT_TOOL_NAME,

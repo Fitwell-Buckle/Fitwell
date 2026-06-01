@@ -1318,6 +1318,9 @@ export const lead = pgTable(
     // The date we actually met this person (editable; defaults to today in
     // the capture/create form). Distinct from capturedAt (row-creation time).
     meetingDate: date("meeting_date"),
+    // Set when the lead emails us back (detected from the owner's Gmail, or
+    // marked manually). Stops the two-week follow-up nudge cron.
+    repliedAt: timestamp("replied_at", { mode: "date" }),
     ownerUserId: text("owner_user_id").references(() => user.id),
     notes: text("notes"),
     cardImageUrl: text("card_image_url"),
@@ -1400,6 +1403,9 @@ export const outboundMessage = pgTable(
       .notNull()
       .references(() => lead.id, { onDelete: "cascade" }),
     channel: text("channel").notNull().default("email"),
+    // 1 = initial follow-up (drafted at capture); 2 = two-week nudge when the
+    // lead hasn't replied. Lets the nudge cron find leads without a step-2 yet.
+    sequenceStep: integer("sequence_step").notNull().default(1),
     toEmail: text("to_email"),
     subject: text("subject"),
     body: text("body").notNull(),

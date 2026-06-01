@@ -157,6 +157,17 @@ export async function updateLead(
   return row ?? null;
 }
 
+// Mark that the lead emailed us back (stops the follow-up nudge). Idempotent.
+export async function setLeadReplied(
+  id: string,
+  when: Date,
+): Promise<void> {
+  await db
+    .update(lead)
+    .set({ repliedAt: when, updatedAt: new Date() })
+    .where(eq(lead.id, id));
+}
+
 // Soft delete: flip status to 'dropped'. History is preserved.
 export async function dropLead(id: string): Promise<{ id: string } | null> {
   const [row] = await db
