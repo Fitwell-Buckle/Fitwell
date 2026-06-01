@@ -10,6 +10,13 @@ import {
 } from "@/lib/crm/service";
 
 export const runtime = "nodejs";
+// Safety net for the (parallelized) Gmail checks; well above the ~2-3s a run
+// actually takes. Runs every 5 min (vercel.json).
+export const maxDuration = 30;
+
+// How many lead mailboxes to check concurrently. Bounded so we stay under
+// Gmail's per-user rate limit (~250 quota units/sec; each check ≈ 5 units).
+const CONCURRENCY = 8;
 
 // Periodically check active leads' owner Gmail for new inbound replies and
 // raise an in-app notification ("X replied") so it shows in the main
@@ -26,27 +33,36 @@ export async function GET(req: NextRequest) {
   let notified = 0;
   let checked = 0;
 
-  for (const lead of leads) {
-    const mailbox = lead.ownerUserId ?? lead.capturedByUserId;
-    if (!lead.email || !mailbox) continue;
-    const since = lead.repliesNotifiedAt ?? lead.createdAt ?? new Date(0);
-    const res = await hasInboundEmailFrom(mailbox, lead.email, since);
-    if (!res.checked) continue;
-    checked++;
-    if (!res.replied) continue;
+  // Check mailboxes in bounded-concurrency batches to keep the run fast and
+  // under Gmail's rate limit; record found replies as we go.
+  for (let i = 0; i < leads.length; i += CONCURRENCY) {
+    const batch = leads.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (lead) => {
+        const mailbox = lead.ownerUserId ?? lead.capturedByUserId;
+        if (!lead.email || !mailbox) return null;
+        const since = lead.repliesNotifiedAt ?? lead.createdAt ?? new Date(0);
+        const res = await hasInboundEmailFrom(mailbox, lead.email, since);
+        return { lead, res };
+      }),
+    );
 
-    const name = leadDisplayName(lead);
-    try {
-      await db.insert(adminNotification).values({
-        type: "lead_reply",
-        title: `${name} replied`,
-        body: lead.email,
-        leadId: lead.id,
-      });
-      await markLeadReplyNotified(lead.id, new Date());
-      notified++;
-    } catch (err) {
-      console.error(`lead-replies: notify failed for ${lead.id}`, err);
+    for (const r of results) {
+      if (!r || !r.res.checked) continue;
+      checked++;
+      if (!r.res.replied) continue;
+      try {
+        await db.insert(adminNotification).values({
+          type: "lead_reply",
+          title: `${leadDisplayName(r.lead)} replied`,
+          body: r.lead.email,
+          leadId: r.lead.id,
+        });
+        await markLeadReplyNotified(r.lead.id, new Date());
+        notified++;
+      } catch (err) {
+        console.error(`lead-replies: notify failed for ${r.lead.id}`, err);
+      }
     }
   }
 

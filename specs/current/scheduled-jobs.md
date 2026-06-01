@@ -16,7 +16,7 @@ All cron jobs run as Vercel Cron serverless functions. Schedules defined in `ver
 | Health Check | `/api/cron/health` | `0 */4 * * *` | Every 4h | Verify DB, API connections |
 | Production deadline alerts | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Daily 13:00 UTC | Email owner + suppliers re: items due/overdue, complete POs ready to receive |
 | Lead follow-up nudges | `/api/cron/lead-followups` | `0 14 * * *` | Daily 14:00 UTC | Draft a 2nd follow-up for leads whose first follow-up was sent ≥14d ago with no reply |
-| Lead reply alerts | `/api/cron/lead-replies` | `0 */6 * * *` | Every 6h | Check active leads' owner Gmail for new inbound replies; raise an admin notification ("X replied"). De-duped via `lead.replies_notified_at`. Needs the Gmail API enabled |
+| Lead reply alerts | `/api/cron/lead-replies` | `*/5 * * * *` | Every 5 min | Check active leads' owner Gmail (bounded concurrency) for new inbound replies; raise an admin notification ("X replied"). De-duped via `lead.replies_notified_at`. ~50 lightweight Gmail list calls/run. Needs the Gmail API enabled |
 
 ## Lead follow-up nudges — Detail
 

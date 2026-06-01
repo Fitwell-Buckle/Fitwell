@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/cron/lead-replies",
-      "schedule": "0 */6 * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }
