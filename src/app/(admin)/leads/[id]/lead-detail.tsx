@@ -590,9 +590,9 @@ export function LeadDetail({
             </Button>
           </div>
           <p className="mt-2 text-xs text-zinc-500">
-            Conversion writes the company FK and marks the lead{" "}
-            <code>converted</code>. A Shopify customer record is only created
-            when the company places a real order.
+            Converting links this lead to the chosen company and marks it{" "}
+            <strong>converted</strong>. A Shopify customer record is only
+            created when the company places a real order.
           </p>
         </CardContent>
       </Card>
