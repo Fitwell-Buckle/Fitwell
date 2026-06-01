@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DetailTabs } from "@/components/ui/detail-tabs";
 import { Input } from "@/components/ui/input";
 import { MessagesList, type MessageView } from "@/app/(admin)/messages/messages-list";
+import { RepliesTab } from "./replies-tab";
 import {
   LEAD_PERSONA_TAGS,
   LEAD_SOURCE_CHANNELS,
@@ -68,12 +69,14 @@ export function LeadDetail({
   cardImages,
   messages,
   draftMessages,
+  hasNewReplies,
 }: {
   lead: LeadView;
   companies: { id: string; name: string }[];
   cardImages: LeadCardImageView[];
   messages: LeadMessageView[];
   draftMessages: MessageView[];
+  hasNewReplies: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -586,6 +589,12 @@ export function LeadDetail({
                   </CardContent>
                 </Card>
               ),
+          },
+          {
+            value: "replies",
+            label: "Replies",
+            dot: hasNewReplies,
+            content: <RepliesTab leadId={lead.id} />,
           },
           { value: "history", label: "History", content: history },
         ]}

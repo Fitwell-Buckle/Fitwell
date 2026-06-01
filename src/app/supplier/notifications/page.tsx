@@ -19,6 +19,7 @@ export default async function SupplierNotificationsPage() {
       title: n.title,
       body: n.body,
       poId: n.poId,
+      leadId: n.leadId,
       readAt: n.readAt ? n.readAt.toISOString() : null,
       createdAt: (n.createdAt ?? new Date()).toISOString(),
     }),

@@ -852,6 +852,8 @@ export const adminNotification = pgTable(
     title: text("title").notNull(),
     body: text("body"),
     poId: text("po_id").references(() => productionPo.id, { onDelete: "cascade" }),
+    // Optional deep-link target for lead-related alerts (e.g. drafted follow-up).
+    leadId: text("lead_id"),
     lineItemId: text("line_item_id"),
     supplierId: text("supplier_id"),
     readAt: timestamp("read_at", { mode: "date" }),
@@ -1321,6 +1323,9 @@ export const lead = pgTable(
     // Set when the lead emails us back (detected from the owner's Gmail, or
     // marked manually). Stops the two-week follow-up nudge cron.
     repliedAt: timestamp("replied_at", { mode: "date" }),
+    // When the user last viewed this lead's Replies tab — a reply newer than
+    // this counts as "new" (drives the Replies tab's blue dot).
+    repliesSeenAt: timestamp("replies_seen_at", { mode: "date" }),
     ownerUserId: text("owner_user_id").references(() => user.id),
     notes: text("notes"),
     cardImageUrl: text("card_image_url"),

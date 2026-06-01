@@ -20,6 +20,7 @@ export default async function NotificationsPage() {
     title: n.title,
     body: n.body,
     poId: n.poId,
+    leadId: n.leadId,
     readAt: n.readAt ? n.readAt.toISOString() : null,
     createdAt: (n.createdAt ?? new Date()).toISOString(),
   }));
@@ -28,13 +29,13 @@ export default async function NotificationsPage() {
     <div>
       <PageHeader title="Notifications" />
       <p className="mt-1 text-sm text-zinc-500">
-        Production handoffs and other alerts. Suppliers trigger one when they
-        complete their stage on a shared PO.
+        Production handoffs, drafted lead follow-ups, and other alerts.
       </p>
       <NotificationList
         items={items}
         apiPath="/api/notifications"
         poHrefBase="/modules/production/po"
+        leadHrefBase="/leads"
       />
     </div>
   );

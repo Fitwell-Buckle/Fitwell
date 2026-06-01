@@ -126,6 +126,7 @@ function SidebarContent({
   const { data: session } = useSession();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [notifCount, setNotifCount] = useState(0);
+  const [pendingDrafts, setPendingDrafts] = useState(0);
 
   // Unread admin-notification badge; refetch on navigation.
   useEffect(() => {
@@ -140,6 +141,23 @@ function SidebarContent({
       active = false;
     };
   }, [pathname]);
+
+  // Pending follow-up drafts → blue dot on Leads (and its Customer group).
+  useEffect(() => {
+    let active = true;
+    fetch("/api/leads/pending-count")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d) setPendingDrafts(d.count ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
+
+  // Nav hrefs that should show a blue dot.
+  const dotHrefs = new Set<string>(pendingDrafts > 0 ? ["/leads"] : []);
 
   function toggle(label: string, fallback: boolean) {
     setOpen((o) => ({ ...o, [label]: !(o[label] ?? fallback) }));
@@ -193,6 +211,7 @@ function SidebarContent({
           const childActive = activeChildHref !== null;
           const selfActive = item.href ? pathname.startsWith(item.href) : false;
           const expanded = open[item.label] ?? childActive;
+          const groupHasDot = children.some((c) => dotHrefs.has(c.href));
 
           return (
             <div key={item.label}>
@@ -235,6 +254,9 @@ function SidebarContent({
                   <span className="flex items-center gap-3">
                     <item.icon className="h-4 w-4" />
                     {item.label}
+                    {groupHasDot && (
+                      <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    )}
                   </span>
                   <ChevronDown
                     className={cn(
@@ -268,6 +290,9 @@ function SidebarContent({
                         <span className={ChildIcon ? "font-semibold" : undefined}>
                           {child.label}
                         </span>
+                        {dotHrefs.has(child.href) && (
+                          <span className="h-2 w-2 rounded-full bg-blue-500" />
+                        )}
                       </Link>
                     );
                   })}

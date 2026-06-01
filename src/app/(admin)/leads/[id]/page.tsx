@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
 import { getLead, listLeadCardImages } from "@/lib/crm/service";
 import { listMessagesForLead, listOutboundMessages } from "@/lib/crm/messages";
+import { hasInboundEmailFrom } from "@/lib/gmail/inbound";
 import { PageHeader } from "@/components/ui/page-header";
 import { leadDisplayName } from "@/lib/crm/display";
 import { LeadDetail } from "./lead-detail";
@@ -36,6 +37,16 @@ export default async function LeadDetailPage({
     listMessagesForLead(id),
     listOutboundMessages({ status: "draft", leadId: id }),
   ]);
+
+  // Cheap (maxResults=1) check: any reply newer than the last Replies-tab
+  // view → the tab gets a blue dot. Skipped when there's no email.
+  let hasNewReplies = false;
+  if (lead.email) {
+    const since = lead.repliesSeenAt ?? lead.createdAt ?? new Date(0);
+    const mailbox = lead.ownerUserId ?? lead.capturedByUserId ?? session.user.id;
+    const { replied } = await hasInboundEmailFrom(mailbox, lead.email, since);
+    hasNewReplies = replied;
+  }
 
   const leadName = leadDisplayName(lead);
   const draftMessages = draftRows.map((m) => ({
@@ -95,6 +106,7 @@ export default async function LeadDetailPage({
           sentAt: m.sentAt,
         }))}
         draftMessages={draftMessages}
+        hasNewReplies={hasNewReplies}
       />
     </div>
   );

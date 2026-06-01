@@ -47,6 +47,7 @@ export async function createOutboundMessage(
       type: "lead_followup_drafted",
       title: `Draft ${kind} ready for ${name}`,
       body: input.subject ?? null,
+      leadId: input.leadId,
     });
   } catch (err) {
     console.error("createOutboundMessage: notification insert failed", err);

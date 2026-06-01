@@ -168,6 +168,14 @@ export async function setLeadReplied(
     .where(eq(lead.id, id));
 }
 
+// Mark the lead's Replies tab as viewed now (clears the "new replies" dot).
+export async function setLeadRepliesSeen(id: string): Promise<void> {
+  await db
+    .update(lead)
+    .set({ repliesSeenAt: new Date() })
+    .where(eq(lead.id, id));
+}
+
 // Soft delete: flip status to 'dropped'. History is preserved.
 export async function dropLead(id: string): Promise<{ id: string } | null> {
   const [row] = await db

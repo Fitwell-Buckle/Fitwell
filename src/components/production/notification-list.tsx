@@ -11,6 +11,7 @@ interface NotificationItem {
   title: string;
   body: string | null;
   poId: string | null;
+  leadId: string | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -24,10 +25,12 @@ export function NotificationList({
   items,
   apiPath,
   poHrefBase,
+  leadHrefBase,
 }: {
   items: NotificationItem[];
   apiPath: string;
   poHrefBase: string;
+  leadHrefBase?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -92,6 +95,11 @@ export function NotificationList({
                   {n.poId && (
                     <Button variant="ghost" size="sm" asChild>
                       <Link href={`${poHrefBase}/${n.poId}`}>Open PO</Link>
+                    </Button>
+                  )}
+                  {n.leadId && leadHrefBase && (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`${leadHrefBase}/${n.leadId}`}>Open lead</Link>
                     </Button>
                   )}
                   {!n.readAt && (
