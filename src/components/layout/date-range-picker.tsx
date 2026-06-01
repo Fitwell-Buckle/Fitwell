@@ -152,15 +152,22 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
   }
 
   const dateInputCls =
-    "h-7 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
+    "h-7 shrink-0 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300";
+  const pillCls =
+    "shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors";
+  const dividerCls = "mx-1.5 h-4 w-px shrink-0 bg-zinc-200";
 
+  // On phones the full control set (5 presets + 3 granularities + 2 date
+  // inputs + Apply) can't fit one 48px row, and wrapping gets clipped by the
+  // fixed-height header. So on mobile it's a single horizontally-scrollable
+  // row; from `sm` up it wraps and right-aligns as before.
   const content = (
-    <div className="flex flex-wrap items-center justify-end gap-1">
+    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:justify-end sm:overflow-visible [&::-webkit-scrollbar]:hidden">
       {PRESETS.map((preset) => (
         <button
           key={preset.label}
           onClick={() => setRange(preset.days)}
-          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+          className={`${pillCls} ${
             activeDays === preset.days
               ? "bg-zinc-900 text-white"
               : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
@@ -170,13 +177,13 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
         </button>
       ))}
 
-      <span className="mx-1.5 h-4 w-px bg-zinc-200" />
+      <span className={dividerCls} />
 
       {GRANULARITIES.map((g) => (
         <button
           key={g.value}
           onClick={() => setGranularity(g.value)}
-          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+          className={`${pillCls} ${
             effectiveGranularity === g.value
               ? "bg-zinc-900 text-white"
               : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
@@ -186,7 +193,7 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
         </button>
       ))}
 
-      <span className="mx-1.5 h-4 w-px bg-zinc-200" />
+      <span className={dividerCls} />
 
       <input
         type="date"
@@ -195,7 +202,7 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
         className={dateInputCls}
         aria-label="From date"
       />
-      <span className="text-xs text-zinc-400">–</span>
+      <span className="shrink-0 text-xs text-zinc-400">–</span>
       <input
         type="date"
         value={mTo}
@@ -203,10 +210,7 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
         className={dateInputCls}
         aria-label="To date"
       />
-      <button
-        onClick={applyManual}
-        className="rounded-md px-2.5 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
-      >
+      <button onClick={applyManual} className={`${pillCls} shrink-0 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700`}>
         Apply
       </button>
     </div>
