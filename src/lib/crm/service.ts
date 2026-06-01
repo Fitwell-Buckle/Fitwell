@@ -40,6 +40,9 @@ export const createLeadSchema = z
     cardImageUrl: z.string().url().max(2000).nullish(),
     cardRawText: z.string().max(10_000).nullish(),
     ocrConfidence: confidenceSchema.nullish(),
+    // When true, skip the same-email duplicate guard (user chose "create
+    // anyway"). Not persisted.
+    allowDuplicate: z.boolean().optional(),
   })
   .refine(
     (v) =>
@@ -152,6 +155,18 @@ export async function updateLead(
   const [row] = await db
     .update(lead)
     .set(patch)
+    .where(eq(lead.id, id))
+    .returning({ id: lead.id });
+  return row ?? null;
+}
+
+// Hard delete: remove the lead row entirely. FK cascades drop its card images
+// and outbound messages. Used to clean up duplicates / junk — not reversible.
+export async function hardDeleteLead(
+  id: string,
+): Promise<{ id: string } | null> {
+  const [row] = await db
+    .delete(lead)
     .where(eq(lead.id, id))
     .returning({ id: lead.id });
   return row ?? null;

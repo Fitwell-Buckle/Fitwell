@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import {
   createLead,
   createLeadSchema,
+  findActiveLeadByEmail,
   listLeads,
   type ListLeadsFilters,
 } from "@/lib/crm/service";
@@ -60,6 +61,22 @@ export async function POST(req: Request) {
       },
       { status: 400 },
     );
+  }
+
+  // Duplicate guard: block a second active lead with the same email unless the
+  // caller explicitly opts in (allowDuplicate). Returns the existing lead so
+  // the UI can offer "open it" vs "create anyway".
+  if (input.email && !input.allowDuplicate) {
+    const existing = await findActiveLeadByEmail(input.email);
+    if (existing) {
+      return NextResponse.json(
+        {
+          error: "A lead with this email already exists.",
+          existingLeadId: existing.id,
+        },
+        { status: 409 },
+      );
+    }
   }
 
   try {

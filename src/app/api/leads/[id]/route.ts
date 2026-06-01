@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { dropLead, getLead, updateLead, updateLeadSchema } from "@/lib/crm/service";
+import {
+  dropLead,
+  getLead,
+  hardDeleteLead,
+  updateLead,
+  updateLeadSchema,
+} from "@/lib/crm/service";
 
 function adminOnly(role?: string | null): NextResponse | null {
   if (role === "supplier" || role === "company") {
@@ -72,9 +78,11 @@ export async function PATCH(
 }
 
 // Soft delete (status → 'dropped'). History preserved per work plan v1
-// scope; hard delete is intentionally not exposed.
+// scope. Default = soft-delete (status='dropped'). `?hard=1` permanently
+// removes the lead (cascades its card images + outbound messages) — used to
+// clean up duplicates.
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
@@ -85,15 +93,16 @@ export async function DELETE(
   if (denied) return denied;
 
   const { id } = await params;
+  const hard = new URL(req.url).searchParams.get("hard") === "1";
 
   try {
-    const dropped = await dropLead(id);
-    if (!dropped) {
+    const result = hard ? await hardDeleteLead(id) : await dropLead(id);
+    if (!result) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json({ data: { id: dropped.id } });
+    return NextResponse.json({ data: { id: result.id } });
   } catch (err) {
-    console.error("Drop lead failed:", err);
+    console.error("Delete lead failed:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

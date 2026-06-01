@@ -167,10 +167,10 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/leads` | List leads with optional filters (stage, sourceChannel, ownerUserId, status, search). Defaults to `status='active'`; search is case-insensitive across first/last name, email, and company name. Sorted by `capturedAt desc` |
-| POST | `/api/leads` | Create a lead. Requires at least one of name/email/phone/company. Stage defaults to `'prospect'` per `b2b-pipeline.md` anti-pattern; owner defaults to the capturing user |
+| POST | `/api/leads` | Create a lead. Requires at least one of name/email/phone/company. **Duplicate guard**: if an active lead with the same email exists, returns 409 `{ error, existingLeadId }` unless `allowDuplicate:true` is sent. Stage defaults to `'prospect'`; owner defaults to the capturing user |
 | GET | `/api/leads/[id]` | Lead detail |
 | PATCH | `/api/leads/[id]` | Partial update (any subset of fields). "Convert to Company" is a PATCH that sets `companyId` and `status='converted'` |
-| DELETE | `/api/leads/[id]` | Soft-delete — flips `status` to `'dropped'`, row preserved for history. Hard delete intentionally not exposed |
+| DELETE | `/api/leads/[id]` | Default: soft-delete (`status='dropped'`, row preserved). `?hard=1`: **permanent** delete — removes the lead and cascades its card images + outbound messages (used to clean up duplicates) |
 | POST | `/api/leads/scan-card` | Upload a business-card image (multipart, 10 MB cap, JPEG/PNG/GIF/WebP); puts to Vercel Blob then calls Claude Sonnet 4.5 vision via a forced tool_use with a strict JSON schema. Returns extracted fields + confidence per field + raw read text + the Blob URL. Does **not** persist a lead — the client follows up with POST `/api/leads`. 503 if `BLOB_READ_WRITE_TOKEN` or `ANTHROPIC_API_KEY` is unset |
 | POST | `/api/leads/[id]/cards` | Attach a business-card image (already uploaded to Blob) to an existing lead — JSON body `{ blobUrl }`. Records it in `lead_card_image` and bumps `lead.card_image_url`. Used by the capture dedup flow's "attach to existing lead" action |
 | GET | `/api/leads/match?email=` | Given an email, returns `{ matchedCompany, matchedLead, matchedDomain }` — matches the email's (non-free) domain to a company and finds an active same-email lead. Drives the capture-confirm dedup banners |

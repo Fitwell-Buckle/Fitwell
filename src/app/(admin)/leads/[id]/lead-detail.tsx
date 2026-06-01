@@ -232,6 +232,35 @@ export function LeadDetail({
     }
   }
 
+  async function deleteLead() {
+    if (
+      !confirm(
+        "Permanently delete this lead, including its card images and drafted messages? This cannot be undone.",
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}?hard=1`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        const msg = json?.error ?? `Delete failed (${res.status})`;
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success("Lead deleted");
+      router.push("/leads");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const readonlyRow = (label: string, value: React.ReactNode) => (
     <div>
       <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
@@ -546,11 +575,18 @@ export function LeadDetail({
               Convert
             </Button>
             <Button
-              variant="destructive"
+              variant="outline"
               onClick={dropLead}
               disabled={busy || draft.status === "dropped"}
             >
               Drop lead
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={deleteLead}
+              disabled={busy}
+            >
+              Delete
             </Button>
           </div>
           <p className="mt-2 text-xs text-zinc-500">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -119,15 +120,18 @@ export function LeadForm({
     initial?.meetingDate ?? todayLocal(),
   );
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  // Set when the server reports a same-email duplicate (409); offers the user
+  // "open existing" vs "create anyway".
+  const [dupLeadId, setDupLeadId] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function save(allowDuplicate: boolean) {
     setError(null);
     if (!firstName && !lastName && !email && !phone && !companyName) {
       setError("Provide at least one of name, email, phone, or company.");
       return;
     }
     setBusy(true);
+    setDupLeadId(null);
     try {
       const res = await fetch("/api/leads", {
         method: "POST",
@@ -148,9 +152,15 @@ export function LeadForm({
           cardImageUrl: initial?.cardImageUrl ?? null,
           cardRawText: initial?.cardRawText ?? null,
           ocrConfidence: confidence ?? null,
+          allowDuplicate,
         }),
       });
       const body = await res.json().catch(() => ({}));
+      if (res.status === 409 && body?.existingLeadId) {
+        setDupLeadId(body.existingLeadId as string);
+        setBusy(false);
+        return;
+      }
       if (!res.ok) {
         setError(body?.error ?? `Save failed (${res.status})`);
         setBusy(false);
@@ -174,9 +184,34 @@ export function LeadForm({
     }
   }
 
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    void save(false);
+  }
+
   return (
     <Card>
       <CardContent>
+        {dupLeadId && (
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+            <p className="font-medium text-amber-900">
+              A lead with this email already exists.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/leads/${dupLeadId}`}>Open existing lead</Link>
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void save(true)}
+              >
+                Create anyway
+              </Button>
+            </div>
+          </div>
+        )}
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
