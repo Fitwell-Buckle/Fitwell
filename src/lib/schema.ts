@@ -1282,3 +1282,153 @@ export const productionStageDef = pgTable("production_stage_def", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
+
+// ─── CRM (leads + tradeshows) ───────────────────────────────────────
+//
+// Stages, source channels, persona tags, and statuses are kept as `text`
+// (validated at the API layer) rather than pgEnum so spec changes in
+// specs/strategy/b2b-pipeline.md don't require a migration each time.
+
+export const tradeshow = pgTable("tradeshow", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  location: text("location"),
+  startsOn: date("starts_on"),
+  endsOn: date("ends_on"),
+  // 'b2b_trade_shows_consumer' | 'b2b_trade_shows_industry'
+  channel: text("channel").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+export const lead = pgTable(
+  "lead",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    capturedAt: timestamp("captured_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    capturedByUserId: text("captured_by_user_id").references(() => user.id),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    email: text("email"),
+    phone: text("phone"),
+    title: text("title"),
+    // Free-text until/unless promoted to a real `company` row via companyId.
+    companyName: text("company_name"),
+    // 'prospect' | 'lead' | 'sample' | 'pilot_order' | 'recurring_order' |
+    // 'partnership'. Default 'prospect' per b2b-pipeline.md anti-pattern:
+    // a booth scan alone isn't a `lead` until a named decision-maker is
+    // captured and they engage post-show.
+    stage: text("stage").notNull().default("prospect"),
+    // Coarse buyer type: watch_oem | strap_oem | retailer | distributor.
+    personaTag: text("persona_tag"),
+    // One of the 7 B2B entry channels from specs/strategy/b2b-pipeline.md.
+    sourceChannel: text("source_channel").notNull(),
+    // The date we actually met this person (editable; defaults to today in
+    // the capture/create form). Distinct from capturedAt (row-creation time).
+    meetingDate: date("meeting_date"),
+    // DEPRECATED — replaced in the UI by meetingDate. Column + tradeshow
+    // table retained until a destructive cleanup migration (discuss w/ Greg).
+    tradeshowId: text("tradeshow_id").references(() => tradeshow.id),
+    ownerUserId: text("owner_user_id").references(() => user.id),
+    notes: text("notes"),
+    cardImageUrl: text("card_image_url"),
+    // Claude's raw read of the card — kept so a desktop fixer can recover
+    // anything the structured extraction missed.
+    cardRawText: text("card_raw_text"),
+    // { firstName: 0..1, email: 0..1, ... } from the vision model.
+    ocrConfidence: jsonb("ocr_confidence"),
+    // Set when the lead is promoted to a B2B brand record.
+    companyId: text("company_id").references(() => company.id),
+    // Populated *only* when a real Shopify order lands and a `customer` row
+    // materializes via the existing sync — never written by lead conversion
+    // (would otherwise pollute the Shopify-synced table with shopify_id=null
+    // rows). See specs/work-plans/todo/crm-leads.md decision 3.
+    customerId: text("customer_id").references(() => customer.id),
+    // 'active' | 'converted' | 'dropped' (soft-delete uses 'dropped').
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("lead_email_idx").on(t.email),
+    index("lead_stage_idx").on(t.stage),
+    index("lead_source_channel_idx").on(t.sourceChannel),
+    index("lead_status_idx").on(t.status),
+    index("lead_tradeshow_id_idx").on(t.tradeshowId),
+    index("lead_owner_user_id_idx").on(t.ownerUserId),
+    index("lead_company_id_idx").on(t.companyId),
+    index("lead_customer_id_idx").on(t.customerId),
+    index("lead_captured_at_idx").on(t.capturedAt),
+  ],
+);
+
+// History of every business-card image scanned for a lead. The lead's
+// `cardImageUrl` mirrors the most recent row's blobUrl for convenience.
+// Multi-row so re-captures (new card, follow-up scan) don't overwrite.
+export const leadCardImage = pgTable(
+  "lead_card_image",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    leadId: text("lead_id")
+      .notNull()
+      .references(() => lead.id, { onDelete: "cascade" }),
+    blobUrl: text("blob_url").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => user.id),
+    uploadedAt: timestamp("uploaded_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("lead_card_image_lead_id_idx").on(t.leadId),
+    index("lead_card_image_uploaded_at_idx").on(t.uploadedAt),
+  ],
+);
+
+export const tradeshowRelations = relations(tradeshow, ({ many }) => ({
+  leads: many(lead),
+}));
+
+export const leadCardImageRelations = relations(leadCardImage, ({ one }) => ({
+  lead: one(lead, {
+    fields: [leadCardImage.leadId],
+    references: [lead.id],
+  }),
+  uploadedBy: one(user, {
+    fields: [leadCardImage.uploadedByUserId],
+    references: [user.id],
+  }),
+}));
+
+export const leadRelations = relations(lead, ({ one }) => ({
+  capturedBy: one(user, {
+    fields: [lead.capturedByUserId],
+    references: [user.id],
+    relationName: "leadCapturedBy",
+  }),
+  owner: one(user, {
+    fields: [lead.ownerUserId],
+    references: [user.id],
+    relationName: "leadOwner",
+  }),
+  tradeshow: one(tradeshow, {
+    fields: [lead.tradeshowId],
+    references: [tradeshow.id],
+  }),
+  company: one(company, {
+    fields: [lead.companyId],
+    references: [company.id],
+  }),
+  customer: one(customer, {
+    fields: [lead.customerId],
+    references: [customer.id],
+  }),
+}));

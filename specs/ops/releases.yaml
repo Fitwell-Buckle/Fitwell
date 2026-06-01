@@ -36,3 +36,32 @@
     - src/lib/email/magic-link.ts
     - src/lib/production/notifications.ts
     - src/app/api/invoices/[id]/send/route.ts
+
+- date: "2026-05-31"
+  title: "CRM leads + business-card capture (Phase 1–5)"
+  notes: |
+    First in-repo CRM. Two new tables (`lead`, `tradeshow`), 7 API routes,
+    full admin UI under Customers → Leads, and a mobile-first 3-mode
+    capture page (`/leads/capture`): photograph a card (Claude Sonnet 4.5
+    vision OCR with per-field confidence rings), live-scan a QR code
+    (vCard / MeCard / `mailto:` / `tel:` / URL → fields), or type it in.
+    Lead conversion writes a `company_id` FK but intentionally does NOT
+    materialize a synthetic `customer` row — that only lands when a real
+    Shopify order arrives. First Anthropic SDK integration in the repo
+    (`src/lib/ai/anthropic.ts`); first Playwright spec
+    (`e2e/tests/leads-flow.spec.ts`, self-skips pending a shared auth
+    fixture). 39 test files / 370 tests passing.
+  artifacts:
+    - specs/work-plans/completed/crm-leads.md
+    - src/lib/schema.ts
+    - drizzle/migrations/0023_smart_firestar.sql
+    - src/lib/ai/anthropic.ts
+    - src/lib/crm/
+    - src/app/api/leads/
+    - src/app/api/tradeshows/
+    - src/app/(admin)/leads/
+    - src/components/layout/admin-sidebar.tsx
+    - specs/current/routes.md
+    - specs/current/schema.md
+    - specs/current/components.md
+    - specs/strategy/b2b-pipeline.md

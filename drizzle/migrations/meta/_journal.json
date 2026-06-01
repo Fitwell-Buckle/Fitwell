@@ -162,6 +162,27 @@
       "when": 1780020504138,
       "tag": "0022_opposite_ink",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1780251944235,
+      "tag": "0023_smart_firestar",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1780256617320,
+      "tag": "0024_optimal_black_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1780271593761,
+      "tag": "0025_sleepy_shiva",
+      "breakpoints": true
     }
   ]
 }

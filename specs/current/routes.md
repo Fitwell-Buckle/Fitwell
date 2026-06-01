@@ -1,6 +1,6 @@
 # Routes
 
-Last updated: 2026-05-28
+Last updated: 2026-05-31
 
 ## (marketing) — Public Pages
 
@@ -30,6 +30,10 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | Path | Description |
 |------|-------------|
 | `/dashboard` | Overview — revenue, orders, traffic KPIs |
+| `/leads` | CRM lead list — name/company/stage/source/captured, with filters (stage, source, tradeshow, status, search) |
+| `/leads/new` | Manual lead entry form |
+| `/leads/capture` | Mobile-first 3-mode capture: photo (Claude vision OCR), live QR (vCard / MeCard / URL → fields), or type manually |
+| `/leads/[id]` | Lead detail — editable fields with stage/persona/source pickers, "Convert to Company" (sets `companyId` + `status='converted'`; does **not** materialize a Shopify `customer` row), drop (soft-delete), card image preview + raw OCR text |
 | `/customers` | Customer list with search, filter, sort |
 | `/customers/[id]` | Individual customer detail — orders, LTV, attribution |
 | `/customers/companies` | B2B companies + price tiers (CRUD) |
@@ -156,6 +160,18 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/invoices/[id]/attachments` | Upload a customer document to an invoice (e.g. their PDF PO) — Vercel Blob, multipart. Returns a graceful 503 when `BLOB_READ_WRITE_TOKEN` isn't set |
 | DELETE | `/api/invoices/attachments/[id]` | Remove an invoice attachment (best-effort blob delete + always-on DB row delete) |
 | PATCH | `/api/settings/billing` | Update remittance / bank-wire details shown on invoices |
+
+### CRM API (each handler checks `auth()`; admin-only — suppliers/companies 403)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/leads` | List leads with optional filters (stage, sourceChannel, tradeshowId, ownerUserId, status, search). Defaults to `status='active'`; search is case-insensitive across first/last name, email, and company name. Sorted by `capturedAt desc` |
+| POST | `/api/leads` | Create a lead. Requires at least one of name/email/phone/company. Stage defaults to `'prospect'` per `b2b-pipeline.md` anti-pattern; owner defaults to the capturing user |
+| GET | `/api/leads/[id]` | Lead detail |
+| PATCH | `/api/leads/[id]` | Partial update (any subset of fields). "Convert to Company" is a PATCH that sets `companyId` and `status='converted'` |
+| DELETE | `/api/leads/[id]` | Soft-delete — flips `status` to `'dropped'`, row preserved for history. Hard delete intentionally not exposed |
+| POST | `/api/leads/scan-card` | Upload a business-card image (multipart, 10 MB cap, JPEG/PNG/GIF/WebP); puts to Vercel Blob then calls Claude Sonnet 4.5 vision via a forced tool_use with a strict JSON schema. Returns extracted fields + confidence per field + raw read text + the Blob URL. Does **not** persist a lead — the client follows up with POST `/api/leads`. 503 if `BLOB_READ_WRITE_TOKEN` or `ANTHROPIC_API_KEY` is unset |
+| GET | `/api/tradeshows` | List tradeshows, sorted by `startsOn desc` |
+| POST | `/api/tradeshows` | Create a tradeshow (`channel` must be one of `b2b_trade_shows_consumer` / `b2b_trade_shows_industry`) |
 
 ### Influencer API (each handler checks `auth()`; admin-only — suppliers/companies 403)
 | Method | Path | Description |

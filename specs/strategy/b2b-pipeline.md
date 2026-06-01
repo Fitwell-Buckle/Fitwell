@@ -288,6 +288,26 @@ rather than strap-assembly level.
   `b2b_d2c_reverse_attribution` channel) should be flagged — they
   arrive warmer and are often easier sales.
 
+## Tooling
+
+Leads are captured and tracked in the in-repo CRM under **Customers →
+Leads** (admin). The mobile-first capture page at `/leads/capture` offers
+three modes for the same flow:
+
+- **Scan card** — photograph the front; Claude Sonnet 4.5 vision extracts
+  name / company / email / phone / title / website with per-field confidence
+  rings on the confirm form. Raw OCR text is preserved on the lead for
+  desktop recovery.
+- **Scan QR** — live camera decode of vCard / MeCard / `mailto:` / `tel:` /
+  URL payloads, parsed into the same field shape.
+- **Type it in** — blank confirm form for when there's no card on hand.
+
+All three feed a single confirm form whose stage defaults to `prospect`,
+honoring the anti-pattern below. The two tradeshow entry channels
+(`b2b_trade_shows_consumer`, `b2b_trade_shows_industry`) are first-class
+selectable values; a `tradeshow` row can be created to roll multiple
+captures up to a single show.
+
 ## Anti-Patterns
 
 - **Counting trade-show conversations as pipeline.** A booth

@@ -1,6 +1,6 @@
 # Database Schema
 
-Last updated: 2026-05-28
+Last updated: 2026-05-31
 
 ## Design Principles
 
@@ -464,6 +464,35 @@ stored. A `user.influencer_id` column (for the future influencer portal,
 `role='influencer'`) is **deferred to that phase's own migration** — it's
 intentionally not added here, so the running app never queries a column the DB
 doesn't have.
+
+## CRM (leads + tradeshows)
+
+Tradeshow leads + other B2B lead sources. Lives under **Customers → Leads**
+in the admin. Stage/status/persona/source values are `text` (validated at
+the API layer in `src/lib/crm/constants.ts`) rather than `pgEnum`, so
+changes in `specs/strategy/b2b-pipeline.md` don't require a migration each
+time. `customer` and `company` are FK targets — never duplicated. A
+"converted" lead writes `company_id` but **does not** materialize a
+`customer` row (`shopify_id=null` would pollute the Shopify-synced table);
+the `customer_id` FK only lands when a real Shopify order arrives via the
+existing sync.
+
+| Table | Key columns |
+|-------|-------------|
+| `tradeshow` | `name`, `location?`, `starts_on?` (date), `ends_on?` (date), `channel` (`b2b_trade_shows_consumer` / `b2b_trade_shows_industry`), `created_at` |
+| `lead` | `captured_at` (default now), `captured_by_user_id?` (FK → user), `first_name?`, `last_name?`, `email?`, `phone?`, `title?`, `company_name?` (free-text pre-qualification), `stage` (text, default `'prospect'` — one of the 6 b2b-pipeline stages), `persona_tag?` (coarse buyer type: `watch_oem` / `strap_oem` / `retailer` / `distributor` — simpler than the B1–B6 marketing personas), `source_channel` (one of the 7 B2B entry channels), `tradeshow_id?` (FK → tradeshow), `owner_user_id?` (FK → user), `notes?`, `card_image_url?`, `card_raw_text?` (raw Claude OCR fallback for desktop recovery), `ocr_confidence?` (jsonb: per-field 0–1), `company_id?` (FK → company, set on conversion), `customer_id?` (FK → customer, populated only when a Shopify order materializes), `status` (`active`/`converted`/`dropped`, default `active` — `dropped` is the soft-delete state) |
+
+Indexes on `lead`: `email`, `stage`, `source_channel`, `status`,
+`tradeshow_id`, `owner_user_id`, `company_id`, `customer_id`, `captured_at`.
+
+Business-card capture: `POST /api/leads/scan-card` accepts an image
+(JPEG/PNG/GIF/WebP, ≤10 MB), uploads it to Vercel Blob, then calls Claude
+Sonnet 4.5 vision via a forced `record_business_card` tool_use (strict
+JSON schema, Zod-validated, retries once on parse failure). The route
+returns the extracted fields + per-field confidence + the raw read text;
+the client follows up with `POST /api/leads` once the user has reviewed.
+Helper lives at `src/lib/ai/anthropic.ts` — first server-side LLM
+integration in the repo.
 
 ## Open Questions
 
