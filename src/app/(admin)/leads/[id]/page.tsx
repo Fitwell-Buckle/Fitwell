@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
 import {
   getLead,
+  listAssignableOwners,
   listLeadCardImages,
   listLeadComments,
 } from "@/lib/crm/service";
@@ -32,7 +33,7 @@ export default async function LeadDetailPage({
   const lead = await getLead(id);
   if (!lead) notFound();
 
-  const [companies, cardImages, messages, draftRows, comments] =
+  const [companies, cardImages, messages, draftRows, comments, owners] =
     await Promise.all([
       db
         .select({ id: company.id, name: company.name })
@@ -42,6 +43,7 @@ export default async function LeadDetailPage({
       listMessagesForLead(id),
       listOutboundMessages({ status: "draft", leadId: id }),
       listLeadComments(id),
+      listAssignableOwners(),
     ]);
 
   // Cheap (maxResults=1) check across every connected team inbox: any reply
@@ -96,6 +98,7 @@ export default async function LeadDetailPage({
           personaTag: lead.personaTag,
           sourceChannel: lead.sourceChannel,
           meetingDate: lead.meetingDate,
+          ownerUserId: lead.ownerUserId,
           notes: lead.notes,
           cardImageUrl: lead.cardImageUrl,
           cardRawText: lead.cardRawText,
@@ -104,6 +107,10 @@ export default async function LeadDetailPage({
           status: lead.status,
         }}
         companies={companies}
+        owners={owners.map((o) => ({
+          id: o.id,
+          name: o.name || o.email || "Unknown",
+        }))}
         cardImages={cardImages.map((c) => ({
           id: c.id,
           blobUrl: c.blobUrl,

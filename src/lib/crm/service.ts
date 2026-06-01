@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, ilike, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   company,
@@ -284,6 +284,29 @@ export async function dropLead(id: string): Promise<{ id: string } | null> {
 
 export async function getLead(id: string) {
   return db.query.lead.findFirst({ where: eq(lead.id, id) });
+}
+
+// Internal team members a lead can be owned by (admins — never suppliers or
+// company portal users). Used to populate the owner reassign picker. `role`
+// defaults to 'user' for Google-signed-in admins, so coalesce nulls to that.
+export interface AssignableOwner {
+  id: string;
+  name: string | null;
+  email: string | null;
+}
+
+export async function listAssignableOwners(): Promise<AssignableOwner[]> {
+  return db
+    .select({
+      id: userTable.id,
+      name: userTable.name,
+      email: userTable.email,
+    })
+    .from(userTable)
+    .where(
+      sql`coalesce(${userTable.role}, 'user') not in ('supplier', 'company')`,
+    )
+    .orderBy(asc(sql`lower(coalesce(${userTable.name}, ${userTable.email}))`));
 }
 
 export interface ListLeadsFilters {

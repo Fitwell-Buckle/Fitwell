@@ -48,6 +48,7 @@ export interface LeadView {
   personaTag: string | null;
   sourceChannel: string;
   meetingDate: string | null;
+  ownerUserId: string | null;
   notes: string | null;
   cardImageUrl: string | null;
   cardRawText: string | null;
@@ -81,6 +82,7 @@ export interface LeadCommentView {
 export function LeadDetail({
   lead,
   companies,
+  owners,
   cardImages,
   messages,
   comments,
@@ -89,6 +91,7 @@ export function LeadDetail({
 }: {
   lead: LeadView;
   companies: { id: string; name: string }[];
+  owners: { id: string; name: string }[];
   cardImages: LeadCardImageView[];
   messages: LeadMessageView[];
   comments: LeadCommentView[];
@@ -164,6 +167,7 @@ export function LeadDetail({
       personaTag: draft.personaTag || null,
       sourceChannel: draft.sourceChannel,
       meetingDate: draft.meetingDate || null,
+      ownerUserId: draft.ownerUserId || null,
     });
     if (!err) {
       // Confirmation is the inline green "✓ Saved" button — no toast, to
@@ -397,6 +401,11 @@ export function LeadDetail({
               draft.personaTag ? personaLabel(draft.personaTag) : null,
             )}
             {readonlyRow("Source", sourceChannelLabel(draft.sourceChannel))}
+            {readonlyRow(
+              "Owner",
+              owners.find((o) => o.id === draft.ownerUserId)?.name ??
+                (draft.ownerUserId ? "—" : "Unassigned"),
+            )}
             {readonlyRow("Meeting date", draft.meetingDate)}
           </dl>
           <Button
@@ -578,6 +587,21 @@ export function LeadDetail({
               {LEAD_SOURCE_CHANNELS.map((s) => (
                 <option key={s} value={s}>
                   {sourceChannelLabel(s)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={LBL}>Owner</label>
+            <select
+              className={SEL}
+              value={draft.ownerUserId ?? ""}
+              onChange={(e) => set("ownerUserId", e.target.value || null)}
+            >
+              <option value="">Unassigned</option>
+              {owners.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
                 </option>
               ))}
             </select>
