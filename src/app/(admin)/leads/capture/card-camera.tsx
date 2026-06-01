@@ -25,6 +25,7 @@ export function CardCamera({
     "starting",
   );
 
+  // Acquire the camera stream once on mount.
   useEffect(() => {
     let alive = true;
     async function start() {
@@ -42,10 +43,6 @@ export function CardCamera({
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => {});
-        }
         setStatus("live");
       } catch {
         // Permission denied, no device, or insecure context → fall back.
@@ -58,6 +55,21 @@ export function CardCamera({
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  // Attach the stream to the <video> whenever both exist. Runs after every
+  // render (cheap, guarded by the srcObject check) so it catches the case
+  // where the stream resolves before the element mounts AND vice-versa —
+  // the original bug was attaching only inside start(), when the element
+  // hadn't rendered yet (videoRef was null), leaving a black viewfinder.
+  useEffect(() => {
+    const v = videoRef.current;
+    const s = streamRef.current;
+    if (v && s && v.srcObject !== s) {
+      v.srcObject = s;
+      // iOS needs an explicit play() after srcObject; ignore autoplay rejects.
+      void v.play().catch(() => {});
+    }
+  });
 
   function stopStream() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -93,6 +105,8 @@ export function CardCamera({
     }
   }
 
+  const showVideo = status === "starting" || status === "live";
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -115,18 +129,27 @@ export function CardCamera({
         </Button>
       </div>
 
-      {status === "live" && (
+      {showVideo && (
         <div className="mt-3">
-          <div className="relative overflow-hidden rounded-md bg-black">
+          <div className="relative flex min-h-[40vh] items-center justify-center overflow-hidden rounded-md bg-black">
+            {/* Always mounted while starting/live so the stream can attach. */}
             <video
               ref={videoRef}
               className="max-h-[60vh] w-full object-contain"
+              autoPlay
               playsInline
               muted
             />
+            {status === "starting" && (
+              <p className="absolute text-sm text-white/80">Starting camera…</p>
+            )}
           </div>
           <div className="mt-3 flex items-center justify-center gap-3">
-            <Button onClick={shoot} className="px-8">
+            <Button
+              onClick={shoot}
+              disabled={status !== "live"}
+              className="px-8"
+            >
               <Camera className="h-5 w-5" /> Capture
             </Button>
             <Button
@@ -142,8 +165,8 @@ export function CardCamera({
       {status === "fallback" && (
         <div className="mt-4 flex flex-col items-center gap-3 py-6">
           <p className="text-center text-xs text-zinc-500">
-            Live camera unavailable here (it needs HTTPS). Tap below — on a
-            phone this opens the camera directly.
+            Live camera unavailable. Tap below — on a phone this opens the
+            camera directly.
           </p>
           <Button onClick={() => fileInputRef.current?.click()}>
             <Camera className="h-5 w-5" /> Open camera
