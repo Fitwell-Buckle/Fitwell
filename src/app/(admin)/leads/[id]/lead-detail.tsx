@@ -713,7 +713,9 @@ export function LeadDetail({
   const notes = (
     <Card>
       <CardContent>
-        <p className="mb-2 text-sm font-semibold text-zinc-900">Notes</p>
+        <p className="mb-2 text-sm font-semibold text-zinc-900">
+          Initial meeting notes
+        </p>
         <textarea
           className="min-h-[160px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
           value={draft.notes ?? ""}
@@ -866,8 +868,8 @@ export function LeadDetail({
                 <Card>
                   <CardContent>
                     <p className="py-6 text-center text-sm text-zinc-400">
-                      Nothing to send. Draft a follow-up from the Notes section
-                      in Overview.
+                      Nothing to send. Draft a follow-up from the Initial
+                      meeting notes in Overview.
                     </p>
                   </CardContent>
                 </Card>
