@@ -465,9 +465,9 @@ stored. A `user.influencer_id` column (for the future influencer portal,
 intentionally not added here, so the running app never queries a column the DB
 doesn't have.
 
-## CRM (leads + tradeshows)
+## CRM (leads)
 
-Tradeshow leads + other B2B lead sources. Lives under **Customers → Leads**
+B2B leads from tradeshows + other sources. Lives under **Customers → Leads**
 in the admin. Stage/status/persona/source values are `text` (validated at
 the API layer in `src/lib/crm/constants.ts`) rather than `pgEnum`, so
 changes in `specs/strategy/b2b-pipeline.md` don't require a migration each
@@ -475,15 +475,21 @@ time. `customer` and `company` are FK targets — never duplicated. A
 "converted" lead writes `company_id` but **does not** materialize a
 `customer` row (`shopify_id=null` would pollute the Shopify-synced table);
 the `customer_id` FK only lands when a real Shopify order arrives via the
-existing sync.
+existing sync. (An earlier `tradeshow` table + `lead.tradeshow_id` were
+dropped in migration 0026 — replaced by the editable `meeting_date`.)
 
 | Table | Key columns |
 |-------|-------------|
-| `tradeshow` | `name`, `location?`, `starts_on?` (date), `ends_on?` (date), `channel` (`b2b_trade_shows_consumer` / `b2b_trade_shows_industry`), `created_at` |
-| `lead` | `captured_at` (default now), `captured_by_user_id?` (FK → user), `first_name?`, `last_name?`, `email?`, `phone?`, `title?`, `company_name?` (free-text pre-qualification), `stage` (text, default `'prospect'` — one of the 6 b2b-pipeline stages), `persona_tag?` (coarse buyer type: `watch_oem` / `strap_oem` / `retailer` / `distributor` — simpler than the B1–B6 marketing personas), `source_channel` (one of the 7 B2B entry channels), `tradeshow_id?` (FK → tradeshow), `owner_user_id?` (FK → user), `notes?`, `card_image_url?`, `card_raw_text?` (raw Claude OCR fallback for desktop recovery), `ocr_confidence?` (jsonb: per-field 0–1), `company_id?` (FK → company, set on conversion), `customer_id?` (FK → customer, populated only when a Shopify order materializes), `status` (`active`/`converted`/`dropped`, default `active` — `dropped` is the soft-delete state) |
+| `lead` | `captured_at` (default now), `captured_by_user_id?` (FK → user), `first_name?`, `last_name?` (both title-cased on save), `email?`, `phone?`, `title?`, `company_name?` (free-text; defaults to the email domain at capture), `stage` (text, default `'prospect'` — one of the 6 b2b-pipeline stages), `persona_tag?` (coarse buyer type: `watch_oem` / `strap_oem` / `retailer` / `distributor`), `source_channel` (one of the 7 B2B entry channels), `meeting_date?` (date — when we met them, editable, defaults to today), `owner_user_id?` (FK → user), `notes?`, `card_image_url?` (latest card scan), `card_raw_text?` (raw Claude OCR fallback), `ocr_confidence?` (jsonb: per-field 0–1), `company_id?` (FK → company, set on conversion), `customer_id?` (FK → customer, populated only when a Shopify order materializes), `status` (`active`/`converted`/`dropped`, default `active` — `dropped` is the soft-delete state) |
+| `lead_card_image` | `lead_id` (FK → lead, cascade), `blob_url`, `content_type?`, `size_bytes?`, `uploaded_by_user_id?` (FK → user), `uploaded_at`. One row per scanned card — re-captures accumulate; `lead.card_image_url` mirrors the most recent |
 
 Indexes on `lead`: `email`, `stage`, `source_channel`, `status`,
-`tradeshow_id`, `owner_user_id`, `company_id`, `customer_id`, `captured_at`.
+`owner_user_id`, `company_id`, `customer_id`, `captured_at`. On
+`lead_card_image`: `lead_id`, `uploaded_at`.
+
+Email-domain matching: the capture-confirm step calls `GET /api/leads/match`
+to link a lead to an existing company by email domain (free-provider domains
+excluded) and to flag a duplicate active lead with the same email.
 
 Business-card capture: `POST /api/leads/scan-card` accepts an image
 (JPEG/PNG/GIF/WebP, ≤10 MB), uploads it to Vercel Blob, then calls Claude

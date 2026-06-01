@@ -1283,24 +1283,11 @@ export const productionStageDef = pgTable("production_stage_def", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
-// ─── CRM (leads + tradeshows) ───────────────────────────────────────
+// ─── CRM (leads) ────────────────────────────────────────────────────
 //
 // Stages, source channels, persona tags, and statuses are kept as `text`
 // (validated at the API layer) rather than pgEnum so spec changes in
 // specs/strategy/b2b-pipeline.md don't require a migration each time.
-
-export const tradeshow = pgTable("tradeshow", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull(),
-  location: text("location"),
-  startsOn: date("starts_on"),
-  endsOn: date("ends_on"),
-  // 'b2b_trade_shows_consumer' | 'b2b_trade_shows_industry'
-  channel: text("channel").notNull(),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
 
 export const lead = pgTable(
   "lead",
@@ -1331,9 +1318,6 @@ export const lead = pgTable(
     // The date we actually met this person (editable; defaults to today in
     // the capture/create form). Distinct from capturedAt (row-creation time).
     meetingDate: date("meeting_date"),
-    // DEPRECATED — replaced in the UI by meetingDate. Column + tradeshow
-    // table retained until a destructive cleanup migration (discuss w/ Greg).
-    tradeshowId: text("tradeshow_id").references(() => tradeshow.id),
     ownerUserId: text("owner_user_id").references(() => user.id),
     notes: text("notes"),
     cardImageUrl: text("card_image_url"),
@@ -1359,7 +1343,6 @@ export const lead = pgTable(
     index("lead_stage_idx").on(t.stage),
     index("lead_source_channel_idx").on(t.sourceChannel),
     index("lead_status_idx").on(t.status),
-    index("lead_tradeshow_id_idx").on(t.tradeshowId),
     index("lead_owner_user_id_idx").on(t.ownerUserId),
     index("lead_company_id_idx").on(t.companyId),
     index("lead_customer_id_idx").on(t.customerId),
@@ -1393,10 +1376,6 @@ export const leadCardImage = pgTable(
   ],
 );
 
-export const tradeshowRelations = relations(tradeshow, ({ many }) => ({
-  leads: many(lead),
-}));
-
 export const leadCardImageRelations = relations(leadCardImage, ({ one }) => ({
   lead: one(lead, {
     fields: [leadCardImage.leadId],
@@ -1418,10 +1397,6 @@ export const leadRelations = relations(lead, ({ one }) => ({
     fields: [lead.ownerUserId],
     references: [user.id],
     relationName: "leadOwner",
-  }),
-  tradeshow: one(tradeshow, {
-    fields: [lead.tradeshowId],
-    references: [tradeshow.id],
   }),
   company: one(company, {
     fields: [lead.companyId],
