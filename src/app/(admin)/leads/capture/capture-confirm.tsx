@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Building2, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,10 +46,13 @@ export function CaptureConfirm({
   initial,
   confidence,
   onStartOver,
+  onSavedNext,
 }: {
   initial: LeadFormInitial;
   confidence?: Record<string, number | undefined>;
   onStartOver: () => void;
+  // Called after a successful save — loops back to the camera for the next card.
+  onSavedNext: () => void;
 }) {
   const router = useRouter();
   const [match, setMatch] = useState<MatchResult | null>(null);
@@ -209,7 +213,12 @@ export function CaptureConfirm({
         <LeadForm
           initial={formInitial}
           confidence={confidence}
-          submitLabel="Save lead"
+          rapid
+          submitLabel="Save & capture another"
+          onSuccess={() => {
+            toast.success("Saved");
+            onSavedNext();
+          }}
         />
       </div>
     </div>

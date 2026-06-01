@@ -23,7 +23,9 @@ const MODE_TILE =
   "flex h-32 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-center transition-colors hover:bg-zinc-50 active:bg-zinc-100";
 
 export function CaptureClient() {
-  const [mode, setMode] = useState<Mode>("idle");
+  // Open straight into the camera — fastest path for booth capture. Cancel
+  // drops to the 3-mode picker (QR / manual still reachable).
+  const [mode, setMode] = useState<Mode>("capturing_card");
   const [error, setError] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [initial, setInitial] = useState<LeadFormInitial | null>(null);
@@ -142,12 +144,22 @@ export function CaptureClient() {
     setMode("confirm");
   }
 
+  // After saving, jump straight back to the camera for the next card.
+  function captureAnother() {
+    setError(null);
+    setBusyLabel(null);
+    setInitial(null);
+    setConfidence(undefined);
+    setMode("capturing_card");
+  }
+
   if (mode === "confirm" && initial) {
     return (
       <CaptureConfirm
         initial={initial}
         confidence={confidence}
         onStartOver={reset}
+        onSavedNext={captureAnother}
       />
     );
   }

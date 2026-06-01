@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useDictation } from "@/components/ui/use-dictation";
 import {
   LEAD_PERSONA_TAGS,
   LEAD_SOURCE_CHANNELS,
@@ -48,6 +50,9 @@ export interface LeadFormProps {
   // Where to send the user after a successful save. Defaults to the new
   // lead's detail page.
   onSuccess?: (newLeadId: string) => void;
+  // Booth-capture mode: collapse the stage/persona/source/date fields (their
+  // defaults are already right) so the screen is just identity + notes + save.
+  rapid?: boolean;
 }
 
 // Local YYYY-MM-DD for "today" (browser-local, so it matches the user's day).
@@ -101,6 +106,7 @@ export function LeadForm({
   confidence,
   submitLabel = "Save lead",
   onSuccess,
+  rapid = false,
 }: LeadFormProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -120,6 +126,7 @@ export function LeadForm({
     initial?.meetingDate ?? todayLocal(),
   );
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const dictation = useDictation(setNotes, () => notes);
   // Set when the server reports a same-email duplicate (409); offers the user
   // "open existing" vs "create anyway".
   const [dupLeadId, setDupLeadId] = useState<string | null>(null);
@@ -188,6 +195,66 @@ export function LeadForm({
     e.preventDefault();
     void save(false);
   }
+
+  const advancedFields = (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div>
+        <FieldLabel htmlFor="stage">Stage</FieldLabel>
+        <select
+          id="stage"
+          className={SEL}
+          value={stage}
+          onChange={(e) => setStage(e.target.value)}
+        >
+          {LEAD_STAGES.map((s) => (
+            <option key={s} value={s}>
+              {stageLabel(s)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <FieldLabel htmlFor="personaTag">Persona (optional)</FieldLabel>
+        <select
+          id="personaTag"
+          className={SEL}
+          value={personaTag}
+          onChange={(e) => setPersonaTag(e.target.value)}
+        >
+          <option value="">—</option>
+          {LEAD_PERSONA_TAGS.map((p) => (
+            <option key={p} value={p}>
+              {personaLabel(p)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <FieldLabel htmlFor="sourceChannel">Source</FieldLabel>
+        <select
+          id="sourceChannel"
+          className={SEL}
+          value={sourceChannel}
+          onChange={(e) => setSourceChannel(e.target.value)}
+        >
+          {LEAD_SOURCE_CHANNELS.map((s) => (
+            <option key={s} value={s}>
+              {sourceChannelLabel(s)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <FieldLabel htmlFor="meetingDate">Meeting date</FieldLabel>
+        <Input
+          id="meetingDate"
+          type="date"
+          value={meetingDate}
+          onChange={(e) => setMeetingDate(e.target.value)}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <Card>
@@ -280,73 +347,45 @@ export function LeadForm({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <FieldLabel htmlFor="stage">Stage</FieldLabel>
-              <select
-                id="stage"
-                className={SEL}
-                value={stage}
-                onChange={(e) => setStage(e.target.value)}
-              >
-                {LEAD_STAGES.map((s) => (
-                  <option key={s} value={s}>
-                    {stageLabel(s)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <FieldLabel htmlFor="personaTag">Persona (optional)</FieldLabel>
-              <select
-                id="personaTag"
-                className={SEL}
-                value={personaTag}
-                onChange={(e) => setPersonaTag(e.target.value)}
-              >
-                <option value="">—</option>
-                {LEAD_PERSONA_TAGS.map((p) => (
-                  <option key={p} value={p}>
-                    {personaLabel(p)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <FieldLabel htmlFor="sourceChannel">Source</FieldLabel>
-              <select
-                id="sourceChannel"
-                className={SEL}
-                value={sourceChannel}
-                onChange={(e) => setSourceChannel(e.target.value)}
-              >
-                {LEAD_SOURCE_CHANNELS.map((s) => (
-                  <option key={s} value={s}>
-                    {sourceChannelLabel(s)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <FieldLabel htmlFor="meetingDate">Meeting date</FieldLabel>
-              <Input
-                id="meetingDate"
-                type="date"
-                value={meetingDate}
-                onChange={(e) => setMeetingDate(e.target.value)}
-              />
-            </div>
-          </div>
+          {/* In rapid (booth) mode the defaults are right, so collapse these. */}
+          {!rapid && advancedFields}
 
           <div>
-            <FieldLabel htmlFor="notes">Notes</FieldLabel>
+            <div className="mb-1 flex items-center justify-between">
+              <FieldLabel htmlFor="notes">Notes</FieldLabel>
+              {dictation.supported && (
+                <button
+                  type="button"
+                  onClick={dictation.toggle}
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ${
+                    dictation.listening
+                      ? "bg-red-100 text-red-700"
+                      : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                  }`}
+                  aria-pressed={dictation.listening}
+                >
+                  <Mic className="h-3.5 w-3.5" />
+                  {dictation.listening ? "Listening… tap to stop" : "Dictate"}
+                </button>
+              )}
+            </div>
             <textarea
               id="notes"
               className="min-h-[120px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              placeholder="Quick note — or tap Dictate and speak"
             />
           </div>
+
+          {rapid && (
+            <details className="rounded-md border border-zinc-200 p-3">
+              <summary className="cursor-pointer text-sm font-medium text-zinc-600">
+                More details (stage, persona, source, date)
+              </summary>
+              <div className="mt-3">{advancedFields}</div>
+            </details>
+          )}
 
           {initial?.cardImageUrl && (
             <details className="text-xs text-zinc-500">
