@@ -61,6 +61,7 @@ function buildPoEmailHtml(
         <td style="${cell}">${prefixHtml}<strong>${esc(g.label)}</strong></td>
         <td style="${cell}color:#888;font-size:11px;">${esc(g.skus.join(", "))}</td>
         <td style="${cell}text-align:right;font-weight:bold;">${g.quantity}</td>
+        <td style="${cell}text-align:right;">${fmtMoney(unit)}</td>
         <td style="${cell}text-align:right;">${fmtMoney(ext)}</td>
       </tr>`;
       })
@@ -72,12 +73,14 @@ function buildPoEmailHtml(
         <th style="${th}">Raw blank</th>
         <th style="${th}">Covers (finished SKUs)</th>
         <th style="${th}text-align:right;">Qty</th>
-        <th style="${th}text-align:right;">Supplier price</th>
+        <th style="${th}text-align:right;">Unit cost</th>
+        <th style="${th}text-align:right;">Line total</th>
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr>
         <td colspan="2" style="${cell}text-align:right;font-weight:bold;">Total pieces</td>
         <td style="${cell}text-align:right;font-weight:bold;">${totalPieces}</td>
+        <td style="${cell}"></td>
         <td style="${cell}text-align:right;font-weight:bold;">${supplierTotal > 0 ? fmtMoney(supplierTotal) : ""}</td>
       </tr></tfoot>
     </table>`;
@@ -90,6 +93,7 @@ function buildPoEmailHtml(
         <td style="${cell}font-family:monospace;">${esc(li.sku)}</td>
         <td style="${cell}">${prefixHtml}${esc(li.title)}</td>
         <td style="${cell}text-align:right;">${li.quantity}</td>
+        <td style="${cell}text-align:right;">${fmtMoney(unit)}</td>
         <td style="${cell}text-align:right;">${fmtMoney(ext)}</td>
       </tr>`;
       })
@@ -98,11 +102,12 @@ function buildPoEmailHtml(
       <thead><tr>
         <th style="${th}">SKU</th><th style="${th}">Product</th>
         <th style="${th}text-align:right;">Qty</th>
-        <th style="${th}text-align:right;">Supplier price</th>
+        <th style="${th}text-align:right;">Unit cost</th>
+        <th style="${th}text-align:right;">Line total</th>
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr>
-        <td colspan="3" style="${cell}text-align:right;font-weight:bold;">Supplier total</td>
+        <td colspan="4" style="${cell}text-align:right;font-weight:bold;">Supplier total</td>
         <td style="${cell}text-align:right;font-weight:bold;">${fmtMoney(supplierTotal)}</td>
       </tr></tfoot>
     </table>`;

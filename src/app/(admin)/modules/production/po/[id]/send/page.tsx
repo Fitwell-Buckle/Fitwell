@@ -228,7 +228,8 @@ export default async function SendPoPage({
                   <TableHead>Raw blank</TableHead>
                   <TableHead>Covers (finished SKUs)</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Supplier price</TableHead>
+                  <TableHead className="text-right">Unit cost</TableHead>
+                  <TableHead className="text-right">Line total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -264,6 +265,9 @@ export default async function SendPoPage({
                       <TableCell className="text-right font-medium text-zinc-900">
                         {g.quantity}
                       </TableCell>
+                      <TableCell className="text-right text-zinc-500">
+                        {fmtMoney(unit)}
+                      </TableCell>
                       <TableCell className="text-right text-zinc-700">
                         {fmtMoney(unit != null ? unit * g.quantity : null)}
                       </TableCell>
@@ -296,14 +300,8 @@ export default async function SendPoPage({
                     <TableHead>SKU</TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead className="text-right">Qty</TableHead>
-                    {isSubPo ? (
-                      <TableHead className="text-right">Supplier price</TableHead>
-                    ) : (
-                      <>
-                        <TableHead className="text-right">Unit cost</TableHead>
-                        <TableHead className="text-right">Line total</TableHead>
-                      </>
-                    )}
+                    <TableHead className="text-right">Unit cost</TableHead>
+                    <TableHead className="text-right">Line total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -321,24 +319,12 @@ export default async function SendPoPage({
                           {li.title}
                         </TableCell>
                         <TableCell className="text-right text-zinc-500">{li.quantity}</TableCell>
-                        {isSubPo ? (
-                          <TableCell className="text-right text-zinc-700">
-                            {fmtMoney(unit != null ? unit * li.quantity : null)}
-                          </TableCell>
-                        ) : (
-                          <>
-                            <TableCell className="text-right text-zinc-500">
-                              {fmtMoney(li.unitCostCents)}
-                            </TableCell>
-                            <TableCell className="text-right text-zinc-700">
-                              {fmtMoney(
-                                li.unitCostCents != null
-                                  ? li.unitCostCents * li.quantity
-                                  : null,
-                              )}
-                            </TableCell>
-                          </>
-                        )}
+                        <TableCell className="text-right text-zinc-500">
+                          {fmtMoney(unit)}
+                        </TableCell>
+                        <TableCell className="text-right text-zinc-700">
+                          {fmtMoney(unit != null ? unit * li.quantity : null)}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
