@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 
-// CRM service (createLead/listLeads/updateLead/dropLead, createTradeshow/
-// listTradeshows) against real Postgres. Runs only when TEST_DATABASE_URL is
-// set; otherwise self-skips.
+// CRM service (createLead/listLeads/updateLead/dropLead, matching, cards)
+// against real Postgres. Runs only when TEST_DATABASE_URL is set; otherwise
+// self-skips.
 const noDb = !process.env.TEST_DATABASE_URL;
 const RUN = Date.now();
 
@@ -13,7 +13,6 @@ describe.skipIf(noDb)("crm service (real DB)", () => {
   let svc: typeof import("./service");
 
   let userId: string;
-  let showId: string;
   const leadIds: string[] = [];
 
   beforeAll(async () => {
@@ -33,32 +32,7 @@ describe.skipIf(noDb)("crm service (real DB)", () => {
     if (leadIds.length) {
       await db.delete(schema.lead).where(inArray(schema.lead.id, leadIds));
     }
-    if (showId) {
-      await db.delete(schema.tradeshow).where(eq(schema.tradeshow.id, showId));
-    }
     await db.delete(schema.user).where(eq(schema.user.id, userId));
-  });
-
-  it("creates + lists tradeshows ordered by startsOn desc", async () => {
-    const { id: a } = await svc.createTradeshow({
-      name: `itest-show-A-${RUN}`,
-      location: "NYC",
-      startsOn: "2026-04-01",
-      endsOn: "2026-04-03",
-      channel: "b2b_trade_shows_consumer",
-    });
-    const { id: b } = await svc.createTradeshow({
-      name: `itest-show-B-${RUN}`,
-      startsOn: "2026-06-01",
-      channel: "b2b_trade_shows_industry",
-    });
-    showId = b;
-
-    const list = await svc.listTradeshows();
-    const ours = list.filter((s) => s.id === a || s.id === b);
-    expect(ours[0].id).toBe(b);
-    expect(ours[1].id).toBe(a);
-    await db.delete(schema.tradeshow).where(eq(schema.tradeshow.id, a));
   });
 
   it("creates a lead, defaults stage and owner, and getLead reads it back", async () => {
@@ -67,7 +41,6 @@ describe.skipIf(noDb)("crm service (real DB)", () => {
         firstName: "Ada",
         email: "ada@itest.local",
         sourceChannel: "b2b_trade_shows_consumer",
-        tradeshowId: showId,
       },
       { capturedByUserId: userId },
     );
@@ -81,7 +54,6 @@ describe.skipIf(noDb)("crm service (real DB)", () => {
       sourceChannel: "b2b_trade_shows_consumer",
       ownerUserId: userId,
       capturedByUserId: userId,
-      tradeshowId: showId,
     });
   });
 

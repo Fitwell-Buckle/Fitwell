@@ -38,7 +38,7 @@ classes, QR payload parsing) live in `lib/crm/` and are unit-tested.
 | Component | Usage |
 |-----------|-------|
 | `leads/lead-form` | Client — shared editable form used by `/leads/new` and the capture confirm step. Accepts `initial`, `confidence` (per-field 0–1 from OCR), `submitLabel`, `onSuccess`. Renders a colored confidence dot beside each input when `confidence` is supplied (green ≥0.8 / amber 0.4–0.8 / red <0.4). POSTs to `/api/leads` |
-| `leads/leads-filters` | Client — query-string-backed filter strip (stage / source / tradeshow / status / search) on the list page |
+| `leads/leads-filters` | Client — query-string-backed filter strip (stage / source / status / search) on the list page |
 | `leads/new/new-lead-form` | Thin wrapper around `lead-form` for the manual-entry route |
 | `leads/[id]/lead-detail` | Client editor — stage/status/persona badges, "Convert to Company" picker + button (PATCH sets `companyId` + `status='converted'`), Drop button (DELETE → soft-delete), DetailTabs (Overview / Notes); shows the business-card photo via `next/image` and the raw OCR text under Notes when present |
 | `leads/capture/capture-client` | Client — mobile-first 3-mode capture state machine (Scan card / Scan QR / Type it in). All three feed the shared `lead-form` with mode-specific initial values |

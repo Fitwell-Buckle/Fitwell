@@ -27,7 +27,6 @@ export async function GET(req: Request) {
   const filters: ListLeadsFilters = {
     stage: url.searchParams.get("stage") ?? undefined,
     sourceChannel: url.searchParams.get("sourceChannel") ?? undefined,
-    tradeshowId: url.searchParams.get("tradeshowId") ?? undefined,
     ownerUserId: url.searchParams.get("ownerUserId") ?? undefined,
     status: url.searchParams.get("status") ?? undefined,
     search: url.searchParams.get("search") ?? undefined,

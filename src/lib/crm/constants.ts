@@ -41,10 +41,3 @@ export type LeadPersonaTag = (typeof LEAD_PERSONA_TAGS)[number];
 // Lead lifecycle status. `dropped` is the soft-delete state.
 export const LEAD_STATUSES = ["active", "converted", "dropped"] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
-
-// Tradeshow channels — subset of LEAD_SOURCE_CHANNELS that may anchor a show.
-export const TRADESHOW_CHANNELS = [
-  "b2b_trade_shows_consumer",
-  "b2b_trade_shows_industry",
-] as const;
-export type TradeshowChannel = (typeof TRADESHOW_CHANNELS)[number];

@@ -1,19 +1,12 @@
 import { z } from "zod";
 import { and, desc, eq, ilike, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
-import {
-  company,
-  companyContact,
-  lead,
-  leadCardImage,
-  tradeshow,
-} from "@/lib/schema";
+import { company, companyContact, lead, leadCardImage } from "@/lib/schema";
 import {
   LEAD_PERSONA_TAGS,
   LEAD_SOURCE_CHANNELS,
   LEAD_STAGES,
   LEAD_STATUSES,
-  TRADESHOW_CHANNELS,
 } from "./constants";
 import { companyEmailDomain } from "./email";
 import { toNameCase } from "./names";
@@ -21,40 +14,6 @@ import { toNameCase } from "./names";
 const dateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "expected a YYYY-MM-DD date");
-
-// ─── Tradeshow ──────────────────────────────────────────────────────
-
-export const tradeshowSchema = z.object({
-  name: z.string().min(1).max(200),
-  location: z.string().max(200).nullish(),
-  startsOn: dateString.nullish(),
-  endsOn: dateString.nullish(),
-  channel: z.enum(TRADESHOW_CHANNELS),
-});
-export type TradeshowInput = z.infer<typeof tradeshowSchema>;
-
-export async function createTradeshow(
-  input: TradeshowInput,
-): Promise<{ id: string }> {
-  const [row] = await db
-    .insert(tradeshow)
-    .values({
-      name: input.name,
-      location: input.location || null,
-      startsOn: input.startsOn || null,
-      endsOn: input.endsOn || null,
-      channel: input.channel,
-    })
-    .returning({ id: tradeshow.id });
-  return { id: row.id };
-}
-
-export async function listTradeshows() {
-  return db
-    .select()
-    .from(tradeshow)
-    .orderBy(desc(tradeshow.startsOn), desc(tradeshow.createdAt));
-}
 
 // ─── Lead ───────────────────────────────────────────────────────────
 
@@ -74,7 +33,6 @@ export const createLeadSchema = z
     personaTag: z.enum(LEAD_PERSONA_TAGS).nullish(),
     sourceChannel: z.enum(LEAD_SOURCE_CHANNELS),
     meetingDate: dateString.nullish(),
-    tradeshowId: z.string().max(200).nullish(),
     ownerUserId: z.string().max(200).nullish(),
     // Auto-linked when the capture flow's domain match surfaces a company.
     companyId: z.string().max(200).nullish(),
@@ -108,7 +66,6 @@ export const updateLeadSchema = z.object({
   personaTag: z.enum(LEAD_PERSONA_TAGS).nullish(),
   sourceChannel: z.enum(LEAD_SOURCE_CHANNELS).optional(),
   meetingDate: dateString.nullish(),
-  tradeshowId: z.string().max(200).nullish(),
   ownerUserId: z.string().max(200).nullish(),
   notes: z.string().max(10_000).nullish(),
   companyId: z.string().max(200).nullish(),
@@ -145,7 +102,6 @@ export async function createLead(
       personaTag: input.personaTag || null,
       sourceChannel: input.sourceChannel,
       meetingDate: input.meetingDate || null,
-      tradeshowId: input.tradeshowId || null,
       ownerUserId,
       companyId: input.companyId || null,
       notes: input.notes || null,
@@ -187,8 +143,6 @@ export async function updateLead(
     patch.sourceChannel = input.sourceChannel;
   if (input.meetingDate !== undefined)
     patch.meetingDate = input.meetingDate || null;
-  if (input.tradeshowId !== undefined)
-    patch.tradeshowId = input.tradeshowId || null;
   if (input.ownerUserId !== undefined)
     patch.ownerUserId = input.ownerUserId || null;
   if (input.notes !== undefined) patch.notes = input.notes || null;
@@ -220,7 +174,6 @@ export async function getLead(id: string) {
 export interface ListLeadsFilters {
   stage?: string;
   sourceChannel?: string;
-  tradeshowId?: string;
   ownerUserId?: string;
   status?: string;
   search?: string;
@@ -423,8 +376,6 @@ export async function listLeads(filters: ListLeadsFilters = {}) {
   if (filters.stage) conds.push(eq(lead.stage, filters.stage));
   if (filters.sourceChannel)
     conds.push(eq(lead.sourceChannel, filters.sourceChannel));
-  if (filters.tradeshowId)
-    conds.push(eq(lead.tradeshowId, filters.tradeshowId));
   if (filters.ownerUserId)
     conds.push(eq(lead.ownerUserId, filters.ownerUserId));
 
