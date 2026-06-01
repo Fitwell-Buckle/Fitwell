@@ -118,8 +118,9 @@ export function LeadDetail({
       meetingDate: draft.meetingDate || null,
     });
     if (!err) {
+      // Confirmation is the inline green "✓ Saved" button — no toast, to
+      // avoid a duplicate notification for the same action.
       setSavedKey("overview");
-      toast.success("Lead saved");
       router.refresh();
     } else {
       toast.error(err);
@@ -130,7 +131,6 @@ export function LeadDetail({
     const err = await patch({ notes: draft.notes });
     if (!err) {
       setSavedKey("notes");
-      toast.success("Notes saved");
       router.refresh();
     } else {
       toast.error(err);
