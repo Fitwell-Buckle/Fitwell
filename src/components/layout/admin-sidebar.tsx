@@ -54,6 +54,7 @@ const navItems: NavItem[] = [
     icon: Users,
     children: [
       { href: "/leads", label: "Leads" },
+      { href: "/messages", label: "Messages to Send" },
       { href: "/customers", label: "Consumer List" },
       { href: "/customers/brands", label: "B2B Customer List" },
       { href: "/invoices", label: "B2B Orders", icon: ReceiptText },

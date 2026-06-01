@@ -156,9 +156,16 @@ export function LeadForm({
         setBusy(false);
         return;
       }
-      if (onSuccess) onSuccess(body.data.id);
+      const newId = body.data.id as string;
+      // Fire-and-forget: queue an AI-drafted follow-up email in
+      // "Messages to Send". Don't block navigation on the draft (it takes a
+      // few seconds); failures are non-fatal — the lead is already saved.
+      void fetch(`/api/leads/${newId}/draft-followup`, { method: "POST" }).catch(
+        () => {},
+      );
+      if (onSuccess) onSuccess(newId);
       else {
-        router.push(`/leads/${body.data.id}`);
+        router.push(`/leads/${newId}`);
         router.refresh();
       }
     } catch (err) {

@@ -33,7 +33,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/leads` | CRM lead list — name/company/stage/source/captured, with filters (stage, source, status, search) |
 | `/leads/new` | Manual lead entry form |
 | `/leads/capture` | Mobile-first 3-mode capture: photo (Claude vision OCR), live QR (vCard / MeCard / URL → fields), or type manually |
-| `/leads/[id]` | Lead detail — editable fields with stage/persona/source pickers, "Convert to Company" (sets `companyId` + `status='converted'`; does **not** materialize a Shopify `customer` row), drop (soft-delete), card image preview + raw OCR text |
+| `/leads/[id]` | Lead detail — editable fields with stage/persona/source pickers, "Convert to Company" (sets `companyId` + `status='converted'`; does **not** materialize a Shopify `customer` row), drop (soft-delete), card image gallery + raw OCR text |
+| `/messages` | "Messages to Send" — queue of AI-drafted follow-up emails (one per captured lead). Edit subject/body, copy, mark sent, or dismiss |
 | `/customers` | Customer list with search, filter, sort |
 | `/customers/[id]` | Individual customer detail — orders, LTV, attribution |
 | `/customers/companies` | B2B companies + price tiers (CRUD) |
@@ -172,6 +173,9 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/leads/scan-card` | Upload a business-card image (multipart, 10 MB cap, JPEG/PNG/GIF/WebP); puts to Vercel Blob then calls Claude Sonnet 4.5 vision via a forced tool_use with a strict JSON schema. Returns extracted fields + confidence per field + raw read text + the Blob URL. Does **not** persist a lead — the client follows up with POST `/api/leads`. 503 if `BLOB_READ_WRITE_TOKEN` or `ANTHROPIC_API_KEY` is unset |
 | POST | `/api/leads/[id]/cards` | Attach a business-card image (already uploaded to Blob) to an existing lead — JSON body `{ blobUrl }`. Records it in `lead_card_image` and bumps `lead.card_image_url`. Used by the capture dedup flow's "attach to existing lead" action |
 | GET | `/api/leads/match?email=` | Given an email, returns `{ matchedCompany, matchedLead, matchedDomain }` — matches the email's (non-free) domain to a company and finds an active same-email lead. Drives the capture-confirm dedup banners |
+| POST | `/api/leads/[id]/draft-followup` | Draft a follow-up email from the lead's notes/context via Claude Sonnet 4.5 and queue it in `outbound_message` (status `draft`). Called fire-and-forget by the capture/create flow after a lead is saved. 503 if `ANTHROPIC_API_KEY` unset |
+| GET | `/api/messages` | List queued outbound messages (joined with lead name). Defaults to `status='draft'`; `?status=sent\|dismissed` for the others |
+| PATCH | `/api/messages/[id]` | Edit a queued message (subject/body/toEmail) or change status (`sent` stamps `sent_at`, `dismissed` removes it from the queue) |
 
 ### Influencer API (each handler checks `auth()`; admin-only — suppliers/companies 403)
 | Method | Path | Description |

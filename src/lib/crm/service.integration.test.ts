@@ -232,4 +232,41 @@ describe.skipIf(noDb)("crm service (real DB)", () => {
       "https://blob.example/leads/cards/second.jpg",
     );
   });
+
+  it("outbound messages: create, list draft queue, edit, mark sent", async () => {
+    const msgs = await import("./messages");
+    const { id: leadId } = await svc.createLead(
+      { firstName: "Msg", email: "msg@itest.local", sourceChannel: "b2b_inbound" },
+      { capturedByUserId: userId },
+    );
+    leadIds.push(leadId);
+
+    const { id: msgId } = await msgs.createOutboundMessage({
+      leadId,
+      toEmail: "msg@itest.local",
+      subject: "Following up",
+      body: "Hi Msg, great to meet you.",
+      generatedByModel: "claude-sonnet-4-5",
+      createdByUserId: userId,
+    });
+
+    // Appears in the default (draft) queue, joined with the lead name.
+    const queue = await msgs.listOutboundMessages();
+    const mine = queue.find((m) => m.id === msgId);
+    expect(mine).toBeTruthy();
+    expect(mine?.leadFirstName).toBe("Msg");
+    expect(mine?.status).toBe("draft");
+
+    // Edit the body.
+    await msgs.updateOutboundMessage(msgId, { body: "Edited body" });
+
+    // Mark sent → leaves the draft queue and stamps sentAt.
+    await msgs.updateOutboundMessage(msgId, { status: "sent" });
+    const stillDraft = await msgs.listOutboundMessages();
+    expect(stillDraft.find((m) => m.id === msgId)).toBeUndefined();
+    const sent = await msgs.listOutboundMessages({ status: "sent" });
+    const sentMsg = sent.find((m) => m.id === msgId);
+    expect(sentMsg?.body).toBe("Edited body");
+    expect(sentMsg?.sentAt).toBeTruthy();
+  });
 });

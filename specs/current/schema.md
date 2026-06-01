@@ -482,6 +482,7 @@ dropped in migration 0026 — replaced by the editable `meeting_date`.)
 |-------|-------------|
 | `lead` | `captured_at` (default now), `captured_by_user_id?` (FK → user), `first_name?`, `last_name?` (both title-cased on save), `email?`, `phone?`, `title?`, `company_name?` (free-text; defaults to the email domain at capture), `stage` (text, default `'prospect'` — one of the 6 b2b-pipeline stages), `persona_tag?` (coarse buyer type: `watch_oem` / `strap_oem` / `retailer` / `distributor`), `source_channel` (one of the 7 B2B entry channels), `meeting_date?` (date — when we met them, editable, defaults to today), `owner_user_id?` (FK → user), `notes?`, `card_image_url?` (latest card scan), `card_raw_text?` (raw Claude OCR fallback), `ocr_confidence?` (jsonb: per-field 0–1), `company_id?` (FK → company, set on conversion), `customer_id?` (FK → customer, populated only when a Shopify order materializes), `status` (`active`/`converted`/`dropped`, default `active` — `dropped` is the soft-delete state) |
 | `lead_card_image` | `lead_id` (FK → lead, cascade), `blob_url`, `content_type?`, `size_bytes?`, `uploaded_by_user_id?` (FK → user), `uploaded_at`. One row per scanned card — re-captures accumulate; `lead.card_image_url` mirrors the most recent |
+| `outbound_message` | `lead_id` (FK → lead, cascade), `channel` (default `email`), `to_email?`, `subject?`, `body`, `status` (`draft`/`sent`/`dismissed`, default `draft`), `generated_by_model?`, `created_by_user_id?` (FK → user), `created_at`, `updated_at`, `sent_at?`. AI-drafted follow-up emails queued in the "Messages to Send" view; one is auto-drafted from the lead's notes when the lead is created |
 
 Indexes on `lead`: `email`, `stage`, `source_channel`, `status`,
 `owner_user_id`, `company_id`, `customer_id`, `captured_at`. On
@@ -490,6 +491,11 @@ Indexes on `lead`: `email`, `stage`, `source_channel`, `status`,
 Email-domain matching: the capture-confirm step calls `GET /api/leads/match`
 to link a lead to an existing company by email domain (free-provider domains
 excluded) and to flag a duplicate active lead with the same email.
+
+Follow-up drafting: when a lead is created, the form fires
+`POST /api/leads/[id]/draft-followup`, which uses Claude Sonnet 4.5 to draft
+a follow-up email from the lead's notes and queues it in `outbound_message`.
+The queue is reviewed/sent from **Customers → Messages to Send**.
 
 Business-card capture: `POST /api/leads/scan-card` accepts an image
 (JPEG/PNG/GIF/WebP, ≤10 MB), uploads it to Vercel Blob, then calls Claude

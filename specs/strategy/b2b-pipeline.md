@@ -310,7 +310,9 @@ nameless booth conversations, not card exchanges). Both are editable on
 the confirm form. Each lead also records an editable **meeting date**
 (defaults to today); names are title-cased and the company field defaults
 to the email domain. The capture-confirm step matches the email domain
-against existing companies and flags duplicate leads.
+against existing companies and flags duplicate leads. On save, an AI
+follow-up email is drafted from the lead's notes and queued in
+**Customers → Messages to Send** for review.
 
 ## Anti-Patterns
 

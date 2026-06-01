@@ -3,6 +3,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import {
   BusinessCardSchema,
   __setAnthropicClientForTesting,
+  draftFollowupEmail,
   extractBusinessCard,
 } from "@/lib/ai/anthropic";
 
@@ -42,8 +43,51 @@ function toolUseResponse(input: unknown) {
   };
 }
 
+function draftToolResponse(input: unknown) {
+  return {
+    content: [{ type: "tool_use", name: "record_followup_email", input }],
+  };
+}
+
 afterEach(() => {
   __setAnthropicClientForTesting(null);
+});
+
+describe("draftFollowupEmail", () => {
+  const validDraft = { subject: "Great meeting you at WindUp", body: "Hi Ada,\n\n…" };
+
+  it("returns the drafted subject + body", async () => {
+    const create = vi.fn().mockResolvedValueOnce(draftToolResponse(validDraft));
+    __setAnthropicClientForTesting(makeMockClient(create));
+    const result = await draftFollowupEmail({
+      firstName: "Ada",
+      companyName: "Analytical",
+      notes: "wants samples",
+    });
+    expect(result).toEqual(validDraft);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries once when the first draft is malformed (empty subject)", async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce(draftToolResponse({ subject: "", body: "x" }))
+      .mockResolvedValueOnce(draftToolResponse(validDraft));
+    __setAnthropicClientForTesting(makeMockClient(create));
+    const result = await draftFollowupEmail({ firstName: "Ada" });
+    expect(result).toEqual(validDraft);
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws when the model omits the tool_use block", async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValue({ content: [{ type: "text", text: "no" }] });
+    __setAnthropicClientForTesting(makeMockClient(create));
+    await expect(draftFollowupEmail({ firstName: "Ada" })).rejects.toThrow(
+      /tool_use/,
+    );
+  });
 });
 
 describe("BusinessCardSchema", () => {

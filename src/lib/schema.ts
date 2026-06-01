@@ -1387,6 +1387,47 @@ export const leadCardImageRelations = relations(leadCardImage, ({ one }) => ({
   }),
 }));
 
+// Drafted follow-up emails awaiting human review/send. Auto-generated from a
+// lead's notes when the lead is created (the "Messages to Send" queue).
+// status: 'draft' (in queue) | 'sent' | 'dismissed'.
+export const outboundMessage = pgTable(
+  "outbound_message",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    leadId: text("lead_id")
+      .notNull()
+      .references(() => lead.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull().default("email"),
+    toEmail: text("to_email"),
+    subject: text("subject"),
+    body: text("body").notNull(),
+    status: text("status").notNull().default("draft"),
+    // Which model drafted it (audit / future re-draft), e.g. claude-sonnet-4-5.
+    generatedByModel: text("generated_by_model"),
+    createdByUserId: text("created_by_user_id").references(() => user.id),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { mode: "date" }),
+  },
+  (t) => [
+    index("outbound_message_lead_id_idx").on(t.leadId),
+    index("outbound_message_status_idx").on(t.status),
+    index("outbound_message_created_at_idx").on(t.createdAt),
+  ],
+);
+
+export const outboundMessageRelations = relations(
+  outboundMessage,
+  ({ one }) => ({
+    lead: one(lead, {
+      fields: [outboundMessage.leadId],
+      references: [lead.id],
+    }),
+  }),
+);
+
 export const leadRelations = relations(lead, ({ one }) => ({
   capturedBy: one(user, {
     fields: [lead.capturedByUserId],

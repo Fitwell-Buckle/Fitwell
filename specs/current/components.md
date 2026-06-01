@@ -44,6 +44,7 @@ classes, QR payload parsing) live in `lib/crm/` and are unit-tested.
 | `leads/capture/capture-client` | Client — mobile-first 3-mode capture state machine (Scan card / Scan QR / Type it in). All three feed the shared `lead-form` with mode-specific initial values |
 | `leads/capture/card-camera` | Client — live rear-camera viewfinder (`getUserMedia`, `facingMode: environment`) with a shutter that grabs a frame to canvas → JPEG `File`. Auto-falls-back to an `<input capture="environment">` (OS camera hand-off) when a live camera isn't available — e.g. a phone hitting the dev server over plain-HTTP LAN, where `getUserMedia` is blocked as an insecure context |
 | `leads/capture/qr-scanner-view` | Client — wraps `qr-scanner` (dynamic-imported so the library never lands in a server bundle); calls back with the first successful decode |
+| `messages/messages-list` | Client — "Messages to Send" queue. Each draft card: editable subject/body, Copy, Mark as sent, Dismiss (all PATCH `/api/messages/[id]`). Server page at `app/(admin)/messages` lists `status='draft'` joined with the lead name |
 
 ## Influencer List + Orders (`app/(admin)/influencers/`, `app/(admin)/influencer-tracking/`)
 

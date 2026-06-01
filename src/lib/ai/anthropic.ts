@@ -162,3 +162,122 @@ export async function extractBusinessCard(
     ? firstError
     : new Error("extractBusinessCard: validation failed");
 }
+
+// ─── Follow-up email drafting ───────────────────────────────────────
+
+const TEXT_MODEL = "claude-sonnet-4-5";
+const DRAFT_TOOL_NAME = "record_followup_email";
+
+export const FollowupEmailSchema = z.object({
+  subject: z.string().min(1),
+  body: z.string().min(1),
+});
+export type FollowupEmail = z.infer<typeof FollowupEmailSchema>;
+
+export interface DraftFollowupInput {
+  firstName?: string | null;
+  lastName?: string | null;
+  companyName?: string | null;
+  title?: string | null;
+  stage?: string | null;
+  notes?: string | null;
+  // The Fitwell rep's name, for the sign-off, if known.
+  fromName?: string | null;
+}
+
+const DRAFT_SYSTEM_PROMPT = [
+  "You write short, warm B2B follow-up emails for Fitwell Buckle Co., a maker",
+  "of precision micro-adjust watch buckles. The email follows up after meeting",
+  "someone (often at a trade show) whose business card was just captured.",
+  "",
+  "Rules:",
+  "- Ground the email in the rep's NOTES about the conversation — reference the",
+  "  specific interest/next step they recorded. If notes are empty, write a brief",
+  "  generic 'great to meet you' follow-up.",
+  "- Keep it under ~120 words, plain and friendly, no marketing fluff.",
+  "- One clear next step (e.g. send samples, schedule a call) when the notes imply one.",
+  "- Do NOT invent facts, prices, or commitments not in the notes.",
+  "- Address the person by first name if available.",
+  "- Sign off from the rep's name if given, otherwise 'The Fitwell Buckle Co. team'.",
+  "- `subject` is a short subject line; `body` is plain text (no HTML), with line breaks.",
+].join("\n");
+
+const DRAFT_TOOL_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    subject: { type: "string" },
+    body: { type: "string" },
+  },
+  required: ["subject", "body"],
+  additionalProperties: false,
+};
+
+function contactSummary(input: DraftFollowupInput): string {
+  const lines = [
+    `Name: ${[input.firstName, input.lastName].filter(Boolean).join(" ") || "(unknown)"}`,
+    `Title: ${input.title || "(unknown)"}`,
+    `Company: ${input.companyName || "(unknown)"}`,
+    `Pipeline stage: ${input.stage || "lead"}`,
+    `Rep's name (sign-off): ${input.fromName || "(unknown — use the team sign-off)"}`,
+    "",
+    "Notes from the conversation:",
+    input.notes?.trim() || "(no notes recorded)",
+  ];
+  return lines.join("\n");
+}
+
+async function callDraftOnce(input: DraftFollowupInput): Promise<unknown> {
+  const result = await getAnthropic().messages.create({
+    model: TEXT_MODEL,
+    max_tokens: 1024,
+    system: DRAFT_SYSTEM_PROMPT,
+    tools: [
+      {
+        name: DRAFT_TOOL_NAME,
+        description: "Record the drafted follow-up email (subject + body).",
+        input_schema: DRAFT_TOOL_INPUT_SCHEMA,
+      },
+    ],
+    tool_choice: { type: "tool", name: DRAFT_TOOL_NAME },
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Draft a follow-up email for this contact and call ${DRAFT_TOOL_NAME}.\n\n${contactSummary(input)}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const toolUse = result.content.find(
+    (block) => block.type === "tool_use" && block.name === DRAFT_TOOL_NAME,
+  );
+  if (!toolUse || toolUse.type !== "tool_use") {
+    throw new Error(
+      `Anthropic response did not include a ${DRAFT_TOOL_NAME} tool_use block`,
+    );
+  }
+  return toolUse.input;
+}
+
+// Draft a follow-up email from a lead's notes + context. Retries once if the
+// model's output fails validation.
+export async function draftFollowupEmail(
+  input: DraftFollowupInput,
+): Promise<FollowupEmail> {
+  let firstError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await callDraftOnce(input);
+    const parsed = FollowupEmailSchema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    if (firstError === null) firstError = parsed.error;
+  }
+  throw firstError instanceof Error
+    ? firstError
+    : new Error("draftFollowupEmail: validation failed");
+}
+
+export const DRAFT_MODEL_NAME = TEXT_MODEL;
