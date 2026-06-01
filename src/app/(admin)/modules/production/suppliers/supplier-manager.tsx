@@ -146,6 +146,16 @@ export function SupplierManager({ suppliers }: { suppliers: Supplier[] }) {
   const [draft, setDraft] = useState<Draft>(toDraft());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Client-side filter by name / contact name / contact email.
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const filteredSuppliers = q
+    ? suppliers.filter((s) =>
+        [s.name, s.contactName, s.contactEmail].some((v) =>
+          v?.toLowerCase().includes(q),
+        ),
+      )
+    : suppliers;
 
   function open(id: string | "new", s?: Supplier) {
     setError(null);
@@ -198,7 +208,14 @@ export function SupplierManager({ suppliers }: { suppliers: Supplier[] }) {
 
   return (
     <div className="mt-6 space-y-5">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or email..."
+          className="flex h-9 w-full max-w-xs rounded-lg border border-zinc-200 bg-white px-3 text-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
+        />
         {editing !== "new" && <Button onClick={() => open("new")}>Add supplier</Button>}
       </div>
 
@@ -225,14 +242,16 @@ export function SupplierManager({ suppliers }: { suppliers: Supplier[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {suppliers.length === 0 ? (
+            {filteredSuppliers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="py-8 text-center text-zinc-400">
-                  No suppliers yet.
+                  {suppliers.length === 0
+                    ? "No suppliers yet."
+                    : "No suppliers match your search."}
                 </TableCell>
               </TableRow>
             ) : (
-              suppliers.map((s) => (
+              filteredSuppliers.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">
                     <Link
