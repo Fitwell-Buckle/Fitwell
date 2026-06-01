@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, ImageUp, X } from "lucide-react";
+import { Camera, ImageUp, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Business-card viewfinder aspect ratio (landscape, ~8:5 — between the
@@ -151,7 +151,7 @@ export function CardCamera({
             onCancel();
           }}
         >
-          <X className="h-4 w-4" /> Cancel
+          <MoreHorizontal className="h-4 w-4" /> Other options
         </Button>
       </div>
 

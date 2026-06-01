@@ -25,7 +25,9 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Mono, Muted } from "@/components/ui/data-table";
+import { Camera } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Dashboard | Fitwell Admin",
@@ -227,7 +229,16 @@ export default async function DashboardPage({
 
   return (
     <div>
-      <PageHeader title="Dashboard" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PageHeader title="Dashboard" />
+        {/* Fast path to the trade-show capture flow — the dashboard is where
+            you land on login, so this is the quickest way to a new lead. */}
+        <Button asChild size="lg">
+          <Link href="/leads/capture">
+            <Camera className="h-5 w-5" /> Capture Business Card
+          </Link>
+        </Button>
+      </div>
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Revenue" value={fmt(totalRevenue)} />
