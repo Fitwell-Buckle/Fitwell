@@ -1,6 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { account, user as userTable } from "@/lib/schema";
+import { parseEmailAddress } from "@/lib/crm/customer-match";
+import { buildInternalEmailMatcher } from "@/lib/crm/internal-email";
 import { buildReplyQuery } from "./reply-query";
 import { ensureFreshAccessToken, getGoogleAccount } from "./token";
 
@@ -209,6 +211,13 @@ export async function listInboundFromAllMailboxes(
   if (!fromEmail) return [];
   const mailboxes = await listConnectedMailboxes();
   if (mailboxes.length === 0) return [];
+  // Only ever surface mail FROM the external contact — drop anything sent by us
+  // (a connected team mailbox, an admin address, or anyone on our domain), in
+  // case an internal address was searched or matched loosely.
+  const isInternal = buildInternalEmailMatcher([
+    ...mailboxes.map((m) => m.email),
+    ...(process.env.ADMIN_EMAILS ?? "").split(","),
+  ]);
   const perBox = await Promise.all(
     mailboxes.map(async (mb) => {
       const msgs = await listInboundFrom(mb.userId, fromEmail, maxPerMailbox);
@@ -219,7 +228,10 @@ export async function listInboundFromAllMailboxes(
       }));
     }),
   );
-  return perBox.flat().sort((a, b) => b.dateMs - a.dateMs);
+  return perBox
+    .flat()
+    .filter((m) => !isInternal(parseEmailAddress(m.from)))
+    .sort((a, b) => b.dateMs - a.dateMs);
 }
 
 // Does `fromEmail` appear in ANY connected team inbox since `since`? Used for

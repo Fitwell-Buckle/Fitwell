@@ -502,7 +502,8 @@ tab. Drafts can be sent from Messages to Send via the admin's Gmail
 Customer messages: the `customer-messages` cron (`*/15`) scans each connected
 team inbox for recent inbound mail and matches the sender's email to a stored
 `customer` (consumer) or company contact (b2b), recording new ones in
-`customer_message` (dedup on `gmail_message_id`) and raising an
+`customer_message` (dedup on `gmail_message_id`; internal/Fitwell senders are
+never recorded — see `lib/crm/internal-email.ts`) and raising an
 `admin_notification` (type `customer_message`, with an `href` deep-link to the
 relevant Customers tab). New (undismissed) messages show at the top of the
 Customers **B2B**/**Consumer** tabs with **Dismiss** + **Compose Message** (an

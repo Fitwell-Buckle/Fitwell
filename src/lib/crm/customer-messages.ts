@@ -16,6 +16,7 @@ import {
   matchCustomerSender,
   type CustomerEmailIndex,
 } from "./customer-match";
+import { buildInternalEmailMatcher } from "./internal-email";
 
 // Build the email→customer / email→company index from stored records.
 export async function buildCustomerEmailIndex(): Promise<CustomerEmailIndex> {
@@ -54,6 +55,12 @@ export async function scanCustomerMessages(): Promise<{
     return { scanned: 0, inserted: 0 };
   }
   const mailboxes = await listConnectedMailboxes();
+  // Never record our own mail as a "customer message" — guards against an
+  // internal/Fitwell address being stored as a customer/company contact.
+  const isInternal = buildInternalEmailMatcher([
+    ...mailboxes.map((m) => m.email),
+    ...(process.env.ADMIN_EMAILS ?? "").split(","),
+  ]);
   let scanned = 0;
   let inserted = 0;
 
@@ -62,7 +69,7 @@ export async function scanCustomerMessages(): Promise<{
     for (const m of msgs) {
       scanned++;
       const match = matchCustomerSender(m.from, index);
-      if (!match) continue;
+      if (!match || isInternal(match.email)) continue;
 
       const rows = await db
         .insert(customerMessage)
