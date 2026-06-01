@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 interface Reply {
   id: string;
@@ -15,6 +16,27 @@ interface Reply {
   mailbox?: string;
   // The owner email of that inbox — targets the right Google account on click.
   mailboxEmail?: string;
+}
+
+// Faded, per-mailbox color so different inboxes are easy to tell apart at a
+// glance. Each entry: a left stripe on the row + a tinted label/filter pill,
+// plus a saturated variant for the active filter chip. (Full class strings so
+// Tailwind keeps them.)
+const MAILBOX_COLORS = [
+  { stripe: "border-l-sky-300", tag: "bg-sky-50 text-sky-700", active: "bg-sky-600 text-white" },
+  { stripe: "border-l-emerald-300", tag: "bg-emerald-50 text-emerald-700", active: "bg-emerald-600 text-white" },
+  { stripe: "border-l-violet-300", tag: "bg-violet-50 text-violet-700", active: "bg-violet-600 text-white" },
+  { stripe: "border-l-amber-300", tag: "bg-amber-50 text-amber-800", active: "bg-amber-600 text-white" },
+  { stripe: "border-l-rose-300", tag: "bg-rose-50 text-rose-700", active: "bg-rose-600 text-white" },
+  { stripe: "border-l-teal-300", tag: "bg-teal-50 text-teal-700", active: "bg-teal-600 text-white" },
+] as const;
+
+// Deterministic color per mailbox label, so the same person is always the same
+// color regardless of result order.
+function colorFor(label: string) {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0;
+  return MAILBOX_COLORS[h % MAILBOX_COLORS.length];
 }
 
 // Build a deep link that opens the conversation in Gmail. `authuser` nudges
@@ -36,6 +58,8 @@ export function RepliesTab({ leadId }: { leadId: string }) {
   const [replies, setReplies] = useState<Reply[]>([]);
   // Labels of the inboxes that were actually searched (Gmail-connected admins).
   const [mailboxes, setMailboxes] = useState<string[]>([]);
+  // Active mailbox filter (null = all inboxes).
+  const [filter, setFilter] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -57,6 +81,20 @@ export function RepliesTab({ leadId }: { leadId: string }) {
     };
   }, [leadId]);
 
+  // Per-mailbox counts (only inboxes that actually have emails for this lead).
+  const counts = new Map<string, number>();
+  for (const r of replies) {
+    const k = r.mailbox ?? "Unknown";
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const filterable = [...counts.keys()];
+  const shown = filter
+    ? replies.filter((r) => (r.mailbox ?? "Unknown") === filter)
+    : replies;
+
+  const chip =
+    "rounded-full px-2.5 py-1 text-xs font-medium transition-colors";
+
   return (
     <Card>
       <CardContent>
@@ -74,49 +112,91 @@ export function RepliesTab({ leadId }: { leadId: string }) {
         {state === "ready" && replies.length === 0 && (
           <p className="py-6 text-center text-sm text-zinc-400">
             No emails from this contact yet
-            {mailboxes.length > 0
-              ? ` — searched ${mailboxes.join(", ")}.`
-              : "."}
+            {mailboxes.length > 0 ? ` — searched ${mailboxes.join(", ")}.` : "."}
           </p>
         )}
-        {state === "ready" && replies.length > 0 && (
-          <ul className="divide-y divide-zinc-100">
-            {replies.map((r) => (
-              <li key={`${r.mailbox ?? ""}-${r.id}`}>
-                <a
-                  href={gmailThreadUrl(r)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group block py-3 transition-colors hover:bg-zinc-50"
-                  title="Open this conversation in Gmail"
+
+        {/* Quick filter by inbox — only when emails span more than one. */}
+        {state === "ready" && filterable.length > 1 && (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFilter(null)}
+              className={cn(
+                chip,
+                filter === null
+                  ? "bg-zinc-900 text-white"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200",
+              )}
+            >
+              All ({replies.length})
+            </button>
+            {filterable.map((m) => {
+              const c = colorFor(m);
+              const isActive = filter === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setFilter(isActive ? null : m)}
+                  className={cn(chip, isActive ? c.active : c.tag)}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-zinc-900">
-                      <span className="truncate">
-                        {r.subject || "(no subject)"}
+                  {m} ({counts.get(m)})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {state === "ready" && shown.length > 0 && (
+          <ul className="space-y-1">
+            {shown.map((r) => {
+              const c = r.mailbox ? colorFor(r.mailbox) : null;
+              return (
+                <li key={`${r.mailbox ?? ""}-${r.id}`}>
+                  <a
+                    href={gmailThreadUrl(r)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(
+                      "group block rounded-r-md border-l-4 py-3 pl-3 pr-2 transition-colors hover:bg-zinc-50",
+                      c ? c.stripe : "border-l-transparent",
+                    )}
+                    title="Open this conversation in Gmail"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-zinc-900">
+                        <span className="truncate">
+                          {r.subject || "(no subject)"}
+                        </span>
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0 text-zinc-300 group-hover:text-zinc-500" />
+                      </p>
+                      <p className="shrink-0 text-xs text-zinc-400">
+                        {r.dateMs
+                          ? new Date(r.dateMs).toLocaleString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })
+                          : ""}
+                      </p>
+                    </div>
+                    <p className="mt-0.5 text-xs text-zinc-500">{r.from}</p>
+                    <p className="mt-1 text-sm text-zinc-600">{r.snippet}</p>
+                    {r.mailbox && c && (
+                      <span
+                        className={cn(
+                          "mt-1.5 inline-block rounded px-1.5 py-0.5 text-xs font-medium",
+                          c.tag,
+                        )}
+                      >
+                        {r.mailbox}&apos;s inbox
                       </span>
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-zinc-300 group-hover:text-zinc-500" />
-                    </p>
-                    <p className="shrink-0 text-xs text-zinc-400">
-                      {r.dateMs
-                        ? new Date(r.dateMs).toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })
-                        : ""}
-                    </p>
-                  </div>
-                  <p className="mt-0.5 text-xs text-zinc-500">{r.from}</p>
-                  <p className="mt-1 text-sm text-zinc-600">{r.snippet}</p>
-                  {r.mailbox && (
-                    <p className="mt-1 text-xs text-zinc-400">
-                      In {r.mailbox}&apos;s inbox
-                    </p>
-                  )}
-                </a>
-              </li>
-            ))}
+                    )}
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         )}
 
