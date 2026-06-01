@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getLead } from "@/lib/crm/service";
-import { listInboundFromAllMailboxes } from "@/lib/gmail/inbound";
+import {
+  listConnectedMailboxes,
+  listInboundFromAllMailboxes,
+} from "@/lib/gmail/inbound";
 
 export const runtime = "nodejs";
 
@@ -27,9 +30,14 @@ export async function GET(
     return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   }
   if (!lead.email) {
-    return NextResponse.json({ data: { replies: [] } });
+    return NextResponse.json({ data: { replies: [], mailboxes: [] } });
   }
 
-  const replies = await listInboundFromAllMailboxes(lead.email);
-  return NextResponse.json({ data: { replies } });
+  const [replies, mailboxes] = await Promise.all([
+    listInboundFromAllMailboxes(lead.email),
+    listConnectedMailboxes(),
+  ]);
+  return NextResponse.json({
+    data: { replies, mailboxes: mailboxes.map((m) => m.label) },
+  });
 }

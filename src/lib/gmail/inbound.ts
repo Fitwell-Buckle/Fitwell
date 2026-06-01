@@ -16,6 +16,8 @@ export interface ReplyCheck {
 
 export interface InboundMessage {
   id: string;
+  // Gmail thread id — used to deep-link to the conversation in Gmail.
+  threadId: string;
   from: string;
   subject: string;
   snippet: string;
@@ -24,14 +26,19 @@ export interface InboundMessage {
   // Which team inbox this message was found in (set by the cross-mailbox
   // search). Undefined for single-mailbox results.
   mailbox?: string;
+  // The owner email of that inbox — used to target the right Google account
+  // when deep-linking ("authuser").
+  mailboxEmail?: string;
 }
 
-// Every team member who has connected a Google account, so we can search their
-// inbox. Used to show a contact's full email history across the whole team —
-// e.g. when the contact emailed a colleague instead of the lead owner.
+// A team member whose Gmail we can search: a connected Google account that
+// actually granted the gmail.readonly scope. Used to show a contact's full
+// email history across the whole team — e.g. when the contact emailed a
+// colleague instead of the lead owner.
 export interface Mailbox {
   userId: string;
   label: string; // whose inbox (name / email)
+  email: string | null;
 }
 
 export async function listConnectedMailboxes(): Promise<Mailbox[]> {
@@ -41,14 +48,27 @@ export async function listConnectedMailboxes(): Promise<Mailbox[]> {
       name: userTable.name,
       email: userTable.email,
       role: userTable.role,
+      scope: account.scope,
     })
     .from(account)
     .innerJoin(userTable, eq(account.userId, userTable.id))
     .where(eq(account.provider, "google"));
   return rows
-    // Internal/admin inboxes only — never a supplier's or company's.
-    .filter((r) => r.role !== "supplier" && r.role !== "company")
-    .map((r) => ({ userId: r.userId, label: r.name || r.email || "Inbox" }));
+    .filter(
+      (r) =>
+        // Internal/admin inboxes only — never a supplier's or company's…
+        r.role !== "supplier" &&
+        r.role !== "company" &&
+        // …and only accounts that actually granted Gmail read access, so the
+        // "searched inboxes" list is truthful (a connected-but-unscoped account
+        // can't be searched — the API 403s).
+        (r.scope ?? "").includes("gmail.readonly"),
+    )
+    .map((r) => ({
+      userId: r.userId,
+      label: r.name || r.email || "Inbox",
+      email: r.email ?? null,
+    }));
 }
 
 // Fetch up to `max` recent messages from `fromEmail` in `userId`'s Gmail
@@ -72,12 +92,14 @@ export async function listInboundFrom(
       { headers: { Authorization: `Bearer ${token}` } },
     );
     if (!listRes.ok) return [];
-    const listData = (await listRes.json()) as { messages?: { id: string }[] };
-    const ids = (listData.messages ?? []).map((m) => m.id);
-    if (ids.length === 0) return [];
+    const listData = (await listRes.json()) as {
+      messages?: { id: string; threadId: string }[];
+    };
+    const refs = listData.messages ?? [];
+    if (refs.length === 0) return [];
 
     const msgs = await Promise.all(
-      ids.map(async (id) => {
+      refs.map(async ({ id }) => {
         const r = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
           { headers: { Authorization: `Bearer ${token}` } },
@@ -85,6 +107,7 @@ export async function listInboundFrom(
         if (!r.ok) return null;
         const m = (await r.json()) as {
           id: string;
+          threadId?: string;
           snippet?: string;
           internalDate?: string;
           payload?: { headers?: { name: string; value: string }[] };
@@ -93,6 +116,7 @@ export async function listInboundFrom(
           m.payload?.headers?.find((h) => h.name === n)?.value ?? "";
         return {
           id: m.id,
+          threadId: m.threadId ?? m.id,
           from: header("From"),
           subject: header("Subject"),
           snippet: m.snippet ?? "",
@@ -150,7 +174,11 @@ export async function listInboundFromAllMailboxes(
   const perBox = await Promise.all(
     mailboxes.map(async (mb) => {
       const msgs = await listInboundFrom(mb.userId, fromEmail, maxPerMailbox);
-      return msgs.map((m) => ({ ...m, mailbox: mb.label }));
+      return msgs.map((m) => ({
+        ...m,
+        mailbox: mb.label,
+        mailboxEmail: mb.email ?? undefined,
+      }));
     }),
   );
   return perBox.flat().sort((a, b) => b.dateMs - a.dateMs);

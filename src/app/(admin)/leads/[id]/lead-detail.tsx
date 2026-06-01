@@ -689,8 +689,9 @@ export function LeadDetail({
   const notes = (
     <Card>
       <CardContent>
+        <p className="mb-2 text-sm font-semibold text-zinc-900">Notes</p>
         <textarea
-          className="min-h-[200px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
+          className="min-h-[160px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
           value={draft.notes ?? ""}
           onChange={(e) => set("notes", e.target.value || null)}
         />
@@ -818,8 +819,16 @@ export function LeadDetail({
 
       <DetailTabs
         tabs={[
-          { value: "overview", label: "Overview", content: overview },
-          { value: "notes", label: "Notes", content: notes },
+          {
+            value: "overview",
+            label: "Overview",
+            content: (
+              <div className="space-y-5">
+                {overview}
+                {notes}
+              </div>
+            ),
+          },
           {
             value: "messages",
             label: "Messages to Send",
@@ -833,7 +842,8 @@ export function LeadDetail({
                 <Card>
                   <CardContent>
                     <p className="py-6 text-center text-sm text-zinc-400">
-                      Nothing to send. Draft a follow-up from the Notes tab.
+                      Nothing to send. Draft a follow-up from the Notes section
+                      in Overview.
                     </p>
                   </CardContent>
                 </Card>

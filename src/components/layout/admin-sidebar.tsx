@@ -128,10 +128,10 @@ function SidebarContent({
   const [notifCount, setNotifCount] = useState(0);
   const [pendingDrafts, setPendingDrafts] = useState(0);
 
-  // Unread admin-notification badge; refetch on navigation AND whenever a
-  // notification is marked read elsewhere (the notifications page broadcasts
-  // "admin-notifications-changed"), so the badge stays in sync everywhere
-  // without waiting for the next navigation.
+  // Unread admin-notification badge. Stays in sync three ways: on navigation,
+  // when a notification is marked read elsewhere (the notifications page
+  // broadcasts "admin-notifications-changed"), and via a lightweight 60s poll
+  // so it eventually reflects changes made on another device/by a teammate.
   useEffect(() => {
     let active = true;
     const load = () => {
@@ -143,9 +143,11 @@ function SidebarContent({
         .catch(() => {});
     };
     load();
+    const poll = setInterval(load, 60_000);
     window.addEventListener("admin-notifications-changed", load);
     return () => {
       active = false;
+      clearInterval(poll);
       window.removeEventListener("admin-notifications-changed", load);
     };
   }, [pathname]);
