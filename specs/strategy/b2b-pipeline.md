@@ -302,13 +302,15 @@ three modes for the same flow:
   URL payloads, parsed into the same field shape.
 - **Type it in** — blank confirm form for when there's no card on hand.
 
-All three feed a single confirm form whose stage defaults to `prospect`,
-honoring the anti-pattern below. The two tradeshow entry channels
-(`b2b_trade_shows_consumer`, `b2b_trade_shows_industry`) are first-class
-selectable source values, and each lead records an editable **meeting
-date** (defaults to today). Names are title-cased and the company field
-defaults to the email domain. The capture-confirm step also matches the
-email domain against existing companies and flags duplicate leads.
+All three feed a single confirm form. Because the capture flow runs at
+trade shows and a business card is a *named decision-maker*, captured
+leads default to **source = Tradeshow** and **stage = `lead`** (a card
+clears the spec's prospect→lead bar; the anti-pattern below is about
+nameless booth conversations, not card exchanges). Both are editable on
+the confirm form. Each lead also records an editable **meeting date**
+(defaults to today); names are title-cased and the company field defaults
+to the email domain. The capture-confirm step matches the email domain
+against existing companies and flags duplicate leads.
 
 ## Anti-Patterns
 

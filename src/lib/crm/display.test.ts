@@ -40,8 +40,9 @@ describe("stageBadgeClass", () => {
 
 describe("sourceChannelLabel", () => {
   it("maps all 7 B2B channels to human strings", () => {
-    expect(sourceChannelLabel("b2b_trade_shows_consumer")).toBe(
-      "Tradeshow (consumer)",
+    expect(sourceChannelLabel("b2b_trade_shows_consumer")).toBe("Tradeshow");
+    expect(sourceChannelLabel("b2b_trade_shows_industry")).toBe(
+      "Tradeshow (industry)",
     );
     expect(sourceChannelLabel("b2b_outbound_cold")).toBe("Outbound (cold)");
     expect(sourceChannelLabel("b2b_d2c_reverse_attribution")).toBe(

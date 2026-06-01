@@ -49,9 +49,18 @@ export function CaptureClient() {
     setMode("scanning_qr");
   }
 
+  // Defaults shared by every capture-page entry: this flow is for cards
+  // collected at trade shows, and a card is a named decision-maker — which
+  // is the spec's bar for `lead` (the booth-conversation anti-pattern is
+  // about nameless chats). So default source → Tradeshow, stage → lead.
+  const CAPTURE_DEFAULTS = {
+    sourceChannel: "b2b_trade_shows_consumer",
+    stage: "lead",
+  } as const;
+
   function startManual() {
     setError(null);
-    setInitial({});
+    setInitial({ ...CAPTURE_DEFAULTS });
     setConfidence(undefined);
     setMode("confirm");
   }
@@ -87,6 +96,7 @@ export function CaptureClient() {
         cardImageUrl: string;
       };
       setInitial({
+        ...CAPTURE_DEFAULTS,
         firstName: toNameCase(d.firstName),
         lastName: toNameCase(d.lastName),
         email: d.email,
@@ -119,6 +129,7 @@ export function CaptureClient() {
       return;
     }
     setInitial({
+      ...CAPTURE_DEFAULTS,
       firstName: toNameCase(parsed.firstName),
       lastName: toNameCase(parsed.lastName),
       email: parsed.email,

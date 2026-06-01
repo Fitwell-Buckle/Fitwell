@@ -37,7 +37,9 @@ export function stageBadgeClass(stage: string): string {
 }
 
 const SOURCE_LABELS: Record<LeadSourceChannel, string> = {
-  b2b_trade_shows_consumer: "Tradeshow (consumer)",
+  // The default capture source — kept generic ("Tradeshow") since that's
+  // what the booth flow is for.
+  b2b_trade_shows_consumer: "Tradeshow",
   b2b_trade_shows_industry: "Tradeshow (industry)",
   b2b_outbound_cold: "Outbound (cold)",
   b2b_inbound: "Inbound",
