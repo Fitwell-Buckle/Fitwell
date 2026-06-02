@@ -64,7 +64,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/modules/production/po/[id]/send` | Printable PO preview; email it (HTML) to the customer |
 | `/modules/production/kanban` | Kanban board — drag line items across stage columns |
 | `/modules/production/suppliers` | Supplier CRUD |
-| `/settings` | Admin settings (nav bottom) — env/DB info **plus** the consolidated config: wire-transfer/billing details (moved from Orders) and production-stage editor (moved from Production Summary) |
+| `/settings` | Admin settings (nav bottom) — env/DB info **plus** the consolidated config: wire-transfer/billing details (moved from Orders), production-stage editor (moved from Production Summary), and B2B **price tiers** (moved from the B2B Customers page). Brands still pick a tier on the B2B customer form |
 
 ## supplier — Supplier Portal
 

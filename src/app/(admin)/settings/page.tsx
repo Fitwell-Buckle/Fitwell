@@ -2,14 +2,21 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { customer, order, orderLineItem, productionPoLineItem } from "@/lib/schema";
-import { count, max } from "drizzle-orm";
+import {
+  customer,
+  order,
+  orderLineItem,
+  priceTier,
+  productionPoLineItem,
+} from "@/lib/schema";
+import { asc, count, max } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { getStages } from "@/lib/production/stage-labels";
 import { WireInfoSetup } from "@/app/(admin)/invoices/wire-info-setup";
 import { StageSetup } from "@/app/(admin)/modules/production/summary/stage-setup";
+import { PriceTiersManager } from "@/components/production/price-tiers-manager";
 
 export const metadata: Metadata = {
   title: "Settings | Fitwell Admin",
@@ -28,6 +35,7 @@ export default async function SettingsPage() {
     billing,
     stages,
     stageCountRows,
+    priceTiers,
   ] = await Promise.all([
     db.select({ count: count() }).from(customer),
     db.select({ count: count() }).from(order),
@@ -43,6 +51,7 @@ export default async function SettingsPage() {
       })
       .from(productionPoLineItem)
       .groupBy(productionPoLineItem.currentStage),
+    db.query.priceTier.findMany({ orderBy: asc(priceTier.name) }),
   ]);
 
   const stageCounts: Record<string, number> = {};
@@ -84,6 +93,21 @@ export default async function SettingsPage() {
             <StageSetup
               stages={stages.map((s) => ({ key: s.key, label: s.label }))}
               counts={stageCounts}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="sm:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-lg">Price tiers</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PriceTiersManager
+              priceTiers={priceTiers.map((t) => ({
+                id: t.id,
+                name: t.name,
+                discountPercent: t.discountPercent,
+              }))}
             />
           </CardContent>
         </Card>
