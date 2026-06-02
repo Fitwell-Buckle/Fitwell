@@ -17,6 +17,7 @@ const index: CustomerEmailIndex = {
     ["vendor@epowercorp.com", "sup_1"],
     ["dual@x.com", "sup_dual"],
   ]),
+  influencerByEmail: new Map([["creator@makerminute.com", "inf_1"]]),
 };
 
 describe("parseEmailAddress", () => {
@@ -56,6 +57,10 @@ describe("matchCustomerSender", () => {
   it("matches a supplier contact", () => {
     const m = matchCustomerSender("Vendor <vendor@epowercorp.com>", index);
     expect(m).toMatchObject({ audience: "supplier", supplierId: "sup_1" });
+  });
+  it("matches an influencer contact", () => {
+    const m = matchCustomerSender("Maker <creator@makerminute.com>", index);
+    expect(m).toMatchObject({ audience: "influencer", influencerId: "inf_1" });
   });
   it("prefers supplier over a plain consumer match (same email in both)", () => {
     expect(matchCustomerSender("dual@x.com", index)?.audience).toBe("supplier");

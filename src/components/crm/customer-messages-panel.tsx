@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { ExternalLink, Mail } from "lucide-react";
+import { Mail } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ComposeMessageButton } from "./compose-message";
+import {
+  MessageList,
+  type MessageListItem,
+  type MessageRelationship,
+} from "./message-list";
 
 export interface CustomerMessageItem {
   id: string;
@@ -21,136 +22,76 @@ export interface CustomerMessageItem {
   mailboxEmail: string | null;
 }
 
-function gmailUrl(threadId: string | null, mailboxEmail: string | null): string | null {
-  if (!threadId) return null;
-  const auth = mailboxEmail
-    ? `?authuser=${encodeURIComponent(mailboxEmail)}`
-    : "u/0/";
-  return `https://mail.google.com/mail/${auth}#all/${threadId}`;
-}
+export type MessageAudience = "b2b" | "consumer" | "supplier" | "influencer";
 
-// New (undismissed) inbound messages from existing customers, surfaced at the
-// top of the B2B / Consumer tabs. Each: dismiss, open-in-Gmail, and an
-// AI-assisted Compose reply.
+const RELATIONSHIP: Record<MessageAudience, MessageRelationship> = {
+  b2b: "b2b_customer",
+  consumer: "customer",
+  supplier: "supplier",
+  influencer: "influencer",
+};
+
+const NOUN: Record<MessageAudience, string> = {
+  b2b: "customers",
+  consumer: "customers",
+  supplier: "suppliers",
+  influencer: "influencers",
+};
+
+// "New messages" panel surfaced at the top of the B2B / Consumer / Suppliers /
+// Influencers lists. Detected (stored) customer_message rows; rendering is the
+// shared <MessageList> so it matches the lead Replies tab exactly.
 export function CustomerMessagesPanel({
   messages,
   audience,
 }: {
   messages: CustomerMessageItem[];
-  audience: "b2b" | "consumer" | "supplier";
+  audience: MessageAudience;
 }) {
   const router = useRouter();
-  // "Open in Gmail" only works for the signed-in user's own inbox.
-  const myEmail = useSession().data?.user?.email?.toLowerCase() ?? null;
-  const [dismissing, setDismissing] = useState<string | null>(null);
-  // Optimistically hide dismissed items before the refresh lands.
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const shown = messages.filter((m) => !hidden.has(m.id));
 
-  async function dismiss(id: string) {
-    setDismissing(id);
-    setHidden((h) => new Set(h).add(id));
+  const items: MessageListItem[] = messages.map((m) => ({
+    id: m.id,
+    threadId: m.threadId,
+    from: `${m.displayName} <${m.fromEmail}>`,
+    fromEmail: m.fromEmail,
+    contactName: m.displayName,
+    subject: m.subject,
+    snippet: m.snippet,
+    dateMs: m.receivedAt ? Date.parse(m.receivedAt) : 0,
+    mailbox: m.mailboxLabel,
+    mailboxEmail: m.mailboxEmail,
+  }));
+
+  async function dismiss(item: MessageListItem) {
     try {
-      const res = await fetch(`/api/customer-messages/${id}/dismiss`, {
+      const res = await fetch(`/api/customer-messages/${item.id}/dismiss`, {
         method: "POST",
       });
       if (!res.ok) {
         toast.error("Couldn't dismiss");
-        setHidden((h) => {
-          const next = new Set(h);
-          next.delete(id);
-          return next;
-        });
         return;
       }
       router.refresh();
-    } finally {
-      setDismissing(null);
+    } catch {
+      toast.error("Couldn't dismiss");
     }
   }
 
-  if (shown.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <Card className="mt-6 border-sky-200 bg-sky-50/40">
       <CardContent>
-        <p className="flex items-center gap-2 text-sm font-semibold text-zinc-900">
+        <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-900">
           <Mail className="h-4 w-4 text-sky-600" />
-          New messages from {audience === "supplier" ? "suppliers" : "customers"}{" "}
-          ({shown.length})
+          New messages from {NOUN[audience]} ({items.length})
         </p>
-        <ul className="mt-3 divide-y divide-zinc-100">
-          {shown.map((m) => {
-            const url = gmailUrl(m.threadId, m.mailboxEmail);
-            return (
-              <li key={m.id} className="py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-zinc-900">
-                      {m.displayName}{" "}
-                      <span className="font-normal text-zinc-400">
-                        &lt;{m.fromEmail}&gt;
-                      </span>
-                    </p>
-                    <p className="mt-0.5 truncate text-sm text-zinc-700">
-                      {m.subject || "(no subject)"}
-                    </p>
-                    {m.snippet && (
-                      <p className="mt-0.5 line-clamp-2 text-sm text-zinc-500">
-                        {m.snippet}
-                      </p>
-                    )}
-                    <p className="mt-1 text-xs text-zinc-400">
-                      {m.receivedAt
-                        ? new Date(m.receivedAt).toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })
-                        : ""}
-                      {m.mailboxLabel ? ` · in ${m.mailboxLabel}'s inbox` : ""}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-xs text-zinc-400" />
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <ComposeMessageButton
-                    target={{
-                      to: m.fromEmail,
-                      contactName: m.displayName,
-                      theirSubject: m.subject,
-                      theirMessage: m.snippet,
-                      relationship:
-                        audience === "b2b"
-                          ? "b2b_customer"
-                          : audience === "supplier"
-                            ? "supplier"
-                            : "customer",
-                    }}
-                    onSent={() => dismiss(m.id)}
-                  />
-                  {url &&
-                    (!m.mailboxEmail ||
-                      (!!myEmail && m.mailboxEmail.toLowerCase() === myEmail)) && (
-                      <Button asChild variant="ghost" size="sm">
-                        <a href={url} target="_blank" rel="noreferrer">
-                          <ExternalLink className="h-3.5 w-3.5" /> Open in Gmail
-                        </a>
-                      </Button>
-                    )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={dismissing === m.id}
-                    onClick={() => dismiss(m.id)}
-                  >
-                    Dismiss
-                  </Button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <MessageList
+          items={items}
+          relationship={RELATIONSHIP[audience]}
+          onDismiss={dismiss}
+        />
       </CardContent>
     </Card>
   );

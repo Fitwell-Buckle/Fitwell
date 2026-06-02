@@ -9,13 +9,16 @@ export interface CustomerEmailIndex {
   customerByEmail: Map<string, string>;
   // lowercased email -> supplier id (supplier contact emails)
   supplierByEmail?: Map<string, string>;
+  // lowercased email -> influencer id (influencer contact emails)
+  influencerByEmail?: Map<string, string>;
 }
 
 export interface SenderMatch {
-  audience: "b2b" | "consumer" | "supplier";
+  audience: "b2b" | "consumer" | "supplier" | "influencer";
   companyId: string | null;
   customerId: string | null;
   supplierId: string | null;
+  influencerId: string | null;
   email: string;
   name: string | null;
 }
@@ -48,38 +51,26 @@ export function matchCustomerSender(
   if (!email) return null;
   const name = parseDisplayName(fromHeader);
 
+  const base = {
+    companyId: null,
+    customerId: null,
+    supplierId: null,
+    influencerId: null,
+    email,
+    name,
+  };
+
   const companyId = index.companyByEmail.get(email);
-  if (companyId) {
-    return {
-      audience: "b2b",
-      companyId,
-      customerId: null,
-      supplierId: null,
-      email,
-      name,
-    };
-  }
+  if (companyId) return { ...base, audience: "b2b", companyId };
+
   const supplierId = index.supplierByEmail?.get(email);
-  if (supplierId) {
-    return {
-      audience: "supplier",
-      companyId: null,
-      customerId: null,
-      supplierId,
-      email,
-      name,
-    };
-  }
+  if (supplierId) return { ...base, audience: "supplier", supplierId };
+
+  const influencerId = index.influencerByEmail?.get(email);
+  if (influencerId) return { ...base, audience: "influencer", influencerId };
+
   const customerId = index.customerByEmail.get(email);
-  if (customerId) {
-    return {
-      audience: "consumer",
-      companyId: null,
-      customerId,
-      supplierId: null,
-      email,
-      name,
-    };
-  }
+  if (customerId) return { ...base, audience: "consumer", customerId };
+
   return null;
 }

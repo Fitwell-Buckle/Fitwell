@@ -1,0 +1,3 @@
+ALTER TABLE "customer_message" ADD COLUMN "influencer_id" text;--> statement-breakpoint
+ALTER TABLE "customer_message" ADD CONSTRAINT "customer_message_influencer_id_influencer_id_fk" FOREIGN KEY ("influencer_id") REFERENCES "public"."influencer"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "customer_message_influencer_id_idx" ON "customer_message" USING btree ("influencer_id");

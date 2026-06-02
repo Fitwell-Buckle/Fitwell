@@ -8,7 +8,7 @@ const schema = z.object({
   theirSubject: z.string().max(500).nullish(),
   theirMessage: z.string().max(10_000).nullish(),
   relationship: z
-    .enum(["customer", "b2b_customer", "lead", "supplier"])
+    .enum(["customer", "b2b_customer", "lead", "supplier", "influencer"])
     .optional(),
 });
 

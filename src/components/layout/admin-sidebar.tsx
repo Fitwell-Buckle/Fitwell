@@ -129,6 +129,7 @@ function SidebarContent({
   const [pendingDrafts, setPendingDrafts] = useState(0);
   const [customerMsgs, setCustomerMsgs] = useState(0);
   const [supplierMsgs, setSupplierMsgs] = useState(0);
+  const [influencerMsgs, setInfluencerMsgs] = useState(0);
 
   // Unread admin-notification badge. Stays in sync three ways: on navigation,
   // when a notification is marked read elsewhere (the notifications page
@@ -179,6 +180,7 @@ function SidebarContent({
           if (active && d?.data) {
             setCustomerMsgs((d.data.b2b ?? 0) + (d.data.consumer ?? 0));
             setSupplierMsgs(d.data.supplier ?? 0);
+            setInfluencerMsgs(d.data.influencer ?? 0);
           }
         })
         .catch(() => {});
@@ -196,6 +198,7 @@ function SidebarContent({
   if (pendingDrafts > 0) dotHrefs.add("/leads");
   if (customerMsgs > 0) dotHrefs.add("/customers/brands");
   if (supplierMsgs > 0) dotHrefs.add("/modules/production/suppliers");
+  if (influencerMsgs > 0) dotHrefs.add("/influencers");
 
   function toggle(label: string, fallback: boolean) {
     setOpen((o) => ({ ...o, [label]: !(o[label] ?? fallback) }));

@@ -8,6 +8,8 @@ import { influencer } from "@/lib/schema";
 import { getCatalogGroupsCached } from "@/lib/catalog/load";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { listCustomerMessages } from "@/lib/crm/customer-messages";
+import { CustomerMessagesPanel } from "@/components/crm/customer-messages-panel";
 import { InfluencersManager } from "./influencers-manager";
 
 export const metadata: Metadata = {
@@ -18,10 +20,13 @@ export default async function InfluencersPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
-  const influencers = await db.query.influencer.findMany({
-    orderBy: asc(influencer.name),
-    with: { contacts: { columns: { id: true, email: true, name: true } } },
-  });
+  const [influencers, messages] = await Promise.all([
+    db.query.influencer.findMany({
+      orderBy: asc(influencer.name),
+      with: { contacts: { columns: { id: true, email: true, name: true } } },
+    }),
+    listCustomerMessages("influencer"),
+  ]);
 
   // Collection options for the assigned-collections picker (degrade gracefully
   // when Shopify is unavailable).
@@ -43,6 +48,21 @@ export default async function InfluencersPage() {
           <Link href="/influencer-tracking">Orders</Link>
         </Button>
       </div>
+
+      <CustomerMessagesPanel
+        audience="influencer"
+        messages={messages.map((m) => ({
+          id: m.id,
+          threadId: m.threadId,
+          fromEmail: m.fromEmail,
+          displayName: m.displayName,
+          subject: m.subject,
+          snippet: m.snippet,
+          receivedAt: m.receivedAt ? m.receivedAt.toISOString() : null,
+          mailboxLabel: m.mailboxLabel,
+          mailboxEmail: m.mailboxEmail,
+        }))}
+      />
 
       <InfluencersManager
         collections={collections}
