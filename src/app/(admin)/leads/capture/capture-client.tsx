@@ -8,6 +8,7 @@ import { parseQrPayload } from "@/lib/crm/qr-parser";
 import { toNameCase } from "@/lib/crm/names";
 import { extractEmailDomain } from "@/lib/crm/email";
 import { type LeadFormInitial } from "../lead-form";
+import type { CompanyOption } from "@/components/crm/company-picker";
 import { CardCamera } from "./card-camera";
 import { CaptureConfirm } from "./capture-confirm";
 import { QrScannerView } from "./qr-scanner-view";
@@ -22,7 +23,7 @@ type Mode =
 const MODE_TILE =
   "flex h-32 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-center transition-colors hover:bg-zinc-50 active:bg-zinc-100";
 
-export function CaptureClient() {
+export function CaptureClient({ companies }: { companies: CompanyOption[] }) {
   // Open straight into the camera — fastest path for booth capture. Cancel
   // drops to the 3-mode picker (QR / manual still reachable).
   const [mode, setMode] = useState<Mode>("capturing_card");
@@ -170,6 +171,7 @@ export function CaptureClient() {
       <CaptureConfirm
         initial={initial}
         confidence={confidence}
+        companies={companies}
         onStartOver={reset}
         onSavedNext={captureAnother}
       />

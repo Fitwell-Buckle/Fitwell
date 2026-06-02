@@ -10,9 +10,9 @@ import {
 
 describe("stageLabel", () => {
   it("returns a human label for every known stage", () => {
-    expect(stageLabel("prospect")).toBe("Prospect");
-    expect(stageLabel("pilot_order")).toBe("Pilot order");
-    expect(stageLabel("partnership")).toBe("Partnership");
+    expect(stageLabel("lead")).toBe("Lead");
+    expect(stageLabel("sample")).toBe("Sample");
+    expect(stageLabel("customer")).toBe("Customer");
   });
 
   it("falls back to the raw key for unknown stages", () => {
@@ -22,14 +22,7 @@ describe("stageLabel", () => {
 
 describe("stageBadgeClass", () => {
   it("returns distinct classes per known stage", () => {
-    const classes = [
-      "prospect",
-      "lead",
-      "sample",
-      "pilot_order",
-      "recurring_order",
-      "partnership",
-    ].map(stageBadgeClass);
+    const classes = ["lead", "sample", "customer"].map(stageBadgeClass);
     expect(new Set(classes).size).toBe(classes.length);
   });
 

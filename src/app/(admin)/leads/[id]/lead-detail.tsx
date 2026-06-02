@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DetailTabs } from "@/components/ui/detail-tabs";
 import { Input } from "@/components/ui/input";
 import { MessagesList, type MessageView } from "@/app/(admin)/messages/messages-list";
+import { CompanyPicker } from "@/components/crm/company-picker";
 import { LeadMessagesTab } from "./messages-tab";
 import { formatAddress } from "@/lib/crm/address";
 import { buildLeadTimeline } from "@/lib/crm/timeline";
@@ -109,12 +110,6 @@ export function LeadDetail({
   // Which section was just saved — drives the inline "✓ Saved" button state.
   // Cleared as soon as the user edits anything again.
   const [savedKey, setSavedKey] = useState<null | "overview" | "notes">(null);
-  const [convertCompanyId, setConvertCompanyId] = useState(
-    lead.companyId ?? "",
-  );
-  // When the convert dropdown is set to "__new__", this holds the name for the
-  // company we'll create on the fly. Prefilled from the lead's free-text company.
-  const [newCompanyName, setNewCompanyName] = useState(lead.companyName ?? "");
   // History-tab "Add comment" composer.
   const [comment, setComment] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
@@ -159,6 +154,7 @@ export function LeadDetail({
       phone: draft.phone,
       title: draft.title,
       companyName: draft.companyName,
+      companyId: draft.companyId,
       addressLine1: draft.addressLine1,
       addressLine2: draft.addressLine2,
       city: draft.city,
@@ -197,6 +193,14 @@ export function LeadDetail({
     } else {
       toast.error(err);
     }
+  }
+
+  // Quick stage change from the top of the lead (Lead → Sample → Customer).
+  async function changeStage(stage: string) {
+    set("stage", stage);
+    const err = await patch({ stage });
+    if (err) toast.error(err);
+    else router.refresh();
   }
 
   // Save the current notes, then ask Claude to draft a follow-up from them and
@@ -255,67 +259,6 @@ export function LeadDetail({
       toast.error(e instanceof Error ? e.message : "Couldn't add comment");
     } finally {
       setCommentBusy(false);
-    }
-  }
-
-  async function convertToCompany() {
-    if (!convertCompanyId) {
-      setError("Pick a company to convert into.");
-      toast.error("Pick a company to convert into.");
-      return;
-    }
-
-    // "+ Add a new company…": create it first, then convert into the new id.
-    let companyId = convertCompanyId;
-    if (convertCompanyId === "__new__") {
-      const name = newCompanyName.trim();
-      if (!name) {
-        setError("Enter a name for the new company.");
-        toast.error("Enter a name for the new company.");
-        return;
-      }
-      setBusy(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/production/companies", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            name,
-            contactName:
-              [draft.firstName, draft.lastName].filter(Boolean).join(" ") ||
-              null,
-            contactEmail: draft.email || "",
-          }),
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const msg = json?.error ?? `Couldn't create company (${res.status})`;
-          setError(msg);
-          toast.error(msg);
-          setBusy(false);
-          return;
-        }
-        companyId = json.data.id as string;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Couldn't create company";
-        setError(msg);
-        toast.error(msg);
-        setBusy(false);
-        return;
-      }
-    }
-
-    const err = await patch({ companyId, status: "converted" });
-    if (!err) {
-      toast.success(
-        convertCompanyId === "__new__"
-          ? `Created ${newCompanyName.trim()} and converted the lead`
-          : "Lead converted to company",
-      );
-      router.refresh();
-    } else {
-      toast.error(err);
     }
   }
 
@@ -502,11 +445,16 @@ export function LeadDetail({
               onChange={(e) => set("title", e.target.value || null)}
             />
           </div>
-          <div>
-            <label className={LBL}>Company (free-text)</label>
-            <Input
-              value={draft.companyName ?? ""}
-              onChange={(e) => set("companyName", e.target.value || null)}
+          <div className="sm:col-span-2">
+            <label className={LBL}>Company (optional)</label>
+            <CompanyPicker
+              companies={companies}
+              companyId={draft.companyId}
+              companyName={draft.companyName ?? ""}
+              onChange={(v) => {
+                set("companyId", v.companyId);
+                set("companyName", v.companyName || null);
+              }}
             />
           </div>
           <div className="sm:col-span-2">
@@ -807,31 +755,20 @@ export function LeadDetail({
         <CardContent>
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[200px]">
-              <label className={LBL}>Convert to company</label>
+              <label className={LBL}>Stage</label>
               <select
                 className={SEL}
-                value={convertCompanyId}
-                onChange={(e) => setConvertCompanyId(e.target.value)}
+                value={draft.stage}
+                onChange={(e) => changeStage(e.target.value)}
+                disabled={busy}
               >
-                <option value="">— pick a company —</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+                {LEAD_STAGES.map((s) => (
+                  <option key={s} value={s}>
+                    {stageLabel(s)}
                   </option>
                 ))}
-                <option value="__new__">+ Add a new company…</option>
               </select>
             </div>
-            <Button
-              onClick={convertToCompany}
-              disabled={
-                busy ||
-                !convertCompanyId ||
-                (convertCompanyId === "__new__" && !newCompanyName.trim())
-              }
-            >
-              Convert
-            </Button>
             <Button
               variant="outline"
               onClick={dropLead}
@@ -839,35 +776,13 @@ export function LeadDetail({
             >
               Drop lead
             </Button>
-            <Button
-              variant="destructive"
-              onClick={deleteLead}
-              disabled={busy}
-            >
+            <Button variant="destructive" onClick={deleteLead} disabled={busy}>
               Delete
             </Button>
           </div>
-
-          {convertCompanyId === "__new__" && (
-            <div className="mt-3 max-w-md">
-              <label className={LBL}>New company name</label>
-              <Input
-                value={newCompanyName}
-                onChange={(e) => setNewCompanyName(e.target.value)}
-                placeholder="Company name"
-              />
-              <p className="mt-1 text-xs text-zinc-500">
-                We&apos;ll create this company
-                {draft.email ? ` with ${draft.email} as the contact` : ""} and
-                convert the lead into it.
-              </p>
-            </div>
-          )}
-
           <p className="mt-2 text-xs text-zinc-500">
-            Converting links this lead to the chosen company and marks it{" "}
-            <strong>converted</strong>. A Shopify customer record is only
-            created when the company places a real order.
+            Tie this lead to a company in Edit (Overview) — a lead is almost
+            always a company contact. Companies live under Customers → B2B.
           </p>
         </CardContent>
       </Card>

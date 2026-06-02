@@ -9,6 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useDictation } from "@/components/ui/use-dictation";
 import {
+  CompanyPicker,
+  type CompanyOption,
+} from "@/components/crm/company-picker";
+import {
   LEAD_PERSONA_TAGS,
   LEAD_SOURCE_CHANNELS,
   LEAD_STAGES,
@@ -65,6 +69,9 @@ export interface LeadFormProps {
   // Booth-capture mode: collapse the stage/persona/source/date fields (their
   // defaults are already right) so the screen is just identity + notes + save.
   rapid?: boolean;
+  // Our companies, for the searchable company picker. Empty = picker still works
+  // as free text + "add new".
+  companies?: CompanyOption[];
 }
 
 // Local YYYY-MM-DD for "today" (browser-local, so it matches the user's day).
@@ -121,6 +128,7 @@ export function LeadForm({
   secondaryLabel,
   onSecondary,
   rapid = false,
+  companies = [],
 }: LeadFormProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -131,6 +139,9 @@ export function LeadForm({
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [companyName, setCompanyName] = useState(initial?.companyName ?? "");
+  const [companyId, setCompanyId] = useState<string | null>(
+    initial?.companyId ?? null,
+  );
   const [addressLine1, setAddressLine1] = useState(
     initial?.addressLine1 ?? "",
   );
@@ -141,7 +152,7 @@ export function LeadForm({
   const [region, setRegion] = useState(initial?.region ?? "");
   const [postalCode, setPostalCode] = useState(initial?.postalCode ?? "");
   const [country, setCountry] = useState(initial?.country ?? "");
-  const [stage, setStage] = useState(initial?.stage ?? "prospect");
+  const [stage, setStage] = useState(initial?.stage ?? "lead");
   const [personaTag, setPersonaTag] = useState(initial?.personaTag ?? "");
   const [sourceChannel, setSourceChannel] = useState(
     initial?.sourceChannel ?? "b2b_outbound_cold",
@@ -194,7 +205,7 @@ export function LeadForm({
           personaTag: personaTag || null,
           sourceChannel,
           meetingDate: meetingDate || null,
-          companyId: initial?.companyId ?? null,
+          companyId,
           notes: notes || null,
           cardImageUrl: initial?.cardImageUrl ?? null,
           cardRawText: initial?.cardRawText ?? null,
@@ -480,12 +491,16 @@ export function LeadForm({
                 htmlFor="companyName"
                 confidence={confidence?.companyName}
               >
-                Company
+                Company (optional)
               </FieldLabel>
-              <Input
-                id="companyName"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
+              <CompanyPicker
+                companies={companies}
+                companyId={companyId}
+                companyName={companyName}
+                onChange={(v) => {
+                  setCompanyId(v.companyId);
+                  setCompanyName(v.companyName);
+                }}
               />
             </div>
           </div>

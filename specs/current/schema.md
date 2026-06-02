@@ -45,6 +45,7 @@ Synced from Shopify. One row per Shopify customer.
 | `utm_source` | text | First-touch attribution |
 | `utm_medium` | text | |
 | `utm_campaign` | text | |
+| `company_id` | text | Nullable FK → `company`. Manually links a Shopify customer to a B2B company — drives the company detail "People" list (its leads + these customers) |
 | `city` | text | From default address |
 | `state` | text | |
 | `country` | text | |

@@ -44,6 +44,16 @@ stages (visitor-behavior-style).
 
 ## Pipeline Stages
 
+> **CRM note (2026-06):** the operational `lead.stage` enum in the app was
+> simplified to **`lead` → `sample` → `customer`** (`LEAD_STAGES` in
+> `src/lib/crm/constants.ts`) — what reps actually track day-to-day. The richer
+> relationship model below (`prospect`…`partnership`) is the *strategic* journey
+> and is no longer 1:1 with the enum. Rough mapping: `prospect`/`lead` → **Lead**,
+> `sample` → **Sample**, `pilot_order`/`recurring_order`/`partnership` →
+> **Customer**. A lead is almost always tied to a company (optional `company_id`),
+> set on the lead form rather than via a separate "convert" step. Revisit whether
+> to reconcile this doc to the 3-stage model with Greg.
+
 ### `prospect`
 **Definition:** Identified as a fit for one of B1–B6 but no contact
 yet. Lives in a target list, not yet a conversation.

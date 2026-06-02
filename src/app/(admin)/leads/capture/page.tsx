@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { company } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { CaptureClient } from "./capture-client";
 
@@ -12,6 +15,11 @@ export const metadata: Metadata = {
 export default async function CapturePage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
+
+  const companies = await db
+    .select({ id: company.id, name: company.name })
+    .from(company)
+    .orderBy(asc(company.name));
 
   return (
     <div>
@@ -25,7 +33,7 @@ export default async function CapturePage() {
         <PageHeader title="Capture lead" />
       </div>
       <div className="mt-6">
-        <CaptureClient />
+        <CaptureClient companies={companies} />
       </div>
     </div>
   );

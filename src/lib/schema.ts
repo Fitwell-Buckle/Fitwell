@@ -13,6 +13,7 @@ import {
   primaryKey,
   check,
   pgSequence,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
@@ -101,6 +102,10 @@ export const customer = pgTable(
     utmCampaign: text("utm_campaign"),
     // PostHog distinct_id bridged from the Shopify pixel/theme (identity stitch)
     fwDistinctId: text("fw_distinct_id"),
+    // Optional link to a B2B company this person belongs to (a company's
+    // "People" list = its leads + these customers). Manually associated in admin.
+    // Annotated return type breaks the customer<->company circular inference.
+    companyId: text("company_id").references((): AnyPgColumn => company.id),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },
@@ -108,6 +113,7 @@ export const customer = pgTable(
     uniqueIndex("customer_shopify_id_idx").on(t.shopifyId),
     index("customer_email_idx").on(t.email),
     index("customer_fw_distinct_id_idx").on(t.fwDistinctId),
+    index("customer_company_id_idx").on(t.companyId),
   ],
 );
 

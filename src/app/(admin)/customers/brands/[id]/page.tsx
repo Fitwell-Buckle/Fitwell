@@ -4,11 +4,19 @@ import Link from "next/link";
 import { asc, desc, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { company, customerAddress, priceTier } from "@/lib/schema";
+import {
+  company,
+  customer,
+  customerAddress,
+  lead,
+  priceTier,
+} from "@/lib/schema";
+import { leadDisplayName } from "@/lib/crm/display";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { InboundMessages } from "@/components/crm/inbound-messages";
+import { CompanyPeople } from "@/components/crm/company-people";
 import { CustomerDetailView } from "./customer-detail-view";
 
 export const metadata: Metadata = {
@@ -24,7 +32,7 @@ export default async function CustomerDetailPage({
   if (!session) redirect("/auth/login");
 
   const { id } = await params;
-  const [companyRow, tiers] = await Promise.all([
+  const [companyRow, tiers, peopleLeads, peopleCustomers] = await Promise.all([
     db.query.company.findFirst({
       where: eq(company.id, id),
       with: {
@@ -36,8 +44,43 @@ export default async function CustomerDetailPage({
       columns: { id: true, name: true, discountPercent: true },
       orderBy: asc(priceTier.name),
     }),
+    // People attached to this company: its leads + its Shopify customers.
+    db
+      .select({
+        id: lead.id,
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        companyName: lead.companyName,
+        email: lead.email,
+      })
+      .from(lead)
+      .where(eq(lead.companyId, id)),
+    db
+      .select({
+        id: customer.id,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        email: customer.email,
+      })
+      .from(customer)
+      .where(eq(customer.companyId, id)),
   ]);
   if (!companyRow) notFound();
+
+  const peopleLeadRows = peopleLeads.map((l) => ({
+    id: l.id,
+    label: leadDisplayName(l),
+    email: l.email,
+  }));
+  const peopleCustomerRows = peopleCustomers.map((c) => ({
+    id: c.id,
+    label: leadDisplayName({
+      firstName: c.firstName,
+      lastName: c.lastName,
+      email: c.email,
+    }),
+    email: c.email,
+  }));
 
   // Shopify-synced addresses for the linked customer (if any). Sourced from
   // the customer.addresses[] payload on every customer sync — Shopify is the
@@ -79,6 +122,12 @@ export default async function CustomerDetailPage({
           name: c.name,
         }))}
         priceTiers={tiers}
+      />
+
+      <CompanyPeople
+        companyId={companyRow.id}
+        leads={peopleLeadRows}
+        customers={peopleCustomerRows}
       />
 
       <InboundMessages

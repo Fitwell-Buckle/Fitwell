@@ -9,12 +9,9 @@ import type {
 // so the enum source-of-truth file stays minimal.
 
 const STAGE_LABELS: Record<LeadStage, string> = {
-  prospect: "Prospect",
   lead: "Lead",
   sample: "Sample",
-  pilot_order: "Pilot order",
-  recurring_order: "Recurring order",
-  partnership: "Partnership",
+  customer: "Customer",
 };
 
 export function stageLabel(stage: string): string {
@@ -24,12 +21,9 @@ export function stageLabel(stage: string): string {
 // Tailwind classes for a stage pill. Cooler colors early in the pipeline,
 // warmer further in. Unknown stages fall back to neutral.
 const STAGE_BADGE_CLASS: Record<LeadStage, string> = {
-  prospect: "bg-zinc-100 text-zinc-700",
   lead: "bg-sky-100 text-sky-800",
-  sample: "bg-indigo-100 text-indigo-800",
-  pilot_order: "bg-amber-100 text-amber-800",
-  recurring_order: "bg-emerald-100 text-emerald-800",
-  partnership: "bg-violet-100 text-violet-800",
+  sample: "bg-amber-100 text-amber-800",
+  customer: "bg-emerald-100 text-emerald-800",
 };
 
 export function stageBadgeClass(stage: string): string {

@@ -2,17 +2,10 @@
 // first, then update these arrays. Kept in a server/client-safe module (no db
 // imports) so UI and API both consume the same source of truth.
 
-// B2B pipeline stages, in canonical order. A booth scan defaults to
-// `prospect`; promotion to `lead` requires a named decision-maker per the
-// spec's anti-pattern.
-export const LEAD_STAGES = [
-  "prospect",
-  "lead",
-  "sample",
-  "pilot_order",
-  "recurring_order",
-  "partnership",
-] as const;
+// B2B pipeline stages, in canonical order. New leads default to `lead`;
+// `sample` = a sample is out with them; `customer` = they're buying. A lead is
+// almost always tied to a company (optional `company_id`).
+export const LEAD_STAGES = ["lead", "sample", "customer"] as const;
 export type LeadStage = (typeof LEAD_STAGES)[number];
 
 // Seven B2B entry channels from specs/strategy/b2b-pipeline.md.

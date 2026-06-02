@@ -8,6 +8,7 @@ import { Building2, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LeadForm, type LeadFormInitial } from "../lead-form";
+import type { CompanyOption } from "@/components/crm/company-picker";
 
 interface CompanyMatch {
   id: string;
@@ -45,11 +46,13 @@ function leadDisplay(l: LeadMatch): string {
 export function CaptureConfirm({
   initial,
   confidence,
+  companies,
   onStartOver,
   onSavedNext,
 }: {
   initial: LeadFormInitial;
   confidence?: Record<string, number | undefined>;
+  companies: CompanyOption[];
   onStartOver: () => void;
   // Called after a successful save — loops back to the camera for the next card.
   onSavedNext: () => void;
@@ -213,6 +216,7 @@ export function CaptureConfirm({
         <LeadForm
           initial={formInitial}
           confidence={confidence}
+          companies={companies}
           rapid
           submitLabel="Save & capture another"
           onSuccess={() => {
