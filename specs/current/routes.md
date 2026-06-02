@@ -229,6 +229,7 @@ Uses the signed-in admin's stored Google OAuth access token (DrizzleAdapter's `a
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/webhooks/shopify` | Shopify webhook receiver (orders/create, orders/updated, customers/update) |
+| GET / POST | `/api/webhooks/whatsapp` | WhatsApp (Meta Cloud API). GET = verification handshake (`hub.challenge` when `hub.verify_token` matches `WHATSAPP_VERIFY_TOKEN`). POST = inbound messages: verifies `X-Hub-Signature-256` HMAC (when `WHATSAPP_APP_SECRET` set), matches each sender's phone to a lead/customer, records a `whatsapp_message`, and raises a notification. Inert until the Meta app + number + webhook are configured |
 
 ## Open Questions
 

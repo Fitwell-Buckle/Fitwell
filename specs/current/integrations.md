@@ -98,6 +98,33 @@ then `curl https://gmail.googleapis.com/gmail/v1/users/me/messages?q=test -H "Au
 
 ---
 
+## WhatsApp (Meta Cloud API)
+
+**Purpose**: pull WhatsApp messages from leads/customers into the CRM — surfaced
+in the **Notifications** inbox (channel "WhatsApp") and matched to a contact by
+**phone number** (vs Gmail's email match).
+
+| Aspect | Detail |
+|---|---|
+| Provider | Meta WhatsApp Business Platform — Cloud API |
+| Inbound | `GET/POST /api/webhooks/whatsapp`. GET = Meta's verify handshake (`hub.verify_token` ↔ `WHATSAPP_VERIFY_TOKEN`). POST = message events; HMAC-verified via `X-Hub-Signature-256` (`WHATSAPP_APP_SECRET`) |
+| Matching | `lib/crm/phone-match.ts` (`normalizePhone` → last 10 digits; `matchPhone`) against `lead.phone` / `customer.phone`. Lead wins |
+| Storage | `whatsapp_message` (dedup on `wa_message_id`); each new inbound raises an `admin_notification` (type `whatsapp_message`, `mailbox_label='WhatsApp'`) |
+| Outbound | `lib/whatsapp/client.ts` `sendWhatsApp(toPhone, text)` → Cloud API `…/{PHONE_NUMBER_ID}/messages`. Note Meta's 24h customer-care window: outside it only approved templates send |
+| Env | `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION` |
+
+### Setup ⚠️ REQUIRED (inert until done)
+1. Create a Meta app + add the **WhatsApp** product; add/verify a business phone number.
+2. Set the env vars above (verify token is any random string you choose).
+3. In the Meta app's WhatsApp → Configuration, add the **callback URL**
+   `https://admin.fitwellbuckle.co/api/webhooks/whatsapp` with the same verify
+   token, and **subscribe** to the `messages` field.
+Until configured, the webhook 403s the handshake and no messages flow.
+Weaving WhatsApp into the per-contact **Replies/Messages** views (alongside
+email) lands with the unified detail-tabs work.
+
+---
+
 ## PostHog
 
 **Purpose**: Product analytics, event tracking, feature flags.

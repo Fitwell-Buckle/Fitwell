@@ -1454,6 +1454,37 @@ export const leadCommentRelations = relations(leadComment, ({ one }) => ({
   }),
 }));
 
+// Inbound (and sent) WhatsApp messages via the Meta Cloud API webhook, matched
+// to a stored lead/customer by phone number. Mirrors customer_message but for
+// the WhatsApp channel (keyed by phone, no Gmail thread). One row per WA
+// message id (dedup); `dismissed_at` hides it.
+export const whatsappMessage = pgTable(
+  "whatsapp_message",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    waMessageId: text("wa_message_id").notNull().unique(),
+    // 'inbound' (from a contact) | 'outbound' (we sent it).
+    direction: text("direction").notNull().default("inbound"),
+    fromPhone: text("from_phone").notNull(),
+    toPhone: text("to_phone"),
+    contactName: text("contact_name"),
+    body: text("body"),
+    receivedAt: timestamp("received_at", { mode: "date" }),
+    leadId: text("lead_id").references(() => lead.id),
+    customerId: text("customer_id").references(() => customer.id),
+    dismissedAt: timestamp("dismissed_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("whatsapp_message_lead_id_idx").on(t.leadId),
+    index("whatsapp_message_customer_id_idx").on(t.customerId),
+    index("whatsapp_message_received_at_idx").on(t.receivedAt),
+    index("whatsapp_message_dismissed_at_idx").on(t.dismissedAt),
+  ],
+);
+
 // Inbound emails from existing customers (matched to a stored customer/company
 // by sender email) detected across the team's connected Gmail inboxes. Surfaced
 // at the top of the Customers B2B/Consumer tabs. One row per Gmail message
