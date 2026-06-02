@@ -27,6 +27,7 @@ export async function getFollowupSettings(): Promise<FollowupSettings> {
     where: eq(leadFollowupSettings.id, "default"),
   });
   return {
+    initialDraftEnabled: row?.initialDraftEnabled ?? true,
     enabled: row?.enabled ?? true,
     nudgeAfterDays: row?.nudgeAfterDays ?? DEFAULT_NUDGE_AFTER_DAYS,
   };
@@ -36,6 +37,8 @@ export async function upsertFollowupSettings(
   input: FollowupSettingsInput,
 ): Promise<void> {
   const fields: Record<string, unknown> = { updatedAt: new Date() };
+  if (input.initialDraftEnabled !== undefined)
+    fields.initialDraftEnabled = input.initialDraftEnabled;
   if (input.enabled !== undefined) fields.enabled = input.enabled;
   if (input.nudgeAfterDays !== undefined)
     fields.nudgeAfterDays = input.nudgeAfterDays;
@@ -46,6 +49,7 @@ export async function upsertFollowupSettings(
     .insert(leadFollowupSettings)
     .values({
       id: "default",
+      initialDraftEnabled: input.initialDraftEnabled ?? true,
       enabled: input.enabled ?? true,
       nudgeAfterDays: input.nudgeAfterDays ?? DEFAULT_NUDGE_AFTER_DAYS,
     })

@@ -1,0 +1,1 @@
+ALTER TABLE "lead_followup_settings" ADD COLUMN "initial_draft_enabled" boolean DEFAULT true NOT NULL;

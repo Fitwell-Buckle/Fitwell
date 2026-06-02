@@ -1297,16 +1297,22 @@ export const billingSettings = pgTable("billing_settings", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
-// Lead follow-up automation settings (single row, id="default"). Controls the
-// daily nudge cron: whether it runs at all, and how many days after the first
-// follow-up was SENT (with no reply) before it drafts a second one. Editable in
-// admin Settings. NOTE: this is intentionally a single global rule for now — a
-// general, AI-assisted multi-rule engine is planned (see
-// specs/work-plans/todo/lead-followup-rule-engine.md).
+// Lead follow-up automation settings (single row, id="default"). Two rules,
+// edited in admin Settings:
+//   - initial_draft_enabled: auto-draft an initial follow-up when a new lead is
+//     captured (the lead-create flow).
+//   - enabled + nudge_after_days: the sent-followups cron — when an email you
+//     sent (to any contact) goes N days with no reply, draft a threaded
+//     follow-up. NOTE: still a single global rule per kind for now — a general,
+//     AI-assisted multi-rule engine is planned (see
+//     specs/work-plans/todo/lead-followup-rule-engine.md).
 export const leadFollowupSettings = pgTable("lead_followup_settings", {
   id: text("id").primaryKey().default("default"),
+  // Rule 2 — unanswered-email follow-up (the sent-followups cron).
   enabled: boolean("enabled").notNull().default(true),
   nudgeAfterDays: integer("nudge_after_days").notNull().default(14),
+  // Rule 1 — auto-draft an initial follow-up email on new-lead capture.
+  initialDraftEnabled: boolean("initial_draft_enabled").notNull().default(true),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 

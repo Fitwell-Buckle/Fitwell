@@ -3,15 +3,17 @@ import { auth } from "@/lib/auth";
 import { DRAFT_MODEL_NAME, draftFollowupEmail } from "@/lib/ai/anthropic";
 import { getLead } from "@/lib/crm/service";
 import { createOutboundMessage } from "@/lib/crm/messages";
+import { getFollowupSettings } from "@/lib/crm/followup-settings";
 
 export const runtime = "nodejs";
 
-// Draft a follow-up email for a lead (from its notes + context) and queue it
-// in "Messages to Send". Called fire-and-forget by the capture/create flow
-// right after a lead is saved. Idempotency is the caller's concern — one call
-// per created lead.
+// Draft an initial follow-up email for a lead (from its notes + context) and
+// queue it in Next Steps. Called fire-and-forget by the capture/create flow
+// right after a lead is saved (with `?auto=1`), and by the manual "Draft
+// follow-up email" button (no param). The Settings → Lead follow-ups "initial
+// draft" rule gates ONLY the automatic path — the manual button always drafts.
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
@@ -26,6 +28,15 @@ export async function POST(
       { error: "Vision model not configured — set ANTHROPIC_API_KEY." },
       { status: 503 },
     );
+  }
+
+  // The automatic on-capture draft respects the settings toggle; manual doesn't.
+  const isAuto = new URL(req.url).searchParams.get("auto") === "1";
+  if (isAuto) {
+    const settings = await getFollowupSettings();
+    if (!settings.initialDraftEnabled) {
+      return NextResponse.json({ data: { skipped: true } });
+    }
   }
 
   const { id } = await params;

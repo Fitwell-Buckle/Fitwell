@@ -225,12 +225,12 @@ export function LeadForm({
         return;
       }
       const newId = body.data.id as string;
-      // Fire-and-forget: queue an AI-drafted follow-up email in
-      // "Messages to Send". Don't block navigation on the draft (it takes a
-      // few seconds); failures are non-fatal — the lead is already saved.
-      void fetch(`/api/leads/${newId}/draft-followup`, { method: "POST" }).catch(
-        () => {},
-      );
+      // Fire-and-forget: queue an AI-drafted initial follow-up in Next Steps.
+      // `auto=1` so it respects the Settings "initial draft" toggle (the manual
+      // button omits it). Don't block navigation; failures are non-fatal.
+      void fetch(`/api/leads/${newId}/draft-followup?auto=1`, {
+        method: "POST",
+      }).catch(() => {});
       const finish = onDoneRef.current ?? onSuccess;
       if (finish) finish(newId);
       else {

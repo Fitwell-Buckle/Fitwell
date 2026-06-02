@@ -107,8 +107,7 @@ export default async function SettingsPage() {
           </CardHeader>
           <CardContent>
             <p className="mb-3 text-sm text-zinc-500">
-              The automatic nudge rule for leads. More follow-up rules
-              (AI-suggested) are coming soon.
+              Automatic follow-up rules. More (AI-suggested) are coming soon.
             </p>
             <LeadFollowupSettings initial={followup} />
           </CardContent>

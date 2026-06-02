@@ -316,6 +316,13 @@
       "when": 1780438974377,
       "tag": "0044_light_franklin_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1780441397190,
+      "tag": "0045_first_wiccan",
+      "breakpoints": true
     }
   ]
 }
