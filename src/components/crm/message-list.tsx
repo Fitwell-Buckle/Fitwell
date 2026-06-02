@@ -125,7 +125,9 @@ export function MessageList({
 
   return (
     <div>
-      {filterable.length > 1 && (
+      {/* Show the inbox chips whenever messages are attributed to an inbox —
+          even a single one — so it's clear whose inbox they're in. */}
+      {filterable.length >= 1 && (
         <div className="mb-3 flex flex-wrap gap-1.5">
           <button
             type="button"
