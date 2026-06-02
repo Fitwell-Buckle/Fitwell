@@ -48,8 +48,10 @@ async function buildRecipientIndex(): Promise<Map<string, Match>> {
 }
 
 // Scan recent Sent mail across connected inboxes; record each message to a known
-// contact in sent_email (dedup on the Gmail message id).
-export async function scanSentEmails(): Promise<{
+// contact in sent_email (dedup on the Gmail message id). `days` is the look-back
+// window — the daily cron uses the default; a manual catch-up run can widen it
+// to pick up older sends.
+export async function scanSentEmails(days = 30): Promise<{
   scanned: number;
   inserted: number;
 }> {
@@ -60,7 +62,7 @@ export async function scanSentEmails(): Promise<{
   let scanned = 0;
   let inserted = 0;
   for (const mb of mailboxes) {
-    const sent = await listRecentSent(mb.userId);
+    const sent = await listRecentSent(mb.userId, 200, days);
     for (const m of sent) {
       scanned++;
       const toAddr = parseEmailAddress(m.to ?? "");

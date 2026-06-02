@@ -157,7 +157,7 @@ export async function listRecentInbound(
 // hydrated with To + Message-ID + threadId. Returns [] on any failure.
 export async function listRecentSent(
   userId: string,
-  max = 100,
+  max = 200,
   days = 30,
 ): Promise<InboundMessage[]> {
   try {
