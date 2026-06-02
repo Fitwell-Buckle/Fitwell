@@ -4,6 +4,7 @@ import { getFollowupSettings } from "@/lib/crm/followup-settings";
 import {
   generateSentFollowups,
   scanSentEmails,
+  scanSentForLeads,
 } from "@/lib/crm/sent-followups";
 
 export const runtime = "nodejs";
@@ -28,10 +29,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ data: { disabled: true } });
   }
 
-  // Always refresh the sent-email tracking first, then generate follow-ups for
-  // anything now past the wait with no reply.
+  // Refresh tracking: a recent-window sweep (covers customers/suppliers) plus a
+  // targeted per-lead search (reliably catches leads even in busy Sent folders),
+  // then generate follow-ups for anything now past the wait with no reply.
   const scan = await scanSentEmails();
+  const leadScan = await scanSentForLeads();
   const generated = await generateSentFollowups(settings.nudgeAfterDays);
 
-  return NextResponse.json({ data: { ...scan, ...generated } });
+  return NextResponse.json({
+    data: { ...scan, leadScan, ...generated },
+  });
 }

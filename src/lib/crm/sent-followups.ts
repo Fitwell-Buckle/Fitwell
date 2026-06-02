@@ -1,10 +1,11 @@
-import { and, asc, eq, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { customer, lead, sentEmail, supplier } from "@/lib/schema";
 import {
   hasInboundFromAnyMailbox,
   listConnectedMailboxes,
   listRecentSent,
+  listSentTo,
 } from "@/lib/gmail/inbound";
 import { parseEmailAddress } from "./customer-match";
 import { draftFollowupEmail, DRAFT_MODEL_NAME } from "@/lib/ai/anthropic";
@@ -90,6 +91,63 @@ export async function scanSentEmails(days = 30): Promise<{
     }
   }
   return { scanned, inserted };
+}
+
+// Leads are few and high-value, so instead of relying on the recent-window
+// sweep (which can miss an older email in a busy Sent folder once the cap is
+// hit), do a TARGETED `in:sent to:<lead email>` search per active lead — the
+// same query the lead's Messages → Sent tab uses, so it finds the thread
+// regardless of age/volume. Records the most recent send per lead.
+export async function scanSentForLeads(): Promise<{
+  leads: number;
+  inserted: number;
+}> {
+  const mailboxes = await listConnectedMailboxes();
+  if (mailboxes.length === 0) return { leads: 0, inserted: 0 };
+
+  const leads = await db
+    .select({ id: lead.id, email: lead.email })
+    .from(lead)
+    .where(and(eq(lead.status, "active"), isNotNull(lead.email)));
+
+  let inserted = 0;
+  for (const l of leads) {
+    if (!l.email) continue;
+    // Most recent sent message to this lead across all connected inboxes.
+    let best: { m: (typeof sentEmail.$inferInsert) | null; dateMs: number } = {
+      m: null,
+      dateMs: -1,
+    };
+    for (const mb of mailboxes) {
+      const sent = await listSentTo(mb.userId, l.email, 5);
+      for (const m of sent) {
+        if (m.dateMs > best.dateMs) {
+          best = {
+            dateMs: m.dateMs,
+            m: {
+              gmailMessageId: m.id,
+              threadId: m.threadId,
+              messageIdHeader: m.messageId ?? null,
+              mailboxUserId: mb.userId,
+              fromEmail: parseEmailAddress(m.from) ?? null,
+              toEmail: l.email,
+              subject: m.subject || null,
+              sentAt: m.dateMs ? new Date(m.dateMs) : null,
+              leadId: l.id,
+            },
+          };
+        }
+      }
+    }
+    if (!best.m) continue;
+    const rows = await db
+      .insert(sentEmail)
+      .values(best.m)
+      .onConflictDoNothing({ target: sentEmail.gmailMessageId })
+      .returning({ id: sentEmail.id });
+    if (rows.length > 0) inserted++;
+  }
+  return { leads: leads.length, inserted };
 }
 
 // For tracked sent emails older than `waitDays` with no reply and no follow-up
