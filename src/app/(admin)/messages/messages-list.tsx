@@ -12,13 +12,15 @@ import { Sparkles } from "lucide-react";
 
 export interface MessageView {
   id: string;
-  leadId: string;
   toEmail: string | null;
   subject: string | null;
   body: string;
   status: string;
   scheduledAt: string | null;
-  leadName: string;
+  // The contact this is going to (lead, customer, or supplier) + a link to
+  // their detail page (null if none).
+  contactName: string;
+  contactHref: string | null;
 }
 
 // "YYYY-MM-DDTHH:mm" in local time for a datetime-local input, defaulting to
@@ -191,12 +193,18 @@ function MessageCard({ message }: { message: MessageView }) {
       <CardContent>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm">
-            <Link
-              href={`/leads/${message.leadId}`}
-              className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
-            >
-              {message.leadName}
-            </Link>
+            {message.contactHref ? (
+              <Link
+                href={message.contactHref}
+                className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+              >
+                {message.contactName}
+              </Link>
+            ) : (
+              <span className="font-medium text-zinc-900">
+                {message.contactName}
+              </span>
+            )}
             {message.toEmail && (
               <span className="ml-2 text-zinc-500">{message.toEmail}</span>
             )}

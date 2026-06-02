@@ -12,7 +12,13 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adminNotification, lead, outboundMessage } from "@/lib/schema";
+import {
+  adminNotification,
+  customer,
+  lead,
+  outboundMessage,
+  supplier,
+} from "@/lib/schema";
 import { leadDisplayName } from "./display";
 
 export const MESSAGE_STATUSES = [
@@ -24,7 +30,10 @@ export const MESSAGE_STATUSES = [
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
 
 export interface CreateOutboundMessageInput {
-  leadId: string;
+  // Exactly one of these identifies the recipient contact.
+  leadId?: string | null;
+  customerId?: string | null;
+  supplierId?: string | null;
   toEmail?: string | null;
   subject?: string | null;
   body: string;
@@ -32,6 +41,9 @@ export interface CreateOutboundMessageInput {
   sequenceStep?: number;
   generatedByModel?: string | null;
   createdByUserId?: string | null;
+  // For a threaded follow-up (reply in the original Gmail thread).
+  threadId?: string | null;
+  inReplyTo?: string | null;
 }
 
 export async function createOutboundMessage(
@@ -40,11 +52,15 @@ export async function createOutboundMessage(
   const [row] = await db
     .insert(outboundMessage)
     .values({
-      leadId: input.leadId,
+      leadId: input.leadId ?? null,
+      customerId: input.customerId ?? null,
+      supplierId: input.supplierId ?? null,
       sequenceStep: input.sequenceStep ?? 1,
       toEmail: input.toEmail ?? null,
       subject: input.subject ?? null,
       body: input.body,
+      threadId: input.threadId ?? null,
+      inReplyTo: input.inReplyTo ?? null,
       generatedByModel: input.generatedByModel ?? null,
       createdByUserId: input.createdByUserId ?? null,
     })
@@ -53,17 +69,32 @@ export async function createOutboundMessage(
   // Raise an in-app alert (bell + /notifications) so a queued draft isn't
   // missed. Best-effort — never block draft creation on the notification.
   try {
-    const who = await db.query.lead.findFirst({
-      where: eq(lead.id, input.leadId),
-      columns: { firstName: true, lastName: true, companyName: true, email: true },
-    });
-    const name = who ? leadDisplayName(who) : "a lead";
+    let name = input.toEmail ?? "a contact";
+    if (input.leadId) {
+      const who = await db.query.lead.findFirst({
+        where: eq(lead.id, input.leadId),
+        columns: { firstName: true, lastName: true, companyName: true, email: true },
+      });
+      if (who) name = leadDisplayName(who);
+    } else if (input.customerId) {
+      const who = await db.query.customer.findFirst({
+        where: eq(customer.id, input.customerId),
+        columns: { firstName: true, lastName: true, email: true },
+      });
+      if (who) name = leadDisplayName(who);
+    } else if (input.supplierId) {
+      const who = await db.query.supplier.findFirst({
+        where: eq(supplier.id, input.supplierId),
+        columns: { name: true },
+      });
+      if (who) name = who.name;
+    }
     const kind = (input.sequenceStep ?? 1) >= 2 ? "follow-up nudge" : "follow-up";
     await db.insert(adminNotification).values({
       type: "lead_followup_drafted",
       title: `Draft ${kind} ready for ${name}`,
       body: input.subject ?? null,
-      leadId: input.leadId,
+      leadId: input.leadId ?? null,
     });
   } catch (err) {
     console.error("createOutboundMessage: notification insert failed", err);
@@ -172,9 +203,10 @@ export async function findLeadsNeedingNudge(
   return rows.filter((r): r is NudgeCandidate => r.sentAt != null);
 }
 
-// List messages joined with their lead's display fields. Defaults to the
-// pending queue (status='draft'); pass status to view sent/dismissed, and/or
-// leadId to scope to one lead.
+// List messages joined with their contact's display fields (lead, customer, or
+// supplier — whichever the message targets). Defaults to the pending queue
+// (status='draft'); pass status/statuses to view others, and/or leadId to scope
+// to one lead.
 export async function listOutboundMessages(
   filters: { status?: string; statuses?: string[]; leadId?: string } = {},
 ) {
@@ -187,6 +219,8 @@ export async function listOutboundMessages(
     .select({
       id: outboundMessage.id,
       leadId: outboundMessage.leadId,
+      customerId: outboundMessage.customerId,
+      supplierId: outboundMessage.supplierId,
       channel: outboundMessage.channel,
       toEmail: outboundMessage.toEmail,
       subject: outboundMessage.subject,
@@ -198,14 +232,20 @@ export async function listOutboundMessages(
       leadFirstName: lead.firstName,
       leadLastName: lead.lastName,
       leadCompanyName: lead.companyName,
+      customerFirstName: customer.firstName,
+      customerLastName: customer.lastName,
+      supplierName: supplier.name,
     })
     .from(outboundMessage)
-    .innerJoin(lead, eq(outboundMessage.leadId, lead.id))
+    .leftJoin(lead, eq(outboundMessage.leadId, lead.id))
+    .leftJoin(customer, eq(outboundMessage.customerId, customer.id))
+    .leftJoin(supplier, eq(outboundMessage.supplierId, supplier.id))
     .where(and(...conds))
     .orderBy(desc(outboundMessage.createdAt));
 }
 
 // Scheduled messages whose time has arrived — sent by the send-scheduled cron.
+// Carries thread fields so a scheduled follow-up still threads on send.
 export async function findDueScheduledMessages(limit = 25) {
   return db
     .select({
@@ -214,6 +254,8 @@ export async function findDueScheduledMessages(limit = 25) {
       subject: outboundMessage.subject,
       body: outboundMessage.body,
       createdByUserId: outboundMessage.createdByUserId,
+      threadId: outboundMessage.threadId,
+      inReplyTo: outboundMessage.inReplyTo,
     })
     .from(outboundMessage)
     .where(
@@ -242,7 +284,9 @@ export async function leadIdsWithDraftMessages(): Promise<Set<string>> {
     .selectDistinct({ leadId: outboundMessage.leadId })
     .from(outboundMessage)
     .where(eq(outboundMessage.status, "draft"));
-  return new Set(rows.map((r) => r.leadId));
+  return new Set(
+    rows.map((r) => r.leadId).filter((id): id is string => id !== null),
+  );
 }
 
 export const updateMessageSchema = z

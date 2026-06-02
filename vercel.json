@@ -37,7 +37,7 @@
       "schedule": "0 13 * * *"
     },
     {
-      "path": "/api/cron/lead-followups",
+      "path": "/api/cron/sent-followups",
       "schedule": "0 14 * * *"
     },
     {

@@ -59,13 +59,13 @@ export default async function LeadDetailPage({
   const leadName = leadDisplayName(lead);
   const draftMessages = draftRows.map((m) => ({
     id: m.id,
-    leadId: m.leadId,
     toEmail: m.toEmail,
     subject: m.subject,
     body: m.body,
     status: m.status,
     scheduledAt: m.scheduledAt ? m.scheduledAt.toISOString() : null,
-    leadName,
+    contactName: leadName,
+    contactHref: `/leads/${m.leadId ?? lead.id}`,
   }));
 
   return (

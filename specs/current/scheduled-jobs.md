@@ -16,34 +16,36 @@ All cron jobs run as Vercel Cron serverless functions. Schedules defined in `ver
 | Extract Klaviyo | `/api/cron/extract-klaviyo` | `30 7 * * *` | Daily 7:30 UTC | Campaign + flow performance, list growth |
 | Health Check | `/api/cron/health` | `0 */4 * * *` | Every 4h | Verify DB, API connections |
 | Production deadline alerts | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Daily 13:00 UTC | Email owner + suppliers re: items due/overdue, complete POs ready to receive |
-| Lead follow-up nudges | `/api/cron/lead-followups` | `0 14 * * *` | Daily 14:00 UTC | Draft a 2nd follow-up for leads whose first follow-up was sent ≥N days ago with no reply. N (default 14) + an on/off toggle are configured in Settings → Lead follow-ups (`lead_followup_settings`); disabled = no-op |
+| Sent follow-ups | `/api/cron/sent-followups` | `0 14 * * *` | Daily 14:00 UTC | Scan connected admins' Gmail **Sent** folders, match recipients to known leads/customers/suppliers (`sent_email`), and for any sent ≥N days ago with no reply, draft a **threaded** follow-up (reply in the original thread) into Next Steps. N (default 14) + on/off in Settings → Lead follow-ups (`lead_followup_settings`); disabled = no-op. Replaced the old platform-only `lead-followups` nudge. Needs the Gmail API enabled |
 | Scheduled sends | `/api/cron/send-scheduled` | `*/15 * * * *` | Every 15 min | Send `outbound_message` rows with `status='scheduled'` whose `scheduled_at` has passed, via the scheduler's Gmail (`created_by_user_id`), then mark them sent. Rows with no sender/recipient are skipped (stay scheduled, fixable) |
 | Lead reply alerts | `/api/cron/lead-replies` | `*/5 * * * *` | Every 5 min | Check active leads' owner Gmail (bounded concurrency) for new inbound replies; raise an admin notification ("X replied"). De-duped via `lead.replies_notified_at`. ~50 lightweight Gmail list calls/run. Needs the Gmail API enabled |
 | Customer messages | `/api/cron/customer-messages` | `*/15 * * * *` | Every 15 min | Scan each connected team inbox's recent inbound (≤25 msgs, `newer_than:7d`), match senders to stored customers/companies by email, record new `customer_message` rows (dedup on gmail id), raise a `customer_message` notification per match. Needs the Gmail API enabled |
 
-## Lead follow-up nudges — Detail
+## Sent follow-ups — Detail
 
 0. Read the rule from `lead_followup_settings` (single row, id=`default`;
-   `getFollowupSettings()`). If `enabled=false`, the cron no-ops and returns
-   `{disabled:true}`. Otherwise `nudge_after_days` (default 14) is the wait
-   period below. Both are edited in **Settings → Lead follow-ups**.
-1. Find candidate leads (`findLeadsNeedingNudge(nudgeAfterDays)`): an initial
-   follow-up (`outbound_message` `sequence_step=1`) was marked **sent**
-   ≥`nudge_after_days` ago, the lead is `active`, `replied_at` is null, and no
-   `sequence_step>=2` message exists yet. Capped at 25 per run.
-2. For each, check whether the lead emailed back: Gmail
-   `from:<lead email> after:<sent date>` via the lead owner's (fallback:
-   capturer's) stored Google token (`src/lib/gmail/inbound.ts`).
-   - Reply found → set `lead.replied_at`, skip (no nudge).
-   - No reply (or Gmail not connected → "not checked") → draft a gentle
-     second follow-up (`draftFollowupEmail({isNudge:true})`) and queue it as
-     a `sequence_step=2` `outbound_message` (status `draft`).
-3. Drafts are reviewed/sent from **Customers → Next Steps** — the cron never
-   sends email itself.
-4. Returns `{candidates, drafted, skippedReplied, failed}`.
+   `getFollowupSettings()`). `enabled=false` → no-op. `nudge_after_days`
+   (default 14) is the wait. Edited in **Settings → Lead follow-ups**.
+1. **Scan** (`scanSentEmails`): for each connected, Gmail-scoped admin inbox,
+   list recent **Sent** mail (`in:sent newer_than:30d`), match each recipient
+   (`To`) to a known lead/customer/supplier by email, and upsert a `sent_email`
+   row (dedup on the Gmail message id) with thread id + RFC822 Message-ID.
+2. **Generate** (`generateSentFollowups(nudgeAfterDays)`): for `sent_email`
+   rows ≥`nudge_after_days` old with `replied_at` + `followup_queued_at` both
+   null:
+   - reply check via `hasInboundFromAnyMailbox(toEmail, sentAt)`. Reply → set
+     `replied_at`, skip.
+   - else draft (`draftFollowupEmail({isNudge:true})`) and queue an
+     `outbound_message` (status `draft`, `sequence_step=2`) targeting that
+     contact, with `thread_id` + `in_reply_to` set so the send **replies in the
+     original thread**, attributed to the sender (`created_by_user_id`). Mark
+     `followup_queued_at`.
+3. Drafts are reviewed/sent from **Next Steps** (`/messages`) — the cron never
+   sends; sending (or the scheduled-send cron) threads via `sendGmail`.
+4. Returns `{scanned, inserted, candidates, drafted, skippedReplied}`.
 
-> A general, multi-rule + AI-assisted follow-up engine is planned to replace this
-> single rule — see `specs/work-plans/todo/lead-followup-rule-engine.md`.
+> A general, multi-rule + AI-assisted follow-up engine is still planned — see
+> `specs/work-plans/todo/lead-followup-rule-engine.md`.
 
 ## Authentication
 

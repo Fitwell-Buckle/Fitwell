@@ -43,6 +43,8 @@ export async function POST(
     to: msg.toEmail,
     subject: msg.subject ?? "(no subject)",
     body: msg.body,
+    threadId: msg.threadId,
+    inReplyTo: msg.inReplyTo,
   });
 
   if (!result.ok) {

@@ -18,7 +18,12 @@ function encodeSubject(subject: string): string {
   return `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
 }
 
-function buildRawMessage(to: string, subject: string, body: string): string {
+function buildRawMessage(
+  to: string,
+  subject: string,
+  body: string,
+  inReplyTo?: string,
+): string {
   const headers = [
     `To: ${to}`,
     `Subject: ${encodeSubject(subject)}`,
@@ -26,6 +31,11 @@ function buildRawMessage(to: string, subject: string, body: string): string {
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: 8bit",
   ];
+  // Thread the reply under the original: In-Reply-To + References point Gmail
+  // (and other clients) at the original Message-ID so it nests in the thread.
+  if (inReplyTo) {
+    headers.push(`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`);
+  }
   // CRLF line endings per RFC 5322; blank line separates headers from body.
   return headers.join("\r\n") + "\r\n\r\n" + body;
 }
@@ -37,7 +47,15 @@ function buildRawMessage(to: string, subject: string, body: string): string {
 // Gmail returns 403 → "insufficient_scope" (they must re-sign-in).
 export async function sendGmail(
   userId: string,
-  msg: { to: string; subject: string; body: string },
+  msg: {
+    to: string;
+    subject: string;
+    body: string;
+    // Reply in an existing Gmail thread: set both for proper threading — the
+    // thread id (Gmail request) + the original Message-ID (In-Reply-To header).
+    threadId?: string | null;
+    inReplyTo?: string | null;
+  },
 ): Promise<SendResult> {
   const acc = await getGoogleAccount(userId);
   if (!acc?.access_token) return { ok: false, error: "no_account" };
@@ -45,9 +63,12 @@ export async function sendGmail(
   if (!token) return { ok: false, error: "no_token" };
 
   const raw = Buffer.from(
-    buildRawMessage(msg.to, msg.subject, msg.body),
+    buildRawMessage(msg.to, msg.subject, msg.body, msg.inReplyTo ?? undefined),
     "utf8",
   ).toString("base64url");
+
+  const payload: { raw: string; threadId?: string } = { raw };
+  if (msg.threadId) payload.threadId = msg.threadId;
 
   try {
     const res = await fetch(
@@ -58,7 +79,7 @@ export async function sendGmail(
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ raw }),
+        body: JSON.stringify(payload),
       },
     );
     if (res.ok) return { ok: true };

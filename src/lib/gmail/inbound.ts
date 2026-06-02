@@ -35,6 +35,9 @@ export interface InboundMessage {
   // to. Used to seed a follow-up Compose (replying to the recipient, not to us,
   // who is the `from` on a sent message).
   to?: string;
+  // RFC822 Message-ID header (when hydrated) — used as In-Reply-To/References
+  // so a follow-up threads under this message.
+  messageId?: string;
 }
 
 // A team member whose Gmail we can search: a connected Google account that
@@ -77,9 +80,9 @@ export async function listConnectedMailboxes(): Promise<Mailbox[]> {
     }));
 }
 
-// Fetch metadata (From/Subject/Date/snippet/threadId) for a set of message
-// refs and return them newest-first. Shared by the from-sender and recent-
-// inbound listers.
+// Fetch metadata (From/To/Subject/Date/Message-ID/snippet/threadId) for a set
+// of message refs and return them newest-first. Shared by the from-sender,
+// recent-inbound, and recent-sent listers.
 async function hydrateMessages(
   token: string,
   refs: { id: string }[],
@@ -87,7 +90,7 @@ async function hydrateMessages(
   const msgs = await Promise.all(
     refs.map(async ({ id }) => {
       const r = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=Message-ID`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!r.ok) return null;
@@ -99,15 +102,20 @@ async function hydrateMessages(
         payload?: { headers?: { name: string; value: string }[] };
       };
       const header = (n: string) =>
-        m.payload?.headers?.find((h) => h.name === n)?.value ?? "";
-      return {
+        m.payload?.headers?.find(
+          (h) => h.name.toLowerCase() === n.toLowerCase(),
+        )?.value ?? "";
+      const out: InboundMessage = {
         id: m.id,
         threadId: m.threadId ?? m.id,
         from: header("From"),
+        to: header("To") || undefined,
         subject: header("Subject"),
+        messageId: header("Message-ID") || undefined,
         snippet: m.snippet ?? "",
         dateMs: m.internalDate ? Number(m.internalDate) : 0,
-      } satisfies InboundMessage;
+      };
+      return out;
     }),
   );
   return msgs
@@ -128,6 +136,37 @@ export async function listRecentInbound(
     if (!token) return [];
 
     const q = "in:inbox newer_than:7d";
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=${max}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!listRes.ok) return [];
+    const listData = (await listRes.json()) as {
+      messages?: { id: string }[];
+    };
+    const refs = listData.messages ?? [];
+    if (refs.length === 0) return [];
+    return hydrateMessages(token, refs);
+  } catch {
+    return [];
+  }
+}
+
+// Recent SENT messages (any recipient) in a mailbox — used to match recipients
+// against known leads/customers/suppliers for follow-up tracking. Each is
+// hydrated with To + Message-ID + threadId. Returns [] on any failure.
+export async function listRecentSent(
+  userId: string,
+  max = 100,
+  days = 30,
+): Promise<InboundMessage[]> {
+  try {
+    const acc = await getGoogleAccount(userId);
+    if (!acc?.access_token) return [];
+    const token = await ensureFreshAccessToken(acc);
+    if (!token) return [];
+
+    const q = `in:sent newer_than:${days}d`;
     const listRes = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=${max}`,
       { headers: { Authorization: `Bearer ${token}` } },

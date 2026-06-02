@@ -30,6 +30,9 @@ const drafts = await db
 const seen = new Set<string>();
 let created = 0;
 for (const d of drafts) {
+  // leadId is nullable on outbound_message now (customer/supplier follow-ups),
+  // but the innerJoin above keeps only lead-linked rows.
+  if (!d.leadId) continue;
   if (seen.has(d.leadId)) continue;
   seen.add(d.leadId);
 

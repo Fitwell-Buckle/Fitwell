@@ -1568,17 +1568,29 @@ export const outboundMessage = pgTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    leadId: text("lead_id")
-      .notNull()
-      .references(() => lead.id, { onDelete: "cascade" }),
+    // The recipient — exactly one of these is set. lead_id is nullable now that
+    // follow-ups can target a customer or supplier too (Next Steps is no longer
+    // lead-only). All cascade so the draft goes when the contact is deleted.
+    leadId: text("lead_id").references(() => lead.id, { onDelete: "cascade" }),
+    customerId: text("customer_id").references(() => customer.id, {
+      onDelete: "cascade",
+    }),
+    supplierId: text("supplier_id").references(() => supplier.id, {
+      onDelete: "cascade",
+    }),
     channel: text("channel").notNull().default("email"),
     // 1 = initial follow-up (drafted at capture); 2 = two-week nudge when the
-    // lead hasn't replied. Lets the nudge cron find leads without a step-2 yet.
+    // contact hasn't replied. Lets the nudge cron find leads without a step-2 yet.
     sequenceStep: integer("sequence_step").notNull().default(1),
     toEmail: text("to_email"),
     subject: text("subject"),
     body: text("body").notNull(),
     status: text("status").notNull().default("draft"),
+    // For a threaded follow-up: the Gmail thread to reply into + the original
+    // message's RFC822 Message-ID (In-Reply-To/References), so the send lands in
+    // the same thread with the original right there.
+    threadId: text("thread_id"),
+    inReplyTo: text("in_reply_to"),
     // Which model drafted it (audit / future re-draft), e.g. claude-sonnet-4-5.
     generatedByModel: text("generated_by_model"),
     createdByUserId: text("created_by_user_id").references(() => user.id),
@@ -1591,9 +1603,55 @@ export const outboundMessage = pgTable(
   },
   (t) => [
     index("outbound_message_lead_id_idx").on(t.leadId),
+    index("outbound_message_customer_id_idx").on(t.customerId),
+    index("outbound_message_supplier_id_idx").on(t.supplierId),
     index("outbound_message_status_idx").on(t.status),
     index("outbound_message_created_at_idx").on(t.createdAt),
     index("outbound_message_scheduled_at_idx").on(t.scheduledAt),
+  ],
+);
+
+// Tracks emails WE sent (scanned from connected admins' Gmail Sent folders) to a
+// known lead/customer/supplier, so the sent-followups cron can surface a
+// threaded follow-up into Next Steps when there's no reply after the configured
+// wait. Dedup on the Gmail message id. Mirrors customer_message but for the
+// outbound direction.
+export const sentEmail = pgTable(
+  "sent_email",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    gmailMessageId: text("gmail_message_id").notNull().unique(),
+    threadId: text("thread_id"),
+    // RFC822 Message-ID header of the sent message (for In-Reply-To when we
+    // draft the threaded follow-up).
+    messageIdHeader: text("message_id_header"),
+    mailboxUserId: text("mailbox_user_id").references(() => user.id),
+    fromEmail: text("from_email"),
+    toEmail: text("to_email").notNull(),
+    subject: text("subject"),
+    sentAt: timestamp("sent_at", { mode: "date" }),
+    leadId: text("lead_id").references(() => lead.id, { onDelete: "cascade" }),
+    customerId: text("customer_id").references(() => customer.id, {
+      onDelete: "cascade",
+    }),
+    supplierId: text("supplier_id").references(() => supplier.id, {
+      onDelete: "cascade",
+    }),
+    // Set when a reply from the contact is detected (stops the follow-up).
+    repliedAt: timestamp("replied_at", { mode: "date" }),
+    // Set when we've queued a follow-up for this sent message (dedup — one
+    // follow-up per original).
+    followupQueuedAt: timestamp("followup_queued_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sent_email_gmail_message_id_idx").on(t.gmailMessageId),
+    index("sent_email_sent_at_idx").on(t.sentAt),
+    index("sent_email_lead_id_idx").on(t.leadId),
+    index("sent_email_customer_id_idx").on(t.customerId),
+    index("sent_email_supplier_id_idx").on(t.supplierId),
   ],
 );
 

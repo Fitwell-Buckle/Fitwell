@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
         to: m.toEmail,
         subject: m.subject ?? "(no subject)",
         body: m.body,
+        threadId: m.threadId,
+        inReplyTo: m.inReplyTo,
       });
       if (!result.ok) {
         failed++;

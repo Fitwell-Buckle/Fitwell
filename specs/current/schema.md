@@ -293,8 +293,8 @@ Added by the Production work plan (Phase 1). Money is stored in **cents**
 
 ### `lead_followup_settings` (single-row config)
 
-The one global lead follow-up rule, edited in **Settings → Lead follow-ups** and
-read by the `/api/cron/lead-followups` cron. One row, `id="default"`.
+The one global follow-up rule, edited in **Settings → Lead follow-ups** and read
+by the `/api/cron/sent-followups` cron. One row, `id="default"`.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -546,7 +546,8 @@ dropped in migration 0026 — replaced by the editable `meeting_date`.)
 | `lead_card_image` | `lead_id` (FK → lead, cascade), `blob_url`, `content_type?`, `size_bytes?`, `uploaded_by_user_id?` (FK → user), `uploaded_at`. One row per scanned card — re-captures accumulate; `lead.card_image_url` mirrors the most recent |
 | `lead_comment` | `lead_id` (FK → lead, cascade), `author_user_id?` (FK → user), `body`, `created_at`. Free-text timeline notes a team member adds to a lead over time (distinct from `lead.notes`, the single capture-time field). Surface in the lead **History** tab interleaved with drafted/sent follow-up emails. Indexes: `lead_id`, `created_at` |
 | `customer_message` | `gmail_message_id` (unique — dedup), `thread_id?`, `mailbox_user_id?` (FK → user) + `mailbox_label?` (whose inbox), `from_email`, `from_name?`, `subject?`, `snippet?`, `received_at?`, `audience` (`b2b`/`consumer`/`supplier`/`influencer`), `customer_id?` (FK → customer), `company_id?` (FK → company), `supplier_id?` (FK → supplier), `influencer_id?` (FK → influencer), `dismissed_at?`, `created_at`. Inbound emails from existing **customers, suppliers, or influencers**, detected by the `customer-messages` cron (matches a sender's email to a stored `customer.email` / company contact / supplier contact / influencer contact email) across connected team inboxes. Surfaced at the top of the Customers B2B/Consumer tabs, the Suppliers list, and the Influencer List; `dismissed_at` hides one. Indexes: `audience`, `dismissed_at`, `received_at`, `customer_id`, `company_id`, `supplier_id`, `influencer_id` |
-| `outbound_message` | `lead_id` (FK → lead, cascade), `channel` (default `email`), `sequence_step` (int, default 1 — `1`=initial follow-up, `2`=two-week nudge), `to_email?`, `subject?`, `body`, `status` (`draft`/`scheduled`/`sent`/`dismissed`, default `draft`), `generated_by_model?`, `created_by_user_id?` (FK → user — also the sender for a scheduled send), `created_at`, `updated_at`, `sent_at?`, `scheduled_at?` (when `status='scheduled'`: the `send-scheduled` cron sends once it passes). AI-drafted follow-up emails queued in the "Next Steps" view; step 1 is auto-drafted when the lead is created, step 2 by the `lead-followups` cron when there's no reply after the configured wait |
+| `outbound_message` | recipient is exactly one of `lead_id?` / `customer_id?` / `supplier_id?` (all FK, cascade — `lead_id` now nullable since follow-ups can target any contact), `channel` (default `email`), `sequence_step` (int), `to_email?`, `subject?`, `body`, `status` (`draft`/`scheduled`/`sent`/`dismissed`), `thread_id?` + `in_reply_to?` (reply in the original Gmail thread on send), `generated_by_model?`, `created_by_user_id?` (FK → user — also the sender), `created_at`, `updated_at`, `sent_at?`, `scheduled_at?`. AI-drafted follow-ups queued in **Next Steps**; step 1 auto-drafted at lead capture, step 2 by the `sent-followups` cron when a sent email goes unanswered |
+| `sent_email` | tracks emails WE sent (scanned from Gmail Sent) to a known contact, for the `sent-followups` cron. `gmail_message_id` (unique — dedup), `thread_id?`, `message_id_header?` (RFC822, for In-Reply-To), `mailbox_user_id?` (FK → user), `from_email?`, `to_email`, `subject?`, `sent_at?`, recipient `lead_id?`/`customer_id?`/`supplier_id?` (FK, cascade), `replied_at?` (set when a reply is seen → stops follow-up), `followup_queued_at?` (dedup — one follow-up per original), `created_at` |
 
 Indexes on `lead`: `email`, `stage`, `source_channel`, `status`,
 `owner_user_id`, `company_id`, `customer_id`, `captured_at`. On
