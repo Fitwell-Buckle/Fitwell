@@ -232,15 +232,19 @@ export function RepliesTab({ leadId }: { leadId: string }) {
                     );
                   })()}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <ComposeMessageButton
-                      target={{
-                        to: parseEmailAddress(r.from) ?? "",
-                        contactName: parseDisplayName(r.from),
-                        theirSubject: r.subject,
-                        theirMessage: r.snippet,
-                        relationship: "lead",
-                      }}
-                    />
+                    {/* Only offer Compose when the email is in your own inbox —
+                        a teammate's message is theirs to reply to. */}
+                    {canOpen(r) && (
+                      <ComposeMessageButton
+                        target={{
+                          to: parseEmailAddress(r.from) ?? "",
+                          contactName: parseDisplayName(r.from),
+                          theirSubject: r.subject,
+                          theirMessage: r.snippet,
+                          relationship: "lead",
+                        }}
+                      />
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
