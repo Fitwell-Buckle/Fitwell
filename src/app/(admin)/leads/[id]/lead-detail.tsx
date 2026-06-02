@@ -357,6 +357,16 @@ export function LeadDetail({
             )}
             {readonlyRow("Meeting date", draft.meetingDate)}
           </dl>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSavedKey(null);
+              setEditing(true);
+            }}
+          >
+            Edit
+          </Button>
         </div>
 
         {cardImages.length > 0 && (
