@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { company } from "@/lib/schema";
+import {
+  company,
+  customerMessage,
+  invoice,
+  lead,
+  productionPo,
+} from "@/lib/schema";
 import {
   detectCompanyConflict,
   companyConflictMessage,
@@ -101,6 +107,71 @@ export async function PATCH(
     return NextResponse.json({ data: { id: updated.id } });
   } catch (err) {
     console.error("Update company failed:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+// Delete a B2B customer (company). Blocked when it has financial records
+// (invoices or purchase orders) — those must be handled first so we never
+// orphan real transactions. Otherwise unlinks soft references (converted leads,
+// detected customer messages) and deletes; company_contact rows cascade.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (session.user.role === "supplier" || session.user.role === "company") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+
+  try {
+    const [invoices, pos] = await Promise.all([
+      db
+        .select({ n: count() })
+        .from(invoice)
+        .where(eq(invoice.companyId, id)),
+      db
+        .select({ n: count() })
+        .from(productionPo)
+        .where(eq(productionPo.companyId, id)),
+    ]);
+    const invoiceCount = invoices[0]?.n ?? 0;
+    const poCount = pos[0]?.n ?? 0;
+    if (invoiceCount > 0 || poCount > 0) {
+      const parts = [
+        invoiceCount > 0 && `${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}`,
+        poCount > 0 && `${poCount} purchase order${poCount === 1 ? "" : "s"}`,
+      ].filter(Boolean);
+      return NextResponse.json(
+        {
+          error: `Can't delete this customer — it still has ${parts.join(" and ")}. Delete or reassign those first.`,
+        },
+        { status: 409 },
+      );
+    }
+
+    // Unlink soft references so the FK delete succeeds, then delete the company
+    // (company_contact rows cascade).
+    await db.update(lead).set({ companyId: null }).where(eq(lead.companyId, id));
+    await db
+      .update(customerMessage)
+      .set({ companyId: null })
+      .where(eq(customerMessage.companyId, id));
+    const [deleted] = await db
+      .delete(company)
+      .where(eq(company.id, id))
+      .returning({ id: company.id });
+    if (!deleted) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json({ data: { id: deleted.id } });
+  } catch (err) {
+    console.error("Delete company failed:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

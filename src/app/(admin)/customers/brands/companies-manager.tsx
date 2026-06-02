@@ -132,6 +132,35 @@ export function CompaniesManager({
     }
   }
 
+  async function deleteCompany(id: string, name: string) {
+    if (
+      !window.confirm(
+        `Delete B2B customer "${name}"? This can't be undone. Converted leads and detected messages will be unlinked. Invoices or purchase orders will block the delete.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/production/companies/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "Delete failed.");
+        setBusy(false);
+        return;
+      }
+      setCompanyEditing(null);
+      router.refresh();
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const editingCompany =
     companyEditing && companyEditing !== "new"
       ? companies.find((c) => c.id === companyEditing)
@@ -245,6 +274,20 @@ export function CompaniesManager({
             busy={busy}
           />
           <CompanyLogins companyId={editingCompany.id} contacts={editingCompany.contacts} />
+          <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50/40 p-3">
+            <p className="text-sm text-zinc-600">
+              Delete this B2B customer. Blocked if it has invoices or purchase
+              orders.
+            </p>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={busy}
+              onClick={() => deleteCompany(editingCompany.id, editingCompany.name)}
+            >
+              Delete customer
+            </Button>
+          </div>
         </>
       )}
     </div>
