@@ -494,6 +494,11 @@ Email-domain matching: the capture-confirm step calls `GET /api/leads/match`
 to link a lead to an existing company by email domain (free-provider domains
 excluded) and to flag a duplicate active lead with the same email.
 
+`admin_notification` also carries `mailbox_label` + `mailbox_email` (set by the
+customer-message and lead-reply crons) so the notifications inbox can color-code
++ filter by team inbox the same way the messaging views do; null for
+non-email notifications (PO handoffs etc.).
+
 Every drafted message also raises an in-app `admin_notification`
 ("Draft follow-up ready for X") and shows in the lead detail **History**
 tab. Drafts can be sent from Messages to Send via the admin's Gmail

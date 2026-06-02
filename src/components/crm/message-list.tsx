@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { mailboxColor as colorFor } from "@/lib/crm/mailbox-color";
 import { ComposeMessageButton } from "./compose-message";
 
 // One normalized message row. Every messaging surface (lead replies, the
@@ -34,22 +35,6 @@ export type MessageRelationship =
   | "lead"
   | "supplier"
   | "influencer";
-
-// Faded, per-mailbox color so different team inboxes are easy to tell apart.
-const MAILBOX_COLORS = [
-  { stripe: "border-l-sky-300", tag: "bg-sky-50 text-sky-700", active: "bg-sky-600 text-white" },
-  { stripe: "border-l-emerald-300", tag: "bg-emerald-50 text-emerald-700", active: "bg-emerald-600 text-white" },
-  { stripe: "border-l-violet-300", tag: "bg-violet-50 text-violet-700", active: "bg-violet-600 text-white" },
-  { stripe: "border-l-amber-300", tag: "bg-amber-50 text-amber-800", active: "bg-amber-600 text-white" },
-  { stripe: "border-l-rose-300", tag: "bg-rose-50 text-rose-700", active: "bg-rose-600 text-white" },
-  { stripe: "border-l-teal-300", tag: "bg-teal-50 text-teal-700", active: "bg-teal-600 text-white" },
-] as const;
-
-function colorFor(label: string) {
-  let h = 0;
-  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0;
-  return MAILBOX_COLORS[h % MAILBOX_COLORS.length];
-}
 
 function gmailThreadUrl(m: MessageListItem): string {
   const base = "https://mail.google.com/mail/";

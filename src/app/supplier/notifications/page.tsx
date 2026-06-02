@@ -21,6 +21,8 @@ export default async function SupplierNotificationsPage() {
       poId: n.poId,
       leadId: n.leadId,
       href: n.href ?? null,
+      mailbox: n.mailboxLabel ?? null,
+      mailboxEmail: n.mailboxEmail ?? null,
       readAt: n.readAt ? n.readAt.toISOString() : null,
       createdAt: (n.createdAt ?? new Date()).toISOString(),
     }),

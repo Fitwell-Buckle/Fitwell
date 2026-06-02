@@ -146,8 +146,11 @@ export async function scanCustomerMessages(): Promise<{
       await db.insert(adminNotification).values({
         type: "customer_message",
         title: `New message from ${who}`,
-        body: m.subject || m.snippet || null,
+        // Richer preview: subject + snippet when both are present.
+        body: [m.subject, m.snippet].filter(Boolean).join(" — ") || null,
         href,
+        mailboxLabel: mb.label,
+        mailboxEmail: mb.email,
       });
     }
   }

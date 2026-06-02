@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { adminNotification } from "@/lib/schema";
 import { verifyCronOrAdmin } from "@/lib/cron-auth";
-import { hasInboundEmailFrom } from "@/lib/gmail/inbound";
+import {
+  hasInboundEmailFrom,
+  listConnectedMailboxes,
+} from "@/lib/gmail/inbound";
 import { leadDisplayName } from "@/lib/crm/display";
 import {
   listLeadsForReplyCheck,
@@ -30,6 +33,12 @@ export async function GET(req: NextRequest) {
   }
 
   const leads = await listLeadsForReplyCheck(50);
+  // Map mailbox userId → display label/email so each reply notification can be
+  // tagged with the inbox it was found in (drives the notifications color +
+  // filter, matching the messaging views).
+  const mailboxById = new Map(
+    (await listConnectedMailboxes()).map((m) => [m.userId, m]),
+  );
   let notified = 0;
   let checked = 0;
 
@@ -52,11 +61,16 @@ export async function GET(req: NextRequest) {
       checked++;
       if (!r.res.replied) continue;
       try {
+        const mb = mailboxById.get(
+          r.lead.ownerUserId ?? r.lead.capturedByUserId ?? "",
+        );
         await db.insert(adminNotification).values({
           type: "lead_reply",
           title: `${leadDisplayName(r.lead)} replied`,
           body: r.lead.email,
           leadId: r.lead.id,
+          mailboxLabel: mb?.label ?? null,
+          mailboxEmail: mb?.email ?? null,
         });
         await markLeadReplyNotified(r.lead.id, new Date());
         notified++;

@@ -860,6 +860,11 @@ export const adminNotification = pgTable(
     // customer-message alert links to /customers). Generic so any notification
     // type can point somewhere without a dedicated FK column.
     href: text("href"),
+    // Which team inbox this notification relates to (for email-derived alerts
+    // — customer messages, lead replies). Lets the inbox color-code + filter by
+    // mailbox like the messaging views. Null for non-email notifications.
+    mailboxLabel: text("mailbox_label"),
+    mailboxEmail: text("mailbox_email"),
     readAt: timestamp("read_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
