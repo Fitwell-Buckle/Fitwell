@@ -195,6 +195,16 @@ export async function countDraftMessages(): Promise<number> {
   return rows.length;
 }
 
+// Lead IDs with at least one draft "next step" queued — used to flag rows on
+// the leads list with a blue dot.
+export async function leadIdsWithDraftMessages(): Promise<Set<string>> {
+  const rows = await db
+    .selectDistinct({ leadId: outboundMessage.leadId })
+    .from(outboundMessage)
+    .where(eq(outboundMessage.status, "draft"));
+  return new Set(rows.map((r) => r.leadId));
+}
+
 export const updateMessageSchema = z
   .object({
     subject: z.string().max(500).nullish(),

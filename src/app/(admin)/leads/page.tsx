@@ -3,7 +3,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { listLeads } from "@/lib/crm/service";
-import { countDraftMessages } from "@/lib/crm/messages";
+import {
+  countDraftMessages,
+  leadIdsWithDraftMessages,
+} from "@/lib/crm/messages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -53,9 +56,10 @@ export default async function LeadsPage({
     search: strParam(params.search),
   };
 
-  const [leads, draftCount] = await Promise.all([
+  const [leads, draftCount, nextStepLeadIds] = await Promise.all([
     listLeads(filters),
     countDraftMessages(),
+    leadIdsWithDraftMessages(),
   ]);
   const tabs = LEADS_TABS.map((t) =>
     t.href === "/messages" ? { ...t, dot: draftCount > 0 } : t,
@@ -86,6 +90,7 @@ export default async function LeadsPage({
               <TableHead>Name</TableHead>
               <TableHead>Company</TableHead>
               <TableHead>Stage</TableHead>
+              <TableHead>Next Steps</TableHead>
               <TableHead>Source</TableHead>
               <TableHead>Captured</TableHead>
             </TableRow>
@@ -94,7 +99,7 @@ export default async function LeadsPage({
             {leads.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="py-8 text-center text-zinc-400"
                 >
                   No leads match.
@@ -119,6 +124,19 @@ export default async function LeadsPage({
                     <Badge className={stageBadgeClass(l.stage)}>
                       {stageLabel(l.stage)}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {nextStepLeadIds.has(l.id) ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700"
+                        title="Has a drafted follow-up waiting in Next Steps"
+                      >
+                        <span className="h-2 w-2 rounded-full bg-blue-500" />
+                        Next step
+                      </span>
+                    ) : (
+                      <span className="text-xs text-zinc-300">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs text-zinc-600">
                     {sourceChannelLabel(l.sourceChannel)}
