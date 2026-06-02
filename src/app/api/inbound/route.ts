@@ -6,14 +6,16 @@ import {
   listSentToAllMailboxes,
   type InboundMessage,
 } from "@/lib/gmail/inbound";
+import { listWhatsappAsMessages } from "@/lib/crm/whatsapp-messages";
 
 export const runtime = "nodejs";
 
-// Email history for one or more addresses (comma-separated `emails`), searched
-// across all connected team inboxes. Used by the per-customer / per-company /
-// per-supplier Messages view. `?direction=sent` returns mail WE sent those
-// addresses; otherwise mail they sent us. Returns `{ replies, mailboxes }`;
-// `[]` when no emails / no connected Google account.
+// A contact's message history across both channels. Email: one or more
+// addresses (comma-separated `emails`), searched across all connected team
+// inboxes. WhatsApp: matched by the contact's stored id, passed as `waType`
+// (customer | supplier) + `waId`. `?direction=sent` returns what WE sent;
+// otherwise inbound. Each row is tagged with its channel ("email"/"whatsapp").
+// Used by the per-customer / per-supplier Messages view.
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) {
@@ -34,23 +36,31 @@ export async function GET(req: Request) {
         .filter(Boolean),
     ),
   ];
-  if (emails.length === 0) {
-    return NextResponse.json({ data: { replies: [], mailboxes: [] } });
-  }
+
+  const waType = url.searchParams.get("waType");
+  const waId = url.searchParams.get("waId") ?? undefined;
+  const waMatch =
+    waId && waType === "customer"
+      ? { customerId: waId }
+      : waId && waType === "supplier"
+        ? { supplierId: waId }
+        : null;
 
   const lister =
     direction === "sent" ? listSentToAllMailboxes : listInboundFromAllMailboxes;
-  const [perEmail, mailboxes] = await Promise.all([
+  const [perEmail, mailboxes, whatsapp] = await Promise.all([
     Promise.all(emails.map((e) => lister(e))),
     listConnectedMailboxes(),
+    waMatch ? listWhatsappAsMessages(waMatch, direction) : Promise.resolve([]),
   ]);
 
-  // Merge across addresses, dedup by gmail message id, newest first.
+  // Merge email across addresses (dedup by gmail id), tag channel, add WhatsApp.
   const byId = new Map<string, InboundMessage>();
   for (const m of perEmail.flat()) {
     if (!byId.has(m.id)) byId.set(m.id, m);
   }
-  const replies = [...byId.values()].sort((a, b) => b.dateMs - a.dateMs);
+  const email = [...byId.values()].map((m) => ({ ...m, channel: "email" as const }));
+  const replies = [...email, ...whatsapp].sort((a, b) => b.dateMs - a.dateMs);
 
   return NextResponse.json({
     data: { replies, mailboxes: mailboxes.map((m) => m.label) },

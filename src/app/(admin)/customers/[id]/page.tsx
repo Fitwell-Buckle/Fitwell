@@ -74,6 +74,7 @@ export default async function CustomerDetailPage({
       <InboundMessages
         emails={cust.email ? [cust.email] : []}
         relationship="customer"
+        whatsapp={{ type: "customer", id: cust.id }}
       />
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2">

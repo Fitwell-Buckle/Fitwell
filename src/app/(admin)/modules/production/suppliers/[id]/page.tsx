@@ -60,6 +60,7 @@ export default async function SupplierDetailPage({
           ...supplierRow.contacts.map((c) => c.email),
         ].filter((e): e is string => Boolean(e))}
         relationship="supplier"
+        whatsapp={{ type: "supplier", id: supplierRow.id }}
       />
     </div>
   );

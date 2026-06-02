@@ -11,6 +11,7 @@ import type { MessageRelationship } from "./message-list";
 export function InboundMessages({
   emails,
   relationship,
+  whatsapp,
   title = "Messages",
 }: {
   emails: string[];
@@ -18,25 +19,30 @@ export function InboundMessages({
     MessageRelationship,
     "customer" | "b2b_customer" | "supplier"
   >;
+  // When set, WhatsApp messages matched to this stored contact are merged into
+  // the same Received/Sent lists (phone-matched at ingest, so keyed by id).
+  whatsapp?: { type: "customer" | "supplier"; id: string };
   title?: string;
 }) {
   const cleaned = emails.map((e) => e.trim()).filter(Boolean);
   const param = encodeURIComponent(cleaned.join(","));
   const primary = cleaned[0] ?? "";
+  const wa = whatsapp ? `&waType=${whatsapp.type}&waId=${whatsapp.id}` : "";
+  const base = `/api/inbound?emails=${param}${wa}`;
 
   return (
     <Card className="mt-6">
       <CardContent>
         <p className="mb-3 text-sm font-semibold text-zinc-900">{title}</p>
-        {cleaned.length === 0 ? (
+        {cleaned.length === 0 && !whatsapp ? (
           <p className="py-6 text-center text-sm text-zinc-400">
             No email address on file.
           </p>
         ) : (
           <MessagesPanel
             relationship={relationship}
-            receivedUrl={`/api/inbound?emails=${param}`}
-            sentUrl={`/api/inbound?emails=${param}&direction=sent`}
+            receivedUrl={base}
+            sentUrl={`${base}&direction=sent`}
             contactEmailForSent={primary}
             composeTo={primary}
           />

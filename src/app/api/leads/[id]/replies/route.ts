@@ -5,16 +5,17 @@ import {
   listConnectedMailboxes,
   listInboundFromAllMailboxes,
   listSentToAllMailboxes,
+  type InboundMessage,
 } from "@/lib/gmail/inbound";
+import { listWhatsappAsMessages } from "@/lib/crm/whatsapp-messages";
 
 export const runtime = "nodejs";
 
-// The lead's email history, fetched live across ALL connected team inboxes (not
-// just the lead owner's) so a contact who emailed a colleague — or a colleague
-// who emailed the contact — still shows up. `?direction=sent` returns mail WE
-// sent the contact; otherwise the contact's inbound mail. Each message is tagged
-// with the inbox it was found in. Returns [] when there's no email or no
-// connected Google account.
+// The lead's message history across both channels: email (live across ALL
+// connected team inboxes, so a contact who emailed a colleague — or a colleague
+// who emailed the contact — still shows) and WhatsApp (matched by phone).
+// `?direction=sent` returns what WE sent; otherwise inbound. Each message is
+// tagged with its channel ("email"/"whatsapp") and, for email, the inbox.
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -37,27 +38,27 @@ export async function GET(
   if (!lead) {
     return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   }
-  if (!lead.email) {
-    return NextResponse.json({ data: { replies: [], mailboxes: [] } });
-  }
 
-  if (direction === "sent") {
-    const [sent, mailboxes] = await Promise.all([
-      listSentToAllMailboxes(lead.email),
-      listConnectedMailboxes(),
-    ]);
-    return NextResponse.json({
-      data: { replies: sent, mailboxes: mailboxes.map((m) => m.label) },
-    });
-  }
-
-  const [allReplies, mailboxes] = await Promise.all([
-    listInboundFromAllMailboxes(lead.email),
-    listConnectedMailboxes(),
-  ]);
-  // Drop replies the user dismissed from this lead's tab.
+  // Email (only when the lead has an address) + WhatsApp (by lead id) in
+  // parallel; tag email rows with channel and drop dismissed inbound replies.
   const dismissed = new Set(lead.dismissedReplyIds ?? []);
-  const replies = allReplies.filter((r) => !dismissed.has(r.id));
+  const tagEmail = (m: InboundMessage) => ({ ...m, channel: "email" as const });
+
+  const [emailRaw, mailboxes, whatsapp] = await Promise.all([
+    lead.email
+      ? direction === "sent"
+        ? listSentToAllMailboxes(lead.email)
+        : listInboundFromAllMailboxes(lead.email)
+      : Promise.resolve<InboundMessage[]>([]),
+    listConnectedMailboxes(),
+    listWhatsappAsMessages({ leadId: id }, direction),
+  ]);
+
+  const email = emailRaw
+    .filter((r) => direction === "sent" || !dismissed.has(r.id))
+    .map(tagEmail);
+  const replies = [...email, ...whatsapp].sort((a, b) => b.dateMs - a.dateMs);
+
   return NextResponse.json({
     data: { replies, mailboxes: mailboxes.map((m) => m.label) },
   });

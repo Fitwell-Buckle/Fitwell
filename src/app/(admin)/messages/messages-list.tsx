@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Sparkles } from "lucide-react";
 
 export interface MessageView {
   id: string;
@@ -24,7 +25,43 @@ function MessageCard({ message }: { message: MessageView }) {
   const [subject, setSubject] = useState(message.subject ?? "");
   const [body, setBody] = useState(message.body);
   const [busy, setBusy] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
   const dirty = subject !== (message.subject ?? "") || body !== message.body;
+
+  // Ask AI to rewrite the on-screen draft (optionally steered). Replaces the
+  // editor contents — the user reviews, then Saves/Sends as usual.
+  async function rewrite() {
+    if (!body.trim()) {
+      toast.error("Nothing to rewrite yet.");
+      return;
+    }
+    const instruction =
+      window
+        .prompt(
+          "Optional: how should the AI rewrite it? (e.g. shorter, more formal). Leave blank for a general polish.",
+        )
+        ?.trim() || undefined;
+    setRewriting(true);
+    try {
+      const res = await fetch(`/api/messages/${message.id}/rewrite`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ subject: subject || null, body, instruction }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json?.error ?? `Rewrite failed (${res.status})`);
+        return;
+      }
+      if (json.data?.subject) setSubject(json.data.subject);
+      if (json.data?.body) setBody(json.data.body);
+      toast.success("Rewritten — review, then save or send.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Rewrite failed");
+    } finally {
+      setRewriting(false);
+    }
+  }
 
   async function patch(payload: Record<string, unknown>, okMsg: string) {
     setBusy(true);
@@ -141,6 +178,15 @@ function MessageCard({ message }: { message: MessageView }) {
             onClick={() => patch({ subject: subject || null, body }, "Saved")}
           >
             {dirty ? "Save edits" : "Saved"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={rewrite}
+            disabled={busy || rewriting || !body.trim()}
+          >
+            <Sparkles className="h-4 w-4" />
+            {rewriting ? "Re-writing…" : "Re-write with AI"}
           </Button>
           <Button size="sm" variant="outline" onClick={copy} disabled={busy}>
             Copy

@@ -27,6 +27,10 @@ export interface MessageListItem {
   dateMs: number;
   mailbox: string | null;
   mailboxEmail: string | null;
+  // Which channel the message came through. Email rows are openable/repliable in
+  // Gmail; WhatsApp rows are read-only here (single business line, no per-admin
+  // inbox) and just carry the tag. Defaults to "email".
+  channel?: "email" | "whatsapp";
 }
 
 export type MessageRelationship =
@@ -80,11 +84,12 @@ export function MessageList({
 
   const visible = items.filter((m) => !hidden.has(m.id));
 
-  // Per-mailbox counts + chips, with MY inbox listed first.
+  // Per-mailbox counts + chips, with MY inbox listed first. Only email rows have
+  // an inbox; WhatsApp rows (no mailbox) are left out of the chips.
   const counts = new Map<string, number>();
   for (const m of visible) {
-    const k = m.mailbox ?? "Unknown";
-    counts.set(k, (counts.get(k) ?? 0) + 1);
+    if (!m.mailbox) continue;
+    counts.set(m.mailbox, (counts.get(m.mailbox) ?? 0) + 1);
   }
   const myLabel =
     visible.find((m) => m.mailboxEmail && myEmail && m.mailboxEmail.toLowerCase() === myEmail)
@@ -146,17 +151,34 @@ export function MessageList({
       <ul className="space-y-1">
         {shown.map((m) => {
           const c = m.mailbox ? colorFor(m.mailbox) : null;
-          const mine = isMine(m);
+          const isEmail = (m.channel ?? "email") === "email";
+          // Openable / repliable in Gmail only for email in MY inbox. WhatsApp is
+          // read-only here, and a teammate's mailbox isn't ours to open.
+          const openInGmail = isEmail && isMine(m);
+          const title =
+            m.subject || (isEmail ? "(no subject)" : "WhatsApp message");
           const body = (
             <>
               <div className="flex items-center justify-between gap-3">
                 <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-zinc-900">
-                  <span className="truncate">{m.subject || "(no subject)"}</span>
-                  {mine && (
+                  <span className="truncate">{title}</span>
+                  {openInGmail && (
                     <ExternalLink className="h-3.5 w-3.5 shrink-0 text-zinc-300 group-hover:text-zinc-500" />
                   )}
                 </p>
-                <p className="shrink-0 text-xs text-zinc-400">{fmtDate(m.dateMs)}</p>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                      isEmail
+                        ? "bg-zinc-100 text-zinc-500"
+                        : "bg-green-100 text-green-700",
+                    )}
+                  >
+                    {isEmail ? "Email" : "WhatsApp"}
+                  </span>
+                  <p className="text-xs text-zinc-400">{fmtDate(m.dateMs)}</p>
+                </div>
               </div>
               <p className="mt-0.5 text-xs text-zinc-500">{m.from}</p>
               <p className="mt-1 text-sm text-zinc-600">{m.snippet}</p>
@@ -164,13 +186,13 @@ export function MessageList({
           );
           return (
             <li
-              key={`${m.mailbox ?? ""}-${m.id}`}
+              key={`${m.mailbox ?? m.channel ?? ""}-${m.id}`}
               className={cn(
                 "rounded-r-md border-l-4 py-3 pl-3 pr-2",
                 c ? c.stripe : "border-l-transparent",
               )}
             >
-              {mine ? (
+              {openInGmail ? (
                 <a
                   href={gmailThreadUrl(m)}
                   target="_blank"
@@ -183,15 +205,20 @@ export function MessageList({
               ) : (
                 <div
                   className="block"
-                  title={`In ${m.mailbox ?? "a teammate"}'s inbox — only they can open it`}
+                  title={
+                    isEmail
+                      ? `In ${m.mailbox ?? "a teammate"}'s inbox — only they can open it`
+                      : "WhatsApp message"
+                  }
                 >
                   {body}
                 </div>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                {/* Compose only when the message is in your own inbox — a
-                    teammate's message is theirs to reply to. */}
-                {mine && (
+                {/* Compose (email reply) only for an email in your own inbox — a
+                    teammate's message is theirs to reply to, and WhatsApp can't
+                    be answered by email. */}
+                {openInGmail && (
                   <ComposeMessageButton
                     target={{
                       to: m.fromEmail,

@@ -1,3 +1,4 @@
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   adminNotification,
@@ -31,6 +32,72 @@ export async function buildPhoneIndex(): Promise<PhoneIndex> {
     if (k) supplierByPhone.set(k, s.id);
   }
   return { leadByPhone, customerByPhone, supplierByPhone };
+}
+
+// A WhatsApp message in the normalized shape the Messages views (lead /
+// customer / supplier) consume, so the Gmail and WhatsApp channels merge into
+// one Received/Sent list. No mailbox (single business line — no per-admin inbox)
+// and no Gmail thread; `channel:"whatsapp"` drives the row's tag + the fact that
+// it isn't openable/repliable as email.
+export interface WhatsappReply {
+  id: string;
+  threadId: null;
+  from: string;
+  subject: null;
+  snippet: string | null;
+  dateMs: number;
+  mailbox: null;
+  mailboxEmail: null;
+  to: null;
+  channel: "whatsapp";
+}
+
+// WhatsApp messages for one contact (matched by phone at ingest, so keyed by the
+// stored lead/customer/supplier id). `direction` maps to the Received/Sent
+// toggle: received → inbound, sent → outbound. Undismissed, newest first.
+export async function listWhatsappAsMessages(
+  match: { leadId?: string; customerId?: string; supplierId?: string },
+  direction: "received" | "sent",
+): Promise<WhatsappReply[]> {
+  const idCond = match.leadId
+    ? eq(whatsappMessage.leadId, match.leadId)
+    : match.customerId
+      ? eq(whatsappMessage.customerId, match.customerId)
+      : match.supplierId
+        ? eq(whatsappMessage.supplierId, match.supplierId)
+        : null;
+  if (!idCond) return [];
+
+  const dir = direction === "sent" ? "outbound" : "inbound";
+  const rows = await db
+    .select()
+    .from(whatsappMessage)
+    .where(
+      and(
+        idCond,
+        eq(whatsappMessage.direction, dir),
+        isNull(whatsappMessage.dismissedAt),
+      ),
+    )
+    .orderBy(desc(whatsappMessage.receivedAt));
+
+  return rows.map((r) => ({
+    id: r.id,
+    threadId: null,
+    from:
+      direction === "sent"
+        ? `You → ${r.toPhone ?? r.contactName ?? "contact"} (WhatsApp)`
+        : r.contactName
+          ? `${r.contactName} (${r.fromPhone})`
+          : r.fromPhone,
+    subject: null,
+    snippet: r.body,
+    dateMs: r.receivedAt ? r.receivedAt.getTime() : 0,
+    mailbox: null,
+    mailboxEmail: null,
+    to: null,
+    channel: "whatsapp" as const,
+  }));
 }
 
 export interface InboundWhatsApp {

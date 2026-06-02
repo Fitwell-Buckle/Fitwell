@@ -316,6 +316,83 @@ export async function draftFollowupEmail(
 
 export const DRAFT_MODEL_NAME = TEXT_MODEL;
 
+// ─── Rewriting an existing draft ─────────────────────────────────────
+
+export interface RewriteEmailInput {
+  subject?: string | null;
+  body: string;
+  // Optional steer from the user, e.g. "make it shorter", "more formal".
+  instruction?: string | null;
+}
+
+const REWRITE_SYSTEM_PROMPT = [
+  "You revise short B2B follow-up emails for Fitwell Buckle Co., a maker of",
+  "precision micro-adjust watch buckles. You are given an existing draft and you",
+  "rewrite it to read more clearly, warmly, and tightly while preserving its",
+  "intent, the recipient's name, any concrete next step, and the sign-off.",
+  "",
+  "Rules:",
+  "- Keep it under ~120 words, plain and friendly, no marketing fluff.",
+  "- Do NOT invent facts, prices, or commitments not in the original draft.",
+  "- If an instruction is given, follow it.",
+  "- `subject` is a short subject line; `body` is plain text (no HTML), with line breaks.",
+].join("\n");
+
+async function callRewriteOnce(input: RewriteEmailInput): Promise<unknown> {
+  const parts = [
+    "Rewrite this follow-up email and call " + DRAFT_TOOL_NAME + ".",
+    "",
+    `Current subject: ${input.subject?.trim() || "(none)"}`,
+    "",
+    "Current body:",
+    input.body.trim() || "(empty)",
+  ];
+  if (input.instruction?.trim()) {
+    parts.push("", `Instruction: ${input.instruction.trim()}`);
+  }
+  const result = await getAnthropic().messages.create({
+    model: TEXT_MODEL,
+    max_tokens: 1024,
+    system: REWRITE_SYSTEM_PROMPT,
+    tools: [
+      {
+        name: DRAFT_TOOL_NAME,
+        description: "Record the rewritten email (subject + body).",
+        input_schema: DRAFT_TOOL_INPUT_SCHEMA,
+      },
+    ],
+    tool_choice: { type: "tool", name: DRAFT_TOOL_NAME },
+    messages: [{ role: "user", content: [{ type: "text", text: parts.join("\n") }] }],
+  });
+
+  const toolUse = result.content.find(
+    (block) => block.type === "tool_use" && block.name === DRAFT_TOOL_NAME,
+  );
+  if (!toolUse || toolUse.type !== "tool_use") {
+    throw new Error(
+      `Anthropic response did not include a ${DRAFT_TOOL_NAME} tool_use block`,
+    );
+  }
+  return toolUse.input;
+}
+
+// Rewrite an existing draft (subject + body), optionally steered by an
+// instruction. Retries once if the model's output fails validation.
+export async function rewriteEmail(
+  input: RewriteEmailInput,
+): Promise<FollowupEmail> {
+  let firstError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await callRewriteOnce(input);
+    const parsed = FollowupEmailSchema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    if (firstError === null) firstError = parsed.error;
+  }
+  throw firstError instanceof Error
+    ? firstError
+    : new Error("rewriteEmail: validation failed");
+}
+
 // ─── Reply drafting (compose a response to an inbound email) ─────────
 
 const REPLY_TOOL_NAME = "record_reply_email";

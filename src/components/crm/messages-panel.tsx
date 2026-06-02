@@ -25,6 +25,7 @@ interface RawMessage {
   mailbox?: string | null;
   mailboxEmail?: string | null;
   to?: string | null;
+  channel?: "email" | "whatsapp";
 }
 
 interface Loaded {
@@ -196,22 +197,31 @@ function toItem(
   direction: Direction,
   contactEmailForSent: string | null,
 ): MessageListItem {
+  const channel = m.channel ?? "email";
   const sent = direction === "sent";
-  const composeEmail = sent
-    ? parseEmailAddress(m.to ?? "") || contactEmailForSent || ""
-    : (parseEmailAddress(m.from) ?? "");
+  // WhatsApp rows aren't email-repliable, so no compose target is derived.
+  const composeEmail =
+    channel !== "email"
+      ? ""
+      : sent
+        ? parseEmailAddress(m.to ?? "") || contactEmailForSent || ""
+        : (parseEmailAddress(m.from) ?? "");
   return {
     id: m.id,
     threadId: m.threadId ?? null,
     from: m.from,
     fromEmail: composeEmail,
-    contactName: sent
-      ? parseDisplayName(m.to ?? "")
-      : parseDisplayName(m.from),
+    contactName:
+      channel !== "email"
+        ? null
+        : sent
+          ? parseDisplayName(m.to ?? "")
+          : parseDisplayName(m.from),
     subject: m.subject,
     snippet: m.snippet,
     dateMs: m.dateMs,
     mailbox: m.mailbox ?? null,
     mailboxEmail: m.mailboxEmail ?? null,
+    channel,
   };
 }
