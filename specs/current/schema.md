@@ -245,6 +245,21 @@ Tracks in-house buckle production across suppliers and an 8-stage workflow.
 Added by the Production work plan (Phase 1). Money is stored in **cents**
 (integers); date-only fields use Postgres `date`.
 
+### `lead_followup_settings` (single-row config)
+
+The one global lead follow-up rule, edited in **Settings → Lead follow-ups** and
+read by the `/api/cron/lead-followups` cron. One row, `id="default"`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK, default `"default"` (single row) |
+| `enabled` | boolean | `false` = the nudge cron no-ops |
+| `nudge_after_days` | int | Days after the first follow-up was sent before drafting a 2nd (default 14, 1–365) |
+| `updated_at` | timestamp | |
+
+> Intentionally a single rule for now. A general, multi-rule + AI-assisted
+> engine is planned — see `specs/work-plans/todo/lead-followup-rule-engine.md`.
+
 ### `production_stage_def` (dynamic stages)
 
 The pipeline's stages are now **data-driven** — admins add / rename / delete /

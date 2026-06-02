@@ -1282,6 +1282,19 @@ export const billingSettings = pgTable("billing_settings", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
+// Lead follow-up automation settings (single row, id="default"). Controls the
+// daily nudge cron: whether it runs at all, and how many days after the first
+// follow-up was SENT (with no reply) before it drafts a second one. Editable in
+// admin Settings. NOTE: this is intentionally a single global rule for now — a
+// general, AI-assisted multi-rule engine is planned (see
+// specs/work-plans/todo/lead-followup-rule-engine.md).
+export const leadFollowupSettings = pgTable("lead_followup_settings", {
+  id: text("id").primaryKey().default("default"),
+  enabled: boolean("enabled").notNull().default(true),
+  nudgeAfterDays: integer("nudge_after_days").notNull().default(14),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
 // The production pipeline's stages — now data-driven (add / rename / delete /
 // reorder). `key` is the stable identifier stored on line items / events /
 // assignments; `position` defines pipeline order (0 = opening, highest =

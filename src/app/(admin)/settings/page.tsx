@@ -13,10 +13,12 @@ import { asc, count, max } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
+import { getFollowupSettings } from "@/lib/crm/followup-settings";
 import { getStages } from "@/lib/production/stage-labels";
 import { WireInfoSetup } from "@/app/(admin)/invoices/wire-info-setup";
 import { StageSetup } from "@/app/(admin)/modules/production/summary/stage-setup";
 import { PriceTiersManager } from "@/components/production/price-tiers-manager";
+import { LeadFollowupSettings } from "./lead-followup-settings";
 
 export const metadata: Metadata = {
   title: "Settings | Fitwell Admin",
@@ -36,6 +38,7 @@ export default async function SettingsPage() {
     stages,
     stageCountRows,
     priceTiers,
+    followup,
   ] = await Promise.all([
     db.select({ count: count() }).from(customer),
     db.select({ count: count() }).from(order),
@@ -52,6 +55,7 @@ export default async function SettingsPage() {
       .from(productionPoLineItem)
       .groupBy(productionPoLineItem.currentStage),
     db.query.priceTier.findMany({ orderBy: asc(priceTier.name) }),
+    getFollowupSettings(),
   ]);
 
   const stageCounts: Record<string, number> = {};
@@ -94,6 +98,19 @@ export default async function SettingsPage() {
               stages={stages.map((s) => ({ key: s.key, label: s.label }))}
               counts={stageCounts}
             />
+          </CardContent>
+        </Card>
+
+        <Card className="sm:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-lg">Lead follow-ups</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-zinc-500">
+              The automatic nudge rule for leads. More follow-up rules
+              (AI-suggested) are coming soon.
+            </p>
+            <LeadFollowupSettings initial={followup} />
           </CardContent>
         </Card>
 

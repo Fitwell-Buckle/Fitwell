@@ -162,6 +162,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/invoices/[id]/attachments` | Upload a customer document to an invoice (e.g. their PDF PO) — Vercel Blob, multipart. Returns a graceful 503 when `BLOB_READ_WRITE_TOKEN` isn't set |
 | DELETE | `/api/invoices/attachments/[id]` | Remove an invoice attachment (best-effort blob delete + always-on DB row delete) |
 | PATCH | `/api/settings/billing` | Update remittance / bank-wire details shown on invoices |
+| PATCH | `/api/settings/lead-followups` | Update the lead follow-up nudge rule (on/off + days-after-send); persisted in `lead_followup_settings` |
 
 ### CRM API (each handler checks `auth()`; admin-only — suppliers/companies 403)
 | Method | Path | Description |
@@ -220,7 +221,7 @@ Uses the signed-in admin's stored Google OAuth access token (DrizzleAdapter's `a
 | GET | `/api/cron/extract-gsc` | `0 7 * * *` | Daily Search Console data |
 | GET | `/api/cron/extract-posthog` | `0 */3 * * *` | PostHog event aggregation |
 | GET | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Email owner + suppliers about line items due soon / overdue, and complete POs ready to receive |
-| GET | `/api/cron/lead-followups` | `0 14 * * *` | Draft a 2nd follow-up for leads whose first follow-up was sent ≥14d ago with no Gmail reply; queues into "Messages to Send" (never sends) |
+| GET | `/api/cron/lead-followups` | `0 14 * * *` | Draft a 2nd follow-up for leads whose first follow-up was sent ≥N days ago with no Gmail reply; queues into "Next Steps" (never sends). N (default 14) + an on/off toggle are configured in Settings → Lead follow-ups (`lead_followup_settings`); when disabled the cron no-ops |
 | GET | `/api/cron/lead-replies` | `*/5 * * * *` | Detect new lead replies (owner Gmail, bounded-concurrency) and raise an admin notification ("X replied"); de-duped via `lead.replies_notified_at` |
 | GET | `/api/cron/customer-messages` | `*/15 * * * *` | Scan connected team inboxes for recent inbound mail from existing customers, suppliers, **or influencers** (matched by stored email), record new ones in `customer_message` (dedup on gmail id), and raise a `customer_message` notification per match |
 | GET | `/api/cron/health` | `0 */4 * * *` | Infrastructure health check |

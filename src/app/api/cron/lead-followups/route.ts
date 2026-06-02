@@ -7,15 +7,15 @@ import {
   createOutboundMessage,
   findLeadsNeedingNudge,
 } from "@/lib/crm/messages";
+import { getFollowupSettings } from "@/lib/crm/followup-settings";
 
 export const runtime = "nodejs";
 
-// Days after the first follow-up was SENT before we draft a nudge.
-const NUDGE_AFTER_DAYS = 14;
-
-// Daily: for each lead whose initial follow-up was sent ~2 weeks ago with no
-// reply, draft a gentle second follow-up into "Messages to Send". If the
-// lead's owner Gmail shows they replied, mark the lead replied and skip.
+// Daily: for each lead whose initial follow-up was sent N days ago (the wait
+// period configured in Settings → Lead follow-ups) with no reply, draft a
+// gentle second follow-up into "Next Steps". If the lead's owner Gmail shows
+// they replied, mark the lead replied and skip. The wait period + an on/off
+// toggle live in the lead_followup_settings table.
 export async function GET(req: NextRequest) {
   if (!(await verifyCronOrAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,7 +27,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const candidates = await findLeadsNeedingNudge(NUDGE_AFTER_DAYS);
+  const settings = await getFollowupSettings();
+  if (!settings.enabled) {
+    return NextResponse.json({ data: { disabled: true } });
+  }
+
+  const candidates = await findLeadsNeedingNudge(settings.nudgeAfterDays);
   let drafted = 0;
   let skippedReplied = 0;
   let failed = 0;

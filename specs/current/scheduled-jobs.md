@@ -15,16 +15,20 @@ All cron jobs run as Vercel Cron serverless functions. Schedules defined in `ver
 | Extract PostHog | `/api/cron/extract-posthog` | `0 */3 * * *` | Every 3h | Aggregate event counts |
 | Health Check | `/api/cron/health` | `0 */4 * * *` | Every 4h | Verify DB, API connections |
 | Production deadline alerts | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Daily 13:00 UTC | Email owner + suppliers re: items due/overdue, complete POs ready to receive |
-| Lead follow-up nudges | `/api/cron/lead-followups` | `0 14 * * *` | Daily 14:00 UTC | Draft a 2nd follow-up for leads whose first follow-up was sent ≥14d ago with no reply |
+| Lead follow-up nudges | `/api/cron/lead-followups` | `0 14 * * *` | Daily 14:00 UTC | Draft a 2nd follow-up for leads whose first follow-up was sent ≥N days ago with no reply. N (default 14) + an on/off toggle are configured in Settings → Lead follow-ups (`lead_followup_settings`); disabled = no-op |
 | Lead reply alerts | `/api/cron/lead-replies` | `*/5 * * * *` | Every 5 min | Check active leads' owner Gmail (bounded concurrency) for new inbound replies; raise an admin notification ("X replied"). De-duped via `lead.replies_notified_at`. ~50 lightweight Gmail list calls/run. Needs the Gmail API enabled |
 | Customer messages | `/api/cron/customer-messages` | `*/15 * * * *` | Every 15 min | Scan each connected team inbox's recent inbound (≤25 msgs, `newer_than:7d`), match senders to stored customers/companies by email, record new `customer_message` rows (dedup on gmail id), raise a `customer_message` notification per match. Needs the Gmail API enabled |
 
 ## Lead follow-up nudges — Detail
 
-1. Find candidate leads (`findLeadsNeedingNudge`): an initial follow-up
-   (`outbound_message` `sequence_step=1`) was marked **sent** ≥14 days ago,
-   the lead is `active`, `replied_at` is null, and no `sequence_step>=2`
-   message exists yet. Capped at 25 per run.
+0. Read the rule from `lead_followup_settings` (single row, id=`default`;
+   `getFollowupSettings()`). If `enabled=false`, the cron no-ops and returns
+   `{disabled:true}`. Otherwise `nudge_after_days` (default 14) is the wait
+   period below. Both are edited in **Settings → Lead follow-ups**.
+1. Find candidate leads (`findLeadsNeedingNudge(nudgeAfterDays)`): an initial
+   follow-up (`outbound_message` `sequence_step=1`) was marked **sent**
+   ≥`nudge_after_days` ago, the lead is `active`, `replied_at` is null, and no
+   `sequence_step>=2` message exists yet. Capped at 25 per run.
 2. For each, check whether the lead emailed back: Gmail
    `from:<lead email> after:<sent date>` via the lead owner's (fallback:
    capturer's) stored Google token (`src/lib/gmail/inbound.ts`).
@@ -32,9 +36,12 @@ All cron jobs run as Vercel Cron serverless functions. Schedules defined in `ver
    - No reply (or Gmail not connected → "not checked") → draft a gentle
      second follow-up (`draftFollowupEmail({isNudge:true})`) and queue it as
      a `sequence_step=2` `outbound_message` (status `draft`).
-3. Drafts are reviewed/sent from **Customers → Messages to Send** — the cron
-   never sends email itself.
+3. Drafts are reviewed/sent from **Customers → Next Steps** — the cron never
+   sends email itself.
 4. Returns `{candidates, drafted, skippedReplied, failed}`.
+
+> A general, multi-rule + AI-assisted follow-up engine is planned to replace this
+> single rule — see `specs/work-plans/todo/lead-followup-rule-engine.md`.
 
 ## Authentication
 
