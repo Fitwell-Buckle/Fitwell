@@ -367,7 +367,7 @@ Our own B2B companies (not Shopify), managed under Customers → Companies.
 
 | Table | Key columns |
 |-------|-------------|
-| `company` | `name`, `contact_name?`, `contact_email?`, `customer_id` (FK → customer, optional link to a synced Shopify customer), `price_tier_id` (FK → price_tier), `assigned_collection_ids` (text[]), `assigned_product_ids` (text[]), `deposit_percent` (real, default 0), `notes` |
+| `company` | `name`, `contact_name?`, `contact_email?` (legacy free-text **fallback** contact), `primary_contact_kind?` + `primary_contact_id?` (the designated Primary Contact — one of the company's attached People, a lead or customer; pointer, no FK), `customer_id` (FK → customer, legacy single Shopify link), `price_tier_id` (FK → price_tier), `assigned_collection_ids` (text[]), `assigned_product_ids` (text[]), `deposit_percent` (real, default 0), `notes`. The displayed **Contact** resolves via `lib/crm/company-contact.ts`: primary person → single attached person → free-text → none |
 | `price_tier` | `name`, `discount_percent` (real, % off retail) |
 
 A brand's `assigned_collection_ids` + `assigned_product_ids` **restrict** which

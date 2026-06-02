@@ -119,7 +119,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | POST | `/api/production/companies` | Create a company |
 | PATCH | `/api/production/companies/[id]` | Update a company |
 | POST | `/api/production/companies/[id]/contacts` | Add a B2B portal login email to a company (Phase 7 allowlist); admin-only |
-| POST | `/api/production/companies/[id]/people` | Attach/detach a person to the company — JSON `{ kind: "lead"\|"customer", entityId, action: "add"\|"remove" }`; sets/clears their `company_id`. Powers the company "People" list |
+| POST | `/api/production/companies/[id]/people` | Attach/detach a person or set Primary Contact — JSON `{ kind: "lead"\|"customer", entityId, action: "add"\|"remove"\|"make_primary" }`. add/remove set/clear their `company_id` (remove also clears the company's primary pointer if it was them); make_primary points `company.primary_contact_*` at them. Powers the company "People" list |
 | GET | `/api/crm/people-search?q=` | Typeahead over leads + Shopify customers (name/email/company) to attach to a company; returns `{ kind, id, label, sublabel, companyId }[]` |
 | DELETE | `/api/production/company-contacts/[id]` | Remove a company portal login email; admin-only |
 | POST | `/api/production/price-tiers` | Create a price tier (% off retail) |

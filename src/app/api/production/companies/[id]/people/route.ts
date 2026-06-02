@@ -10,11 +10,13 @@ export const runtime = "nodejs";
 const bodySchema = z.object({
   kind: z.enum(["lead", "customer"]),
   entityId: z.string().min(1),
-  action: z.enum(["add", "remove"]),
+  action: z.enum(["add", "remove", "make_primary"]),
 });
 
-// Attach or detach a person (a lead or a Shopify customer) to/from this B2B
-// company. Add sets their company_id to this company; remove clears it.
+// Attach/detach a person (a lead or a Shopify customer) to/from this B2B
+// company, or designate them Primary Contact. Add sets their company_id; remove
+// clears it (and clears the company's primary pointer if it was them);
+// make_primary points the company at them.
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -50,8 +52,19 @@ export async function POST(
     return NextResponse.json({ error: "Company not found" }, { status: 404 });
   }
 
-  const newCompanyId = input.action === "add" ? id : null;
   try {
+    if (input.action === "make_primary") {
+      await db
+        .update(company)
+        .set({
+          primaryContactKind: input.kind,
+          primaryContactId: input.entityId,
+        })
+        .where(eq(company.id, id));
+      return NextResponse.json({ data: { ok: true } });
+    }
+
+    const newCompanyId = input.action === "add" ? id : null;
     if (input.kind === "lead") {
       await db
         .update(lead)
@@ -62,6 +75,23 @@ export async function POST(
         .update(customer)
         .set({ companyId: newCompanyId })
         .where(eq(customer.id, input.entityId));
+    }
+
+    // Detaching the current primary clears the company's pointer.
+    if (input.action === "remove") {
+      const [c] = await db
+        .select({
+          kind: company.primaryContactKind,
+          pid: company.primaryContactId,
+        })
+        .from(company)
+        .where(eq(company.id, id));
+      if (c && c.kind === input.kind && c.pid === input.entityId) {
+        await db
+          .update(company)
+          .set({ primaryContactKind: null, primaryContactId: null })
+          .where(eq(company.id, id));
+      }
     }
     return NextResponse.json({ data: { ok: true } });
   } catch (err) {

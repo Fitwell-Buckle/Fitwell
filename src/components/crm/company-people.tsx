@@ -31,10 +31,13 @@ export function CompanyPeople({
   companyId,
   leads,
   customers,
+  primary,
 }: {
   companyId: string;
   leads: Person[];
   customers: Person[];
+  // The designated Primary Contact, if any.
+  primary?: { kind: "lead" | "customer"; id: string } | null;
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -71,10 +74,14 @@ export function CompanyPeople({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  const total = leads.length + customers.length;
+  const isPrimary = (kind: "lead" | "customer", id: string) =>
+    !!primary && primary.kind === kind && primary.id === id;
+
   async function mutate(
     kind: "lead" | "customer",
     entityId: string,
-    action: "add" | "remove",
+    action: "add" | "remove" | "make_primary",
   ) {
     setBusy(true);
     try {
@@ -99,6 +106,7 @@ export function CompanyPeople({
 
   function row(kind: "lead" | "customer", p: Person) {
     const href = kind === "lead" ? `/leads/${p.id}` : `/customers/${p.id}`;
+    const primaryHere = isPrimary(kind, p.id);
     return (
       <li
         key={`${kind}-${p.id}`}
@@ -117,17 +125,35 @@ export function CompanyPeople({
             >
               {kind.toUpperCase()}
             </span>
+            {primaryHere && (
+              <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                PRIMARY
+              </span>
+            )}
           </span>
           {p.email && <p className="text-xs text-zinc-500">{p.email}</p>}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          onClick={() => mutate(kind, p.id, "remove")}
-        >
-          Remove
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {/* Designating a primary only matters with more than one person. */}
+          {total > 1 && !primaryHere && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => mutate(kind, p.id, "make_primary")}
+            >
+              Make primary
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => mutate(kind, p.id, "remove")}
+          >
+            Remove
+          </Button>
+        </div>
       </li>
     );
   }

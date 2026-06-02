@@ -445,8 +445,17 @@ export const company = pgTable(
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
     name: text("name").notNull(),
+    // Legacy free-text contact, kept as a fallback (invoicing/email read it) when
+    // no person is attached. The displayed "Contact" now prefers an attached
+    // person — see primaryContact* below + lib/crm/company-contact.ts.
     contactName: text("contact_name"),
     contactEmail: text("contact_email"),
+    // The company's designated Primary Contact — one of its attached People
+    // (a lead or a Shopify customer). Pointer (kind + id), no FK since it can
+    // reference either table. Only meaningful when ≥2 people are attached; with
+    // one person they're implicitly the contact.
+    primaryContactKind: text("primary_contact_kind"),
+    primaryContactId: text("primary_contact_id"),
     // Free-text postal address for this brand (shipping / invoicing). Multi-line.
     address: text("address"),
     // Optional link to a synced Shopify customer (the contact person).

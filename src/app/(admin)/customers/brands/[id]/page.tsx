@@ -128,6 +128,14 @@ export default async function CustomerDetailPage({
         companyId={companyRow.id}
         leads={peopleLeadRows}
         customers={peopleCustomerRows}
+        primary={
+          companyRow.primaryContactId && companyRow.primaryContactKind
+            ? {
+                kind: companyRow.primaryContactKind as "lead" | "customer",
+                id: companyRow.primaryContactId,
+              }
+            : null
+        }
       />
 
       <InboundMessages

@@ -35,6 +35,10 @@ export interface Company {
   name: string;
   contactName: string | null;
   contactEmail: string | null;
+  // Resolved Contact for the list column (primary attached person → single
+  // person → free-text). The contactName/contactEmail above remain the editable
+  // free-text fallback used by the form.
+  contactLabel: string | null;
   address: string | null;
   customerId: string | null;
   notes: string | null;
@@ -262,7 +266,7 @@ export function CompaniesManager({
                     )}
                   </TableCell>
                   <TableCell className="text-zinc-500">
-                    {c.contactName ?? c.contactEmail ?? "—"}
+                    {c.contactLabel ?? "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button size="sm" variant="outline" onClick={() => openCompany(c.id, c)}>
