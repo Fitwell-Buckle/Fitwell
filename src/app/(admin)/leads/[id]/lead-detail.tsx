@@ -104,6 +104,8 @@ export function LeadDetail({
   const [draft, setDraft] = useState<LeadView>(lead);
   // Overview is read-only until the user clicks Edit.
   const [editing, setEditing] = useState(false);
+  // Initial meeting notes are read-only until the user clicks Edit, too.
+  const [editingNotes, setEditingNotes] = useState(false);
   // Which section was just saved — drives the inline "✓ Saved" button state.
   // Cleared as soon as the user edits anything again.
   const [savedKey, setSavedKey] = useState<null | "overview" | "notes">(null);
@@ -190,6 +192,7 @@ export function LeadDetail({
     const err = await patch({ notes: draft.notes });
     if (!err) {
       setSavedKey("notes");
+      setEditingNotes(false);
       router.refresh();
     } else {
       toast.error(err);
@@ -217,6 +220,9 @@ export function LeadDetail({
         return;
       }
       toast.success("Draft follow-up added to Next Steps");
+      setSavedKey("notes");
+      setEditingNotes(false);
+      router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't draft the email");
     } finally {
@@ -713,47 +719,76 @@ export function LeadDetail({
   const notes = (
     <Card>
       <CardContent>
-        <p className="mb-2 text-sm font-semibold text-zinc-900">
-          Initial meeting notes
-        </p>
-        <textarea
-          className="min-h-[160px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
-          value={draft.notes ?? ""}
-          onChange={(e) => set("notes", e.target.value || null)}
-        />
-        {lead.cardRawText && (
-          <div className="mt-4">
-            <p className={LBL}>Card text (raw OCR)</p>
-            <pre className="whitespace-pre-wrap rounded-md border border-zinc-100 bg-zinc-50 p-3 text-xs text-zinc-600">
-              {lead.cardRawText}
-            </pre>
-          </div>
-        )}
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-          {savedKey === "notes" && !busy && (
-            <span className="text-sm font-medium text-emerald-600">
-              ✓ Saved
-            </span>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm font-semibold text-zinc-900">
+            Initial meeting notes
+          </p>
+          {!editingNotes && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSavedKey(null);
+                setEditingNotes(true);
+              }}
+            >
+              Edit
+            </Button>
           )}
-          <Button variant="outline" onClick={draftFollowupFromNotes} disabled={busy}>
-            Draft follow-up email
-          </Button>
-          <Button
-            onClick={saveNotes}
-            disabled={busy}
-            className={
-              savedKey === "notes" && !busy
-                ? "bg-emerald-600 hover:bg-emerald-700"
-                : undefined
-            }
-          >
-            {busy ? "Saving…" : savedKey === "notes" ? "✓ Saved" : "Save notes"}
-          </Button>
         </div>
-        <p className="mt-2 text-right text-xs text-zinc-500">
-          Drafts an AI follow-up from these notes into Customers → Leads → Next
-          Steps.
-        </p>
+
+        {editingNotes ? (
+          <>
+            <textarea
+              autoFocus
+              className="mt-2 min-h-[160px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
+              value={draft.notes ?? ""}
+              onChange={(e) => set("notes", e.target.value || null)}
+            />
+            {lead.cardRawText && (
+              <div className="mt-4">
+                <p className={LBL}>Card text (raw OCR)</p>
+                <pre className="whitespace-pre-wrap rounded-md border border-zinc-100 bg-zinc-50 p-3 text-xs text-zinc-600">
+                  {lead.cardRawText}
+                </pre>
+              </div>
+            )}
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  set("notes", lead.notes);
+                  setEditingNotes(false);
+                }}
+                disabled={busy}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                onClick={draftFollowupFromNotes}
+                disabled={busy}
+              >
+                Draft follow-up email
+              </Button>
+              <Button onClick={saveNotes} disabled={busy}>
+                {busy ? "Saving…" : "Save notes"}
+              </Button>
+            </div>
+            <p className="mt-2 text-right text-xs text-zinc-500">
+              Drafts an AI follow-up from these notes into Customers → Leads →
+              Next Steps.
+            </p>
+          </>
+        ) : draft.notes?.trim() ? (
+          <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-700">
+            {draft.notes}
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-zinc-400">
+            No notes yet. Click Edit to add notes and draft a follow-up email.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
