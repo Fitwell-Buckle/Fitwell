@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   adminNotification,
@@ -154,6 +154,17 @@ export async function scanCustomerMessages(): Promise<{
   return { scanned, inserted };
 }
 
+// Matcher that flags internal/Fitwell senders. Used to defensively exclude
+// our own mail at read time — covers rows recorded before the detection-side
+// internal filter existed (e.g. a teammate who is also a Shopify customer).
+async function isInternalSenderMatcher() {
+  const mailboxes = await listConnectedMailboxes();
+  return buildInternalEmailMatcher([
+    ...mailboxes.map((m) => m.email),
+    ...(process.env.ADMIN_EMAILS ?? "").split(","),
+  ]);
+}
+
 export interface CustomerMessageView {
   id: string;
   gmailMessageId: string;
@@ -214,7 +225,11 @@ export async function listCustomerMessages(
     )
     .orderBy(desc(customerMessage.receivedAt));
 
-  return rows.map((r) => {
+  const isInternal = await isInternalSenderMatcher();
+
+  return rows
+    .filter((r) => !isInternal(r.fromEmail))
+    .map((r) => {
     const custName = [r.custFirst, r.custLast].filter(Boolean).join(" ").trim();
     const displayName =
       r.coName || r.supName || r.infName || custName || r.fromName || r.fromEmail;
@@ -257,16 +272,22 @@ export async function countNewCustomerMessages(): Promise<{
   influencer: number;
   total: number;
 }> {
-  const rows = await db
-    .select({ audience: customerMessage.audience, n: count() })
-    .from(customerMessage)
-    .where(isNull(customerMessage.dismissedAt))
-    .groupBy(customerMessage.audience);
-  const get = (a: string) => rows.find((r) => r.audience === a)?.n ?? 0;
-  const b2b = get("b2b");
-  const consumer = get("consumer");
-  const supplier = get("supplier");
-  const influencer = get("influencer");
+  const [rows, isInternal] = await Promise.all([
+    db
+      .select({
+        audience: customerMessage.audience,
+        fromEmail: customerMessage.fromEmail,
+      })
+      .from(customerMessage)
+      .where(isNull(customerMessage.dismissedAt)),
+    isInternalSenderMatcher(),
+  ]);
+  const tally = { b2b: 0, consumer: 0, supplier: 0, influencer: 0 };
+  for (const r of rows) {
+    if (isInternal(r.fromEmail)) continue;
+    if (r.audience in tally) tally[r.audience as keyof typeof tally]++;
+  }
+  const { b2b, consumer, supplier, influencer } = tally;
   return {
     b2b,
     consumer,
