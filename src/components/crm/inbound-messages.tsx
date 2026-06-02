@@ -96,7 +96,14 @@ export function InboundMessages({
     const k = r.mailbox ?? "Unknown";
     counts.set(k, (counts.get(k) ?? 0) + 1);
   }
-  const filterable = [...counts.keys()];
+  // Your own inbox first in the filter chips, then the rest in order.
+  const myLabel =
+    replies.find(
+      (r) => r.mailboxEmail && myEmail && r.mailboxEmail.toLowerCase() === myEmail,
+    )?.mailbox ?? null;
+  const filterable = [...counts.keys()].sort((a, b) =>
+    a === myLabel ? -1 : b === myLabel ? 1 : 0,
+  );
   const shown = filter
     ? replies.filter((r) => (r.mailbox ?? "Unknown") === filter)
     : replies;
