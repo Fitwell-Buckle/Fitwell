@@ -46,6 +46,7 @@ export interface SupplierOption {
   name: string;
   contactName: string | null;
   contactEmail: string | null;
+  phone: string | null;
   shippingAddress: string | null;
   notes: string | null;
 }
@@ -252,6 +253,7 @@ export function PoForm({
       name: s.name,
       contactName: s.contactName ?? "",
       contactEmail: s.contactEmail ?? "",
+      phone: s.phone ?? "",
       shippingAddress: s.shippingAddress ?? "",
       notes: s.notes ?? "",
     };
@@ -287,6 +289,7 @@ export function PoForm({
         name: supplierDraft.name.trim(),
         contactName: supplierDraft.contactName.trim() || null,
         contactEmail: supplierDraft.contactEmail.trim() || null,
+        phone: supplierDraft.phone.trim() || null,
         shippingAddress: supplierDraft.shippingAddress.trim() || null,
         notes: supplierDraft.notes.trim() || null,
       });
@@ -307,6 +310,7 @@ export function PoForm({
         name: supplierDraft.name.trim(),
         contactName: supplierDraft.contactName.trim() || null,
         contactEmail: supplierDraft.contactEmail.trim() || null,
+        phone: supplierDraft.phone.trim() || null,
         shippingAddress: supplierDraft.shippingAddress.trim() || null,
         notes: supplierDraft.notes.trim() || null,
       };

@@ -43,6 +43,7 @@ export default async function SupplierDetailPage({
           name: supplierRow.name,
           contactName: supplierRow.contactName,
           contactEmail: supplierRow.contactEmail,
+          phone: supplierRow.phone,
           shippingAddress: supplierRow.shippingAddress,
           notes: supplierRow.notes,
         }}

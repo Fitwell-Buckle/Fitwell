@@ -19,6 +19,7 @@ export interface SupplierDetail {
   name: string;
   contactName: string | null;
   contactEmail: string | null;
+  phone: string | null;
   shippingAddress: string | null;
   notes: string | null;
 }
@@ -28,6 +29,7 @@ function toDraft(s: SupplierDetail): SupplierDraft {
     name: s.name,
     contactName: s.contactName ?? "",
     contactEmail: s.contactEmail ?? "",
+    phone: s.phone ?? "",
     shippingAddress: s.shippingAddress ?? "",
     notes: s.notes ?? "",
   };
@@ -71,6 +73,7 @@ export function SupplierDetailView({
           name: draft.name.trim(),
           contactName: draft.contactName.trim() || null,
           contactEmail: draft.contactEmail.trim() || null,
+          phone: draft.phone.trim() || null,
           shippingAddress: draft.shippingAddress.trim() || null,
           notes: draft.notes.trim() || null,
         }),
@@ -125,6 +128,7 @@ export function SupplierDetailView({
             <DetailField label="Name" value={supplier.name} />
             <DetailField label="Contact name" value={supplier.contactName} />
             <DetailField label="Contact email" value={supplier.contactEmail} />
+            <DetailField label="Phone" value={supplier.phone} />
             <div className="sm:col-span-2">
               <DetailField label="Shipping address" value={supplier.shippingAddress} />
             </div>

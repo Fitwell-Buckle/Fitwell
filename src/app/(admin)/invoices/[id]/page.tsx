@@ -48,6 +48,7 @@ export default async function InvoiceDetailPage({
         name: true,
         contactName: true,
         contactEmail: true,
+        phone: true,
         shippingAddress: true,
         notes: true,
       },

@@ -267,6 +267,13 @@
       "when": 1780368232468,
       "tag": "0037_narrow_wild_child",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1780368920063,
+      "tag": "0038_fat_freak",
+      "breakpoints": true
     }
   ]
 }

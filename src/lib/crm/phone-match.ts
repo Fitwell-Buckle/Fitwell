@@ -7,11 +7,14 @@ export interface PhoneIndex {
   leadByPhone: Map<string, string>;
   // normalized phone -> customer id
   customerByPhone: Map<string, string>;
+  // normalized phone -> supplier id
+  supplierByPhone?: Map<string, string>;
 }
 
 export interface PhoneMatch {
   leadId: string | null;
   customerId: string | null;
+  supplierId: string | null;
 }
 
 // Normalize a phone to a comparable key: digits only, last 10 (so a stored
@@ -23,8 +26,8 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   return digits.slice(-10);
 }
 
-// Lead match wins over a customer match. Returns null when the number isn't a
-// known lead/customer — those inbound messages are ignored.
+// Lead wins, then supplier, then customer. Returns null when the number isn't a
+// known contact — those inbound messages are ignored.
 export function matchPhone(
   phone: string | null | undefined,
   index: PhoneIndex,
@@ -32,8 +35,10 @@ export function matchPhone(
   const key = normalizePhone(phone);
   if (!key) return null;
   const leadId = index.leadByPhone.get(key);
-  if (leadId) return { leadId, customerId: null };
+  if (leadId) return { leadId, customerId: null, supplierId: null };
+  const supplierId = index.supplierByPhone?.get(key);
+  if (supplierId) return { leadId: null, customerId: null, supplierId };
   const customerId = index.customerByPhone.get(key);
-  if (customerId) return { leadId: null, customerId };
+  if (customerId) return { leadId: null, customerId, supplierId: null };
   return null;
 }

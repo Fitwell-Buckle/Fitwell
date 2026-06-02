@@ -26,6 +26,7 @@ interface Supplier {
   name: string;
   contactName: string | null;
   contactEmail: string | null;
+  phone: string | null;
   shippingAddress: string | null;
   notes: string | null;
   contacts: SupplierLogin[];
@@ -35,6 +36,7 @@ interface Draft {
   name: string;
   contactName: string;
   contactEmail: string;
+  phone: string;
   shippingAddress: string;
   notes: string;
 }
@@ -44,6 +46,7 @@ function toDraft(s?: Supplier): Draft {
     name: s?.name ?? "",
     contactName: s?.contactName ?? "",
     contactEmail: s?.contactEmail ?? "",
+    phone: s?.phone ?? "",
     shippingAddress: s?.shippingAddress ?? "",
     notes: s?.notes ?? "",
   };
@@ -106,6 +109,14 @@ function SupplierForm({
             type="email"
             value={draft.contactEmail}
             onChange={(e) => setDraft({ ...draft, contactEmail: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className={fieldLabel}>Phone</label>
+          <Input
+            value={draft.phone}
+            onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+            placeholder="+1 415 555 0199"
           />
         </div>
         <div>
@@ -184,6 +195,7 @@ export function SupplierManager({ suppliers }: { suppliers: Supplier[] }) {
           name: draft.name.trim(),
           contactName: draft.contactName.trim() || null,
           contactEmail: draft.contactEmail.trim() || null,
+          phone: draft.phone.trim() || null,
           shippingAddress: draft.shippingAddress.trim() || null,
           notes: draft.notes.trim() || null,
         }),

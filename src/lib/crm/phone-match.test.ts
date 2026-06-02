@@ -17,6 +17,7 @@ describe("normalizePhone", () => {
 const index: PhoneIndex = {
   leadByPhone: new Map([[normalizePhone("+41 78 880 92 92")!, "lead_1"]]),
   customerByPhone: new Map([[normalizePhone("+1 415 555 0199")!, "cust_1"]]),
+  supplierByPhone: new Map([[normalizePhone("+86 21 1234 5678")!, "sup_1"]]),
 };
 
 describe("matchPhone", () => {
@@ -24,13 +25,18 @@ describe("matchPhone", () => {
     expect(matchPhone("41788809292", index)).toEqual({
       leadId: "lead_1",
       customerId: null,
+      supplierId: null,
     });
   });
   it("matches a customer", () => {
     expect(matchPhone("+1 (415) 555-0199", index)).toEqual({
       leadId: null,
       customerId: "cust_1",
+      supplierId: null,
     });
+  });
+  it("matches a supplier", () => {
+    expect(matchPhone("862112345678", index)?.supplierId).toBe("sup_1");
   });
   it("returns null for an unknown number", () => {
     expect(matchPhone("+44 20 7946 0000", index)).toBeNull();

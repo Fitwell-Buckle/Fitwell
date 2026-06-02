@@ -45,6 +45,7 @@ export async function PATCH(
         ...(input.contactEmail !== undefined
           ? { contactEmail: input.contactEmail || null }
           : {}),
+        ...(input.phone !== undefined ? { phone: input.phone || null } : {}),
         ...(input.shippingAddress !== undefined
           ? { shippingAddress: input.shippingAddress || null }
           : {}),

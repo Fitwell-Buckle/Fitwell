@@ -33,6 +33,7 @@ export default async function EditPoPage({
         name: true,
         contactName: true,
         contactEmail: true,
+        phone: true,
         shippingAddress: true,
         notes: true,
       },

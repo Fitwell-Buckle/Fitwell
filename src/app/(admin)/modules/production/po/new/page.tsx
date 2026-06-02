@@ -32,6 +32,7 @@ export default async function NewPoPage({
         name: true,
         contactName: true,
         contactEmail: true,
+        phone: true,
         shippingAddress: true,
         notes: true,
       },

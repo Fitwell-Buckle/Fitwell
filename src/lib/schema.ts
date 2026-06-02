@@ -535,6 +535,7 @@ export const supplier = pgTable("supplier", {
   name: text("name").notNull(),
   contactEmail: text("contact_email"),
   contactName: text("contact_name"),
+  phone: text("phone"),
   // Free-text address we ship to this supplier (raw materials / handoffs).
   shippingAddress: text("shipping_address"),
   notes: text("notes"),
@@ -1474,12 +1475,14 @@ export const whatsappMessage = pgTable(
     receivedAt: timestamp("received_at", { mode: "date" }),
     leadId: text("lead_id").references(() => lead.id),
     customerId: text("customer_id").references(() => customer.id),
+    supplierId: text("supplier_id").references(() => supplier.id),
     dismissedAt: timestamp("dismissed_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
     index("whatsapp_message_lead_id_idx").on(t.leadId),
     index("whatsapp_message_customer_id_idx").on(t.customerId),
+    index("whatsapp_message_supplier_id_idx").on(t.supplierId),
     index("whatsapp_message_received_at_idx").on(t.receivedAt),
     index("whatsapp_message_dismissed_at_idx").on(t.dismissedAt),
   ],

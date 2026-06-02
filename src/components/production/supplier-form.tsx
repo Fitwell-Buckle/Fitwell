@@ -9,6 +9,7 @@ export interface SupplierDraft {
   name: string;
   contactName: string;
   contactEmail: string;
+  phone: string;
   shippingAddress: string;
   notes: string;
 }
@@ -18,6 +19,7 @@ export function emptySupplierDraft(): SupplierDraft {
     name: "",
     contactName: "",
     contactEmail: "",
+    phone: "",
     shippingAddress: "",
     notes: "",
   };
@@ -91,6 +93,17 @@ export function SupplierForm({
             value={draft.contactEmail}
             onChange={(e) => setDraft({ ...draft, contactEmail: e.target.value })}
           />
+        </div>
+        <div>
+          <label className={fieldLabel}>Phone</label>
+          <Input
+            value={draft.phone}
+            onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+            placeholder="+1 415 555 0199"
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            Used to match inbound WhatsApp messages to this supplier.
+          </p>
         </div>
         <div className="sm:col-span-2">
           <label className={fieldLabel}>Shipping address</label>
