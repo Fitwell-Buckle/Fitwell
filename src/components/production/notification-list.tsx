@@ -80,14 +80,14 @@ export function NotificationList({
             className={tabCls(tab === "unread")}
             onClick={() => setTab("unread")}
           >
-            Unread{unread > 0 ? ` (${unread})` : ""}
+            New{unread > 0 ? ` (${unread})` : ""}
           </button>
           <button
             type="button"
             className={tabCls(tab === "read")}
             onClick={() => setTab("read")}
           >
-            Read{readCount > 0 ? ` (${readCount})` : ""}
+            Dismissed{readCount > 0 ? ` (${readCount})` : ""}
           </button>
         </div>
         {tab === "unread" && (
@@ -97,7 +97,7 @@ export function NotificationList({
             disabled={busy || unread === 0}
             onClick={() => mark({ all: true })}
           >
-            Mark all read
+            Dismiss all
           </Button>
         )}
       </div>
@@ -105,7 +105,7 @@ export function NotificationList({
       <div className="mt-3 space-y-2">
         {shown.length === 0 ? (
           <p className="py-10 text-center text-sm text-zinc-400">
-            {tab === "unread" ? "Nothing unread." : "Nothing read yet."}
+            {tab === "unread" ? "Nothing new." : "Nothing dismissed yet."}
           </p>
         ) : (
           shown.map((n) => (
@@ -152,7 +152,7 @@ export function NotificationList({
                       disabled={busy}
                       onClick={() => mark({ id: n.id })}
                     >
-                      Mark read
+                      Dismiss
                     </Button>
                   )}
                 </div>
