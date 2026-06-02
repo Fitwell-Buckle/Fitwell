@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,14 @@ export function CompaniesManager({
 
   // ── Companies ── (price tiers are managed in Settings now)
   const [companyEditing, setCompanyEditing] = useState<string | "new" | null>(null);
+  // The edit panel (incl. the Delete button) renders below the table — scroll it
+  // into view when opened so it's not missed on a long page.
+  const editPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (companyEditing && companyEditing !== "new") {
+      editPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [companyEditing]);
   const [draft, setDraft] = useState<CompanyDraft>(emptyCompanyDraft());
   // Client-side filter by company name / contact name / contact email.
   const [search, setSearch] = useState("");
@@ -269,7 +277,7 @@ export function CompaniesManager({
       </DataTable>
 
       {editingCompany && (
-        <>
+        <div ref={editPanelRef} className="scroll-mt-4 space-y-5">
           <CompanyForm
             title="Edit brand"
             draft={draft}
@@ -294,7 +302,7 @@ export function CompaniesManager({
               Delete customer
             </Button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
