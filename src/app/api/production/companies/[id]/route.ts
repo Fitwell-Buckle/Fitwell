@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   company,
+  customer,
   customerMessage,
   invoice,
   lead,
@@ -156,12 +157,17 @@ export async function DELETE(
       );
     }
 
-    // Unlink soft references so the FK delete succeeds, then delete the company
-    // (company_contact rows cascade). production_po_line_item.companyId is a
-    // per-line company override that can point here even when the PO belongs to
-    // someone else (so the PO guard above wouldn't catch it) — null it so the
-    // line falls back to its PO-level company.
+    // Unlink every soft reference into this company so the FK delete succeeds,
+    // then delete it (company_contact rows cascade). These are all the
+    // non-financial tables that point at company.id: attached leads + Shopify
+    // customers (the "People" list), detected customer messages, and per-line
+    // company overrides on PO line items (which can point here even when the PO
+    // belongs to someone else, so the PO guard above wouldn't catch them).
     await db.update(lead).set({ companyId: null }).where(eq(lead.companyId, id));
+    await db
+      .update(customer)
+      .set({ companyId: null })
+      .where(eq(customer.companyId, id));
     await db
       .update(customerMessage)
       .set({ companyId: null })
