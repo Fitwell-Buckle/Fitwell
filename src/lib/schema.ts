@@ -1544,8 +1544,9 @@ export const customerMessage = pgTable(
 );
 
 // Drafted follow-up emails awaiting human review/send. Auto-generated from a
-// lead's notes when the lead is created (the "Messages to Send" queue).
-// status: 'draft' (in queue) | 'sent' | 'dismissed'.
+// lead's notes when the lead is created (the "Next Steps" queue).
+// status: 'draft' (in queue) | 'scheduled' (auto-send at scheduled_at) | 'sent'
+// | 'dismissed'.
 export const outboundMessage = pgTable(
   "outbound_message",
   {
@@ -1569,11 +1570,15 @@ export const outboundMessage = pgTable(
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
     sentAt: timestamp("sent_at", { mode: "date" }),
+    // When status='scheduled': the send-scheduled cron sends it once this time
+    // passes, via createdByUserId's Gmail.
+    scheduledAt: timestamp("scheduled_at", { mode: "date" }),
   },
   (t) => [
     index("outbound_message_lead_id_idx").on(t.leadId),
     index("outbound_message_status_idx").on(t.status),
     index("outbound_message_created_at_idx").on(t.createdAt),
+    index("outbound_message_scheduled_at_idx").on(t.scheduledAt),
   ],
 );
 

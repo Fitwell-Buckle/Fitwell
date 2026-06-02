@@ -1,10 +1,26 @@
 import { z } from "zod";
-import { and, desc, eq, isNull, lte, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/lib/db";
 import { adminNotification, lead, outboundMessage } from "@/lib/schema";
 import { leadDisplayName } from "./display";
 
-export const MESSAGE_STATUSES = ["draft", "sent", "dismissed"] as const;
+export const MESSAGE_STATUSES = [
+  "draft",
+  "scheduled",
+  "sent",
+  "dismissed",
+] as const;
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
 
 export interface CreateOutboundMessageInput {
@@ -160,11 +176,12 @@ export async function findLeadsNeedingNudge(
 // pending queue (status='draft'); pass status to view sent/dismissed, and/or
 // leadId to scope to one lead.
 export async function listOutboundMessages(
-  filters: { status?: string; leadId?: string } = {},
+  filters: { status?: string; statuses?: string[]; leadId?: string } = {},
 ) {
-  const conds: SQL[] = [
-    eq(outboundMessage.status, filters.status ?? "draft"),
-  ];
+  const statusCond = filters.statuses
+    ? inArray(outboundMessage.status, filters.statuses)
+    : eq(outboundMessage.status, filters.status ?? "draft");
+  const conds: SQL[] = [statusCond];
   if (filters.leadId) conds.push(eq(outboundMessage.leadId, filters.leadId));
   return db
     .select({
@@ -177,6 +194,7 @@ export async function listOutboundMessages(
       status: outboundMessage.status,
       createdAt: outboundMessage.createdAt,
       sentAt: outboundMessage.sentAt,
+      scheduledAt: outboundMessage.scheduledAt,
       leadFirstName: lead.firstName,
       leadLastName: lead.lastName,
       leadCompanyName: lead.companyName,
@@ -185,6 +203,28 @@ export async function listOutboundMessages(
     .innerJoin(lead, eq(outboundMessage.leadId, lead.id))
     .where(and(...conds))
     .orderBy(desc(outboundMessage.createdAt));
+}
+
+// Scheduled messages whose time has arrived — sent by the send-scheduled cron.
+export async function findDueScheduledMessages(limit = 25) {
+  return db
+    .select({
+      id: outboundMessage.id,
+      toEmail: outboundMessage.toEmail,
+      subject: outboundMessage.subject,
+      body: outboundMessage.body,
+      createdByUserId: outboundMessage.createdByUserId,
+    })
+    .from(outboundMessage)
+    .where(
+      and(
+        eq(outboundMessage.status, "scheduled"),
+        isNotNull(outboundMessage.scheduledAt),
+        lte(outboundMessage.scheduledAt, new Date()),
+      ),
+    )
+    .orderBy(asc(outboundMessage.scheduledAt))
+    .limit(limit);
 }
 
 export async function countDraftMessages(): Promise<number> {
@@ -211,6 +251,8 @@ export const updateMessageSchema = z
     body: z.string().max(20_000).optional(),
     toEmail: z.string().email().max(320).nullish().or(z.literal("")),
     status: z.enum(MESSAGE_STATUSES).optional(),
+    // ISO datetime for a scheduled send; null clears it (back to a plain draft).
+    scheduledAt: z.string().datetime().nullish(),
   })
   .refine((v) => Object.keys(v).length > 0, {
     message: "no fields to update",
@@ -220,15 +262,27 @@ export type UpdateMessageInput = z.infer<typeof updateMessageSchema>;
 export async function updateOutboundMessage(
   id: string,
   input: UpdateMessageInput,
+  // The acting user — recorded as createdByUserId when scheduling so the
+  // send-scheduled cron knows whose Gmail to send from later.
+  actingUserId?: string,
 ): Promise<{ id: string } | null> {
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   if (input.subject !== undefined) patch.subject = input.subject || null;
   if (input.body !== undefined) patch.body = input.body;
   if (input.toEmail !== undefined) patch.toEmail = input.toEmail || null;
+  if (input.scheduledAt !== undefined) {
+    patch.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+  }
   if (input.status !== undefined) {
     patch.status = input.status;
     // Stamp sentAt when the message leaves the queue as sent.
     if (input.status === "sent") patch.sentAt = new Date();
+    // Scheduling: remember who scheduled it (the cron sends from their Gmail).
+    if (input.status === "scheduled" && actingUserId) {
+      patch.createdByUserId = actingUserId;
+    }
+    // Leaving the scheduled state (cancel / send / dismiss) clears the time.
+    if (input.status !== "scheduled") patch.scheduledAt = null;
   }
 
   const [row] = await db

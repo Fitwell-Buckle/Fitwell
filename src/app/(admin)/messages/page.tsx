@@ -16,7 +16,8 @@ export default async function MessagesPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
-  const rows = await listOutboundMessages();
+  // Both the live queue (draft) and anything queued to auto-send (scheduled).
+  const rows = await listOutboundMessages({ statuses: ["draft", "scheduled"] });
   const tabs = LEADS_TABS.map((t) =>
     t.href === "/messages" ? { ...t, dot: rows.length > 0 } : t,
   );
@@ -28,6 +29,7 @@ export default async function MessagesPage() {
     subject: m.subject,
     body: m.body,
     status: m.status,
+    scheduledAt: m.scheduledAt ? m.scheduledAt.toISOString() : null,
     leadName: leadDisplayName({
       firstName: m.leadFirstName,
       lastName: m.leadLastName,

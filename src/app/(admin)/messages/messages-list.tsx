@@ -17,7 +17,25 @@ export interface MessageView {
   subject: string | null;
   body: string;
   status: string;
+  scheduledAt: string | null;
   leadName: string;
+}
+
+// "YYYY-MM-DDTHH:mm" in local time for a datetime-local input, defaulting to
+// ~1 hour out.
+function defaultScheduleLocal(): string {
+  const d = new Date(Date.now() + 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fmtWhen(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function MessageCard({ message }: { message: MessageView }) {
@@ -26,7 +44,36 @@ function MessageCard({ message }: { message: MessageView }) {
   const [body, setBody] = useState(message.body);
   const [busy, setBusy] = useState(false);
   const [rewriting, setRewriting] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState(defaultScheduleLocal());
+  const scheduled = message.status === "scheduled";
   const dirty = subject !== (message.subject ?? "") || body !== message.body;
+
+  // Schedule the send: persist any edits + set status/scheduledAt. The
+  // send-scheduled cron sends it from your Gmail once the time passes.
+  async function schedule() {
+    if (!message.toEmail) {
+      toast.error("This lead has no email address to send to.");
+      return;
+    }
+    const when = new Date(scheduleAt);
+    if (!scheduleAt || isNaN(when.getTime())) {
+      toast.error("Pick a date & time.");
+      return;
+    }
+    if (when.getTime() < Date.now()) {
+      toast.error("Pick a time in the future.");
+      return;
+    }
+    await patch(
+      {
+        subject: subject || null,
+        body,
+        status: "scheduled",
+        scheduledAt: when.toISOString(),
+      },
+      `Scheduled for ${fmtWhen(when.toISOString())}`,
+    );
+  }
 
   // Ask AI to rewrite the on-screen draft (optionally steered). Replaces the
   // editor contents — the user reviews, then Saves/Sends as usual.
@@ -154,7 +201,14 @@ function MessageCard({ message }: { message: MessageView }) {
               <span className="ml-2 text-zinc-500">{message.toEmail}</span>
             )}
           </div>
-          <Badge className="bg-amber-100 text-amber-800">Draft</Badge>
+          {scheduled ? (
+            <Badge className="bg-blue-100 text-blue-800">
+              Scheduled
+              {message.scheduledAt ? ` · ${fmtWhen(message.scheduledAt)}` : ""}
+            </Badge>
+          ) : (
+            <Badge className="bg-amber-100 text-amber-800">Draft</Badge>
+          )}
         </div>
 
         <div className="mt-3 space-y-2">
@@ -215,6 +269,34 @@ function MessageCard({ message }: { message: MessageView }) {
           >
             Send via Gmail
           </Button>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-2">
+          <span className="text-xs text-zinc-500">Schedule for later:</span>
+          <input
+            type="datetime-local"
+            value={scheduleAt}
+            onChange={(e) => setScheduleAt(e.target.value)}
+            className="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || !message.toEmail}
+            onClick={schedule}
+          >
+            {scheduled ? "Reschedule" : "Schedule send"}
+          </Button>
+          {scheduled && (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => patch({ status: "draft" }, "Schedule cancelled")}
+            >
+              Cancel schedule
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

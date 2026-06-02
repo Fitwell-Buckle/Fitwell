@@ -41,7 +41,7 @@ export default async function LeadDetailPage({
         .orderBy(asc(company.name)),
       listLeadCardImages(id),
       listMessagesForLead(id),
-      listOutboundMessages({ status: "draft", leadId: id }),
+      listOutboundMessages({ statuses: ["draft", "scheduled"], leadId: id }),
       listLeadComments(id),
       listAssignableOwners(),
     ]);
@@ -64,6 +64,7 @@ export default async function LeadDetailPage({
     subject: m.subject,
     body: m.body,
     status: m.status,
+    scheduledAt: m.scheduledAt ? m.scheduledAt.toISOString() : null,
     leadName,
   }));
 

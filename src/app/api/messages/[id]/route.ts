@@ -33,7 +33,7 @@ export async function PATCH(
   }
 
   try {
-    const updated = await updateOutboundMessage(id, input);
+    const updated = await updateOutboundMessage(id, input, session.user.id);
     if (!updated) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
