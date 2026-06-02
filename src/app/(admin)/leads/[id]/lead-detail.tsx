@@ -216,7 +216,7 @@ export function LeadDetail({
         toast.error(json?.error ?? "Couldn't draft the email");
         return;
       }
-      toast.success("Draft follow-up added to Messages to Send");
+      toast.success("Draft follow-up added to Next Steps");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't draft the email");
     } finally {
@@ -751,8 +751,8 @@ export function LeadDetail({
           </Button>
         </div>
         <p className="mt-2 text-right text-xs text-zinc-500">
-          Drafts an AI follow-up from these notes into Customers → Leads →
-          Messages to Send.
+          Drafts an AI follow-up from these notes into Customers → Leads → Next
+          Steps.
         </p>
       </CardContent>
     </Card>
@@ -852,12 +852,26 @@ export function LeadDetail({
               <div className="space-y-5">
                 {overview}
                 {notes}
+                <div>
+                  <p className="mb-2 px-1 text-sm font-semibold text-zinc-900">
+                    History
+                  </p>
+                  {history}
+                </div>
               </div>
             ),
           },
           {
+            value: "replies",
+            label: "Messages",
+            dot: hasNewReplies,
+            content: (
+              <LeadMessagesTab leadId={lead.id} contactEmail={lead.email} />
+            ),
+          },
+          {
             value: "messages",
-            label: "Messages to Send",
+            label: "Next Steps",
             dot: draftMessages.length > 0,
             content:
               draftMessages.length > 0 ? (
@@ -868,22 +882,13 @@ export function LeadDetail({
                 <Card>
                   <CardContent>
                     <p className="py-6 text-center text-sm text-zinc-400">
-                      Nothing to send. Draft a follow-up from the Initial
+                      No next steps yet. Draft a follow-up email from the Initial
                       meeting notes in Overview.
                     </p>
                   </CardContent>
                 </Card>
               ),
           },
-          {
-            value: "replies",
-            label: "Messages",
-            dot: hasNewReplies,
-            content: (
-              <LeadMessagesTab leadId={lead.id} contactEmail={lead.email} />
-            ),
-          },
-          { value: "history", label: "History", content: history },
         ]}
       />
     </div>

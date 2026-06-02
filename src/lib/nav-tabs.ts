@@ -5,7 +5,7 @@ import type { SectionTab } from "@/components/ui/section-tabs";
 
 export const LEADS_TABS: SectionTab[] = [
   { href: "/leads", label: "Leads" },
-  { href: "/messages", label: "Messages to Send" },
+  { href: "/messages", label: "Next Steps" },
 ];
 
 export const CUSTOMERS_TABS: SectionTab[] = [

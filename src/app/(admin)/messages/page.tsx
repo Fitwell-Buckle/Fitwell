@@ -9,7 +9,7 @@ import { LEADS_TABS } from "@/lib/nav-tabs";
 import { MessagesList } from "./messages-list";
 
 export const metadata: Metadata = {
-  title: "Messages to Send | Fitwell Admin",
+  title: "Next Steps | Fitwell Admin",
 };
 
 export default async function MessagesPage() {
