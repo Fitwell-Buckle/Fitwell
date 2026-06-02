@@ -47,4 +47,5 @@ data/
 
 # claude code: ephemeral agent worktrees (not part of the project)
 .claude/worktrees/
+
 .env*

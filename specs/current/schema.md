@@ -225,6 +225,51 @@ Daily snapshots extracted from external APIs. Append-only — one row per date p
 | `properties` | jsonb | Aggregated property breakdown |
 | `created_at` | timestamptz | |
 
+### `klaviyo_list_growth_daily`
+
+Daily snapshot of the newsletter list. Populated by `/api/cron/extract-klaviyo`. Migration `0020_fine_night_thrasher.sql`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK (UUID) |
+| `date` | timestamp | Day this row represents (UTC midnight) |
+| `list_id` | text | Klaviyo list ID; uniqueness keyed on `(date, list_id)` |
+| `list_name` | text | |
+| `subscribers` | integer | Total profile count — recorded on today's row only (Klaviyo has no daily history) |
+| `new_subscribers` | integer | Count of `Subscribed to List` events that day |
+| `unsubscribes` | integer | Count of `Unsubscribed` events that day |
+
+### `klaviyo_email_performance`
+
+One row per campaign; upserted on `campaign_id` so engagement keeps accruing rather than appending a time series. Populated by `/api/cron/extract-klaviyo`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `campaign_id` | text | PK (Klaviyo's ID) |
+| `campaign_name` | text | |
+| `sent_at` | timestamp | From `/api/campaigns` |
+| `sends` | integer | Recipients or delivered |
+| `opens` | integer | Unique opens |
+| `clicks` | integer | Unique clicks |
+| `conversions` | integer | Unique conversion profiles (Placed Order metric) |
+| `revenue_cents` | integer | `conversion_value` × 100 |
+| `captured_at` | timestamp | Last sync that touched this row |
+
+### `klaviyo_flow_attribution`
+
+Per-order attribution from Klaviyo flows. **Phase 0 grain:** aggregate rows only — one row per flow per sync, `customer_id` and `order_id` NULL, sourced from `/api/flow-values-reports`. Per-order grain (rows with `customer_id` + `order_id` populated, from the Placed Order event stream) is a Phase 0.5 follow-up; the schema is shaped for it now to avoid a rewrite.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK (UUID) |
+| `flow_id` | text | Klaviyo flow ID |
+| `flow_name` | text | |
+| `customer_id` | text | FK → `customer.id`, NULL for aggregate rows |
+| `order_id` | text | FK → `order.id`, NULL for aggregate rows |
+| `attributed_revenue_cents` | integer | |
+| `attributed_order_count` | integer | Conversion uniques (count of attributed orders for aggregate rows; 1 for per-order rows) |
+| `touched_at` | timestamp | Sync time for aggregate rows; order time for per-order rows |
+
 ## Lifecycle
 
 ### `customer_event`

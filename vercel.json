@@ -25,6 +25,10 @@
       "schedule": "15 7 * * *"
     },
     {
+      "path": "/api/cron/extract-klaviyo",
+      "schedule": "30 7 * * *"
+    },
+    {
       "path": "/api/cron/extract-posthog",
       "schedule": "0 */3 * * *"
     },

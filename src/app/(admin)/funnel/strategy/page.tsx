@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { parseDateRange } from "@/lib/date-range";
@@ -13,10 +14,14 @@ import {
   type FunnelStageRow,
   type RetentionStageRow,
   type ChannelRow,
+  type RetentionStage,
 } from "@/lib/funnel/strategy";
+import { RETENTION_STAGE_META } from "@/lib/funnel/classify";
+import { getKlaviyoOverview, type KlaviyoOverview } from "@/lib/klaviyo/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Mono } from "@/components/ui/data-table";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Strategic Funnel | Fitwell Admin",
@@ -131,6 +136,95 @@ function RetentionStageBar({ row }: { row: RetentionStageRow }) {
   );
 }
 
+// Retention-stage colors used by both filter pills and segment-mix bars.
+// Order matches the classifier hierarchy so the stacked bar reads
+// "newest-buyer left → most-engaged right".
+const SEGMENT_ORDER: RetentionStage[] = [
+  "first_buyer",
+  "second_buyer",
+  "multi_unit",
+  "outfitter",
+  "advocate",
+];
+
+const SEGMENT_COLORS: Record<RetentionStage, { bar: string; pill: string }> = {
+  first_buyer: { bar: "bg-zinc-300", pill: "border-zinc-300 text-zinc-700" },
+  second_buyer: { bar: "bg-sky-400", pill: "border-sky-400 text-sky-700" },
+  multi_unit: { bar: "bg-amber-400", pill: "border-amber-400 text-amber-700" },
+  outfitter: { bar: "bg-emerald-500", pill: "border-emerald-500 text-emerald-700" },
+  advocate: { bar: "bg-violet-500", pill: "border-violet-500 text-violet-700" },
+};
+
+function SegmentMixBar({ row }: { row: ChannelRow }) {
+  if (row.customers === 0) return null;
+  return (
+    <div className="mt-1.5 flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
+      {SEGMENT_ORDER.map((stage) => {
+        const n = row.segmentMix[stage];
+        if (n === 0) return null;
+        const pct = (n / row.customers) * 100;
+        return (
+          <div
+            key={stage}
+            className={SEGMENT_COLORS[stage].bar}
+            style={{ width: `${pct}%` }}
+            title={`${RETENTION_STAGE_META[stage].label}: ${n} (${pct.toFixed(1)}%)`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function SegmentFilterPills({
+  active,
+  buildHref,
+}: {
+  active: RetentionStage | null;
+  buildHref: (segment: RetentionStage | null) => string;
+}) {
+  const pillBase =
+    "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors";
+  const allPill = active === null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[11px] uppercase tracking-wider text-zinc-500">
+        Filter channel breakdown by segment:
+      </span>
+      <Link
+        href={buildHref(null)}
+        className={cn(
+          pillBase,
+          allPill
+            ? "border-zinc-900 bg-zinc-900 text-white"
+            : "border-zinc-200 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900",
+        )}
+      >
+        All
+      </Link>
+      {SEGMENT_ORDER.map((stage) => {
+        const isActive = active === stage;
+        const c = SEGMENT_COLORS[stage];
+        return (
+          <Link
+            key={stage}
+            href={buildHref(stage)}
+            className={cn(
+              pillBase,
+              isActive
+                ? `${c.pill} bg-white shadow-[inset_0_0_0_1px_currentColor]`
+                : `border-zinc-200 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900`,
+            )}
+          >
+            <span className={cn("h-2 w-2 rounded-full", c.bar)} />
+            {RETENTION_STAGE_META[stage].label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 function ChannelTable({ rows }: { rows: ChannelRow[] }) {
   if (rows.length === 0) {
     return (
@@ -163,7 +257,10 @@ function ChannelTable({ rows }: { rows: ChannelRow[] }) {
                 key={row.channel}
                 className="border-b border-zinc-100 last:border-b-0"
               >
-                <td className="py-2.5 pr-4 text-zinc-900">{row.label}</td>
+                <td className="py-2.5 pr-4 text-zinc-900">
+                  <div>{row.label}</div>
+                  <SegmentMixBar row={row} />
+                </td>
                 <td className="py-2.5 pr-4 text-right font-mono text-zinc-900">
                   {formatCount(row.customers)}
                 </td>
@@ -208,6 +305,230 @@ function ChannelTable({ rows }: { rows: ChannelRow[] }) {
   );
 }
 
+function FlowBucketBar({
+  label,
+  revenueCents,
+  orders,
+  totalCents,
+  color,
+}: {
+  label: string;
+  revenueCents: number;
+  orders: number;
+  totalCents: number;
+  color: string;
+}) {
+  const pct = totalCents > 0 ? (revenueCents / totalCents) * 100 : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="font-medium text-zinc-700">{label}</span>
+        <span className="font-mono text-zinc-900">
+          {formatCents(revenueCents)}{" "}
+          <span className="text-zinc-400">· {orders} orders</span>
+        </span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-zinc-100">
+        <div
+          className={`h-full rounded-full ${color}`}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
+      </div>
+      <div className="text-[10px] text-zinc-400">
+        {pct.toFixed(1)}% of attributed flow revenue
+      </div>
+    </div>
+  );
+}
+
+function KlaviyoSection({ k }: { k: KlaviyoOverview }) {
+  if (!k.hasData) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Email program (Klaviyo API)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-zinc-500">
+            No data yet. The <Mono>/api/cron/extract-klaviyo</Mono> cron
+            runs daily at 07:30 UTC. Trigger it manually with{" "}
+            <Mono>curl https://admin.fitwellbuckle.co/api/cron/extract-klaviyo</Mono>{" "}
+            (signed in as admin) to populate.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const netLabel =
+    k.growth30dNet >= 0 ? `+${formatCount(k.growth30dNet)}` : `${formatCount(k.growth30dNet)}`;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Email program (Klaviyo API)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <p className="text-xs text-zinc-500">
+          Live email-side measurement from the Klaviyo API. Replaces the
+          UTM-heuristic acquisition-vs-retention split in{" "}
+          <Mono>scripts/klaviyo-acquisition-vs-retention.ts</Mono>.
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+              Subscribers
+            </div>
+            <div className="mt-1 font-mono text-2xl text-zinc-900">
+              {k.subscribersLatest !== null
+                ? formatCount(k.subscribersLatest)
+                : "—"}
+            </div>
+            <div className="text-[11px] text-zinc-400">latest snapshot</div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+              30-day net change
+            </div>
+            <div
+              className={`mt-1 font-mono text-2xl ${
+                k.growth30dNet >= 0 ? "text-emerald-700" : "text-rose-700"
+              }`}
+            >
+              {netLabel}
+            </div>
+            <div className="text-[11px] text-zinc-400">
+              new − unsub (Klaviyo events)
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+              Flow revenue (90d)
+            </div>
+            <div className="mt-1 font-mono text-2xl text-zinc-900">
+              {formatCents(k.flowSplit.totalRevenueCents)}
+            </div>
+            <div className="text-[11px] text-zinc-400">
+              attributed across {k.flowSplit.flows.length} flows
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 text-xs font-medium text-zinc-700">
+            Welcome vs. post-purchase
+          </div>
+          <div className="space-y-3">
+            <FlowBucketBar
+              label="Welcome flow"
+              revenueCents={k.flowSplit.welcomeRevenueCents}
+              orders={k.flowSplit.welcomeOrders}
+              totalCents={k.flowSplit.totalRevenueCents}
+              color="bg-emerald-500"
+            />
+            <FlowBucketBar
+              label="Post-purchase"
+              revenueCents={k.flowSplit.postPurchaseRevenueCents}
+              orders={k.flowSplit.postPurchaseOrders}
+              totalCents={k.flowSplit.totalRevenueCents}
+              color="bg-blue-500"
+            />
+            <FlowBucketBar
+              label="Other flows"
+              revenueCents={k.flowSplit.otherRevenueCents}
+              orders={k.flowSplit.otherOrders}
+              totalCents={k.flowSplit.totalRevenueCents}
+              color="bg-zinc-400"
+            />
+          </div>
+        </div>
+
+        {k.topCampaigns.length > 0 && (
+          <div>
+            <div className="mb-2 text-xs font-medium text-zinc-700">
+              Top 5 campaigns by attributed revenue
+            </div>
+            <div className="overflow-hidden rounded-md border border-zinc-200">
+              <table className="w-full text-xs">
+                <thead className="bg-zinc-50 text-zinc-600">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Campaign</th>
+                    <th className="px-3 py-2 text-right font-medium">Sends</th>
+                    <th className="px-3 py-2 text-right font-medium">Opens</th>
+                    <th className="px-3 py-2 text-right font-medium">Clicks</th>
+                    <th className="px-3 py-2 text-right font-medium">Orders</th>
+                    <th className="px-3 py-2 text-right font-medium">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {k.topCampaigns.map((c) => (
+                    <tr key={c.campaignId} className="border-t border-zinc-100">
+                      <td className="px-3 py-2 text-zinc-900">
+                        {c.campaignName ?? c.campaignId}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {formatCount(c.sends)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {formatCount(c.opens)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {formatCount(c.clicks)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {formatCount(c.conversions)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {formatCents(c.revenueCents)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Whitelist of valid segment values for the ?segment= URL param —
+// avoids passing unsanitized input into the data layer.
+const VALID_SEGMENTS = new Set<RetentionStage>([
+  "first_buyer",
+  "second_buyer",
+  "multi_unit",
+  "outfitter",
+  "advocate",
+]);
+
+function parseSegment(
+  params: Record<string, string | string[] | undefined>,
+): RetentionStage | null {
+  const raw = typeof params.segment === "string" ? params.segment : null;
+  if (raw && VALID_SEGMENTS.has(raw as RetentionStage)) {
+    return raw as RetentionStage;
+  }
+  return null;
+}
+
+function buildSegmentHref(
+  current: Record<string, string | string[] | undefined>,
+  segment: RetentionStage | null,
+): string {
+  const usp = new URLSearchParams();
+  // Preserve other params (date range, etc.) but drop the old segment.
+  for (const [k, v] of Object.entries(current)) {
+    if (k === "segment") continue;
+    if (typeof v === "string") usp.set(k, v);
+  }
+  if (segment) usp.set("segment", segment);
+  const qs = usp.toString();
+  return qs ? `?${qs}` : "?";
+}
+
 export default async function FunnelStrategyPage({
   searchParams,
 }: {
@@ -218,13 +539,15 @@ export default async function FunnelStrategyPage({
 
   const params = await searchParams;
   const { from, to } = parseDateRange(params);
+  const segmentFilter = parseSegment(params);
 
-  const [acq, retention, channels] = await Promise.all([
+  const [acq, retention, channels, klaviyo] = await Promise.all([
     getAcquisitionFunnel(from, to),
     // Retention loop + channel breakdown are full-customer-base views
     // (LTV makes no sense windowed); they ignore the date range.
     getRetentionLoop(),
-    getChannelBreakdown(),
+    getChannelBreakdown(segmentFilter ?? undefined),
+    getKlaviyoOverview(),
   ]);
 
   return (
@@ -292,15 +615,36 @@ export default async function FunnelStrategyPage({
             <CardTitle>Channel entry breakdown</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-4 text-xs text-zinc-500">
+            <p className="mb-3 text-xs text-zinc-500">
               First-touch UTM mapped to the channel taxonomy in{" "}
-              <Mono>funnel.md</Mono>. Welcome-flow vs. retention split for
-              Klaviyo is decided by campaign-name heuristic; see{" "}
+              <Mono>funnel.md</Mono>. Each row shows a stacked segment-mix
+              bar under the channel name — colors match the filter pills.
+              Welcome-flow vs. retention split for Klaviyo is decided by
+              campaign-name heuristic; see{" "}
               <Mono>src/lib/funnel/classify.ts</Mono>.
             </p>
+            <div className="mb-4">
+              <SegmentFilterPills
+                active={segmentFilter}
+                buildHref={(seg) => buildSegmentHref(params, seg)}
+              />
+              {segmentFilter && (
+                <p className="mt-2 text-[11px] italic text-zinc-500">
+                  Filtered to{" "}
+                  <Mono>{RETENTION_STAGE_META[segmentFilter].label}</Mono>{" "}
+                  customers only. Channel rows below count only customers
+                  in this segment; segment-mix bars show that single
+                  segment at 100%. Clear filter to see the full mix.
+                </p>
+              )}
+            </div>
             <ChannelTable rows={channels} />
           </CardContent>
         </Card>
+      </section>
+
+      <section>
+        <KlaviyoSection k={klaviyo} />
       </section>
 
       <section>
@@ -324,21 +668,32 @@ export default async function FunnelStrategyPage({
                 <strong>brand_aware</strong>.
               </li>
               <li>
-                <strong>Klaviyo API</strong> — sync list size, flow
-                attribution, and per-email UTMs so the welcome-flow vs.
-                post-purchase split becomes a live query, not a heuristic
-                on campaign name.
+                <strong>Klaviyo per-order attribution</strong> — Phase 0
+                shipped aggregate flow totals (above). Per-order
+                grain (joining the Placed Order event stream to the{" "}
+                <Mono>order</Mono> table) is a Phase 0.5 follow-up so the
+                channel breakdown can show per-flow rows instead of a
+                single UTM-derived Klaviyo row.
               </li>
               <li>
                 <strong>Judge.me API</strong> — live <strong>advocate</strong>{" "}
                 count instead of the 2026-05-26 snapshot.
               </li>
               <li>
-                <strong>Campaign-name parsing for cold vs. retargeting</strong>{" "}
-                — split <Mono>metaAdsDaily</Mono> into{" "}
-                <strong>unaware</strong> (cold impressions) vs. retargeting
-                impressions (which belong in <strong>considering</strong>
-                ).
+                <strong>Upper-funnel persona × stage cross-cut</strong> —
+                segment filter pills above the channel breakdown work for
+                customers we've classified post-purchase. Cutting{" "}
+                <strong>unaware</strong> /{" "}
+                <strong>problem_aware</strong> by persona requires PostHog
+                persona inference from behavior patterns; deferred until
+                PostHog Phase 1+2 lands.
+              </li>
+              <li>
+                <strong>Order sequence-position</strong> — Phase 4 of the
+                strategy-funnel iteration plan. Adds an{" "}
+                <Mono>order.order_sequence</Mono> column so any channel can
+                be split between acquisition-position (sequence = 1) and
+                retention-position (sequence &gt; 1).
               </li>
             </ul>
           </CardContent>

@@ -13,6 +13,7 @@ All cron jobs run as Vercel Cron serverless functions. Schedules defined in `ver
 | Extract Google Ads | `/api/cron/extract-google-ads` | `45 6 * * *` | Daily 6:45 UTC | Previous day's ad spend/conversions |
 | Extract GSC | `/api/cron/extract-gsc` | `0 7 * * *` | Daily 7:00 UTC | Search data (3-day lag) |
 | Extract PostHog | `/api/cron/extract-posthog` | `0 */3 * * *` | Every 3h | Aggregate event counts |
+| Extract Klaviyo | `/api/cron/extract-klaviyo` | `30 7 * * *` | Daily 7:30 UTC | Campaign + flow performance, list growth |
 | Health Check | `/api/cron/health` | `0 */4 * * *` | Every 4h | Verify DB, API connections |
 | Production deadline alerts | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Daily 13:00 UTC | Email owner + suppliers re: items due/overdue, complete POs ready to receive |
 | Lead follow-up nudges | `/api/cron/lead-followups` | `0 14 * * *` | Daily 14:00 UTC | Draft a 2nd follow-up for leads whose first follow-up was sent ≥N days ago with no reply. N (default 14) + an on/off toggle are configured in Settings → Lead follow-ups (`lead_followup_settings`); disabled = no-op |
@@ -89,6 +90,15 @@ Requests without valid secret return `401`.
 1. Query PostHog events API for events since last extraction
 2. Aggregate by event_name + page + date
 3. Insert into `posthog_daily`
+
+## Extract Klaviyo — Detail
+
+1. Discover metric IDs by name (Placed Order / Subscribed to List / Unsubscribed) via `/api/metrics`
+2. Discover the newsletter list — explicit `KLAVIYO_NEWSLETTER_LIST_ID` env var, else largest list (with a warning)
+3. `POST /api/campaign-values-reports` for last 90 days; upsert into `klaviyo_email_performance` keyed on `campaign_id`
+4. `POST /api/flow-values-reports` for last 90 days; delete today's aggregate rows, re-insert one row per flow with `customer_id`/`order_id` NULL
+5. `POST /api/metric-aggregates` for Subscribed + Unsubscribed daily counts (last 90 days); upsert into `klaviyo_list_growth_daily` on `(date, list_id)`; snapshot list profile_count onto today's row only
+6. Client retries `429` and `5xx` up to 3 times, honors `Retry-After`. Returns counts per table for logging.
 
 ## Health Check — Detail
 

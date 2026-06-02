@@ -232,6 +232,41 @@ Daily cron at 06:45 UTC:
 
 ---
 
+## Klaviyo
+
+**Purpose**: Email/SMS platform. Welcome flow drives a measured +27.6% LTV lift; post-purchase + win-back + M4 cross-sell flows are in the 360 campaign plan. Phase 0 (read side) is live; write side (campaign + flow authoring from this repo) is Phase 2–4 of `specs/work-plans/todo/klaviyo-integration.md`.
+
+| Detail | Value |
+|--------|-------|
+| Base URL | `https://a.klaviyo.com/api` |
+| Auth | `Authorization: Klaviyo-API-Key <key>` (env: `KLAVIYO_API_KEY`) |
+| API revision | `2026-04-15` (pinned in `src/lib/klaviyo/client.ts`) |
+| Optional env | `KLAVIYO_NEWSLETTER_LIST_ID` — locks the list used for growth metrics; if unset, the cron picks the largest list and warns |
+| Client | `src/lib/klaviyo/client.ts` |
+| Extract | `src/lib/klaviyo/extract.ts`, cron at `/api/cron/extract-klaviyo` |
+
+### Read endpoints used (Phase 0)
+
+- `POST /api/campaign-values-reports` — per-campaign sends/opens/clicks/conversions/revenue
+- `POST /api/flow-values-reports` — per-flow attributed revenue (aggregate)
+- `POST /api/metric-aggregates` — daily Subscribed / Unsubscribed event counts
+- `GET /api/lists` — list metadata + profile counts
+- `GET /api/metrics` — discover the Placed Order conversion metric ID
+
+### Rate limits
+
+Reports endpoints: burst 1/s, steady 2/min, daily 225/req. Daily cron is well under, but the client retries on `429` with `Retry-After`.
+
+### Data written
+
+| Table | Granularity | Populated by |
+|-------|-------------|--------------|
+| `klaviyo_list_growth_daily` | One row per (date, list_id) | `extractListGrowth` |
+| `klaviyo_email_performance` | One row per campaign (upsert on `campaign_id`) | `extractCampaignPerformance` |
+| `klaviyo_flow_attribution` | One row per flow per sync (`customer_id` + `order_id` NULL); per-order grain is a Phase 0.5 follow-up | `extractFlowAggregates` |
+
+---
+
 ## Resend
 
 **Purpose**: Transactional email delivery.

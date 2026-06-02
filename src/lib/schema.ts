@@ -1627,3 +1627,84 @@ export const leadRelations = relations(lead, ({ one }) => ({
     references: [customer.id],
   }),
 }));
+
+// ─── Klaviyo email/SMS analytics ────────────────────────────────────
+// Populated by /api/cron/extract-klaviyo. See specs/work-plans/todo/
+// klaviyo-integration.md (Phase 0). Read-side measurement that
+// replaces the UTM-heuristic split in scripts/klaviyo-acquisition-
+// vs-retention.ts.
+
+// Daily snapshot of newsletter list size + new/unsub events. Unique on
+// (date, list_id) so each day has at most one row per tracked list.
+export const klaviyoListGrowthDaily = pgTable(
+  "klaviyo_list_growth_daily",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    date: timestamp("date", { mode: "date" }).notNull(),
+    listId: text("list_id").notNull(),
+    listName: text("list_name"),
+    subscribers: integer("subscribers"),
+    newSubscribers: integer("new_subscribers").default(0),
+    unsubscribes: integer("unsubscribes").default(0),
+  },
+  (t) => [
+    index("klaviyo_list_growth_daily_date_idx").on(t.date),
+    uniqueIndex("klaviyo_list_growth_daily_date_list_uniq").on(
+      t.date,
+      t.listId,
+    ),
+  ],
+);
+
+// One row per campaign. Cumulative engagement totals (opens/clicks/etc
+// keep accruing for weeks after send), so the cron upserts on
+// campaign_id rather than appending a time series.
+export const klaviyoEmailPerformance = pgTable(
+  "klaviyo_email_performance",
+  {
+    campaignId: text("campaign_id").primaryKey(),
+    campaignName: text("campaign_name"),
+    sentAt: timestamp("sent_at", { mode: "date" }),
+    sends: integer("sends").default(0),
+    opens: integer("opens").default(0),
+    clicks: integer("clicks").default(0),
+    conversions: integer("conversions").default(0),
+    revenueCents: integer("revenue_cents").default(0),
+    capturedAt: timestamp("captured_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("klaviyo_email_performance_sent_at_idx").on(t.sentAt)],
+);
+
+// Flow attribution. Phase 0 populates AGGREGATE rows (one per flow at
+// each sync, customer_id/order_id NULL) from /api/flow-values-reports
+// so the dashboard can show flow-level totals immediately. Per-order
+// grain (rows with customer_id + order_id populated, sourced from the
+// "Placed Order" event stream with $flow attribution) is a Phase 0.5
+// follow-up — the schema is shaped for it now to avoid a rewrite.
+export const klaviyoFlowAttribution = pgTable(
+  "klaviyo_flow_attribution",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    flowId: text("flow_id").notNull(),
+    flowName: text("flow_name"),
+    customerId: text("customer_id").references(() => customer.id, {
+      onDelete: "set null",
+    }),
+    orderId: text("order_id").references(() => order.id, {
+      onDelete: "set null",
+    }),
+    attributedRevenueCents: integer("attributed_revenue_cents").default(0),
+    attributedOrderCount: integer("attributed_order_count").default(0),
+    touchedAt: timestamp("touched_at", { mode: "date" }).notNull(),
+  },
+  (t) => [
+    index("klaviyo_flow_attribution_flow_id_idx").on(t.flowId),
+    index("klaviyo_flow_attribution_touched_at_idx").on(t.touchedAt),
+  ],
+);
