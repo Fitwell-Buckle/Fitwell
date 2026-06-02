@@ -289,6 +289,39 @@ export async function leadIdsWithDraftMessages(): Promise<Set<string>> {
   );
 }
 
+// Company IDs that have a pending follow-up (draft or scheduled) for any of
+// their attached People — a lead or a Shopify customer linked to the company.
+// Used to flag rows on the B2B customers list with a "Next Steps" dot.
+export async function companyIdsWithNextSteps(): Promise<Set<string>> {
+  const pending = ["draft", "scheduled"];
+  const [viaLeads, viaCustomers] = await Promise.all([
+    db
+      .selectDistinct({ companyId: lead.companyId })
+      .from(outboundMessage)
+      .innerJoin(lead, eq(outboundMessage.leadId, lead.id))
+      .where(
+        and(
+          inArray(outboundMessage.status, pending),
+          isNotNull(lead.companyId),
+        ),
+      ),
+    db
+      .selectDistinct({ companyId: customer.companyId })
+      .from(outboundMessage)
+      .innerJoin(customer, eq(outboundMessage.customerId, customer.id))
+      .where(
+        and(
+          inArray(outboundMessage.status, pending),
+          isNotNull(customer.companyId),
+        ),
+      ),
+  ]);
+  const set = new Set<string>();
+  for (const r of viaLeads) if (r.companyId) set.add(r.companyId);
+  for (const r of viaCustomers) if (r.companyId) set.add(r.companyId);
+  return set;
+}
+
 export const updateMessageSchema = z
   .object({
     subject: z.string().max(500).nullish(),

@@ -39,6 +39,9 @@ export interface Company {
   // person → free-text). The contactName/contactEmail above remain the editable
   // free-text fallback used by the form.
   contactLabel: string | null;
+  // True when a follow-up (draft/scheduled) is queued for one of this company's
+  // attached people — drives the "Next Steps" dot.
+  hasNextStep: boolean;
   address: string | null;
   customerId: string | null;
   notes: string | null;
@@ -225,13 +228,14 @@ export function CompaniesManager({
               <TableHead>Price tier</TableHead>
               <TableHead>Can order</TableHead>
               <TableHead>Contact</TableHead>
+              <TableHead>Next Steps</TableHead>
               <TableHead className="text-right">Edit</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredCompanies.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-zinc-400">
+                <TableCell colSpan={6} className="py-8 text-center text-zinc-400">
                   {companies.length === 0
                     ? "No brands yet."
                     : "No brands match your search."}
@@ -267,6 +271,19 @@ export function CompaniesManager({
                   </TableCell>
                   <TableCell className="text-zinc-500">
                     {c.contactLabel ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    {c.hasNextStep ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700"
+                        title="A follow-up is queued for this customer in Next Steps"
+                      >
+                        <span className="h-2 w-2 rounded-full bg-blue-500" />
+                        Next step
+                      </span>
+                    ) : (
+                      <span className="text-xs text-zinc-300">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button size="sm" variant="outline" onClick={() => openCompany(c.id, c)}>

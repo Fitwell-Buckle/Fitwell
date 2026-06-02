@@ -11,6 +11,7 @@ import {
   countNewCustomerMessages,
   listCustomerMessages,
 } from "@/lib/crm/customer-messages";
+import { companyIdsWithNextSteps } from "@/lib/crm/messages";
 import { leadDisplayName } from "@/lib/crm/display";
 import {
   resolveCompanyContact,
@@ -27,8 +28,15 @@ export default async function BrandsPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
-  const [tiers, companies, peopleLeads, peopleCustomers, messages, counts] =
-    await Promise.all([
+  const [
+    tiers,
+    companies,
+    peopleLeads,
+    peopleCustomers,
+    messages,
+    counts,
+    nextStepCompanyIds,
+  ] = await Promise.all([
       db.query.priceTier.findMany({ orderBy: asc(priceTier.name) }),
       db.query.company.findMany({
         orderBy: asc(company.name),
@@ -60,6 +68,7 @@ export default async function BrandsPage() {
         .where(isNotNull(customer.companyId)),
       listCustomerMessages("b2b"),
       countNewCustomerMessages(),
+      companyIdsWithNextSteps(),
     ]);
 
   // Build per-company People (leads + customers) → resolve each company's
@@ -137,6 +146,7 @@ export default async function BrandsPage() {
             // Resolved Contact shown in the list (primary person → single
             // person → free-text); the form still edits the free-text fields.
             contactLabel: resolved.name ?? resolved.email ?? null,
+            hasNextStep: nextStepCompanyIds.has(c.id),
             address: c.address,
             customerId: c.customerId,
             notes: c.notes,
