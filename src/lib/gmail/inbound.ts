@@ -3,10 +3,10 @@ import { db } from "@/lib/db";
 import { account, user as userTable } from "@/lib/schema";
 import { parseEmailAddress } from "@/lib/crm/customer-match";
 import { buildInternalEmailMatcher } from "@/lib/crm/internal-email";
-import { buildReplyQuery } from "./reply-query";
+import { buildReplyQuery, buildSentQuery } from "./reply-query";
 import { ensureFreshAccessToken, getGoogleAccount } from "./token";
 
-export { buildReplyQuery };
+export { buildReplyQuery, buildSentQuery };
 
 export interface ReplyCheck {
   // True when at least one inbound message from the address exists since the date.
@@ -31,6 +31,10 @@ export interface InboundMessage {
   // The owner email of that inbox — used to target the right Google account
   // when deep-linking ("authuser").
   mailboxEmail?: string;
+  // Only set for the "Sent" direction: the contact this message was addressed
+  // to. Used to seed a follow-up Compose (replying to the recipient, not to us,
+  // who is the `from` on a sent message).
+  to?: string;
 }
 
 // A team member whose Gmail we can search: a connected Google account that
@@ -172,6 +176,41 @@ export async function listInboundFrom(
   }
 }
 
+// Fetch up to `max` recent messages WE sent to `toEmail` from `userId`'s Gmail
+// Sent mailbox (newest first). Mirror of `listInboundFrom` for the other
+// direction. Each result is tagged with `to` so the caller can seed a follow-up
+// reply to the recipient (the `from` on a sent message is us, not the contact).
+// Returns [] on any failure / no Google connection.
+export async function listSentTo(
+  userId: string,
+  toEmail: string,
+  max = 10,
+): Promise<InboundMessage[]> {
+  if (!toEmail) return [];
+  try {
+    const acc = await getGoogleAccount(userId);
+    if (!acc?.access_token) return [];
+    const token = await ensureFreshAccessToken(acc);
+    if (!token) return [];
+
+    const q = buildSentQuery(toEmail);
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=${max}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!listRes.ok) return [];
+    const listData = (await listRes.json()) as {
+      messages?: { id: string }[];
+    };
+    const refs = listData.messages ?? [];
+    if (refs.length === 0) return [];
+    const msgs = await hydrateMessages(token, refs);
+    return msgs.map((m) => ({ ...m, to: toEmail }));
+  } catch {
+    return [];
+  }
+}
+
 // Does `fromEmail` appear as a sender in `userId`'s Gmail since `since`?
 // Uses the user's stored Google OAuth token (auto-refreshed). Never throws —
 // returns {checked:false} on any failure so the caller can decide.
@@ -232,6 +271,31 @@ export async function listInboundFromAllMailboxes(
     .flat()
     .filter((m) => !isInternal(parseEmailAddress(m.from)))
     .sort((a, b) => b.dateMs - a.dateMs);
+}
+
+// Every message WE sent to `toEmail` across ALL connected team inboxes, newest
+// first, each tagged with the inbox (team member) it was sent from. Mirror of
+// `listInboundFromAllMailboxes` for the "Sent" direction — so the Messages tab's
+// Sent view shows what you AND your colleagues sent the contact. No internal-
+// sender filter here: on a sent message the sender is always us, by definition.
+export async function listSentToAllMailboxes(
+  toEmail: string,
+  maxPerMailbox = 10,
+): Promise<InboundMessage[]> {
+  if (!toEmail) return [];
+  const mailboxes = await listConnectedMailboxes();
+  if (mailboxes.length === 0) return [];
+  const perBox = await Promise.all(
+    mailboxes.map(async (mb) => {
+      const msgs = await listSentTo(mb.userId, toEmail, maxPerMailbox);
+      return msgs.map((m) => ({
+        ...m,
+        mailbox: mb.label,
+        mailboxEmail: mb.email ?? undefined,
+      }));
+    }),
+  );
+  return perBox.flat().sort((a, b) => b.dateMs - a.dateMs);
 }
 
 // Does `fromEmail` appear in ANY connected team inbox since `since`? Used for

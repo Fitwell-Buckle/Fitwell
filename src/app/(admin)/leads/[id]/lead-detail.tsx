@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DetailTabs } from "@/components/ui/detail-tabs";
 import { Input } from "@/components/ui/input";
 import { MessagesList, type MessageView } from "@/app/(admin)/messages/messages-list";
-import { RepliesTab } from "./replies-tab";
+import { LeadMessagesTab } from "./messages-tab";
 import { formatAddress } from "@/lib/crm/address";
 import { buildLeadTimeline } from "@/lib/crm/timeline";
 import {
@@ -877,9 +877,11 @@ export function LeadDetail({
           },
           {
             value: "replies",
-            label: "Replies",
+            label: "Messages",
             dot: hasNewReplies,
-            content: <RepliesTab leadId={lead.id} />,
+            content: (
+              <LeadMessagesTab leadId={lead.id} contactEmail={lead.email} />
+            ),
           },
           { value: "history", label: "History", content: history },
         ]}

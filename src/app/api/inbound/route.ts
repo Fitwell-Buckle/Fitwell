@@ -3,15 +3,17 @@ import { auth } from "@/lib/auth";
 import {
   listConnectedMailboxes,
   listInboundFromAllMailboxes,
+  listSentToAllMailboxes,
   type InboundMessage,
 } from "@/lib/gmail/inbound";
 
 export const runtime = "nodejs";
 
-// Inbound email history for one or more addresses (comma-separated `emails`),
-// searched across all connected team inboxes. Used by the per-customer /
-// per-company Messages view. Returns `{ replies, mailboxes }`; `[]` when no
-// emails / no connected Google account.
+// Email history for one or more addresses (comma-separated `emails`), searched
+// across all connected team inboxes. Used by the per-customer / per-company /
+// per-supplier Messages view. `?direction=sent` returns mail WE sent those
+// addresses; otherwise mail they sent us. Returns `{ replies, mailboxes }`;
+// `[]` when no emails / no connected Google account.
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) {
@@ -21,9 +23,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const url = new URL(req.url);
+  const direction =
+    url.searchParams.get("direction") === "sent" ? "sent" : "received";
   const emails = [
     ...new Set(
-      (new URL(req.url).searchParams.get("emails") ?? "")
+      (url.searchParams.get("emails") ?? "")
         .split(",")
         .map((s) => s.trim().toLowerCase())
         .filter(Boolean),
@@ -33,8 +38,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ data: { replies: [], mailboxes: [] } });
   }
 
+  const lister =
+    direction === "sent" ? listSentToAllMailboxes : listInboundFromAllMailboxes;
   const [perEmail, mailboxes] = await Promise.all([
-    Promise.all(emails.map((e) => listInboundFromAllMailboxes(e))),
+    Promise.all(emails.map((e) => lister(e))),
     listConnectedMailboxes(),
   ]);
 

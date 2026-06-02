@@ -1,29 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  MessageList,
-  type MessageListItem,
-  type MessageRelationship,
-} from "./message-list";
-import { ComposeMessageButton } from "./compose-message";
-import { parseDisplayName, parseEmailAddress } from "@/lib/crm/customer-match";
+import { MessagesPanel } from "./messages-panel";
+import type { MessageRelationship } from "./message-list";
 
-interface Reply {
-  id: string;
-  threadId: string;
-  from: string;
-  subject: string;
-  snippet: string;
-  dateMs: number;
-  mailbox?: string;
-  mailboxEmail?: string;
-}
-
-// Inbound email history for a customer/company/supplier (one or more addresses)
-// across all connected team inboxes. Rendering is delegated to the shared
-// <MessageList> so the interface stays identical to the lead Replies tab.
+// Email history for a customer/company/supplier (one or more addresses) across
+// all connected team inboxes, with a Received/Sent toggle. The toggle, fetching
+// and rendering all live in the shared <MessagesPanel>, so this view stays
+// identical to the lead Messages tab.
 export function InboundMessages({
   emails,
   relationship,
@@ -36,86 +20,26 @@ export function InboundMessages({
   >;
   title?: string;
 }) {
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [replies, setReplies] = useState<Reply[]>([]);
-  const [mailboxes, setMailboxes] = useState<string[]>([]);
-
-  const param = emails.filter(Boolean).join(",");
-
-  useEffect(() => {
-    if (!param) {
-      setReplies([]);
-      setState("ready");
-      return;
-    }
-    let alive = true;
-    setState("loading");
-    fetch(`/api/inbound?emails=${encodeURIComponent(param)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => {
-        if (!alive) return;
-        setReplies(d.data?.replies ?? []);
-        setMailboxes(d.data?.mailboxes ?? []);
-        setState("ready");
-      })
-      .catch(() => alive && setState("error"));
-    return () => {
-      alive = false;
-    };
-  }, [param]);
-
-  const items: MessageListItem[] = replies.map((r) => ({
-    id: r.id,
-    threadId: r.threadId,
-    from: r.from,
-    fromEmail: parseEmailAddress(r.from) ?? "",
-    contactName: parseDisplayName(r.from),
-    subject: r.subject,
-    snippet: r.snippet,
-    dateMs: r.dateMs,
-    mailbox: r.mailbox ?? null,
-    mailboxEmail: r.mailboxEmail ?? null,
-  }));
+  const cleaned = emails.map((e) => e.trim()).filter(Boolean);
+  const param = encodeURIComponent(cleaned.join(","));
+  const primary = cleaned[0] ?? "";
 
   return (
     <Card className="mt-6">
       <CardContent>
-        <p className="text-sm font-semibold text-zinc-900">{title}</p>
-
-        {state === "loading" && (
+        <p className="mb-3 text-sm font-semibold text-zinc-900">{title}</p>
+        {cleaned.length === 0 ? (
           <p className="py-6 text-center text-sm text-zinc-400">
-            Checking inboxes…
+            No email address on file.
           </p>
-        )}
-        {state === "error" && (
-          <p className="py-6 text-center text-sm text-zinc-400">
-            Couldn&apos;t load messages. Connect Google (sign out/in) to see
-            email history here.
-          </p>
-        )}
-        {state === "ready" && (
-          <div className="mt-3">
-            <MessageList
-              items={items}
-              relationship={relationship}
-              emptyText={
-                mailboxes.length > 0
-                  ? `No emails on file — searched ${mailboxes.join(", ")}.`
-                  : "No emails on file."
-              }
-              footer={
-                items.length > 0 ? (
-                  <div className="mt-3 flex justify-end">
-                    <ComposeMessageButton
-                      target={{ to: emails[0] ?? "", relationship }}
-                      label="New message"
-                      variant="secondary"
-                    />
-                  </div>
-                ) : null
-              }
-            />
-          </div>
+        ) : (
+          <MessagesPanel
+            relationship={relationship}
+            receivedUrl={`/api/inbound?emails=${param}`}
+            sentUrl={`/api/inbound?emails=${param}&direction=sent`}
+            contactEmailForSent={primary}
+            composeTo={primary}
+          />
         )}
       </CardContent>
     </Card>
