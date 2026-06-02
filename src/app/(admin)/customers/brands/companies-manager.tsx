@@ -62,14 +62,19 @@ export function CompaniesManager({
   const [draft, setDraft] = useState<CompanyDraft>(emptyCompanyDraft());
   // Client-side filter by company name / contact name / contact email.
   const [search, setSearch] = useState("");
+  // Optimistically hide rows we've just deleted, so they disappear instantly
+  // even before router.refresh() re-fetches the server component. Once the
+  // refreshed props arrive without the row, this filter is simply a no-op.
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const q = search.trim().toLowerCase();
+  const visibleCompanies = companies.filter((c) => !removedIds.has(c.id));
   const filteredCompanies = q
-    ? companies.filter((c) =>
+    ? visibleCompanies.filter((c) =>
         [c.name, c.contactName, c.contactEmail].some((v) =>
           v?.toLowerCase().includes(q),
         ),
       )
-    : companies;
+    : visibleCompanies;
 
   function openCompany(id: string | "new", c?: Company) {
     setError(null);
@@ -152,6 +157,7 @@ export function CompaniesManager({
         setBusy(false);
         return;
       }
+      setRemovedIds((prev) => new Set(prev).add(id));
       setCompanyEditing(null);
       router.refresh();
     } catch {
