@@ -29,6 +29,10 @@
       "schedule": "30 7 * * *"
     },
     {
+      "path": "/api/cron/extract-judgeme",
+      "schedule": "45 7 * * *"
+    },
+    {
       "path": "/api/cron/extract-posthog",
       "schedule": "0 */3 * * *"
     },

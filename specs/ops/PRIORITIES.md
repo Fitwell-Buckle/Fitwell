@@ -230,7 +230,9 @@ V1 of `/funnel/strategy` shipped 2026-05-26 (commits `81e4079`, `fd5f5bd`). Iter
 - [x] **Phase 2: Channel × persona cross-cut** — segment pills + per-channel segment mix bars (data layer `c9e92ec`, UI `c209fdc`).
 - [x] **Phase 3: Klaviyo API integration** — Phase 0 read-side shipped in `c209fdc`. Per-order grain attribution deferred to Phase 0.5.
 - [x] **Phase 4: Order position split (acquisition vs retention)** — shipped 2026-06-03. Runtime-computed via `ROW_NUMBER` window function instead of stored column (preserved zero-drift guarantee that two existing denormalized customer fields have already broken).
-- [ ] **Phase 5: Judge.me API integration** — live advocate count
+- [x] **Phase 5: Judge.me API integration** — shipped 2026-06-03. New `review` table, paginated client + idempotent extract cron at 07:45 UTC, advocate stage in retention loop is now live-computed (outfitter customers whose email matches a reviewer's). Confidence falls back to `weak` with a how-to-fix note when the table is empty (Judge.me API key + outage clearance still pending).
+
+**Iteration plan complete.** Pending follow-ups: vocabulary-map drift script (deferred, cheap), per-order Klaviyo flow attribution grain (Phase 0.5 of `klaviyo-integration.md`), upper-funnel persona × stage cross-cut (needs PostHog client-side).
 
 PostHog client-side instrumentation (workstream 6) is the largest unblock for upper-funnel measurement but is independent of this plan.
 

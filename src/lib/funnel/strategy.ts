@@ -19,6 +19,7 @@ import {
   orderLineItem,
   ga4Daily,
   metaAdsDaily,
+  review,
 } from "@/lib/schema";
 import {
   and,
@@ -247,27 +248,25 @@ export interface RetentionLoop {
   stages: RetentionStageRow[];
 }
 
-// Snapshot from scripts/persona-reviews-join.ts on 2026-05-26.
-// Update when Judge.me API integration lands.
-const STATIC_ADVOCATE_COUNT = 9;
-
 export async function getRetentionLoop(): Promise<RetentionLoop> {
   // Compute per-customer rollups directly from the order table (D2C only),
   // not from customer.orderCount / customer.totalSpent which are denormalized
-  // and known to drift (per personas.md Distribution finding). Two parallel
-  // queries — orders for count + spend, line items for total units — joined
-  // by customerId in TypeScript. Cleaner than a single grouped JOIN where the
-  // line-item fan-out would inflate SUM(totalPrice).
-  const [orderSummary, qtySummary] = await Promise.all([
+  // and known to drift (per personas.md Distribution finding). Three parallel
+  // queries — orders for count + spend (joined to customer for email so we
+  // can detect advocates), line items for total units, reviewer-email set
+  // for advocate detection.
+  const [orderSummary, qtySummary, reviewerEmailRows] = await Promise.all([
     db
       .select({
         customerId: order.customerId,
+        email: customer.email,
         orderCount: count().mapWith(Number),
         totalSpent: sum(order.totalPrice).mapWith(Number),
       })
       .from(order)
+      .innerJoin(customer, eq(customer.id, order.customerId))
       .where(and(isNotNull(order.customerId), D2C_ONLY))
-      .groupBy(order.customerId),
+      .groupBy(order.customerId, customer.email),
 
     db
       .select({
@@ -278,11 +277,23 @@ export async function getRetentionLoop(): Promise<RetentionLoop> {
       .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
       .where(and(isNotNull(order.customerId), D2C_ONLY))
       .groupBy(order.customerId),
+
+    // Deduped set of emails who have left at least one review of any source.
+    // Drives the advocate-stage detection: a customer is an advocate iff
+    // they're classified as outfitter AND their email matches a reviewer's.
+    db
+      .selectDistinct({ email: review.reviewerEmail })
+      .from(review)
+      .where(isNotNull(review.reviewerEmail)),
   ]);
 
   const qtyByCustomer = new Map<string, number>();
   for (const q of qtySummary) {
     if (q.customerId) qtyByCustomer.set(q.customerId, q.totalQty ?? 0);
+  }
+  const reviewerEmails = new Set<string>();
+  for (const r of reviewerEmailRows) {
+    if (r.email) reviewerEmails.add(r.email.toLowerCase().trim());
   }
   const rows = orderSummary
     .filter((r) => r.customerId !== null)
@@ -290,6 +301,7 @@ export async function getRetentionLoop(): Promise<RetentionLoop> {
       orderCount: r.orderCount,
       totalSpent: r.totalSpent ?? 0,
       totalQty: qtyByCustomer.get(r.customerId!) ?? 0,
+      email: r.email,
     }));
 
   const acc: Record<
@@ -303,14 +315,32 @@ export async function getRetentionLoop(): Promise<RetentionLoop> {
     advocate: { customers: 0, totalSpendCents: 0 },
   };
 
+  // Advocate is computed orthogonally to the segment-mix classifier — a
+  // customer is an advocate iff (a) they classify as outfitter, AND (b)
+  // their email matches a reviewer's. We accumulate them separately so the
+  // outfitter row keeps its full count (every outfitter contributes to the
+  // outfitter bar) while the advocate row reflects only the subset who've
+  // also publicly advocated.
+  let advocateCount = 0;
+  let advocateSpendCents = 0;
   for (const r of rows) {
     const stage = classifyRetentionStage(r.orderCount ?? 0, r.totalQty ?? 0);
     if (!stage) continue;
     acc[stage].customers += 1;
     acc[stage].totalSpendCents += r.totalSpent ?? 0;
+    if (stage === "outfitter" && r.email) {
+      const normalized = r.email.toLowerCase().trim();
+      if (reviewerEmails.has(normalized)) {
+        advocateCount += 1;
+        advocateSpendCents += r.totalSpent ?? 0;
+      }
+    }
   }
+  acc.advocate.customers = advocateCount;
+  acc.advocate.totalSpendCents = advocateSpendCents;
 
   const totalCustomers = rows.length;
+  const hasReviewData = reviewerEmails.size > 0;
 
   const stageOrder: RetentionStage[] = [
     "first_buyer",
@@ -322,8 +352,7 @@ export async function getRetentionLoop(): Promise<RetentionLoop> {
 
   const stages: RetentionStageRow[] = stageOrder.map((stage) => {
     const meta = RETENTION_STAGE_META[stage];
-    const customers =
-      stage === "advocate" ? STATIC_ADVOCATE_COUNT : acc[stage].customers;
+    const customers = acc[stage].customers;
     const totalSpendCents = acc[stage].totalSpendCents;
     return {
       stage,
@@ -334,17 +363,16 @@ export async function getRetentionLoop(): Promise<RetentionLoop> {
         totalCustomers > 0 ? (100 * customers) / totalCustomers : 0,
       totalSpendCents,
       avgSpendCents:
-        customers > 0 && stage !== "advocate"
-          ? Math.round(totalSpendCents / customers)
-          : 0,
+        customers > 0 ? Math.round(totalSpendCents / customers) : 0,
       source:
         stage === "advocate"
-          ? "Static cross-reference (Judge.me export 2026-05-26)"
+          ? "order + customer + review (outfitter customers with a matched reviewer_email; Judge.me API extraction)"
           : "order + order_line_item (D2C only, computed from orders not denormalized customer fields)",
-      confidence: stage === "advocate" ? "weak" : "strong",
+      confidence:
+        stage === "advocate" && !hasReviewData ? "weak" : "strong",
       note:
-        stage === "advocate"
-          ? `v1 shows static count from 2026-05-26 Judge.me cross-reference (${STATIC_ADVOCATE_COUNT} outfitter-reviewers). Live tracking requires Judge.me API integration.`
+        stage === "advocate" && !hasReviewData
+          ? "No review data in the database yet — the extract-judgeme cron hasn't run successfully. Add JUDGEME_API_TOKEN + JUDGEME_SHOP_DOMAIN to Vercel prod env and trigger /api/cron/extract-judgeme."
           : undefined,
     };
   });

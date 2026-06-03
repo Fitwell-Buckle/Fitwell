@@ -122,24 +122,23 @@ column becomes warranted (e.g., a hot query needing index-backed
 - [x] Unit: behavior is unchanged when no overrides provided
 - [x] Unit: position filter combines correctly with segmentFilter (5 new tests, 468 total passing)
 
-### Phase 5: Judge.me API integration (~1 day)
+### Phase 5: Judge.me API integration — ✅ shipped 2026-06-03
 
 Live advocate count + vocabulary refresh pipeline.
 
-- [ ] Add schema:
-  - `review` — id, reviewer_email, rating, title, body, review_date, product_handle, location, source ('judgeme'|'other'), captured_at
-- [ ] Add env: `JUDGEME_API_TOKEN` to `.env.example` and Vercel
-- [ ] Create `src/lib/analytics/judgeme.ts` client
-- [ ] Create `/api/cron/extract-judgeme/route.ts` — daily sync
-- [ ] Register cron in `vercel.json`
-- [ ] Update `getRetentionLoop` to replace the `STATIC_ADVOCATE_COUNT = 9` constant with a live query joining `review.reviewer_email = customer.email` and counting outfitter-classified customers
-- [ ] Promote the advocate stage from `confidence: 'weak'` to `confidence: 'strong'` once the live query is in place
-- [ ] Optional: vocabulary-refresh script that re-runs the distinctive-word analysis from `specs/strategy/vocabulary-map.md` weekly and surfaces drift
-- [ ] Update `specs/current/integrations.md`, `scheduled-jobs.md`, `schema.md`
+- [x] Add schema: `review` table (`id`, `external_id`, `source`, `reviewer_email`, `reviewer_name`, `rating`, `title`, `body`, `verified`, `product_id`, `product_handle`, `location`, `review_date`, `captured_at`, `updated_at`). Unique index on `(source, external_id)`; indexes on `reviewer_email`, `rating`, `review_date`. Migration `0048_light_zemo.sql`.
+- [x] Add env: `JUDGEME_API_TOKEN` + `JUDGEME_SHOP_DOMAIN` to `.env.example`. Vercel-prod additions deferred until Tom can paste the token (Judge.me/Shopify outage was in flight at ship time).
+- [x] Create `src/lib/judgeme/client.ts` — paginated `fetchAllReviews()` async generator + pure `normalizeReview()` mapper.
+- [x] Create `src/lib/judgeme/extract.ts` — orchestrates the upsert on `(source, external_id)` so re-runs are idempotent and review edits sync forward.
+- [x] Create `/api/cron/extract-judgeme/route.ts`; register cron in `vercel.json` at daily 07:45 UTC.
+- [x] Update `getRetentionLoop` — replaces `STATIC_ADVOCATE_COUNT = 9` with a `selectDistinct` over `review.reviewer_email`, joined in-memory to outfitter-classified customers by lowercased email. Source label, confidence, and "What's missing" notes updated to reflect the live query.
+- [x] Confidence promotes from `weak` to `strong` once review data is present; falls back to `weak` + a how-to-fix note when the table is empty (Judge.me outage / pre-key state).
+- [ ] **Deferred:** vocabulary-refresh script that re-runs the distinctive-word analysis from `specs/strategy/vocabulary-map.md` weekly and surfaces drift. Real follow-up; cheap; doable when there's energy.
+- [x] Update `specs/current/integrations.md`, `scheduled-jobs.md`, `schema.md`.
 
 #### Tests
-- Unit: review-to-customer match logic (email exact match; later add fuzzy/name match)
-- Integration: cron populates `review` table; advocate count > 0
+- [x] Unit: 11 `normalizeReview` tests covering string vs numeric ratings, truthy/falsy verified, case-insensitive emails, malformed dates, whitespace trimming, and null reviewer objects. 504 tests total passing.
+- [ ] Integration: cron populates `review` table; advocate count > 0. Deferred until Judge.me API is reachable + key is in Vercel prod env — both currently blocked.
 
 ## Notes
 

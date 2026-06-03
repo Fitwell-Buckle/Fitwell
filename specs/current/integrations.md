@@ -267,6 +267,39 @@ Reports endpoints: burst 1/s, steady 2/min, daily 225/req. Daily cron is well un
 
 ---
 
+## Judge.me
+
+**Purpose**: Product reviews on the Shopify storefront. Read-only sync of all published reviews so `/funnel/strategy`'s retention-loop section can promote the advocate stage from a 2026-05-26 snapshot count (9) to a live, drift-free count of outfitter customers who've publicly reviewed.
+
+| Detail | Value |
+|--------|-------|
+| Base URL | `https://judge.me/api/v1` |
+| Auth | `api_token` + `shop_domain` query params (env: `JUDGEME_API_TOKEN`, `JUDGEME_SHOP_DOMAIN`) |
+| Client | `src/lib/judgeme/client.ts` |
+| Extract | `src/lib/judgeme/extract.ts`, cron at `/api/cron/extract-judgeme` (daily 7:45 UTC) |
+
+### Read endpoints used
+
+- `GET /api/v1/reviews?api_token=…&shop_domain=…&page=…&per_page=100` — paginated list of all published reviews
+
+### Data written
+
+| Table | Granularity | Populated by |
+|-------|-------------|--------------|
+| `review` | One row per (source, external_id); upsert overwrites content fields so edits sync forward | `extractJudgeme` |
+
+### Advocate-stage detection
+
+`getRetentionLoop` joins `review.reviewer_email = customer.email` (lowercased, trimmed). A customer counts as an advocate iff they classify as outfitter (5+ units OR 3+ orders) AND their email matches a reviewer's. No stored advocate flag — recomputed each request so refunds, schema changes, and review syncs all reflect immediately.
+
+### Watchpoints
+
+- Judge.me may rate-limit aggressive pagination. Client sleeps 200ms between pages by default.
+- The API exposes only published reviews; unpublished / hidden ones don't sync. Matches the personas.md "110+ reviews" frame which was based on the published CSV export.
+- Some Judge.me clients return `rating` as a string; `normalizeReview` handles both numeric and string forms.
+
+---
+
 ## Resend
 
 **Purpose**: Transactional email delivery.

@@ -1787,3 +1787,45 @@ export const klaviyoFlowAttribution = pgTable(
     index("klaviyo_flow_attribution_touched_at_idx").on(t.touchedAt),
   ],
 );
+
+// ─── Reviews (Judge.me + future sources) ───────────────────────────
+// Populated by /api/cron/extract-judgeme. One row per source review;
+// upsert on judgeme_id (or generic external_id when a different source
+// arrives). `reviewer_email` is the join key to `customer.email` for
+// the advocate-stage detection in /funnel/strategy retention loop and
+// for the personas.md Outfitter-reviewers cross-reference.
+export const review = pgTable(
+  "review",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Source identifier (Judge.me's own review id, etc.). Unique per
+    // source so upserts can dedupe; the same email may have multiple
+    // reviews and that's fine.
+    externalId: text("external_id").notNull(),
+    // 'judgeme' for now; the column exists so a future Stamped /
+    // Yotpo / Loox source can land in the same table.
+    source: text("source").notNull().default("judgeme"),
+    reviewerEmail: text("reviewer_email"),
+    reviewerName: text("reviewer_name"),
+    rating: integer("rating"),
+    title: text("title"),
+    body: text("body"),
+    verified: boolean("verified").default(false),
+    productId: text("product_id"),
+    productHandle: text("product_handle"),
+    location: text("location"),
+    reviewDate: timestamp("review_date", { mode: "date" }),
+    capturedAt: timestamp("captured_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("review_source_external_id_uniq").on(t.source, t.externalId),
+    index("review_reviewer_email_idx").on(t.reviewerEmail),
+    index("review_rating_idx").on(t.rating),
+    index("review_review_date_idx").on(t.reviewDate),
+  ],
+);

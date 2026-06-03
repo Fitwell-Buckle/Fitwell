@@ -14,6 +14,7 @@ All cron jobs run as Vercel Cron serverless functions. Schedules defined in `ver
 | Extract GSC | `/api/cron/extract-gsc` | `0 7 * * *` | Daily 7:00 UTC | Search data (3-day lag) |
 | Extract PostHog | `/api/cron/extract-posthog` | `0 */3 * * *` | Every 3h | Aggregate event counts |
 | Extract Klaviyo | `/api/cron/extract-klaviyo` | `30 7 * * *` | Daily 7:30 UTC | Campaign + flow performance, list growth |
+| Extract Judge.me | `/api/cron/extract-judgeme` | `45 7 * * *` | Daily 7:45 UTC | All published reviews; upserts the `review` table; drives the live advocate count on `/funnel/strategy` |
 | Health Check | `/api/cron/health` | `0 */4 * * *` | Every 4h | Verify DB, API connections |
 | Production deadline alerts | `/api/cron/production-deadline-alerts` | `0 13 * * *` | Daily 13:00 UTC | Email owner + suppliers re: items due/overdue, complete POs ready to receive |
 | Sent follow-ups | `/api/cron/sent-followups` | `0 14 * * *` | Daily 14:00 UTC | Scan connected admins' Gmail **Sent** folders, match recipients to known leads/customers/suppliers (`sent_email`), and for any sent ≥N days ago with no reply, draft a **threaded** follow-up (reply in the original thread) into Next Steps. N (default 14) + on/off in Settings → Lead follow-ups (`lead_followup_settings`); disabled = no-op. Replaced the old platform-only `lead-followups` nudge. Needs the Gmail API enabled |

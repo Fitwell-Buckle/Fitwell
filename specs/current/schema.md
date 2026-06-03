@@ -270,6 +270,30 @@ Per-order attribution from Klaviyo flows. **Phase 0 grain:** aggregate rows only
 | `attributed_order_count` | integer | Conversion uniques (count of attributed orders for aggregate rows; 1 for per-order rows) |
 | `touched_at` | timestamp | Sync time for aggregate rows; order time for per-order rows |
 
+### `review`
+
+Product reviews from external sources (Judge.me today; the `source` column leaves room for Stamped / Yotpo / Loox later). Populated by `/api/cron/extract-judgeme`. Migration `0048_light_zemo.sql`. Drives the advocate-stage detection in `getRetentionLoop`: a customer is an advocate iff they classify as outfitter AND `LOWER(review.reviewer_email) = LOWER(customer.email)`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK (UUID) |
+| `external_id` | text | Source's own review ID; upsert key |
+| `source` | text | `'judgeme'` for now; future Stamped/Yotpo/Loox land here |
+| `reviewer_email` | text | Lowercased + trimmed by the extractor for stable joins to `customer.email` |
+| `reviewer_name` | text | |
+| `rating` | integer | 1–5 |
+| `title` | text | |
+| `body` | text | |
+| `verified` | boolean | Judge.me's verified-buyer flag; defaults `false` |
+| `product_id` | text | Shopify product external ID |
+| `product_handle` | text | Shopify product handle |
+| `location` | text | Reviewer location string (API doesn't expose; CSV export does) |
+| `review_date` | timestamp | `created_at` from Judge.me |
+| `captured_at` | timestamp | When the row was first inserted |
+| `updated_at` | timestamp | Refreshed on every upsert |
+
+Unique index on `(source, external_id)` for upserts; indexes on `reviewer_email`, `rating`, `review_date`.
+
 ## Lifecycle
 
 ### `customer_event`
