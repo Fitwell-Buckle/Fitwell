@@ -164,7 +164,7 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           return (
             <p className="mt-1 text-zinc-700">
               A <span className="font-semibold">{pct}% deposit</span> (
-              {fmtMoney(depositCents)}) is due now via the payment link. The
+              {fmtMoney(depositCents)}) is due now via wire or payment link. The
               remaining balance ({fmtMoney(balanceCents)}) will be billed when
               your order is fulfilled.
             </p>
@@ -187,6 +187,10 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           </p>
         )}
       </div>
+
+      <p className="mt-8 text-center text-lg font-medium text-zinc-700">
+        Invoicing and Supply Chain Management by Fitwell Systems
+      </p>
     </div>
   );
 }
