@@ -124,6 +124,120 @@ describe("KlaviyoClient.campaignValuesReport", () => {
   });
 });
 
+describe("KlaviyoClient write methods", () => {
+  function jsonOk(body: unknown) {
+    return jsonRes(200, body);
+  }
+
+  it("createTemplate posts the expected JSON:API body", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonOk({ data: { type: "template", id: "tpl_1" } }));
+    const client = new KlaviyoClient({ fetchFn });
+    const out = await client.createTemplate({
+      name: "2026-06-collectors",
+      html: "<html></html>",
+    });
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe("https://a.klaviyo.com/api/templates");
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(init.body);
+    expect(body).toEqual({
+      data: {
+        type: "template",
+        attributes: {
+          name: "2026-06-collectors",
+          editor_type: "CODE",
+          html: "<html></html>",
+        },
+      },
+    });
+    expect(out).toEqual({ id: "tpl_1" });
+  });
+
+  it("createCampaign posts the expected inline campaign-message body", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonOk({
+        data: { type: "campaign", id: "camp_1", attributes: { name: "x" } },
+        included: [{ type: "campaign-message", id: "msg_1" }],
+      }),
+    );
+    const client = new KlaviyoClient({ fetchFn });
+    const out = await client.createCampaign({
+      name: "test-campaign",
+      audiencesIncluded: ["list_a"],
+      audiencesExcluded: ["list_b"],
+      subject: "Hi",
+      previewText: "preview",
+      fromEmail: "hello@fitwellbuckle.co",
+      fromLabel: "Fitwell",
+      replyToEmail: "reply@fitwellbuckle.co",
+    });
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body);
+    expect(body.data.type).toBe("campaign");
+    expect(body.data.attributes.name).toBe("test-campaign");
+    expect(body.data.attributes.audiences).toEqual({
+      included: ["list_a"],
+      excluded: ["list_b"],
+    });
+    const msg = body.data.attributes["campaign-messages"].data[0];
+    expect(msg.type).toBe("campaign-message");
+    expect(msg.attributes.definition.channel).toBe("email");
+    expect(msg.attributes.definition.content).toEqual({
+      subject: "Hi",
+      preview_text: "preview",
+      from_email: "hello@fitwellbuckle.co",
+      from_label: "Fitwell",
+      reply_to_email: "reply@fitwellbuckle.co",
+    });
+    expect(out).toEqual({ id: "camp_1", messageId: "msg_1" });
+  });
+
+  it("assignTemplateToCampaignMessage posts to the bind endpoint", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonOk({}));
+    const client = new KlaviyoClient({ fetchFn });
+    await client.assignTemplateToCampaignMessage({
+      campaignMessageId: "msg_1",
+      templateId: "tpl_1",
+    });
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe(
+      "https://a.klaviyo.com/api/campaign-message-assign-template",
+    );
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(init.body);
+    expect(body.data.id).toBe("msg_1");
+    expect(body.data.relationships.template.data).toEqual({
+      type: "template",
+      id: "tpl_1",
+    });
+  });
+
+  it("getCampaignByName extracts the included campaign-message id", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonOk({
+        data: [
+          {
+            type: "campaign",
+            id: "camp_1",
+            attributes: { name: "x", status: "Draft" },
+          },
+        ],
+        included: [{ type: "campaign-message", id: "msg_1" }],
+      }),
+    );
+    const client = new KlaviyoClient({ fetchFn });
+    const out = await client.getCampaignByName("x");
+    expect(out).toEqual({ id: "camp_1", status: "Draft", messageId: "msg_1" });
+  });
+
+  it("getCampaignByName returns null when no campaign matches", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonOk({ data: [] }));
+    const client = new KlaviyoClient({ fetchFn });
+    expect(await client.getCampaignByName("nope")).toBeNull();
+  });
+});
+
 describe("KlaviyoClient.metricAggregate", () => {
   it("zips dates with the first measurement series", async () => {
     const fetchFn = vi.fn().mockResolvedValue(

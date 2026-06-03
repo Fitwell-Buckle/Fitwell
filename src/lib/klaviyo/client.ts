@@ -108,7 +108,7 @@ export class KlaviyoClient {
   }
 
   private async request(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PATCH",
     path: string,
     body?: unknown,
   ): Promise<unknown> {
@@ -355,5 +355,240 @@ export class KlaviyoClient {
       path = next ? next.replace(KLAVIYO_BASE_URL, "") : null;
     }
     return out;
+  }
+
+  // ─── Write methods (Phase 2: campaigns, Phase 4: flows) ──────────────
+
+  /**
+   * GET /api/templates with name-equality filter. Used by the campaign
+   * draft script for idempotency — if a template with this name exists
+   * we PATCH it instead of creating a duplicate. Returns null if not found.
+   */
+  async getTemplateByName(name: string): Promise<{ id: string } | null> {
+    const safe = name.replace(/'/g, "\\'");
+    const path = `/templates?filter=equals(name,'${encodeURIComponent(safe)}')&fields[template]=name`;
+    const page = (await this.request("GET", path)) as JsonApiResponse<
+      "template",
+      { name: string }
+    >;
+    const rows = Array.isArray(page.data) ? page.data : page.data ? [page.data] : [];
+    const row = rows[0];
+    return row?.id ? { id: row.id } : null;
+  }
+
+  /** POST /api/templates — creates an editor_type=CODE (raw HTML) template. */
+  async createTemplate(opts: {
+    name: string;
+    html: string;
+  }): Promise<{ id: string }> {
+    const body = {
+      data: {
+        type: "template",
+        attributes: {
+          name: opts.name,
+          editor_type: "CODE",
+          html: opts.html,
+        },
+      },
+    };
+    const json = (await this.request("POST", "/templates", body)) as JsonApiResponse<
+      "template",
+      { name: string }
+    >;
+    const data = Array.isArray(json.data) ? json.data[0] : json.data;
+    if (!data?.id) throw new Error("Klaviyo createTemplate returned no id");
+    return { id: data.id };
+  }
+
+  /** PATCH /api/templates/{id} — updates an existing template's html in place. */
+  async updateTemplate(opts: {
+    id: string;
+    name: string;
+    html: string;
+  }): Promise<{ id: string }> {
+    const body = {
+      data: {
+        type: "template",
+        id: opts.id,
+        attributes: {
+          name: opts.name,
+          editor_type: "CODE",
+          html: opts.html,
+        },
+      },
+    };
+    const json = (await this.request(
+      "PATCH",
+      `/templates/${opts.id}`,
+      body,
+    )) as JsonApiResponse<"template", { name: string }>;
+    const data = Array.isArray(json.data) ? json.data[0] : json.data;
+    return { id: data?.id ?? opts.id };
+  }
+
+  /**
+   * GET /api/campaigns by exact name match. Used by the campaign draft
+   * script for idempotency. Returns the campaign + its single email
+   * message id (campaigns we create here always have exactly one
+   * email message). Returns null if not found.
+   */
+  async getCampaignByName(
+    name: string,
+  ): Promise<{ id: string; status: string; messageId: string | null } | null> {
+    const safe = name.replace(/'/g, "\\'");
+    // Klaviyo requires a messages.channel filter on this endpoint
+    const path = `/campaigns?filter=and(equals(messages.channel,'email'),equals(name,'${encodeURIComponent(safe)}'))&fields[campaign]=name,status&include=campaign-messages`;
+    const page = (await this.request("GET", path)) as JsonApiResponse<
+      "campaign",
+      { name: string; status: string }
+    > & {
+      included?: Array<{ type: string; id: string }>;
+    };
+    const rows = Array.isArray(page.data) ? page.data : page.data ? [page.data] : [];
+    const row = rows[0];
+    if (!row?.id) return null;
+    const messageId =
+      page.included?.find((r) => r.type === "campaign-message")?.id ?? null;
+    return {
+      id: row.id,
+      status: row.attributes.status,
+      messageId,
+    };
+  }
+
+  /**
+   * POST /api/campaigns — creates a draft email campaign with one inline
+   * campaign-message. Default audiences shape: { included: [listId] }.
+   * Klaviyo returns the new campaign id + the message id we then assign
+   * a template to via assignTemplateToCampaignMessage.
+   *
+   * Newly-created campaigns default to draft status — they never
+   * auto-send. The Phase 2 contract is: Tom reviews in Klaviyo's UI and
+   * sends manually.
+   */
+  async createCampaign(opts: {
+    name: string;
+    audiencesIncluded: string[];
+    audiencesExcluded?: string[];
+    subject: string;
+    previewText?: string;
+    fromEmail: string;
+    fromLabel: string;
+    replyToEmail?: string;
+  }): Promise<{ id: string; messageId: string }> {
+    const body = {
+      data: {
+        type: "campaign",
+        attributes: {
+          name: opts.name,
+          audiences: {
+            included: opts.audiencesIncluded,
+            ...(opts.audiencesExcluded
+              ? { excluded: opts.audiencesExcluded }
+              : {}),
+          },
+          "campaign-messages": {
+            data: [
+              {
+                type: "campaign-message",
+                attributes: {
+                  definition: {
+                    channel: "email",
+                    label: opts.name,
+                    content: {
+                      subject: opts.subject,
+                      ...(opts.previewText
+                        ? { preview_text: opts.previewText }
+                        : {}),
+                      from_email: opts.fromEmail,
+                      from_label: opts.fromLabel,
+                      ...(opts.replyToEmail
+                        ? { reply_to_email: opts.replyToEmail }
+                        : {}),
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    };
+    const json = (await this.request(
+      "POST",
+      "/campaigns",
+      body,
+    )) as JsonApiResponse<"campaign", { name: string }> & {
+      included?: Array<{ type: string; id: string }>;
+    };
+    const data = Array.isArray(json.data) ? json.data[0] : json.data;
+    if (!data?.id) throw new Error("Klaviyo createCampaign returned no id");
+    const messageId =
+      json.included?.find((r) => r.type === "campaign-message")?.id;
+    if (!messageId) {
+      // The campaign was created but Klaviyo didn't include the message
+      // in the response — fall back to a follow-up lookup.
+      const lookup = await this.getCampaignByName(opts.name);
+      if (!lookup?.messageId) {
+        throw new Error(
+          `Klaviyo created campaign ${data.id} but no campaign-message id returned`,
+        );
+      }
+      return { id: data.id, messageId: lookup.messageId };
+    }
+    return { id: data.id, messageId };
+  }
+
+  /**
+   * PATCH /api/campaigns/{id} — updates an existing draft campaign's
+   * name / audiences / message content in place. Used by the idempotent
+   * draft script when a campaign with this name already exists.
+   */
+  async updateCampaignDraft(opts: {
+    id: string;
+    name: string;
+    audiencesIncluded: string[];
+    audiencesExcluded?: string[];
+  }): Promise<void> {
+    const body = {
+      data: {
+        type: "campaign",
+        id: opts.id,
+        attributes: {
+          name: opts.name,
+          audiences: {
+            included: opts.audiencesIncluded,
+            ...(opts.audiencesExcluded
+              ? { excluded: opts.audiencesExcluded }
+              : {}),
+          },
+        },
+      },
+    };
+    await this.request("PATCH", `/campaigns/${opts.id}`, body);
+  }
+
+  /**
+   * POST /api/campaign-message-assign-template — binds a template to a
+   * campaign-message. Klaviyo clones the template into the message
+   * (non-reusable copy), so subsequent template edits don't auto-flow
+   * into the campaign — we re-assign on every draft script run.
+   */
+  async assignTemplateToCampaignMessage(opts: {
+    campaignMessageId: string;
+    templateId: string;
+  }): Promise<void> {
+    const body = {
+      data: {
+        type: "campaign-message",
+        id: opts.campaignMessageId,
+        relationships: {
+          template: {
+            data: { type: "template", id: opts.templateId },
+          },
+        },
+      },
+    };
+    await this.request("POST", "/campaign-message-assign-template", body);
   }
 }

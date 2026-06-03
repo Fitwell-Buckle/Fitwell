@@ -265,6 +265,40 @@ Reports endpoints: burst 1/s, steady 2/min, daily 225/req. Daily cron is well un
 | `klaviyo_email_performance` | One row per campaign (upsert on `campaign_id`) | `extractCampaignPerformance` |
 | `klaviyo_flow_attribution` | One row per flow per sync (`customer_id` + `order_id` NULL); per-order grain is a Phase 0.5 follow-up | `extractFlowAggregates` |
 
+### Write endpoints used (Phase 2 — campaign drafts)
+
+- `POST /api/templates` + `PATCH /api/templates/{id}` — create or update an `editor_type=CODE` template from compiled MJML
+- `POST /api/campaigns` — create a draft email campaign with one inline campaign-message; Klaviyo defaults new campaigns to `draft` status
+- `PATCH /api/campaigns/{id}` — update an existing draft campaign in place (idempotency on re-run)
+- `POST /api/campaign-message-assign-template` — bind the template into the campaign-message (Klaviyo clones the template; subsequent template edits don't auto-flow, so we re-bind on every run)
+- Additional read for idempotency: `GET /api/templates?filter=equals(name,…)`, `GET /api/campaigns?filter=…name…`
+
+Required scopes: `templates:write`, `campaigns:write` (on top of the read scopes above).
+
+### Campaign drafts — workflow
+
+Author one file per campaign in `klaviyo/campaigns/<slug>/`:
+- `template.mjml` — the email body in MJML
+- `config.yaml` — `subject`, `preview_text` (opt), `from_email`, `from_label`, `reply_to_email` (opt), and `audiences: { included: [...], excluded: [...] }`. Strict Zod schema; unknown keys fail loud.
+
+Deploy as a draft to Klaviyo:
+
+```
+npm run klaviyo:campaign:draft <slug>
+```
+
+The script (`scripts/klaviyo-draft-campaign.ts`):
+1. Validates the slug shape + reads both files.
+2. `compileMjml` → HTML + warnings.
+3. `injectUtms(html, { campaign: <slug>, content: "blast" })`.
+4. Calls `draftCampaign` (`src/lib/klaviyo/draft-campaign.ts`) which upserts the template by name, upserts the campaign by name (PATCH if existing draft, refuse if already sent), and re-binds the template to the campaign-message.
+5. Prints the Klaviyo edit URL.
+
+**Hard invariants:**
+- The script **never** sends. Klaviyo creates everything in `draft` status; sending is a manual action in Klaviyo's UI.
+- Re-running with the same slug updates the existing draft in place — no duplicate campaigns.
+- If a campaign with this slug has already been sent in Klaviyo, the script refuses to overwrite it. Rename the slug to iterate.
+
 ---
 
 ## Judge.me
