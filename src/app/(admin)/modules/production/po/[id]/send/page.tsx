@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
+import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { productionPo } from "@/lib/schema";
 import { getPoDetail, getSupplierLineCosts } from "@/lib/production/service";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
@@ -22,9 +25,26 @@ import {
 import { SendForm } from "./send-form";
 import { PrintButton } from "@/app/(admin)/invoices/[id]/print/print-button";
 
-export const metadata: Metadata = {
-  title: "Send PO | Fitwell Admin",
-};
+// The page <title> is what the browser suggests as the "Save as PDF" filename,
+// so name it "Fitwell Purchase Order PO-…" (mirrors the invoice pages).
+// `absolute` skips any title template.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const po = await db.query.productionPo.findFirst({
+    where: eq(productionPo.id, id),
+    columns: { shopifyPoNumber: true, poSuffix: true },
+  });
+  const display = po
+    ? formatPoNumber(po.shopifyPoNumber, { suffix: po.poSuffix })
+    : "";
+  return {
+    title: { absolute: `Fitwell Purchase Order ${display}`.trim() },
+  };
+}
 
 interface AddressLike {
   address1?: string | null;

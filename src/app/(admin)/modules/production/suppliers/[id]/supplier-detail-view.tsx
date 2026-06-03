@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,7 +60,39 @@ export function SupplierDetailView({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SupplierDraft>(toDraft(supplier));
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete this supplier. The API unlinks detected messages and blocks if it
+  // still has POs. On success the detail page is gone, so go back to the list.
+  async function remove() {
+    if (
+      !window.confirm(
+        `Delete supplier "${supplier.name}"? This can't be undone. ` +
+          `Purchase orders will block the delete.`,
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/production/suppliers/${supplier.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || "Delete failed.");
+        setDeleting(false);
+        return;
+      }
+      toast.success(`Deleted ${supplier.name}`);
+      router.push("/modules/production/suppliers");
+      router.refresh();
+    } catch {
+      toast.error("Network error — please try again.");
+      setDeleting(false);
+    }
+  }
 
   async function save() {
     setError(null);
@@ -121,6 +154,15 @@ export function SupplierDetailView({
               </Button>
               <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
                 Edit supplier
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                disabled={deleting}
+                onClick={remove}
+              >
+                {deleting ? "Deleting…" : "Delete"}
               </Button>
             </div>
           </div>
