@@ -65,6 +65,10 @@ function ComposeModal({
 }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [cc, setCc] = useState("");
+  const [bcc, setBcc] = useState("");
+  const [showCc, setShowCc] = useState(false);
+  const [notes, setNotes] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +86,7 @@ function ComposeModal({
           theirSubject: target.theirSubject ?? null,
           theirMessage: target.theirMessage ?? null,
           threadId: target.threadId ?? null,
+          instruction: notes.trim() || null,
           relationship: target.relationship ?? "customer",
         }),
       });
@@ -123,7 +128,13 @@ function ComposeModal({
       const res = await fetch("/api/compose/send", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ to: target.to, subject, body }),
+        body: JSON.stringify({
+          to: target.to,
+          subject,
+          body,
+          cc: cc.trim() || null,
+          bcc: bcc.trim() || null,
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -153,16 +164,58 @@ function ComposeModal({
     >
       <div className="space-y-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">
-            Subject
-          </label>
-          <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
-        </div>
-        <div>
           <div className="mb-1 flex items-center justify-between">
             <label className="block text-xs font-medium text-zinc-500">
-              Message
+              Subject
             </label>
+            {!showCc && (
+              <button
+                type="button"
+                onClick={() => setShowCc(true)}
+                className="text-xs font-medium text-zinc-500 hover:text-zinc-800"
+              >
+                Add Cc/Bcc
+              </button>
+            )}
+          </div>
+          <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
+        </div>
+        {showCc && (
+          <>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-500">
+                Cc
+              </label>
+              <Input
+                value={cc}
+                onChange={(e) => setCc(e.target.value)}
+                placeholder="name@example.com, other@example.com"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-500">
+                Bcc
+              </label>
+              <Input
+                value={bcc}
+                onChange={(e) => setBcc(e.target.value)}
+                placeholder="name@example.com, other@example.com"
+              />
+            </div>
+          </>
+        )}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-500">
+            Notes to guide the AI (optional)
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            placeholder="e.g. offer a sample, push for a call next week, keep it short"
+            className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
+          />
+          <div className="mt-1 flex justify-end">
             <button
               type="button"
               onClick={generate}
@@ -170,9 +223,14 @@ function ComposeModal({
               className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              {drafting ? "Drafting…" : "Re-draft with AI"}
+              {drafting ? "Recomposing…" : "Recompose with AI"}
             </button>
           </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-500">
+            Message
+          </label>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}

@@ -18,26 +18,32 @@ function encodeSubject(subject: string): string {
   return `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
 }
 
-function buildRawMessage(
-  to: string,
-  subject: string,
-  body: string,
-  inReplyTo?: string,
-): string {
-  const headers = [
-    `To: ${to}`,
-    `Subject: ${encodeSubject(subject)}`,
+function buildRawMessage(msg: {
+  to: string;
+  subject: string;
+  body: string;
+  cc?: string | null;
+  bcc?: string | null;
+  inReplyTo?: string | null;
+}): string {
+  const headers = [`To: ${msg.to}`];
+  // Cc is visible to all recipients; Bcc is delivered but Gmail strips the
+  // header from the copies recipients receive.
+  if (msg.cc) headers.push(`Cc: ${msg.cc}`);
+  if (msg.bcc) headers.push(`Bcc: ${msg.bcc}`);
+  headers.push(
+    `Subject: ${encodeSubject(msg.subject)}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: 8bit",
-  ];
+  );
   // Thread the reply under the original: In-Reply-To + References point Gmail
   // (and other clients) at the original Message-ID so it nests in the thread.
-  if (inReplyTo) {
-    headers.push(`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`);
+  if (msg.inReplyTo) {
+    headers.push(`In-Reply-To: ${msg.inReplyTo}`, `References: ${msg.inReplyTo}`);
   }
   // CRLF line endings per RFC 5322; blank line separates headers from body.
-  return headers.join("\r\n") + "\r\n\r\n" + body;
+  return headers.join("\r\n") + "\r\n\r\n" + msg.body;
 }
 
 // Send a plain-text email from `userId`'s Gmail (From = that account). Uses the
@@ -51,6 +57,9 @@ export async function sendGmail(
     to: string;
     subject: string;
     body: string;
+    // Optional comma-separated Cc / Bcc recipient lists.
+    cc?: string | null;
+    bcc?: string | null;
     // Reply in an existing Gmail thread: set both for proper threading — the
     // thread id (Gmail request) + the original Message-ID (In-Reply-To header).
     threadId?: string | null;
@@ -63,7 +72,14 @@ export async function sendGmail(
   if (!token) return { ok: false, error: "no_token" };
 
   const raw = Buffer.from(
-    buildRawMessage(msg.to, msg.subject, msg.body, msg.inReplyTo ?? undefined),
+    buildRawMessage({
+      to: msg.to,
+      subject: msg.subject,
+      body: msg.body,
+      cc: msg.cc,
+      bcc: msg.bcc,
+      inReplyTo: msg.inReplyTo,
+    }),
     "utf8",
   ).toString("base64url");
 

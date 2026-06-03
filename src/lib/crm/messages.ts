@@ -20,6 +20,10 @@ import {
   supplier,
 } from "@/lib/schema";
 import { leadDisplayName } from "./display";
+import {
+  isValidRecipientList,
+  normalizeRecipients,
+} from "./email-recipients";
 
 export const MESSAGE_STATUSES = [
   "draft",
@@ -35,6 +39,9 @@ export interface CreateOutboundMessageInput {
   customerId?: string | null;
   supplierId?: string | null;
   toEmail?: string | null;
+  // Optional comma-separated Cc / Bcc recipient lists (normalized on insert).
+  cc?: string | null;
+  bcc?: string | null;
   subject?: string | null;
   body: string;
   // 1 = initial follow-up, 2 = two-week nudge. Defaults to 1.
@@ -57,6 +64,8 @@ export async function createOutboundMessage(
       supplierId: input.supplierId ?? null,
       sequenceStep: input.sequenceStep ?? 1,
       toEmail: input.toEmail ?? null,
+      cc: normalizeRecipients(input.cc),
+      bcc: normalizeRecipients(input.bcc),
       subject: input.subject ?? null,
       body: input.body,
       threadId: input.threadId ?? null,
@@ -223,6 +232,8 @@ export async function listOutboundMessages(
       supplierId: outboundMessage.supplierId,
       channel: outboundMessage.channel,
       toEmail: outboundMessage.toEmail,
+      cc: outboundMessage.cc,
+      bcc: outboundMessage.bcc,
       subject: outboundMessage.subject,
       body: outboundMessage.body,
       status: outboundMessage.status,
@@ -251,6 +262,8 @@ export async function findDueScheduledMessages(limit = 25) {
     .select({
       id: outboundMessage.id,
       toEmail: outboundMessage.toEmail,
+      cc: outboundMessage.cc,
+      bcc: outboundMessage.bcc,
       subject: outboundMessage.subject,
       body: outboundMessage.body,
       createdByUserId: outboundMessage.createdByUserId,
@@ -327,6 +340,18 @@ export const updateMessageSchema = z
     subject: z.string().max(500).nullish(),
     body: z.string().max(20_000).optional(),
     toEmail: z.string().email().max(320).nullish().or(z.literal("")),
+    // Comma-separated Cc / Bcc lists; "" clears the field. Validated as a list
+    // of email addresses (each part must be a valid address).
+    cc: z
+      .string()
+      .max(1000)
+      .nullish()
+      .refine(isValidRecipientList, { message: "Cc has an invalid email" }),
+    bcc: z
+      .string()
+      .max(1000)
+      .nullish()
+      .refine(isValidRecipientList, { message: "Bcc has an invalid email" }),
     status: z.enum(MESSAGE_STATUSES).optional(),
     // ISO datetime for a scheduled send; null clears it (back to a plain draft).
     scheduledAt: z.string().datetime().nullish(),
@@ -347,6 +372,8 @@ export async function updateOutboundMessage(
   if (input.subject !== undefined) patch.subject = input.subject || null;
   if (input.body !== undefined) patch.body = input.body;
   if (input.toEmail !== undefined) patch.toEmail = input.toEmail || null;
+  if (input.cc !== undefined) patch.cc = normalizeRecipients(input.cc);
+  if (input.bcc !== undefined) patch.bcc = normalizeRecipients(input.bcc);
   if (input.scheduledAt !== undefined) {
     patch.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
   }

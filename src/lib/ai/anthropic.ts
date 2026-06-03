@@ -421,6 +421,9 @@ export interface DraftReplyInput {
   // The prior email thread (oldest→newest transcript), so the reply is grounded
   // in the real back-and-forth — what we already said, what they asked, etc.
   conversation?: string | null;
+  // Optional notes from the user steering this draft (e.g. "offer 10% off",
+  // "push for a call next week", "keep it short").
+  instruction?: string | null;
 }
 
 const REPLY_SYSTEM_PROMPT = [
@@ -455,6 +458,12 @@ function replySummary(input: DraftReplyInput): string {
     input.theirMessage?.trim() ||
       "(no body available — write a brief, helpful acknowledgement)",
   );
+  if (input.instruction?.trim()) {
+    lines.push(
+      "",
+      `IMPORTANT — the rep's notes to steer this reply (follow them): ${input.instruction.trim()}`,
+    );
+  }
   return lines.join("\n");
 }
 

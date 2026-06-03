@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { sendGmail } from "@/lib/gmail/send";
+import {
+  isValidRecipientList,
+  normalizeRecipients,
+} from "@/lib/crm/email-recipients";
 
 export const runtime = "nodejs";
 
@@ -9,6 +13,17 @@ const schema = z.object({
   to: z.string().email().max(320),
   subject: z.string().max(500),
   body: z.string().min(1).max(20_000),
+  // Optional comma-separated Cc / Bcc lists.
+  cc: z
+    .string()
+    .max(1000)
+    .nullish()
+    .refine(isValidRecipientList, { message: "Cc has an invalid email" }),
+  bcc: z
+    .string()
+    .max(1000)
+    .nullish()
+    .refine(isValidRecipientList, { message: "Bcc has an invalid email" }),
 });
 
 // Send a composed reply from the signed-in admin's Gmail (From = their
@@ -40,6 +55,8 @@ export async function POST(req: Request) {
     to: input.to,
     subject: input.subject || "(no subject)",
     body: input.body,
+    cc: normalizeRecipients(input.cc),
+    bcc: normalizeRecipients(input.bcc),
   });
 
   if (!result.ok) {

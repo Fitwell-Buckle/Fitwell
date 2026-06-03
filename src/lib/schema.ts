@@ -1589,6 +1589,11 @@ export const outboundMessage = pgTable(
     // contact hasn't replied. Lets the nudge cron find leads without a step-2 yet.
     sequenceStep: integer("sequence_step").notNull().default(1),
     toEmail: text("to_email"),
+    // Optional Cc / Bcc recipients — comma-separated email lists, added by the
+    // rep when reviewing an AI draft / follow-up. Surfaced as Cc:/Bcc: headers
+    // on the Gmail send.
+    cc: text("cc"),
+    bcc: text("bcc"),
     subject: text("subject"),
     body: text("body").notNull(),
     status: text("status").notNull().default("draft"),

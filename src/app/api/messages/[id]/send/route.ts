@@ -43,6 +43,8 @@ export async function POST(
     to: msg.toEmail,
     subject: msg.subject ?? "(no subject)",
     body: msg.body,
+    cc: msg.cc,
+    bcc: msg.bcc,
     threadId: msg.threadId,
     inReplyTo: msg.inReplyTo,
   });

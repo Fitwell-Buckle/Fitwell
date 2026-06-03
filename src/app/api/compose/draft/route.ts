@@ -11,6 +11,8 @@ const schema = z.object({
   // The Gmail thread to pull full prior-conversation context from. The message
   // being replied to is in MY inbox, so we read the thread with my token.
   threadId: z.string().max(200).nullish(),
+  // Optional notes from the user to steer the draft.
+  instruction: z.string().max(1000).nullish(),
   relationship: z
     .enum(["customer", "b2b_customer", "lead", "supplier", "influencer"])
     .optional(),
@@ -57,6 +59,7 @@ export async function POST(req: Request) {
       relationship: input.relationship ?? "customer",
       fromName: session.user.name ?? null,
       conversation,
+      instruction: input.instruction,
     });
     return NextResponse.json({ data: draft });
   } catch (err) {

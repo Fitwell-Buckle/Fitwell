@@ -60,6 +60,8 @@ export default async function LeadDetailPage({
   const draftMessages = draftRows.map((m) => ({
     id: m.id,
     toEmail: m.toEmail,
+    cc: m.cc,
+    bcc: m.bcc,
     subject: m.subject,
     body: m.body,
     status: m.status,

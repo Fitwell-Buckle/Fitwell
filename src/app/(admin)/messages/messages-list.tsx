@@ -13,6 +13,8 @@ import { Sparkles } from "lucide-react";
 export interface MessageView {
   id: string;
   toEmail: string | null;
+  cc: string | null;
+  bcc: string | null;
   subject: string | null;
   body: string;
   status: string;
@@ -44,11 +46,19 @@ function MessageCard({ message }: { message: MessageView }) {
   const router = useRouter();
   const [subject, setSubject] = useState(message.subject ?? "");
   const [body, setBody] = useState(message.body);
+  const [cc, setCc] = useState(message.cc ?? "");
+  const [bcc, setBcc] = useState(message.bcc ?? "");
+  const [showCc, setShowCc] = useState(!!(message.cc || message.bcc));
+  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [rewriting, setRewriting] = useState(false);
   const [scheduleAt, setScheduleAt] = useState(defaultScheduleLocal());
   const scheduled = message.status === "scheduled";
-  const dirty = subject !== (message.subject ?? "") || body !== message.body;
+  const dirty =
+    subject !== (message.subject ?? "") ||
+    body !== message.body ||
+    cc !== (message.cc ?? "") ||
+    bcc !== (message.bcc ?? "");
 
   // Schedule the send: persist any edits + set status/scheduledAt. The
   // send-scheduled cron sends it from your Gmail once the time passes.
@@ -70,6 +80,8 @@ function MessageCard({ message }: { message: MessageView }) {
       {
         subject: subject || null,
         body,
+        cc: cc.trim() || null,
+        bcc: bcc.trim() || null,
         status: "scheduled",
         scheduledAt: when.toISOString(),
       },
@@ -77,19 +89,14 @@ function MessageCard({ message }: { message: MessageView }) {
     );
   }
 
-  // Ask AI to rewrite the on-screen draft (optionally steered). Replaces the
-  // editor contents — the user reviews, then Saves/Sends as usual.
+  // Ask AI to recompose the on-screen draft, steered by the notes box. Replaces
+  // the editor contents — the user reviews, then Saves/Sends as usual.
   async function rewrite() {
     if (!body.trim()) {
-      toast.error("Nothing to rewrite yet.");
+      toast.error("Nothing to recompose yet.");
       return;
     }
-    const instruction =
-      window
-        .prompt(
-          "Optional: how should the AI rewrite it? (e.g. shorter, more formal). Leave blank for a general polish.",
-        )
-        ?.trim() || undefined;
+    const instruction = notes.trim() || undefined;
     setRewriting(true);
     try {
       const res = await fetch(`/api/messages/${message.id}/rewrite`, {
@@ -99,14 +106,14 @@ function MessageCard({ message }: { message: MessageView }) {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(json?.error ?? `Rewrite failed (${res.status})`);
+        toast.error(json?.error ?? `Recompose failed (${res.status})`);
         return;
       }
       if (json.data?.subject) setSubject(json.data.subject);
       if (json.data?.body) setBody(json.data.body);
-      toast.success("Rewritten — review, then save or send.");
+      toast.success("Recomposed — review, then save or send.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Rewrite failed");
+      toast.error(err instanceof Error ? err.message : "Recompose failed");
     } finally {
       setRewriting(false);
     }
@@ -164,7 +171,12 @@ function MessageCard({ message }: { message: MessageView }) {
         const save = await fetch(`/api/messages/${message.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ subject: subject || null, body }),
+          body: JSON.stringify({
+            subject: subject || null,
+            body,
+            cc: cc.trim() || null,
+            bcc: bcc.trim() || null,
+          }),
         });
         if (!save.ok) {
           toast.error("Couldn't save edits before sending");
@@ -220,16 +232,53 @@ function MessageCard({ message }: { message: MessageView }) {
         </div>
 
         <div className="mt-3 space-y-2">
-          <Input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Subject"
-          />
+          <div className="flex items-start gap-2">
+            <Input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Subject"
+            />
+            {!showCc && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="shrink-0"
+                onClick={() => setShowCc(true)}
+              >
+                Cc/Bcc
+              </Button>
+            )}
+          </div>
+          {showCc && (
+            <>
+              <Input
+                value={cc}
+                onChange={(e) => setCc(e.target.value)}
+                placeholder="Cc — name@example.com, other@example.com"
+              />
+              <Input
+                value={bcc}
+                onChange={(e) => setBcc(e.target.value)}
+                placeholder="Bcc — name@example.com, other@example.com"
+              />
+            </>
+          )}
           <textarea
             className="min-h-[160px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
             value={body}
             onChange={(e) => setBody(e.target.value)}
           />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-500">
+              Notes to guide the AI (optional)
+            </label>
+            <textarea
+              className="min-h-[60px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. offer a sample, push for a call next week, keep it short — then Recompose with AI"
+            />
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -237,7 +286,17 @@ function MessageCard({ message }: { message: MessageView }) {
             size="sm"
             variant="outline"
             disabled={busy || !dirty}
-            onClick={() => patch({ subject: subject || null, body }, "Saved")}
+            onClick={() =>
+              patch(
+                {
+                  subject: subject || null,
+                  body,
+                  cc: cc.trim() || null,
+                  bcc: bcc.trim() || null,
+                },
+                "Saved",
+              )
+            }
           >
             {dirty ? "Save edits" : "Saved"}
           </Button>
@@ -248,7 +307,7 @@ function MessageCard({ message }: { message: MessageView }) {
             disabled={busy || rewriting || !body.trim()}
           >
             <Sparkles className="h-4 w-4" />
-            {rewriting ? "Re-writing…" : "Re-write with AI"}
+            {rewriting ? "Recomposing…" : "Recompose with AI"}
           </Button>
           <Button size="sm" variant="outline" onClick={copy} disabled={busy}>
             Copy

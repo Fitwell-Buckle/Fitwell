@@ -49,6 +49,8 @@ export default async function MessagesPage() {
     return {
       id: m.id,
       toEmail: m.toEmail,
+      cc: m.cc,
+      bcc: m.bcc,
       subject: m.subject,
       body: m.body,
       status: m.status,
