@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 import { ListFilters } from "@/components/catalog/list-filters";
 import { RefreshCatalogButton } from "@/components/catalog/refresh-catalog-button";
+import { getCatalogCached } from "@/lib/catalog/load";
 
 export const metadata: Metadata = {
   title: "Products | Fitwell Admin",
@@ -45,7 +46,8 @@ export default async function ProductsPage({
       .filter(Boolean),
   );
 
-  const products = await db
+  // Sales performance per SKU (from order line items).
+  const salesRows = await db
     .select({
       sku: orderLineItem.sku,
       title: orderLineItem.title,
@@ -56,6 +58,7 @@ export default async function ProductsPage({
     .from(orderLineItem)
     .groupBy(orderLineItem.sku, orderLineItem.title)
     .orderBy(sql`sum(${orderLineItem.quantity}) desc`);
+  const salesBySku = new Map(salesRows.map((r) => [r.sku ?? "", r]));
 
   // Incoming = produced-but-not-yet-received units, by SKU (excludes cancelled POs).
   const incomingRows = await db
@@ -74,10 +77,58 @@ export default async function ProductsPage({
     .groupBy(productionPoLineItem.sku);
   const incomingBySku = new Map(incomingRows.map((r) => [r.sku, r.qty ?? 0]));
 
+  // The list is the whole Shopify catalog (so brand-new / unsold products show
+  // too), left-joined with the sales aggregates. Falls back to sales-only if
+  // Shopify is unreachable. The catalog is cached — "Refresh catalog" re-pulls it.
+  type ProductRow = {
+    key: string;
+    sku: string;
+    title: string;
+    unitsSold: number;
+    orderCount: number;
+    revenue: number;
+  };
+  let catalog: Awaited<ReturnType<typeof getCatalogCached>> = [];
+  try {
+    catalog = await getCatalogCached();
+  } catch (err) {
+    console.error("products page: catalog load failed — showing sold SKUs only", err);
+  }
+
+  const rows: ProductRow[] = [];
+  const seen = new Set<string>();
+  for (const v of catalog) {
+    const sku = v.sku ?? "";
+    const s = sku ? salesBySku.get(sku) : undefined;
+    rows.push({
+      key: sku || v.shopifyVariantId,
+      sku,
+      title: v.variantTitle ? `${v.title} — ${v.variantTitle}` : v.title,
+      unitsSold: Number(s?.unitsSold ?? 0),
+      orderCount: Number(s?.orderCount ?? 0),
+      revenue: Number(s?.revenue ?? 0),
+    });
+    if (sku) seen.add(sku);
+  }
+  // Keep historical sold SKUs no longer in the catalog (e.g. archived items).
+  for (const r of salesRows) {
+    const sku = r.sku ?? "";
+    if (sku && seen.has(sku)) continue;
+    rows.push({
+      key: sku || `sold-${rows.length}`,
+      sku,
+      title: r.title ?? "—",
+      unitsSold: Number(r.unitsSold ?? 0),
+      orderCount: Number(r.orderCount ?? 0),
+      revenue: Number(r.revenue ?? 0),
+    });
+  }
+  rows.sort((a, b) => b.unitsSold - a.unitsSold || a.title.localeCompare(b.title));
+
   // Item Chooser filter: keep just the chosen products' rows.
   const visibleProducts = skuSet.size
-    ? products.filter((p) => skuSet.has(p.sku ?? ""))
-    : products;
+    ? rows.filter((p) => skuSet.has(p.sku))
+    : rows;
 
   return (
     <div>
@@ -111,8 +162,8 @@ export default async function ProductsPage({
                 </TableCell>
               </TableRow>
             ) : (
-              visibleProducts.map((p, i) => (
-                <TableRow key={`${p.sku}-${i}`}>
+              visibleProducts.map((p) => (
+                <TableRow key={p.key}>
                   <TableCell className="whitespace-nowrap font-mono text-xs text-zinc-600">
                     {p.sku ?? "—"}
                   </TableCell>
