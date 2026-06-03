@@ -57,7 +57,7 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
         <img src={logoUrl} alt="Fitwell" className="h-8 w-auto shrink-0 [filter:brightness(0)]" />
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-6 text-sm">
+      <div className="mt-8 grid grid-cols-3 gap-4 text-sm">
         <div>
           <div className="text-xs uppercase tracking-wider text-zinc-400">From</div>
           <div className="mt-1 font-medium text-zinc-900">{shop?.name ?? "Fitwell Buckle Co."}</div>
@@ -69,34 +69,33 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           <div className="text-xs uppercase tracking-wider text-zinc-400">Bill to</div>
           <div className="mt-1 font-medium text-zinc-900">{inv.company?.name ?? "—"}</div>
           {inv.company?.contactName && <div className="text-zinc-500">{inv.company.contactName}</div>}
-          {inv.company?.contactEmail && <div className="text-zinc-500">{inv.company.contactEmail}</div>}
+          {inv.company?.contactEmail && (
+            <div className="break-words text-zinc-500">{inv.company.contactEmail}</div>
+          )}
         </div>
-      </div>
-
-      {(() => {
-        const shipLines = shippingAddressLines(inv.shippingAddress);
-        const fallback = inv.company?.address?.trim() || "";
-        if (shipLines.length === 0 && !fallback) return null;
-        return (
-          <div className="mt-6 text-sm">
-            <div className="text-xs uppercase tracking-wider text-zinc-400">
-              Ship to
-            </div>
-            {shipLines.length > 0 ? (
-              shipLines.map((line, i) => (
+        <div>
+          <div className="text-xs uppercase tracking-wider text-zinc-400">Ship to</div>
+          {(() => {
+            const shipLines = shippingAddressLines(inv.shippingAddress);
+            const fallback = inv.company?.address?.trim() || "";
+            if (shipLines.length > 0) {
+              return shipLines.map((line, i) => (
                 <div
                   key={i}
                   className={i === 0 ? "mt-1 font-medium text-zinc-900" : "text-zinc-500"}
                 >
                   {line}
                 </div>
-              ))
-            ) : (
-              <div className="mt-1 whitespace-pre-line text-zinc-500">{fallback}</div>
-            )}
-          </div>
-        );
-      })()}
+              ));
+            }
+            return (
+              <div className="mt-1 whitespace-pre-line text-zinc-500">
+                {fallback || "—"}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
 
       <div className="mt-6 flex flex-wrap gap-x-8 gap-y-1 border-y border-zinc-100 py-3 text-sm text-zinc-600">
         <span>Issued: {fmtDate(inv.issuedDate)}</span>
