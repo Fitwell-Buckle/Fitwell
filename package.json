@@ -71,6 +71,7 @@
     "dotenv": "^17.4.2",
     "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.30.0",
+    "esbuild": "^0.28.0",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.22.3",
