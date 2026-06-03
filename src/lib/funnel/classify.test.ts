@@ -414,4 +414,99 @@ describe("aggregateChannelsFromCustomers", () => {
     const meta = rows.find((r) => r.channel === "paid_meta_cold")!;
     expect(meta.label).toBe("Meta paid (cold)");
   });
+
+  describe("with display-metric overrides (position filter)", () => {
+    // A customer whose lifetime metrics put them in the outfitter
+    // segment (3 orders / 6 units), but the caller is filtering to
+    // acquisition orders only — so displayed metrics show just 1
+    // order at $40 (their first purchase).
+    const positionFiltered: CustomerOrderRollup[] = [
+      {
+        utmSource: "meta",
+        utmMedium: "cpc",
+        utmCampaign: "awareness-cold",
+        orderCount: 3, // lifetime — used for classification
+        totalSpentCents: 18000,
+        totalQty: 6,
+        displayedOrders: 1, // first-order subset
+        displayedSpentCents: 4000,
+      },
+    ];
+
+    it("uses lifetime metrics for stage classification, not displayed", () => {
+      // Customer's lifetime is 3 orders / 6 units → outfitter. Even
+      // though the displayed orders is 1 (which would classify as
+      // first_buyer if classification looked at displayed), the
+      // segmentMix should still show outfitter.
+      const rows = aggregateChannelsFromCustomers(positionFiltered);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].segmentMix.outfitter).toBe(1);
+      expect(rows[0].segmentMix.first_buyer).toBe(0);
+    });
+
+    it("uses displayed metrics for the orders + revenue columns", () => {
+      const rows = aggregateChannelsFromCustomers(positionFiltered);
+      expect(rows[0].orders).toBe(1); // displayedOrders, not lifetime 3
+      expect(rows[0].totalSpendCents).toBe(4000); // displayedSpentCents, not lifetime 18000
+    });
+
+    it("avgLtv is computed against displayed spend, not lifetime", () => {
+      const rows = aggregateChannelsFromCustomers(positionFiltered);
+      // 4000 / 1 customer = 4000
+      expect(rows[0].avgLtvCents).toBe(4000);
+    });
+
+    it("falls back to lifetime metrics when display overrides are not provided", () => {
+      // Existing tests already cover this, but make it explicit: an
+      // input without displayedOrders should behave exactly as before.
+      const noOverride: CustomerOrderRollup[] = [
+        {
+          utmSource: "meta",
+          utmMedium: "cpc",
+          utmCampaign: "awareness-cold",
+          orderCount: 3,
+          totalSpentCents: 18000,
+          totalQty: 6,
+        },
+      ];
+      const rows = aggregateChannelsFromCustomers(noOverride);
+      expect(rows[0].orders).toBe(3);
+      expect(rows[0].totalSpendCents).toBe(18000);
+    });
+
+    it("combines with segmentFilter correctly", () => {
+      // segmentFilter narrows by lifetime classification; position
+      // overrides only affect displayed metrics. Together: only
+      // include outfitter customers, but show their first-order
+      // metrics only.
+      const mixed: CustomerOrderRollup[] = [
+        // Outfitter — should be included
+        {
+          utmSource: "meta",
+          utmMedium: "cpc",
+          utmCampaign: "awareness-cold",
+          orderCount: 3,
+          totalSpentCents: 18000,
+          totalQty: 6,
+          displayedOrders: 1,
+          displayedSpentCents: 4000,
+        },
+        // first_buyer — should be excluded by segmentFilter='outfitter'
+        {
+          utmSource: "meta",
+          utmMedium: "cpc",
+          utmCampaign: "awareness-cold",
+          orderCount: 1,
+          totalSpentCents: 4000,
+          totalQty: 1,
+          displayedOrders: 1,
+          displayedSpentCents: 4000,
+        },
+      ];
+      const rows = aggregateChannelsFromCustomers(mixed, "outfitter");
+      expect(rows[0].customers).toBe(1);
+      expect(rows[0].orders).toBe(1);
+      expect(rows[0].totalSpendCents).toBe(4000);
+    });
+  });
 });

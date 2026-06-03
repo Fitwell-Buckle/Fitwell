@@ -39,6 +39,7 @@ import {
   type Channel,
   type ChannelAggregate,
   type Confidence,
+  type OrderPosition,
   type RetentionStage,
   type SegmentMix,
   aggregateChannelsFromCustomers,
@@ -72,6 +73,7 @@ export type {
   Channel,
   ChannelAggregate,
   Confidence,
+  OrderPosition,
   RetentionStage,
   SegmentMix,
 } from "./classify";
@@ -365,15 +367,27 @@ export type ChannelRow = ChannelAggregate;
  * totals — the segmentMix on each row will be zero in every other
  * stage.
  *
+ * When `positionFilter` is set ('acquisition' or 'retention'), the
+ * customer count + orders + revenue shown for each channel are
+ * computed from the filtered subset of orders only — customer's
+ * first D2C order chronologically (acquisition) or their second-
+ * and-later orders (retention). Sequence is computed at query time
+ * via ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY
+ * processed_at) — no stored column, no drift risk. Segment
+ * classification still uses the customer's lifetime order count
+ * and unit count.
+ *
  * Pure accumulation lives in `aggregateChannelsFromCustomers` in
  * classify.ts; this function is just the DB-fetch wrapper.
  */
 export async function getChannelBreakdown(
   segmentFilter?: RetentionStage,
+  positionFilter?: OrderPosition,
 ): Promise<ChannelRow[]> {
-  // Two parallel queries to avoid line-item fan-out inflating order
-  // counts/spend: one for per-customer order count + spend + UTM, one
-  // for per-customer total units.
+  // Two base queries (unchanged from before): per-customer lifetime
+  // order count + spend + UTM, and per-customer total units. Both
+  // filter to D2C orders only. Lifetime totals are what drive
+  // retention-stage classification — never narrow them by position.
   const [orderRows, qtyRows] = await Promise.all([
     db
       .select({
@@ -409,15 +423,87 @@ export async function getChannelBreakdown(
     if (q.customerId) qtyByCustomer.set(q.customerId, q.totalQty ?? 0);
   }
 
+  // Third query, only when filtering by order position: per-customer
+  // count + spend of orders matching the position filter (sequence = 1
+  // for acquisition, sequence > 1 for retention). Computed via a
+  // ROW_NUMBER window function in a CTE; no schema changes, always
+  // consistent with the live order table.
+  let positionMetricsByCustomer: Map<
+    string,
+    { displayedOrders: number; displayedSpentCents: number }
+  > | null = null;
+
+  if (positionFilter) {
+    const seqWhere =
+      positionFilter === "acquisition" ? sql`seq = 1` : sql`seq > 1`;
+    const positionRows = await db.execute<{
+      customer_id: string;
+      order_count: number;
+      total_spent: number;
+    }>(sql`
+      WITH ranked AS (
+        SELECT
+          customer_id,
+          total_price,
+          ROW_NUMBER() OVER (
+            PARTITION BY customer_id
+            ORDER BY processed_at, id
+          ) AS seq
+        FROM "order"
+        WHERE
+          customer_id IS NOT NULL
+          AND (source_name IS NULL OR source_name != 'shopify_draft_order')
+      )
+      SELECT
+        customer_id,
+        COUNT(*)::int AS order_count,
+        COALESCE(SUM(total_price), 0)::int AS total_spent
+      FROM ranked
+      WHERE ${seqWhere}
+      GROUP BY customer_id
+    `);
+    const rows =
+      (positionRows as unknown as { rows?: typeof positionRows }).rows ??
+      (positionRows as unknown as typeof positionRows);
+    positionMetricsByCustomer = new Map();
+    for (const r of rows as unknown as Array<{
+      customer_id: string;
+      order_count: number;
+      total_spent: number;
+    }>) {
+      positionMetricsByCustomer.set(r.customer_id, {
+        displayedOrders: Number(r.order_count),
+        displayedSpentCents: Number(r.total_spent),
+      });
+    }
+  }
+
   return aggregateChannelsFromCustomers(
-    orderRows.map((r) => ({
-      utmSource: r.utmSource,
-      utmMedium: r.utmMedium,
-      utmCampaign: r.utmCampaign,
-      orderCount: r.orderCount,
-      totalSpentCents: r.totalSpent ?? 0,
-      totalQty: qtyByCustomer.get(r.customerId) ?? 0,
-    })),
+    orderRows
+      .map((r) => {
+        const positionMetrics =
+          positionMetricsByCustomer?.get(r.customerId) ?? null;
+        return {
+          utmSource: r.utmSource,
+          utmMedium: r.utmMedium,
+          utmCampaign: r.utmCampaign,
+          orderCount: r.orderCount,
+          totalSpentCents: r.totalSpent ?? 0,
+          totalQty: qtyByCustomer.get(r.customerId) ?? 0,
+          // When positionFilter is active and the customer has at least
+          // one matching order, show the filtered subset. If they have
+          // no matching orders (e.g., a single-order customer under the
+          // retention filter), drop them entirely below.
+          displayedOrders: positionMetrics?.displayedOrders,
+          displayedSpentCents: positionMetrics?.displayedSpentCents,
+          _hasPositionMatch: positionMetrics !== null,
+        };
+      })
+      // Drop customers with no orders matching the position filter so they
+      // don't inflate the customer count on a slice that produced none of
+      // their revenue.
+      .filter((r) => !positionFilter || r._hasPositionMatch)
+      .map(({ _hasPositionMatch: _, ...rest }) => rest),
     segmentFilter,
   );
 }

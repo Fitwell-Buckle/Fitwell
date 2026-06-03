@@ -34,6 +34,23 @@ export type Channel =
 export type Confidence = "strong" | "medium" | "weak" | "missing";
 
 /**
+ * Order-position filter for the channel breakdown.
+ *
+ * Acquisition = customer's first D2C order (sequence 1 chronologically
+ *               by processed_at).
+ * Retention   = the same customer's second-and-later D2C orders.
+ *
+ * Computed at query time via a window function (ROW_NUMBER OVER
+ * PARTITION BY customer_id ORDER BY processed_at) — see
+ * specs/work-plans/todo/funnel-strategy-next-iteration.md Phase 4.
+ * Kept as runtime-computed rather than a stored column because two
+ * existing denormalized rollups (customer.orderCount, customer.totalSpent)
+ * have drifted from the order table by ~10x; adding another stored
+ * sequence field would inherit the same risk.
+ */
+export type OrderPosition = "acquisition" | "retention";
+
+/**
  * Classify a customer into a retention-loop stage. Mutually exclusive,
  * hierarchical: outfitter > multi_unit > second_buyer > first_buyer.
  * The `advocate` stage is set externally (requires Judge.me data) and
@@ -165,9 +182,24 @@ export interface CustomerOrderRollup {
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
+  /**
+   * Lifetime D2C order count — used for retention-stage classification.
+   * Always reflects the customer's full history, never filtered by
+   * position (otherwise a repeat buyer counted only via their first
+   * order would be mis-classified as a first_buyer).
+   */
   orderCount: number;
   totalSpentCents: number;
   totalQty: number;
+  /**
+   * Optional display-metric overrides. When the caller is filtering
+   * by order position (acquisition / retention), the aggregator should
+   * still classify on the lifetime values above but display the
+   * filtered subset. When omitted, displayed metrics equal the
+   * lifetime values — preserves existing behavior.
+   */
+  displayedOrders?: number;
+  displayedSpentCents?: number;
 }
 
 function emptySegmentMix(): SegmentMix {
@@ -216,8 +248,8 @@ export function aggregateChannelsFromCustomers(
         segmentMix: emptySegmentMix(),
       };
     e.customers += 1;
-    e.orders += c.orderCount;
-    e.totalSpendCents += c.totalSpentCents;
+    e.orders += c.displayedOrders ?? c.orderCount;
+    e.totalSpendCents += c.displayedSpentCents ?? c.totalSpentCents;
     e.segmentMix[stage] += 1;
     acc.set(channel, e);
   }

@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-05-28
+Last updated: 2026-06-03
 
 ## Current Strategic Focus (2026-05-25)
 
@@ -208,15 +208,15 @@ deadline. Styled to mirror the B2B Orders/Brands system. Pricing = **gifting
 ---
 
 ### 9. 🔨 Strategic Funnel — Next Iteration (in flight)
-**Last worked**: 2026-05-27 (Phase 1 shipped, commit `067d6be`)
+**Last worked**: 2026-06-03 (Phase 4 shipped)
 **Source of truth**: `specs/work-plans/todo/funnel-strategy-next-iteration.md`
 **Owner**: Tom (planning), Greg (engineering)
 
 V1 of `/funnel/strategy` shipped 2026-05-26 (commits `81e4079`, `fd5f5bd`). Iteration plan progress:
-- [x] **Phase 1: Tier 1 quick wins** — D2C wholesale filter + Meta cold/retargeting split shipped 2026-05-27 (`067d6be`). GSC auth unblock deferred (not cheap; auth-stack rewrite + user OAuth Playground steps).
-- [ ] **Phase 2: Channel × persona cross-cut** — click a channel → see persona mix; persona filter pills at top
-- [ ] **Phase 3: Klaviyo API integration** — live email-side measurement
-- [ ] **Phase 4: Order sequence-position column** — acquisition vs. retention discrimination
+- [x] **Phase 1: Tier 1 quick wins** — D2C wholesale filter + Meta cold/retargeting split shipped 2026-05-27 (`067d6be`). GSC auth unblock deferred.
+- [x] **Phase 2: Channel × persona cross-cut** — segment pills + per-channel segment mix bars (data layer `c9e92ec`, UI `c209fdc`).
+- [x] **Phase 3: Klaviyo API integration** — Phase 0 read-side shipped in `c209fdc`. Per-order grain attribution deferred to Phase 0.5.
+- [x] **Phase 4: Order position split (acquisition vs retention)** — shipped 2026-06-03. Runtime-computed via `ROW_NUMBER` window function instead of stored column (preserved zero-drift guarantee that two existing denormalized customer fields have already broken).
 - [ ] **Phase 5: Judge.me API integration** — live advocate count
 
 PostHog client-side instrumentation (workstream 6) is the largest unblock for upper-funnel measurement but is independent of this plan.

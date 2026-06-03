@@ -92,20 +92,35 @@ daily cron, same `/funnel/strategy` widgets. That phase is the
 dependency for this iteration's measurement goals; the write-side
 phases (1–5 there) are independent of this plan.
 
-### Phase 4: Order sequence-position column (~half day)
+### Phase 4: Order position (acquisition vs retention) — ✅ shipped 2026-06-03
 
 Unlocks acquisition-vs-retention split for any channel, not just Klaviyo.
 
-- [ ] Add `order.orderSequence` integer column (1, 2, 3… per customer chronologically)
-- [ ] Generate + apply migration
-- [ ] Update Shopify sync (`src/lib/shopify/sync.ts` or wherever order upsert happens) to compute and write this on insert/update — `MAX(order_sequence) + 1` for that customer, or recompute on update
-- [ ] Backfill script `scripts/backfill-order-sequence.ts` for existing orders
-- [ ] Add a "First order vs. repeat order" toggle to `/funnel/strategy` channel breakdown — splits each channel's revenue between acquisition-position (sequence = 1) and retention-position (sequence > 1)
-- [ ] Update `specs/current/schema.md`
+**Design change vs. original plan:** computed at query time via
+`ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY processed_at)`
+instead of a stored `order.order_sequence` column. Two existing
+denormalized fields (`customer.orderCount` and `customer.totalSpent`)
+have drifted by ~10x from the live order table (per
+[[personas]] Distribution); adding a third denormalized field would
+inherit the same drift risk. Runtime computation is zero-drift,
+needs no migration / sync code / backfill, and at current scale
+(~1,500 orders) the window function is microseconds. If a stored
+column becomes warranted (e.g., a hot query needing index-backed
+"is first order" lookups), promote then on measured need.
+
+- [x] Add `OrderPosition` type ('acquisition' | 'retention') to `src/lib/funnel/classify.ts`
+- [x] Extend `CustomerOrderRollup` with optional `displayedOrders` + `displayedSpentCents` overrides — lifetime metrics stay used for retention-stage classification; displayed metrics use the filtered subset
+- [x] Update `aggregateChannelsFromCustomers` to read displayed overrides when present
+- [x] Extend `getChannelBreakdown` with optional `positionFilter` — runs a third query (CTE with ROW_NUMBER window) when set, populates display overrides; drops customers with no matching orders so the customer count stays accurate per slice
+- [x] Add 3-way pill toggle on `/funnel/strategy` (All orders / First order / Repeat orders), URL param `?position=…`
+- [x] Removes the "Order sequence-position" entry from the page's "What's missing" backlog card
 
 #### Tests
-- Unit: sequence computation handles concurrent inserts (idempotent — same customer, two orders processed → sequences 1 and 2 not 1 and 1)
-- Integration: backfill against a fixture customer with multiple orders
+- [x] Unit: classification continues to use lifetime metrics when display overrides are present (an outfitter shown via first-order view doesn't get mis-classified as first_buyer)
+- [x] Unit: displayed orders + revenue reflect the override values
+- [x] Unit: avgLtv computes against displayed spend
+- [x] Unit: behavior is unchanged when no overrides provided
+- [x] Unit: position filter combines correctly with segmentFilter (5 new tests, 468 total passing)
 
 ### Phase 5: Judge.me API integration (~1 day)
 

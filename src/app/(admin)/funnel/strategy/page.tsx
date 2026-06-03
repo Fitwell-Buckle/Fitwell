@@ -14,6 +14,7 @@ import {
   type FunnelStageRow,
   type RetentionStageRow,
   type ChannelRow,
+  type OrderPosition,
   type RetentionStage,
 } from "@/lib/funnel/strategy";
 import { RETENTION_STAGE_META } from "@/lib/funnel/classify";
@@ -529,6 +530,89 @@ function buildSegmentHref(
   return qs ? `?${qs}` : "?";
 }
 
+// Whitelist of valid position values for the ?position= URL param.
+const VALID_POSITIONS = new Set<OrderPosition>([
+  "acquisition",
+  "retention",
+]);
+
+function parsePosition(
+  params: Record<string, string | string[] | undefined>,
+): OrderPosition | null {
+  const raw = typeof params.position === "string" ? params.position : null;
+  if (raw && VALID_POSITIONS.has(raw as OrderPosition)) {
+    return raw as OrderPosition;
+  }
+  return null;
+}
+
+function buildPositionHref(
+  current: Record<string, string | string[] | undefined>,
+  position: OrderPosition | null,
+): string {
+  const usp = new URLSearchParams();
+  for (const [k, v] of Object.entries(current)) {
+    if (k === "position") continue;
+    if (typeof v === "string") usp.set(k, v);
+  }
+  if (position) usp.set("position", position);
+  const qs = usp.toString();
+  return qs ? `?${qs}` : "?";
+}
+
+function PositionFilterPills({
+  active,
+  buildHref,
+}: {
+  active: OrderPosition | null;
+  buildHref: (position: OrderPosition | null) => string;
+}) {
+  const pillBase =
+    "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors";
+  const items: {
+    label: string;
+    value: OrderPosition | null;
+    description: string;
+  }[] = [
+    { label: "All orders", value: null, description: "lifetime view" },
+    {
+      label: "First order",
+      value: "acquisition",
+      description: "acquisition position (sequence 1)",
+    },
+    {
+      label: "Repeat orders",
+      value: "retention",
+      description: "retention position (sequence > 1)",
+    },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[11px] uppercase tracking-wider text-zinc-500">
+        Split by order position:
+      </span>
+      {items.map((it) => {
+        const isActive = active === it.value;
+        return (
+          <Link
+            key={it.label}
+            href={buildHref(it.value)}
+            title={it.description}
+            className={cn(
+              pillBase,
+              isActive
+                ? "border-zinc-900 bg-zinc-900 text-white"
+                : "border-zinc-200 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900",
+            )}
+          >
+            {it.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 export default async function FunnelStrategyPage({
   searchParams,
 }: {
@@ -540,13 +624,17 @@ export default async function FunnelStrategyPage({
   const params = await searchParams;
   const { from, to } = parseDateRange(params);
   const segmentFilter = parseSegment(params);
+  const positionFilter = parsePosition(params);
 
   const [acq, retention, channels, klaviyo] = await Promise.all([
     getAcquisitionFunnel(from, to),
     // Retention loop + channel breakdown are full-customer-base views
     // (LTV makes no sense windowed); they ignore the date range.
     getRetentionLoop(),
-    getChannelBreakdown(segmentFilter ?? undefined),
+    getChannelBreakdown(
+      segmentFilter ?? undefined,
+      positionFilter ?? undefined,
+    ),
     getKlaviyoOverview(),
   ]);
 
@@ -623,18 +711,42 @@ export default async function FunnelStrategyPage({
               campaign-name heuristic; see{" "}
               <Mono>src/lib/funnel/classify.ts</Mono>.
             </p>
-            <div className="mb-4">
+            <div className="mb-4 space-y-3">
               <SegmentFilterPills
                 active={segmentFilter}
                 buildHref={(seg) => buildSegmentHref(params, seg)}
               />
-              {segmentFilter && (
+              <PositionFilterPills
+                active={positionFilter}
+                buildHref={(pos) => buildPositionHref(params, pos)}
+              />
+              {(segmentFilter || positionFilter) && (
                 <p className="mt-2 text-[11px] italic text-zinc-500">
-                  Filtered to{" "}
-                  <Mono>{RETENTION_STAGE_META[segmentFilter].label}</Mono>{" "}
-                  customers only. Channel rows below count only customers
-                  in this segment; segment-mix bars show that single
-                  segment at 100%. Clear filter to see the full mix.
+                  {segmentFilter && (
+                    <>
+                      Segment-filtered to{" "}
+                      <Mono>
+                        {RETENTION_STAGE_META[segmentFilter].label}
+                      </Mono>{" "}
+                      customers only.{" "}
+                    </>
+                  )}
+                  {positionFilter === "acquisition" && (
+                    <>
+                      Showing each customer's <strong>first D2C order only</strong>{" "}
+                      (sequence = 1 by <Mono>processed_at</Mono>) — acquisition
+                      revenue per channel. Segment mix still reflects lifetime
+                      customer classification.
+                    </>
+                  )}
+                  {positionFilter === "retention" && (
+                    <>
+                      Showing each customer's <strong>repeat orders only</strong>{" "}
+                      (sequence &gt; 1 by <Mono>processed_at</Mono>) — retention
+                      revenue per channel attributed back to first-touch UTM.
+                      Customers with no repeat orders are excluded.
+                    </>
+                  )}
                 </p>
               )}
             </div>
@@ -687,13 +799,6 @@ export default async function FunnelStrategyPage({
                 <strong>problem_aware</strong> by persona requires PostHog
                 persona inference from behavior patterns; deferred until
                 PostHog Phase 1+2 lands.
-              </li>
-              <li>
-                <strong>Order sequence-position</strong> — Phase 4 of the
-                strategy-funnel iteration plan. Adds an{" "}
-                <Mono>order.order_sequence</Mono> column so any channel can
-                be split between acquisition-position (sequence = 1) and
-                retention-position (sequence &gt; 1).
               </li>
             </ul>
           </CardContent>
