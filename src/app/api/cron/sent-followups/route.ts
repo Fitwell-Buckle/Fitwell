@@ -3,6 +3,7 @@ import { verifyCronOrAdmin } from "@/lib/cron-auth";
 import { getFollowupSettings } from "@/lib/crm/followup-settings";
 import {
   generateSentFollowups,
+  regenerateQueuedFollowups,
   scanSentEmails,
   scanSentForLeads,
 } from "@/lib/crm/sent-followups";
@@ -22,6 +23,14 @@ export async function GET(req: NextRequest) {
       { error: "ANTHROPIC_API_KEY not configured" },
       { status: 503 },
     );
+  }
+
+  // `?regenerate=1` re-drafts the follow-ups already queued in Next Steps with
+  // the current prompt (e.g. after a prompt fix) instead of scanning for new
+  // ones. Overwrites their bodies in place.
+  if (new URL(req.url).searchParams.get("regenerate") === "1") {
+    const result = await regenerateQueuedFollowups();
+    return NextResponse.json({ data: { regenerate: result } });
   }
 
   const settings = await getFollowupSettings();

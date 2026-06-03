@@ -1,6 +1,13 @@
 import { and, asc, eq, isNotNull, isNull, lte } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { customer, lead, sentEmail, supplier } from "@/lib/schema";
+import {
+  customer,
+  lead,
+  outboundMessage,
+  sentEmail,
+  supplier,
+  user,
+} from "@/lib/schema";
 import {
   fetchThreadTranscript,
   hasInboundFromAnyMailbox,
@@ -175,6 +182,22 @@ export async function generateSentFollowups(
   let drafted = 0;
   let skippedReplied = 0;
 
+  // The follow-up sends from the original sender's Gmail, so the draft must be
+  // written in THEIR voice (first person) and signed with THEIR name — otherwise
+  // the model treats the sender (seen in the prior thread) as a third party.
+  const senderNames = new Map<string, string | null>();
+  async function senderName(userId: string | null): Promise<string | null> {
+    if (!userId) return null;
+    if (senderNames.has(userId)) return senderNames.get(userId) ?? null;
+    const u = await db.query.user.findFirst({
+      where: eq(user.id, userId),
+      columns: { name: true },
+    });
+    const n = u?.name ?? null;
+    senderNames.set(userId, n);
+    return n;
+  }
+
   for (const s of due) {
     const since = s.sentAt ?? cutoff;
     const { replied, checked } = await hasInboundFromAnyMailbox(s.toEmail, since);
@@ -224,6 +247,7 @@ export async function generateSentFollowups(
         ...ctx,
         isNudge: true,
         priorConversation,
+        fromName: await senderName(s.mailboxUserId),
       });
       await createOutboundMessage({
         leadId: s.leadId,
@@ -249,4 +273,97 @@ export async function generateSentFollowups(
   }
 
   return { candidates: due.length, drafted, skippedReplied };
+}
+
+// Re-draft the body of every threaded AI follow-up still sitting in the queue
+// (status='draft', model-generated, has a Gmail thread). Used to refresh drafts
+// made before a prompt change — e.g. the first-person/sign-off fix — without
+// waiting for new sends. Rewrites the body in place (keeps the threaded subject)
+// and WILL overwrite manual edits, so it's a deliberate, triggered action.
+export async function regenerateQueuedFollowups(
+  limit = 100,
+): Promise<{ scanned: number; regenerated: number }> {
+  const drafts = await db
+    .select({
+      id: outboundMessage.id,
+      leadId: outboundMessage.leadId,
+      customerId: outboundMessage.customerId,
+      supplierId: outboundMessage.supplierId,
+      threadId: outboundMessage.threadId,
+      createdByUserId: outboundMessage.createdByUserId,
+      sequenceStep: outboundMessage.sequenceStep,
+    })
+    .from(outboundMessage)
+    .where(
+      and(
+        eq(outboundMessage.status, "draft"),
+        isNotNull(outboundMessage.generatedByModel),
+        isNotNull(outboundMessage.threadId),
+      ),
+    )
+    .limit(limit);
+
+  const senderNames = new Map<string, string | null>();
+  async function senderName(userId: string | null): Promise<string | null> {
+    if (!userId) return null;
+    if (senderNames.has(userId)) return senderNames.get(userId) ?? null;
+    const u = await db.query.user.findFirst({
+      where: eq(user.id, userId),
+      columns: { name: true },
+    });
+    const n = u?.name ?? null;
+    senderNames.set(userId, n);
+    return n;
+  }
+
+  let regenerated = 0;
+  for (const d of drafts) {
+    const ctx: {
+      firstName?: string | null;
+      lastName?: string | null;
+      companyName?: string | null;
+      title?: string | null;
+    } = {};
+    if (d.leadId) {
+      const l = await db.query.lead.findFirst({
+        where: eq(lead.id, d.leadId),
+        columns: { firstName: true, lastName: true, companyName: true, title: true },
+      });
+      if (l) Object.assign(ctx, l);
+    } else if (d.customerId) {
+      const c = await db.query.customer.findFirst({
+        where: eq(customer.id, d.customerId),
+        columns: { firstName: true, lastName: true },
+      });
+      if (c) Object.assign(ctx, c);
+    } else if (d.supplierId) {
+      const sup = await db.query.supplier.findFirst({
+        where: eq(supplier.id, d.supplierId),
+        columns: { name: true },
+      });
+      if (sup) ctx.companyName = sup.name;
+    }
+
+    try {
+      const priorConversation =
+        d.threadId && d.createdByUserId
+          ? await fetchThreadTranscript(d.createdByUserId, d.threadId)
+          : "";
+      const draft = await draftFollowupEmail({
+        ...ctx,
+        isNudge: (d.sequenceStep ?? 1) >= 2,
+        priorConversation,
+        fromName: await senderName(d.createdByUserId),
+      });
+      await db
+        .update(outboundMessage)
+        .set({ body: draft.body, updatedAt: new Date() })
+        .where(eq(outboundMessage.id, d.id));
+      regenerated++;
+    } catch (err) {
+      console.error(`regenerate-followups: failed for ${d.id}`, err);
+    }
+  }
+
+  return { scanned: drafts.length, regenerated };
 }

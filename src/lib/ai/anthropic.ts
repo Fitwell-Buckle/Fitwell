@@ -218,6 +218,10 @@ const DRAFT_SYSTEM_PROMPT = [
   "someone (often at a trade show) whose business card was just captured.",
   "",
   "Rules:",
+  "- You ARE the rep, writing in the FIRST person ('I'/'we'). If a rep name is",
+  "  given, that name is YOU — the prior email thread (if any) was written by you.",
+  "  NEVER refer to the rep in the third person or name them in the body; the rep's",
+  "  name appears ONLY in the sign-off.",
   "- Ground the email in the rep's NOTES about the conversation — reference the",
   "  specific interest/next step they recorded. If notes are empty, write a brief",
   "  generic 'great to meet you' follow-up.",
@@ -253,7 +257,7 @@ function contactSummary(input: DraftFollowupInput): string {
   if (input.priorConversation?.trim()) {
     lines.push(
       "",
-      "Prior email thread (oldest to newest — what we already sent them; they have NOT replied). Reference the last message naturally; do not paste it back:",
+      "Prior email thread (oldest to newest — written BY YOU, the rep, to them; they have NOT replied). Continue it as the same person; reference the last message naturally; do not paste it back:",
       input.priorConversation.trim(),
     );
   }

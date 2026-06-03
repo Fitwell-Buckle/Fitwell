@@ -340,10 +340,13 @@ export function LeadDetail({
             {readonlyRow("Company", draft.companyName)}
             <div className="sm:col-span-2">
               <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                Address
+                Address from business card
               </dt>
               <dd className="mt-0.5 whitespace-pre-line text-sm text-zinc-900">
                 {formatAddress(draft) || "—"}
+              </dd>
+              <dd className="mt-0.5 text-xs text-zinc-400">
+                Stored on this lead only — not synced with Shopify.
               </dd>
             </div>
             {readonlyRow("Stage", stageLabel(draft.stage))}
@@ -464,6 +467,14 @@ export function LeadDetail({
                 set("companyName", v.companyName || null);
               }}
             />
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-sm font-medium text-zinc-700">
+              Address from business card
+            </p>
+            <p className="text-xs text-zinc-400">
+              Stored on this lead only — not synced with Shopify.
+            </p>
           </div>
           <div className="sm:col-span-2">
             <label className={LBL}>Street address</label>
