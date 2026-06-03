@@ -357,6 +357,71 @@ export class KlaviyoClient {
     return out;
   }
 
+  /**
+   * GET /api/flows — list all flows in the account (name + status).
+   * Paginates. Used by the Phase 3 spike and by future Phase 4 deploys
+   * for idempotency lookups by name.
+   */
+  async listFlows(): Promise<
+    Array<{ id: string; name: string; status: string }>
+  > {
+    const out: Array<{ id: string; name: string; status: string }> = [];
+    let path: string | null = "/flows?fields[flow]=name,status";
+    while (path) {
+      const page = (await this.request("GET", path)) as JsonApiResponse<
+        "flow",
+        { name: string; status: string }
+      > & { links?: { next?: string } };
+      const rows = Array.isArray(page.data) ? page.data : [page.data];
+      for (const row of rows) {
+        if (row.id) {
+          out.push({
+            id: row.id,
+            name: row.attributes.name,
+            status: row.attributes.status,
+          });
+        }
+      }
+      const next = page.links?.next ?? null;
+      path = next ? next.replace(KLAVIYO_BASE_URL, "") : null;
+    }
+    return out;
+  }
+
+  /**
+   * GET /api/flows/{id}?additional-fields[flow]=definition — fetches
+   * the full flow definition JSON (triggers, actions, conditional
+   * splits, etc.). This is the per-Klaviyo-docs recommended way to
+   * understand a flow's structure; Phase 4 will use the result to
+   * inform what the YAML compiler needs to produce.
+   */
+  async getFlowDefinition(id: string): Promise<{
+    id: string;
+    name: string;
+    status: string;
+    definition: unknown;
+    raw: unknown;
+  }> {
+    const path = `/flows/${encodeURIComponent(id)}?additional-fields[flow]=definition`;
+    const json = (await this.request("GET", path)) as JsonApiResponse<
+      "flow",
+      {
+        name: string;
+        status: string;
+        definition?: unknown;
+      }
+    >;
+    const data = Array.isArray(json.data) ? json.data[0] : json.data;
+    if (!data?.id) throw new Error(`Klaviyo getFlowDefinition: no flow ${id}`);
+    return {
+      id: data.id,
+      name: data.attributes.name,
+      status: data.attributes.status,
+      definition: data.attributes.definition ?? null,
+      raw: json,
+    };
+  }
+
   // ─── Write methods (Phase 2: campaigns, Phase 4: flows) ──────────────
 
   /**

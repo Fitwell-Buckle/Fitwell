@@ -23,7 +23,8 @@
     "shopify": "node --env-file=.env.local --import tsx/esm scripts/shopify-cli.ts",
     "backfill:shopify": "node --env-file=.env.local --import tsx/esm scripts/backfill-shopify.ts",
     "backfill:posthog": "node --env-file=.env.local --import tsx/esm scripts/backfill-posthog.ts",
-    "klaviyo:campaign:draft": "node --env-file=.env.local --import tsx/esm scripts/klaviyo-draft-campaign.ts"
+    "klaviyo:campaign:draft": "node --env-file=.env.local --import tsx/esm scripts/klaviyo-draft-campaign.ts",
+    "klaviyo:flow:spike": "node --env-file=.env.local --import tsx/esm scripts/klaviyo-flow-spike.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",

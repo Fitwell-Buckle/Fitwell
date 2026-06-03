@@ -170,33 +170,58 @@ from Klaviyo's flow API actually work via API and aren't UI-only.
 #### Tests
 - Manual: the spike flow runs end-to-end in a Klaviyo sandbox account against a test profile; the test profile receives the email.
 
-### Phase 4: Flow write production (~1–2 weeks; subject to Phase 3 outcome)
+### Phase 4: Flow write production (~1 week, revised post-spike)
 
-Author flows as YAML, deploy as Klaviyo drafts. First-deploy is
-inactive; updates to already-live flows require an explicit opt-in.
+**Approach changed from the original plan** — see `Spike findings`
+below. We no longer try to POST a flow from scratch. Instead, Tom
+creates the flow skeleton in Klaviyo's UI (trigger, step count,
+conditional-split topology), we pull its definition into the repo as
+YAML keyed by stable Klaviyo action IDs, Claude iterates content in
+the YAML, and the deploy script PATCHes each action's `data` block.
+Wiring (`id`, `type`, `links`) is **never mutated** — only
+content/config.
 
-- [ ] Define flow YAML schema (Zod). Cover: triggers (metric, segment add, list subscribe), delays (absolute + relative), conditional splits (customer property, event property), send-email actions (referencing a template path), update-profile actions (optional).
-- [ ] Implement `src/lib/klaviyo/flow-compiler.ts` — YAML → Klaviyo flow JSON. Pure function with snapshot tests.
-- [ ] Implement flow write methods in `src/lib/klaviyo/client.ts`: `createFlow`, `updateFlow`, `getFlow`, `listFlows`.
-- [ ] Create `src/lib/klaviyo/managed-flows.ts` — **hard-coded allowlist** of flow names this code is allowed to touch. The welcome flow's name is **not** on the list. Any deploy command that targets a name not on the list errors out before contacting the API.
-- [ ] Create `scripts/klaviyo-deploy-flow.ts` — CLI: `npm run klaviyo:flow:deploy <name>`. Supports:
-  - `--dry-run` (default): print the JSON that would be sent and a diff vs. the current live flow if one exists
-  - `--apply`: deploys as an **inactive draft**; Tom activates manually first time
-  - `--update-live`: required for any change to a flow that is currently active. Without this flag, the command errors if the target flow is `live`.
+- [ ] Implement flow read + patch methods in `src/lib/klaviyo/client.ts`:
+  - `getFlowDefinition(id)` — already shipped in Phase 3 spike
+  - `listFlows()` — already shipped in Phase 3 spike
+  - `patchFlowAction(actionId, data)` — `PATCH /api/flow-actions/{id}` with new `data` block
+  - `getFlowStatus(id)` / `setFlowStatus(id, status)` — for draft↔live transitions if we want them; otherwise leave activation as a UI action
+- [ ] Define flow YAML schema (Zod). Schema mirrors what the Klaviyo definition exposes:
+  - `flow.id` — Klaviyo flow ID this YAML manages
+  - `flow.name` — for verification (refuse to deploy if name on disk doesn't match Klaviyo)
+  - `actions: { <klaviyo_action_id>: { content } }` — content keyed by the stable Klaviyo ID, not a repo-local slug
+  - send-email content: `subject`, `preview_text`, `template_mjml_path` (path to MJML in `klaviyo/templates/`), UTM `content` override
+  - time-delay content: `unit`, `value`, optional `delay_until_weekdays`
+  - conditional-split content: `condition_groups` (passed through verbatim to Klaviyo's filter shape)
+- [ ] Implement `src/lib/klaviyo/flow-deployer.ts` — pure orchestrator: load YAML, verify it matches the live flow's wiring, compile each managed action's content, PATCH per action.
+- [ ] Create `src/lib/klaviyo/managed-flows.ts` — **hard-coded denylist** by name:
+  - `Welcome Flow - DTC First Purchase Discount` (UL2AFA — the +27.6% LTV live flow)
+  - `Welcome Flow - Dec 2025` (RcGm73 — alternate welcome draft)
+  - Any name matching `/welcome/i`
+  - Any name matching `/abandoned checkout reminder/i` (WunfeH — currently live, may be replaced by the 5-email sequence)
+  - Pull command refuses to pull these into the repo; deploy command refuses to PATCH them.
+- [ ] Create `scripts/klaviyo-flow-pull.ts` — CLI: `npm run klaviyo:flow:pull <flow_id>`. Fetches the definition, serializes editable parts to `klaviyo/flows/<slug>.yaml` + dumps the full original definition to `klaviyo/flows/<slug>.snapshot.json` for diff reference.
+- [ ] Create `scripts/klaviyo-flow-deploy.ts` — CLI: `npm run klaviyo:flow:deploy <slug>`. Supports:
+  - `--dry-run` (default): GET current state, compute per-action diff vs. YAML, print, no writes
+  - `--apply`: PATCH each managed action's `data` block; never touches wiring
+  - Hard refusal if the flow's current status is `live` unless `--update-live` is also set
+  - Hard refusal if YAML's `flow.name` doesn't match the live flow's name (defensive — catches accidental rename or ID swap)
 - [ ] Ship the three flows the 360 plan calls for, in this order:
-  - `klaviyo/flows/post-purchase.yaml` — highest-leverage gap
-  - `klaviyo/flows/win-back-90d.yaml`
-  - `klaviyo/flows/m4-cross-sell.yaml`
-- [ ] Per-step UTMs auto-injected as `utm_campaign=<flow-name>&utm_content=<step-id>` so the Phase 0 `klaviyo_flow_attribution` table can break down by step.
-- [ ] Update `specs/current/integrations.md` with the flow-deploy workflow + safety model.
+  - Post-purchase — highest-leverage gap (no live post-purchase flow exists today)
+  - Win-back 90d
+  - M4 cross-sell
+  - For each: Tom creates skeleton in UI → `npm run klaviyo:flow:pull <id>` → Claude iterates YAML → `npm run klaviyo:flow:deploy <slug> --apply`
+- [ ] Per-step UTMs auto-injected as `utm_campaign=<flow-name-slug>&utm_content=<step-id>` so the Phase 0 `klaviyo_flow_attribution` table can break down by step.
+- [ ] Update `specs/current/integrations.md` with the flow pull/deploy workflow + safety model.
 
 #### Tests
-- Unit: flow YAML schema validation (Zod) rejects malformed flows.
-- Unit: `flow-compiler` golden tests for each step type.
-- Unit: managed-flows allowlist blocks deploys to unlisted flow names.
+- Unit: flow YAML schema validation (Zod) rejects malformed flows / unknown action IDs.
+- Unit: managed-flows denylist blocks pull AND deploy on denylisted names.
+- Unit: name-mismatch guard (YAML's `flow.name` ≠ Klaviyo's current name → refuse).
 - Unit: `--update-live` requirement enforced when target flow is `live`.
-- Integration: against mocked client, dry-run produces expected JSON; `--apply` calls `createFlow` with that JSON.
-- Manual: deploy `post-purchase` to a Klaviyo sandbox, activate, send a test order to a test profile, verify the sequence fires.
+- Unit: deployer never includes `id`, `type`, or `links` in the PATCH body (defensive — even if YAML accidentally contains them).
+- Integration: against mocked client, `--apply` issues the expected per-action `patchFlowAction` calls; `--dry-run` doesn't.
+- Manual: pull → edit a non-critical existing draft flow → deploy → verify the change shows in Klaviyo UI.
 
 ### Phase 5: Polish (defer — add when pasting friction reappears)
 
@@ -256,7 +281,75 @@ the approval surface. We do **not** build a custom approval UI.
 
 ### Spike findings
 
-*To be filled in during Phase 3.*
+Ran 2026-06-03 against the live Klaviyo account using a read-only
+`scripts/klaviyo-flow-spike.ts` (subcommands: `list`, `get <id>`,
+`get-welcome`). All findings from GETs only — no writes.
+
+#### Account inventory
+
+11 flows total: **6 live, 5 draft.** Live flows include the welcome
+flow (`UL2AFA - Welcome Flow - DTC First Purchase Discount`, the
++27.6% LTV cash cow), abandoned-checkout reminder (`WunfeH`), back-in-stock,
+two Geneva-segment broadcasts, and an email-signup no-purchase flow.
+**No live post-purchase, win-back, or M4 cross-sell** — confirms the
+360 gap is real. Drafts include a 5-email AC sequence (`YqCvHv`,
+multi-step + conditional splits — good shape sample), three duplicate
+"Essential Flow Recommendation_" drafts (cleanup candidate, not
+blocking), and a "Welcome Flow - Dec 2025" draft (`RcGm73`, possibly
+a planned welcome replacement).
+
+#### Flow definition shape — confirmed via UL2AFA + YqCvHv
+
+```
+definition: {
+  triggers: [{ type: "list" | "metric", id }],   // observed both types
+  profile_filter: { condition_groups: [...] },   // top-level recipient filter
+  entry_action_id,                                // pointer to first action
+  actions: [...],                                 // flat list, wired by links
+  reentry_criteria,                               // present on metric-triggered flows
+}
+
+action: {
+  id,                          // stable Klaviyo-assigned, survives edits
+  type: "send-email" | "time-delay" | "conditional-split" | ...,
+  data: { ... type-specific ... },
+  links: {                     // graph wiring — by action ID
+    next?,                     // sequential
+    next_if_true?,             // conditional-split true branch
+    next_if_false?,            // conditional-split false branch
+  },
+}
+
+send-email data:        { message: <ref>, status }
+time-delay data:        { unit, value, secondary_value, timezone, delay_until_weekdays }
+conditional-split data: { profile_filter: { condition_groups: [...] } }   // same shape as top-level filter
+```
+
+#### Implications for Phase 4
+
+1. **Klaviyo's docs explicitly discourage programmatic flow creation:** *"Klaviyo does not recommend pre-creation of flows in customer accounts. The recommended workflow requires creating flows manually in Klaviyo first, then retrieving their definitions via GET /api/flows/:id?additional-fields[flow]=definition."* This is a hard signal — don't fight it.
+2. **Wiring is linked-list-by-ID.** `links.next` for sequences, `links.next_if_true` / `links.next_if_false` for splits. Trivial to compile from YAML, but more importantly: **stable IDs let us PATCH content per action without rebuilding the graph.**
+3. **`data` blocks are clean and self-contained.** Every action's `data` is the part that holds editable content (subject, copy reference, delay value, split condition). The wiring lives outside `data`. So PATCHing `data` only is safe.
+4. **`profile_filter.condition_groups`** is the same shape at the flow-top-level and inside conditional-split actions. One filter schema covers both.
+
+#### Phase 4 scope decision: **create-in-UI → pull-as-YAML → PATCH-content**
+
+The original plan was POST-a-whole-flow-from-YAML. That's no longer
+the play. The new model:
+
+1. Tom creates the flow skeleton in Klaviyo UI (trigger, step count, conditional-split topology).
+2. `npm run klaviyo:flow:pull <id>` fetches the definition and serializes the per-action content into `klaviyo/flows/<slug>.yaml`, keyed by stable Klaviyo action IDs.
+3. Claude iterates the YAML — copy, subjects, delay values, condition criteria.
+4. `npm run klaviyo:flow:deploy <slug>` PATCHes each action's `data` block via `PATCH /api/flow-actions/{id}`. Wiring (`id`, `type`, `links`) is never mutated.
+5. Activation stays a manual UI action.
+
+This is **lower-risk and faster to build** than the original plan. Phase 4 estimate revised from 1–2 weeks to ~1 week.
+
+#### Open questions for Phase 4 implementation
+
+- Can `PATCH /api/flow-actions/{id}` modify a flow whose status is `live`? Or does the flow need to be paused/draft first? (Test on a non-critical existing draft flow before committing the deploy script's behavior.)
+- The `send-email` action's `data.message` field references a "message" object — confirm what we're allowed to PATCH on it (subject? from_label? template ID?) vs. what requires a separate `flow-message` endpoint.
+- `reentry_criteria` only appeared on the metric-triggered flow, not the list-triggered welcome flow. May or may not be top-level on every flow — handle gracefully if absent.
 
 ### Where this lives
 
