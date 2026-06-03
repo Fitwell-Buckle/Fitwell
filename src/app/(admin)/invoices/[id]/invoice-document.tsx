@@ -182,7 +182,7 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           </p>
         )}
         {billing?.instructions && (
-          <p className="mt-2 whitespace-pre-line text-xs text-zinc-500">
+          <p className="mt-2 whitespace-pre-line text-[10px] leading-snug text-zinc-500">
             {billing.instructions}
           </p>
         )}
