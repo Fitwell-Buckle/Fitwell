@@ -206,6 +206,10 @@ export interface DraftFollowupInput {
   // When true, this is a 2nd follow-up (~2 weeks later, no reply yet): a
   // shorter, gentle nudge that acknowledges the prior unanswered email.
   isNudge?: boolean;
+  // The prior email thread (oldest→newest transcript): what we already sent
+  // them (and any earlier exchange). Lets the nudge reference the actual last
+  // message instead of guessing.
+  priorConversation?: string | null;
 }
 
 const DRAFT_SYSTEM_PROMPT = [
@@ -246,6 +250,13 @@ function contactSummary(input: DraftFollowupInput): string {
     "Notes from the conversation:",
     input.notes?.trim() || "(no notes recorded)",
   ];
+  if (input.priorConversation?.trim()) {
+    lines.push(
+      "",
+      "Prior email thread (oldest to newest — what we already sent them; they have NOT replied). Reference the last message naturally; do not paste it back:",
+      input.priorConversation.trim(),
+    );
+  }
   return lines.join("\n");
 }
 
@@ -407,6 +418,9 @@ export interface DraftReplyInput {
   relationship?: "customer" | "b2b_customer" | "lead" | "supplier" | "influencer";
   // The Fitwell rep's name for the sign-off, if known.
   fromName?: string | null;
+  // The prior email thread (oldest→newest transcript), so the reply is grounded
+  // in the real back-and-forth — what we already said, what they asked, etc.
+  conversation?: string | null;
 }
 
 const REPLY_SYSTEM_PROMPT = [
@@ -422,15 +436,26 @@ const REPLY_SYSTEM_PROMPT = [
 ].join("\n");
 
 function replySummary(input: DraftReplyInput): string {
-  return [
+  const lines = [
     `From: ${input.contactName || "(unknown)"}`,
     `They are: ${input.relationship ?? "customer"}`,
     `Rep's name (sign-off): ${input.fromName || "(unknown — use the team sign-off)"}`,
     `Their subject: ${input.theirSubject || "(none)"}`,
+  ];
+  if (input.conversation?.trim()) {
+    lines.push(
+      "",
+      "Prior email thread (oldest to newest — use it for context; don't repeat it back):",
+      input.conversation.trim(),
+    );
+  }
+  lines.push(
     "",
-    "Their message:",
-    input.theirMessage?.trim() || "(no body available — write a brief, helpful acknowledgement)",
-  ].join("\n");
+    "Their latest message (reply to this):",
+    input.theirMessage?.trim() ||
+      "(no body available — write a brief, helpful acknowledgement)",
+  );
+  return lines.join("\n");
 }
 
 async function callReplyOnce(input: DraftReplyInput): Promise<unknown> {

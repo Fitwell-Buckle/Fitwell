@@ -2,6 +2,7 @@ import { and, asc, eq, isNotNull, isNull, lte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { customer, lead, sentEmail, supplier } from "@/lib/schema";
 import {
+  fetchThreadTranscript,
   hasInboundFromAnyMailbox,
   listConnectedMailboxes,
   listRecentSent,
@@ -214,7 +215,16 @@ export async function generateSentFollowups(
     }
 
     try {
-      const draft = await draftFollowupEmail({ ...ctx, isNudge: true });
+      // The real prior thread (what we sent them) so the nudge references it.
+      const priorConversation =
+        s.threadId && s.mailboxUserId
+          ? await fetchThreadTranscript(s.mailboxUserId, s.threadId)
+          : "";
+      const draft = await draftFollowupEmail({
+        ...ctx,
+        isNudge: true,
+        priorConversation,
+      });
       await createOutboundMessage({
         leadId: s.leadId,
         customerId: s.customerId,

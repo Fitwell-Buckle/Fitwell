@@ -188,7 +188,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | GET | `/api/customer-messages/count` | `{ b2b, consumer, supplier, influencer, total }` of undismissed messages (nav dots) |
 | GET | `/api/inbound?emails=a,b` | A contact's message history across both channels. Email: one or more addresses (comma-separated), searched across all connected team inboxes, merged + deduped by gmail id. **Only messages FROM the external contact** — internal senders filtered out (`lib/crm/internal-email.ts`). WhatsApp: pass `waType=customer\|supplier` + `waId` to merge phone-matched WhatsApp rows. `?direction=sent` returns what WE sent. Each row carries `channel`. Returns `{ replies, mailboxes }`. Powers the per-customer / per-supplier **Messages** view |
 | POST | `/api/customer-messages/[id]/dismiss` | Mark a customer message dismissed (`dismissed_at = now`) |
-| POST | `/api/compose/draft` | AI-draft a reply to an inbound email — JSON `{ contactName?, theirSubject?, theirMessage?, relationship? }` → `{ subject, body }`. 503 if `ANTHROPIC_API_KEY` unset |
+| POST | `/api/compose/draft` | AI-draft a reply to an inbound email — JSON `{ contactName?, theirSubject?, theirMessage?, threadId?, relationship? }` → `{ subject, body }`. When `threadId` is given, the full prior Gmail thread (your token) is read and fed to the prompt so the draft is grounded in the real back-and-forth. 503 if `ANTHROPIC_API_KEY` unset |
 | POST | `/api/compose/send` | Send a composed reply from the signed-in admin's Gmail — JSON `{ to, subject, body }`. Same `gmail.send`/API-enabled 409s as the messages send route |
 
 ### Influencer API (each handler checks `auth()`; admin-only — suppliers/companies 403)

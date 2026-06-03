@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { draftReply } from "@/lib/ai/anthropic";
+import { fetchThreadTranscript } from "@/lib/gmail/inbound";
 
 const schema = z.object({
   contactName: z.string().max(200).nullish(),
   theirSubject: z.string().max(500).nullish(),
   theirMessage: z.string().max(10_000).nullish(),
+  // The Gmail thread to pull full prior-conversation context from. The message
+  // being replied to is in MY inbox, so we read the thread with my token.
+  threadId: z.string().max(200).nullish(),
   relationship: z
     .enum(["customer", "b2b_customer", "lead", "supplier", "influencer"])
     .optional(),
@@ -43,12 +47,16 @@ export async function POST(req: Request) {
   }
 
   try {
+    const conversation = input.threadId
+      ? await fetchThreadTranscript(session.user.id, input.threadId)
+      : "";
     const draft = await draftReply({
       contactName: input.contactName,
       theirSubject: input.theirSubject,
       theirMessage: input.theirMessage,
       relationship: input.relationship ?? "customer",
       fromName: session.user.name ?? null,
+      conversation,
     });
     return NextResponse.json({ data: draft });
   } catch (err) {

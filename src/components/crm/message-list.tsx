@@ -215,6 +215,7 @@ export function MessageList({
                 contactName: m.contactName,
                 theirSubject: m.subject,
                 theirMessage: m.snippet,
+                threadId: m.threadId,
                 relationship,
               }}
             />

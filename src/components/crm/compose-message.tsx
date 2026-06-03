@@ -12,6 +12,8 @@ export interface ComposeTarget {
   contactName?: string | null;
   theirSubject?: string | null;
   theirMessage?: string | null;
+  // The Gmail thread being replied to — gives the AI the full prior exchange.
+  threadId?: string | null;
   relationship?: "customer" | "b2b_customer" | "lead" | "supplier" | "influencer";
 }
 
@@ -79,6 +81,7 @@ function ComposeModal({
           contactName: target.contactName ?? null,
           theirSubject: target.theirSubject ?? null,
           theirMessage: target.theirMessage ?? null,
+          threadId: target.threadId ?? null,
           relationship: target.relationship ?? "customer",
         }),
       });

@@ -4,6 +4,11 @@ import { account, user as userTable } from "@/lib/schema";
 import { parseEmailAddress } from "@/lib/crm/customer-match";
 import { buildInternalEmailMatcher } from "@/lib/crm/internal-email";
 import { buildReplyQuery, buildSentQuery } from "./reply-query";
+import {
+  extractPlainText,
+  formatTranscript,
+  type GmailPayload,
+} from "./transcript";
 import { ensureFreshAccessToken, getGoogleAccount } from "./token";
 
 export { buildReplyQuery, buildSentQuery };
@@ -121,6 +126,45 @@ async function hydrateMessages(
   return msgs
     .filter((m): m is InboundMessage => m !== null)
     .sort((a, b) => b.dateMs - a.dateMs);
+}
+
+// Full text transcript of a Gmail thread (oldest→newest, sender + date + body,
+// quoted chains stripped, bounded length) for `userId`'s mailbox. Used to give
+// the AI draft prompts the real prior conversation. "" on any failure.
+export async function fetchThreadTranscript(
+  userId: string,
+  threadId: string,
+  maxChars = 4000,
+): Promise<string> {
+  if (!threadId) return "";
+  try {
+    const acc = await getGoogleAccount(userId);
+    if (!acc?.access_token) return "";
+    const token = await ensureFreshAccessToken(acc);
+    if (!token) return "";
+    const res = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) return "";
+    const data = (await res.json()) as {
+      messages?: Array<{
+        internalDate?: string;
+        snippet?: string;
+        payload?: GmailPayload & { headers?: { name: string; value: string }[] };
+      }>;
+    };
+    const entries = (data.messages ?? []).map((m) => ({
+      from:
+        m.payload?.headers?.find((h) => h.name.toLowerCase() === "from")
+          ?.value ?? "",
+      dateMs: m.internalDate ? Number(m.internalDate) : 0,
+      text: extractPlainText(m.payload) || m.snippet || "",
+    }));
+    return formatTranscript(entries, maxChars);
+  } catch {
+    return "";
+  }
 }
 
 // Recent inbound messages (any sender) in a mailbox — used to match senders
