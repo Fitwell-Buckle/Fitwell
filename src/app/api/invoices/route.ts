@@ -16,9 +16,14 @@ export async function POST(req: Request) {
   try {
     input = createInvoiceSchema.parse(await req.json());
   } catch (err) {
+    // Surface the first validation message (e.g. the missing-SKU one) instead
+    // of a generic "Invalid payload" so the form tells the user what to fix.
     return NextResponse.json(
       {
-        error: "Invalid payload",
+        error:
+          err instanceof z.ZodError
+            ? (err.issues[0]?.message ?? "Invalid payload")
+            : "Invalid payload",
         details: err instanceof z.ZodError ? err.issues : undefined,
       },
       { status: 400 },

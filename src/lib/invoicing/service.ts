@@ -40,7 +40,10 @@ async function nextInvoiceNumber(): Promise<string> {
 }
 
 export const invoiceLineInputSchema = z.object({
-  sku: z.string().min(1).max(200),
+  sku: z
+    .string()
+    .max(200)
+    .min(1, "A line item is missing its SKU — add a SKU to that product in Shopify, then Refresh catalog and try again."),
   title: z.string().min(1).max(500),
   quantity: z.number().int().positive(),
   unitPriceCents: z.number().int().nonnegative(),

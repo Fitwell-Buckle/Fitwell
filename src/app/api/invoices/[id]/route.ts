@@ -65,7 +65,10 @@ export async function PUT(
   } catch (err) {
     return NextResponse.json(
       {
-        error: "Invalid payload",
+        error:
+          err instanceof z.ZodError
+            ? (err.issues[0]?.message ?? "Invalid payload")
+            : "Invalid payload",
         details: err instanceof z.ZodError ? err.issues : undefined,
       },
       { status: 400 },
