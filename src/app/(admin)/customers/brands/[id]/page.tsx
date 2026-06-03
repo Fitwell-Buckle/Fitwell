@@ -15,6 +15,7 @@ import {
   supplier,
 } from "@/lib/schema";
 import { leadDisplayName } from "@/lib/crm/display";
+import { getShopifyClient } from "@/lib/shopify/client";
 import { PageHeader } from "@/components/ui/page-header";
 import { InboundMessages } from "@/components/crm/inbound-messages";
 import { CompanyPeople } from "@/components/crm/company-people";
@@ -97,12 +98,96 @@ export default async function CustomerDetailPage({
   );
 
   // Shopify-synced addresses across all linked customers (defaults first).
-  const addresses = linkedCustomerIds.length
+  const synced = linkedCustomerIds.length
     ? await db.query.customerAddress.findMany({
         where: inArray(customerAddress.customerId, linkedCustomerIds),
         orderBy: [desc(customerAddress.isDefault), asc(customerAddress.city)],
       })
     : [];
+
+  type AddressRow = {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    company: string | null;
+    address1: string | null;
+    address2: string | null;
+    city: string | null;
+    province: string | null;
+    provinceCode: string | null;
+    zip: string | null;
+    country: string | null;
+    phone: string | null;
+    isDefault: boolean | null;
+  };
+
+  let addresses: AddressRow[] = synced.map((a) => ({
+    id: a.id,
+    firstName: a.firstName,
+    lastName: a.lastName,
+    company: a.company,
+    address1: a.address1,
+    address2: a.address2,
+    city: a.city,
+    province: a.province,
+    provinceCode: a.provinceCode,
+    zip: a.zip,
+    country: a.country,
+    phone: a.phone,
+    isDefault: a.isDefault,
+  }));
+
+  // Self-heal a sync gap: if nothing is synced yet for the linked customers,
+  // pull their addresses live from Shopify so the tab still reflects Shopify
+  // (read-only — the customer sync / backfill will persist them later).
+  if (addresses.length === 0 && linkedCustomerIds.length > 0) {
+    const linkedShopifyIds = (
+      await db
+        .select({ shopifyId: customer.shopifyId })
+        .from(customer)
+        .where(inArray(customer.id, linkedCustomerIds))
+    )
+      .map((r) => r.shopifyId)
+      .filter((x): x is string => Boolean(x));
+
+    if (linkedShopifyIds.length > 0) {
+      const client = getShopifyClient();
+      const live: AddressRow[] = [];
+      for (const sid of linkedShopifyIds) {
+        try {
+          const c = await client.getCustomer(sid);
+          const arr =
+            c.addresses && c.addresses.length > 0
+              ? c.addresses
+              : c.default_address
+                ? [{ ...c.default_address, default: true }]
+                : [];
+          const defaultId = c.default_address?.id;
+          for (const a of arr) {
+            live.push({
+              id: a.id != null ? String(a.id) : `${sid}-${live.length}`,
+              firstName: a.first_name ?? null,
+              lastName: a.last_name ?? null,
+              company: a.company ?? null,
+              address1: a.address1 ?? null,
+              address2: a.address2 ?? null,
+              city: a.city ?? null,
+              province: a.province ?? null,
+              provinceCode: a.province_code ?? null,
+              zip: a.zip ?? null,
+              country: a.country ?? null,
+              phone: a.phone ?? null,
+              isDefault:
+                a.default === true || (defaultId != null && a.id === defaultId),
+            });
+          }
+        } catch (err) {
+          console.error("live Shopify address fetch failed:", err);
+        }
+      }
+      addresses = live;
+    }
+  }
 
   // Order history = Shopify orders from those linked customers. PO history =
   // purchase orders routed to this company. Invoices = platform B2B invoices
@@ -194,21 +279,7 @@ export default async function CustomerDetailPage({
           email: c.email,
           name: c.name,
         }))}
-        addresses={addresses.map((a) => ({
-          id: a.id,
-          firstName: a.firstName,
-          lastName: a.lastName,
-          company: a.company,
-          address1: a.address1,
-          address2: a.address2,
-          city: a.city,
-          province: a.province,
-          provinceCode: a.provinceCode,
-          zip: a.zip,
-          country: a.country,
-          phone: a.phone,
-          isDefault: a.isDefault,
-        }))}
+        addresses={addresses}
         priceTiers={tiers}
       />
 
