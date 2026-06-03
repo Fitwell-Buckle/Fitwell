@@ -18,6 +18,7 @@ import {
   formatInvoiceNumber,
   groupByCompany,
   type InvoiceStatus,
+  type ShippableAddress,
 } from "./invoicing";
 
 function isScopeError(msg: string): boolean {
@@ -397,8 +398,10 @@ export async function getInvoiceDetail(invoiceId: string) {
   if (!inv) return inv;
 
   // Primary shipping address = the linked Shopify customer's default (or first)
-  // synced address. Read-only here; Shopify stays the source of truth.
-  let shippingAddress: typeof customerAddress.$inferSelect | null = null;
+  // synced address. If it isn't synced yet (the customer_address backfill hasn't
+  // reached this customer), fall back to fetching it live from Shopify so the
+  // invoice still shows it. Read-only — Shopify stays the source of truth.
+  let shippingAddress: ShippableAddress | null = null;
   const linkedCustomerId = inv.company?.customerId ?? null;
   if (linkedCustomerId) {
     shippingAddress =
@@ -406,6 +409,31 @@ export async function getInvoiceDetail(invoiceId: string) {
         where: eq(customerAddress.customerId, linkedCustomerId),
         orderBy: (a, { desc }) => [desc(a.isDefault)],
       })) ?? null;
+
+    if (!shippingAddress && inv.company?.customer?.shopifyId) {
+      try {
+        const c = await getShopifyClient().getCustomer(
+          inv.company.customer.shopifyId,
+        );
+        const a = c.default_address ?? c.addresses?.[0] ?? null;
+        if (a) {
+          shippingAddress = {
+            firstName: a.first_name ?? null,
+            lastName: a.last_name ?? null,
+            company: a.company ?? null,
+            address1: a.address1 ?? null,
+            address2: a.address2 ?? null,
+            city: a.city ?? null,
+            province: a.province ?? null,
+            provinceCode: a.province_code ?? null,
+            zip: a.zip ?? null,
+            country: a.country ?? null,
+          };
+        }
+      } catch (err) {
+        console.error("invoice ship-to live Shopify fetch failed:", err);
+      }
+    }
   }
   return { ...inv, shippingAddress };
 }
