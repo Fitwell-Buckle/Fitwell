@@ -149,7 +149,7 @@ export default async function SendPoPage({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between print:hidden">
-        <PageHeader title={`Send PO ${poNumberDisplay}`} />
+        <PageHeader title={`Send ${poNumberDisplay}`} />
         <Button variant="ghost" size="sm" asChild>
           <Link href={`/modules/production/po/${po.id}`}>Back</Link>
         </Button>

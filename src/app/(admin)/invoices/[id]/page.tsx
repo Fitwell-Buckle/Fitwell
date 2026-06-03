@@ -6,9 +6,10 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { supplier, company, priceTier } from "@/lib/schema";
 import { getInvoiceDetail } from "@/lib/invoicing/service";
-import { netLineDisplays } from "@/lib/invoicing/invoicing";
+import { netLineDisplays, shippingAddressLines } from "@/lib/invoicing/invoicing";
 import { buildInvoiceHistory } from "@/lib/invoicing/history";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
+import { formatPoNumber } from "@/lib/production/sub-po";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -185,6 +186,28 @@ export default async function InvoiceDetailPage({
               </div>
             )}
           </div>
+          <div className="sm:col-span-2">
+            <div className="text-xs text-zinc-400">Ship to</div>
+            {(() => {
+              const shipLines = shippingAddressLines(inv.shippingAddress);
+              const fallback = inv.company?.address?.trim() || "";
+              if (shipLines.length === 0) {
+                return (
+                  <div className="mt-1 whitespace-pre-line text-zinc-500">
+                    {fallback || "—"}
+                  </div>
+                );
+              }
+              return shipLines.map((line, i) => (
+                <div
+                  key={i}
+                  className={i === 0 ? "mt-1 font-medium text-zinc-900" : "text-zinc-500"}
+                >
+                  {line}
+                </div>
+              ));
+            })()}
+          </div>
           <div>
             <div className="text-xs text-zinc-400">Issued</div>
             <div className="mt-1 text-zinc-700">{fmtDate(inv.issuedDate)}</div>
@@ -306,7 +329,7 @@ export default async function InvoiceDetailPage({
                     href={`/modules/production/po/${inv.sourcePo.id}`}
                     className="font-mono text-sm font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
                   >
-                    {inv.sourcePo.shopifyPoNumber}
+                    {formatPoNumber(inv.sourcePo.shopifyPoNumber)}
                   </Link>
                   <Button variant="outline" size="sm" asChild>
                     <Link href={`/modules/production/po/${inv.sourcePo.id}`}>Open PO</Link>

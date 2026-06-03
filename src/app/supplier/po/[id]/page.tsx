@@ -10,6 +10,7 @@ import { derivePoStage, terminalStage } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { supplierHasAnyStage, stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { subPoStageTargets } from "@/lib/production/service";
+import { formatPoNumber } from "@/lib/production/sub-po";
 import {
   STATUS_LABELS,
   statusBadgeClass,
@@ -78,7 +79,7 @@ export default async function SupplierPoDetailPage({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title={`PO ${po.shopifyPoNumber}`} />
+        <PageHeader title={formatPoNumber(po.shopifyPoNumber, { suffix: po.poSuffix })} />
         <Button variant="ghost" size="sm" asChild>
           <Link href="/supplier">Back</Link>
         </Button>

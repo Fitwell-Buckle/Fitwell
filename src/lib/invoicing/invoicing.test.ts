@@ -6,7 +6,41 @@ import {
   computeDeposit,
   netUnitPriceCents,
   netLineDisplays,
+  shippingAddressLines,
 } from "@/lib/invoicing/invoicing";
+
+describe("shippingAddressLines", () => {
+  it("returns [] for null", () => {
+    expect(shippingAddressLines(null)).toEqual([]);
+  });
+  it("orders name/company/street/city-line/country and drops blanks", () => {
+    expect(
+      shippingAddressLines({
+        firstName: "David",
+        lastName: "Quinlan",
+        company: "Awake Concept",
+        address1: "12 Rue de la Paix",
+        address2: null,
+        city: "Paris",
+        provinceCode: null,
+        province: null,
+        zip: "75002",
+        country: "France",
+      }),
+    ).toEqual([
+      "David Quinlan",
+      "Awake Concept",
+      "12 Rue de la Paix",
+      "Paris, 75002",
+      "France",
+    ]);
+  });
+  it("prefers provinceCode over province in the city line", () => {
+    expect(
+      shippingAddressLines({ city: "Austin", provinceCode: "TX", province: "Texas", zip: "78701" }),
+    ).toEqual(["Austin, TX, 78701"]);
+  });
+});
 
 describe("computeDeposit", () => {
   it("0% = no deposit, full amount is the balance", () => {

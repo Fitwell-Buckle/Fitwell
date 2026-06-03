@@ -12,11 +12,11 @@ const ORDER = [...STAGES];
 
 describe("formatPoNumber", () => {
   it("formats standalone, master, and sub-PO numbers", () => {
-    expect(formatPoNumber("00100")).toBe("00100");
-    expect(formatPoNumber("00100", { isMaster: true })).toBe("00100-Master");
-    expect(formatPoNumber("00100", { suffix: "A" })).toBe("00100-A");
+    expect(formatPoNumber("00100")).toBe("PO-00100");
+    expect(formatPoNumber("00100", { isMaster: true })).toBe("PO-00100-Master");
+    expect(formatPoNumber("00100", { suffix: "A" })).toBe("PO-00100-A");
     // suffix wins over isMaster if both are (wrongly) passed
-    expect(formatPoNumber("00100", { suffix: "B", isMaster: true })).toBe("00100-B");
+    expect(formatPoNumber("00100", { suffix: "B", isMaster: true })).toBe("PO-00100-B");
   });
 });
 

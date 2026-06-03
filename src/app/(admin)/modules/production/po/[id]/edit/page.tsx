@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { supplier, company, priceTier } from "@/lib/schema";
 import { getPoDetail, getSubPos } from "@/lib/production/service";
 import { skuSize } from "@/lib/production/display";
+import { formatPoNumber } from "@/lib/production/sub-po";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { PoForm, type PoFormInitial } from "../../new/po-form";
@@ -112,7 +113,7 @@ export default async function EditPoPage({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title={`Edit PO ${po.shopifyPoNumber}`} />
+        <PageHeader title={`Edit ${formatPoNumber(po.shopifyPoNumber, { suffix: po.poSuffix })}`} />
         <Button variant="ghost" size="sm" asChild>
           <Link href={`/modules/production/po/${po.id}`}>Cancel</Link>
         </Button>

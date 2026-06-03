@@ -2,6 +2,19 @@
 
 Last updated: 2026-06-03
 
+## ⚠️ Action needed — Greg (Shopify scope deploy)
+
+`shopify.app.toml` now requests **`write_customers`** (needed by the new
+"Add to Shopify addresses" button on leads — pushes a lead's business-card
+address as an *additional* address, never overwriting). It won't work until the
+scope is released + the store re-authorizes:
+
+1. `shopify app deploy --message "add write_customers scope"`
+2. `shopify app release --version <name> --allow-updates`
+3. Re-authorize the app in Shopify Admin (scope changes force a re-grant — UI only).
+
+Until then the button returns a graceful 502. See `specs/current/shopify-app-config.md`.
+
 ## Current Strategic Focus (2026-05-25)
 
 **The thesis:** Instrument the existing Shopify funnel end-to-end before scaling ad spend. Current state is ~300–400 daily visitors producing ~7 daily sales (~1.5% conversion). Doubling conversion has more leverage than doubling traffic — pouring more spend into a leaky funnel wastes money. See where people actually bail before deciding what to fix.

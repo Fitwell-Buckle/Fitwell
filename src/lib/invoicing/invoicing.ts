@@ -31,6 +31,34 @@ export function formatInvoiceNumber(n: number): string {
   return `INV-${String(n).padStart(5, "0")}`;
 }
 
+// A Shopify-synced address (customer_address subset) → printable lines, in
+// order, dropping blanks. Shared by the invoice detail + printable document so
+// the "Ship to" block renders identically. Pure.
+export interface ShippableAddress {
+  firstName?: string | null;
+  lastName?: string | null;
+  company?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  provinceCode?: string | null;
+  zip?: string | null;
+  country?: string | null;
+}
+export function shippingAddressLines(
+  a: ShippableAddress | null | undefined,
+): string[] {
+  if (!a) return [];
+  const name = [a.firstName, a.lastName].filter(Boolean).join(" ");
+  const cityLine = [a.city, a.provinceCode ?? a.province, a.zip]
+    .filter(Boolean)
+    .join(", ");
+  return [name, a.company, a.address1, a.address2, cityLine, a.country].filter(
+    (x): x is string => Boolean(x && x.trim()),
+  );
+}
+
 export interface PricedLine {
   quantity: number;
   unitPriceCents: number;

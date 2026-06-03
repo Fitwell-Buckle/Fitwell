@@ -115,6 +115,28 @@ export function LeadDetail({
   // History-tab "Add comment" composer.
   const [comment, setComment] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
+  const [syncingAddr, setSyncingAddr] = useState(false);
+
+  // Push the card address to Shopify as an additional address on the matching
+  // customer (additive, never overwrites). Reports the outcome via toast.
+  async function syncAddressToShopify() {
+    setSyncingAddr(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/sync-address`, {
+        method: "POST",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json?.error ?? "Couldn't sync the address.");
+        return;
+      }
+      toast.success(json?.data?.message ?? "Synced to Shopify.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't sync the address.");
+    } finally {
+      setSyncingAddr(false);
+    }
+  }
 
   function set<K extends keyof LeadView>(key: K, value: LeadView[K]) {
     setSavedKey(null);
@@ -348,6 +370,19 @@ export function LeadDetail({
               <dd className="mt-0.5 text-xs text-zinc-400">
                 Stored on this lead only — not synced with Shopify.
               </dd>
+              {formatAddress(draft) && (
+                <dd className="mt-1">
+                  <button
+                    type="button"
+                    onClick={syncAddressToShopify}
+                    disabled={syncingAddr}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                    title="Adds this as an additional address on the matching Shopify customer — never overwrites an existing one"
+                  >
+                    {syncingAddr ? "Adding to Shopify…" : "Add to Shopify addresses"}
+                  </button>
+                </dd>
+              )}
             </div>
             {readonlyRow("Stage", stageLabel(draft.stage))}
             {readonlyRow(

@@ -8,6 +8,7 @@ import {
   company,
   customer,
   customerAddress,
+  invoice,
   lead,
   order,
   priceTier,
@@ -85,28 +86,31 @@ export default async function CustomerDetailPage({
     email: c.email,
   }));
 
-  // Shopify-synced addresses for the linked customer (if any). Sourced from
-  // the customer.addresses[] payload on every customer sync — Shopify is the
-  // source of truth here. Defaults first, then by city.
-  const addresses = companyRow.customerId
-    ? await db.query.customerAddress.findMany({
-        where: eq(customerAddress.customerId, companyRow.customerId),
-        orderBy: [desc(customerAddress.isDefault), asc(customerAddress.city)],
-      })
-    : [];
-
-  // Order history = Shopify orders from every customer linked to this company
-  // (its primary linked customer + any attached People customers). PO history =
-  // purchase orders routed directly to this company.
-  const orderCustomerIds = Array.from(
+  // Every Shopify customer linked to this company: its primary linked customer
+  // (company.customerId) PLUS any attached People customers (customer.companyId).
+  // Used for BOTH the addresses tab and the Shopify order history, so a customer
+  // attached via People (not the company's single "Shopify link") still shows.
+  const linkedCustomerIds = Array.from(
     new Set(
       [companyRow.customerId, ...peopleCustomers.map((c) => c.id)].filter(
         (x): x is string => Boolean(x),
       ),
     ),
   );
-  const [orders, pos] = await Promise.all([
-    orderCustomerIds.length > 0
+
+  // Shopify-synced addresses across all linked customers (defaults first).
+  const addresses = linkedCustomerIds.length
+    ? await db.query.customerAddress.findMany({
+        where: inArray(customerAddress.customerId, linkedCustomerIds),
+        orderBy: [desc(customerAddress.isDefault), asc(customerAddress.city)],
+      })
+    : [];
+
+  // Order history = Shopify orders from those linked customers. PO history =
+  // purchase orders routed to this company. Invoices = platform B2B invoices
+  // (INV-…) raised for this company (separate from Shopify orders).
+  const [orders, pos, invoices] = await Promise.all([
+    linkedCustomerIds.length > 0
       ? db
           .select({
             id: order.id,
@@ -122,7 +126,7 @@ export default async function CustomerDetailPage({
           })
           .from(order)
           .leftJoin(customer, eq(order.customerId, customer.id))
-          .where(inArray(order.customerId, orderCustomerIds))
+          .where(inArray(order.customerId, linkedCustomerIds))
           .orderBy(desc(order.processedAt))
           .limit(50)
       : Promise.resolve([]),
@@ -139,6 +143,18 @@ export default async function CustomerDetailPage({
       .leftJoin(supplier, eq(productionPo.supplierId, supplier.id))
       .where(eq(productionPo.companyId, companyRow.id))
       .orderBy(desc(productionPo.issuedDate)),
+    db
+      .select({
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        status: invoice.status,
+        totalCents: invoice.totalCents,
+        currency: invoice.currency,
+        issuedDate: invoice.issuedDate,
+      })
+      .from(invoice)
+      .where(eq(invoice.companyId, companyRow.id))
+      .orderBy(desc(invoice.createdAt)),
   ]);
 
   const orderRows = orders.map((o) => ({
@@ -217,7 +233,7 @@ export default async function CustomerDetailPage({
         }
       />
 
-      <CompanyHistory orders={orderRows} pos={pos} />
+      <CompanyHistory orders={orderRows} pos={pos} invoices={invoices} />
 
       <InboundMessages
         emails={[

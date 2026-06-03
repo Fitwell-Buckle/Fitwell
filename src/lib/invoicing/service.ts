@@ -6,6 +6,7 @@ import {
   invoiceLineItem,
   invoiceAttachment,
   company,
+  customerAddress,
   productionPo,
 } from "@/lib/schema";
 import { createPo, createMultiSupplierPo } from "@/lib/production/service";
@@ -357,7 +358,7 @@ export async function updateInvoiceStatus(
 
 /** Invoice with company (+ tier + Shopify customer link), line items, source PO. */
 export async function getInvoiceDetail(invoiceId: string) {
-  return db.query.invoice.findFirst({
+  const inv = await db.query.invoice.findFirst({
     where: eq(invoice.id, invoiceId),
     with: {
       company: {
@@ -366,11 +367,13 @@ export async function getInvoiceDetail(invoiceId: string) {
           name: true,
           contactName: true,
           contactEmail: true,
+          address: true,
+          customerId: true,
           depositPercent: true,
         },
         with: {
           priceTier: { columns: { name: true, discountPercent: true } },
-          customer: { columns: { email: true, shopifyId: true } },
+          customer: { columns: { id: true, email: true, shopifyId: true } },
         },
       },
       lineItems: true,
@@ -388,6 +391,20 @@ export async function getInvoiceDetail(invoiceId: string) {
       },
     },
   });
+  if (!inv) return inv;
+
+  // Primary shipping address = the linked Shopify customer's default (or first)
+  // synced address. Read-only here; Shopify stays the source of truth.
+  let shippingAddress: typeof customerAddress.$inferSelect | null = null;
+  const linkedCustomerId = inv.company?.customerId ?? null;
+  if (linkedCustomerId) {
+    shippingAddress =
+      (await db.query.customerAddress.findFirst({
+        where: eq(customerAddress.customerId, linkedCustomerId),
+        orderBy: (a, { desc }) => [desc(a.isDefault)],
+      })) ?? null;
+  }
+  return { ...inv, shippingAddress };
 }
 
 /** Record a customer document (e.g. their PDF purchase order) on an invoice. */

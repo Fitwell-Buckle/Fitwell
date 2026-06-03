@@ -333,6 +333,57 @@ class ShopifyClient {
     return result.customer;
   }
 
+  // Add an ADDITIONAL address to a Shopify customer (never the default, never
+  // overwriting an existing one). De-dupes against the customer's current
+  // addresses on address1+city+zip so re-running is a no-op. Requires the
+  // `write_customers` scope. Returns whether a new address was actually created.
+  async createCustomerAddress(
+    shopifyCustomerId: string | number,
+    address: {
+      address1?: string | null;
+      address2?: string | null;
+      city?: string | null;
+      province?: string | null;
+      zip?: string | null;
+      country?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+      company?: string | null;
+      phone?: string | null;
+    },
+  ): Promise<{ created: boolean; reason?: "duplicate" }> {
+    const norm = (s?: string | null) => (s ?? "").trim().toLowerCase();
+    const existing = await this.fetch<{
+      addresses: Array<{ address1?: string; city?: string; zip?: string }>;
+    }>(`/customers/${shopifyCustomerId}/addresses.json`);
+    const dup = (existing.addresses ?? []).some(
+      (a) =>
+        norm(a.address1) === norm(address.address1) &&
+        norm(a.city) === norm(address.city) &&
+        norm(a.zip) === norm(address.zip),
+    );
+    if (dup) return { created: false, reason: "duplicate" };
+
+    await this.fetch(`/customers/${shopifyCustomerId}/addresses.json`, {
+      method: "POST",
+      body: JSON.stringify({
+        address: {
+          address1: address.address1 ?? undefined,
+          address2: address.address2 ?? undefined,
+          city: address.city ?? undefined,
+          province: address.province ?? undefined,
+          zip: address.zip ?? undefined,
+          country: address.country ?? undefined,
+          first_name: address.firstName ?? undefined,
+          last_name: address.lastName ?? undefined,
+          company: address.company ?? undefined,
+          phone: address.phone ?? undefined,
+        },
+      }),
+    });
+    return { created: true };
+  }
+
   async getCustomerCount(
     params: { updated_at_min?: string } = {},
   ): Promise<number> {

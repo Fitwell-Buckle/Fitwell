@@ -216,7 +216,7 @@ export default async function PoDetailPage({
     <div>
       <div className="flex items-center justify-between">
         <PageHeader
-          title={`PO ${formatPoNumber(po.shopifyPoNumber, { isMaster, suffix: po.poSuffix })}`}
+          title={formatPoNumber(po.shopifyPoNumber, { isMaster, suffix: po.poSuffix })}
         />
         <div className="flex gap-2">
           <Button variant="outline" size="sm" asChild>
@@ -232,7 +232,7 @@ export default async function PoDetailPage({
           )}
           <DeleteButton
             entityKind="PO"
-            entityLabel={`PO ${formatPoNumber(po.shopifyPoNumber, { isMaster, suffix: po.poSuffix })}`}
+            entityLabel={formatPoNumber(po.shopifyPoNumber, { isMaster, suffix: po.poSuffix })}
             deleteUrl={`/api/production/po/${po.id}`}
             redirectTo="/modules/production"
           />

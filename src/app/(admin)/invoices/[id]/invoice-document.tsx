@@ -2,6 +2,7 @@ import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import {
   INVOICE_STATUS_LABELS,
   netLineDisplays,
+  shippingAddressLines,
   type InvoiceStatus,
 } from "@/lib/invoicing/invoicing";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
@@ -71,6 +72,31 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           {inv.company?.contactEmail && <div className="text-zinc-500">{inv.company.contactEmail}</div>}
         </div>
       </div>
+
+      {(() => {
+        const shipLines = shippingAddressLines(inv.shippingAddress);
+        const fallback = inv.company?.address?.trim() || "";
+        if (shipLines.length === 0 && !fallback) return null;
+        return (
+          <div className="mt-6 text-sm">
+            <div className="text-xs uppercase tracking-wider text-zinc-400">
+              Ship to
+            </div>
+            {shipLines.length > 0 ? (
+              shipLines.map((line, i) => (
+                <div
+                  key={i}
+                  className={i === 0 ? "mt-1 font-medium text-zinc-900" : "text-zinc-500"}
+                >
+                  {line}
+                </div>
+              ))
+            ) : (
+              <div className="mt-1 whitespace-pre-line text-zinc-500">{fallback}</div>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="mt-6 flex flex-wrap gap-x-8 gap-y-1 border-y border-zinc-100 py-3 text-sm text-zinc-600">
         <span>Issued: {fmtDate(inv.issuedDate)}</span>
@@ -156,7 +182,7 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           </p>
         )}
         {billing?.instructions && (
-          <p className="mt-2 whitespace-pre-line font-semibold text-zinc-900">
+          <p className="mt-2 whitespace-pre-line text-xs text-zinc-500">
             {billing.instructions}
           </p>
         )}

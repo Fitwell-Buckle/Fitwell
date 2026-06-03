@@ -6,18 +6,19 @@ import { nextStage, type ProductionStage } from "./stages";
 import { supplierForStage } from "./stage-owners";
 
 /**
- * Display number for a PO:
- *  - standalone: "00100"
- *  - master (has sub-POs): "00100-Master"
- *  - sub-PO: "00100-A"
+ * Display number for a PO — always prefixed "PO-" (like invoices' "INV-"):
+ *  - standalone: "PO-00100"
+ *  - master (has sub-POs): "PO-00100-Master"
+ *  - sub-PO: "PO-00100-A"
  */
 export function formatPoNumber(
   shopifyPoNumber: string,
   opts?: { suffix?: string | null; isMaster?: boolean },
 ): string {
-  if (opts?.suffix) return `${shopifyPoNumber}-${opts.suffix}`;
-  if (opts?.isMaster) return `${shopifyPoNumber}-Master`;
-  return shopifyPoNumber;
+  const base = `PO-${shopifyPoNumber}`;
+  if (opts?.suffix) return `${base}-${opts.suffix}`;
+  if (opts?.isMaster) return `${base}-Master`;
+  return base;
 }
 
 export interface SubPoPlan {

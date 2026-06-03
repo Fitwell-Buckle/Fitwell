@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { isTerminal, type ProductionStage } from "@/lib/production/stages";
 import { STAGE_BAR, fmtDate, skuSize } from "@/lib/production/display";
 import { projectEta } from "@/lib/production/cycle-time";
+import { formatPoNumber } from "@/lib/production/sub-po";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -88,7 +89,7 @@ export function ProductionTimeline({
           return {
             key: li.id,
             poId: po.id,
-            poNumber: li.poNumber ?? po.shopifyPoNumber,
+            poNumber: li.poNumber ?? formatPoNumber(po.shopifyPoNumber),
             supplier: li.supplierName ?? po.supplier?.name ?? "—",
             sku: li.sku,
             title: li.title,
@@ -143,7 +144,7 @@ export function ProductionTimeline({
                     {t.sku}
                   </Link>
                   <div className="truncate text-[11px] text-zinc-400">
-                    PO {t.poNumber} · {t.supplier}
+                    {t.poNumber} · {t.supplier}
                   </div>
                 </div>
 

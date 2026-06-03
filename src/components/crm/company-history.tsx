@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
+import { formatPoNumber } from "@/lib/production/sub-po";
 
 // Wholesale orders (Shopify orders placed by the company's linked customers) and
 // any purchase orders routed to this B2B company. Read-only history on the
@@ -23,6 +24,15 @@ export interface CompanyPoRow {
   expectedDeliveryDate: string | null;
   status: string;
   supplierName: string | null;
+}
+
+export interface CompanyInvoiceRow {
+  id: string;
+  invoiceNumber: string;
+  status: string;
+  totalCents: number | null;
+  currency: string | null;
+  issuedDate: string | null;
 }
 
 function money(cents: number | null, currency: string | null): string {
@@ -55,12 +65,51 @@ const statusPill =
 export function CompanyHistory({
   orders,
   pos,
+  invoices,
 }: {
   orders: CompanyOrderRow[];
   pos: CompanyPoRow[];
+  invoices: CompanyInvoiceRow[];
 }) {
   return (
     <>
+      {invoices.length > 0 && (
+        <Card className="mt-5 p-6">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold text-zinc-900">Invoices</h2>
+            <p className="text-xs text-zinc-400">B2B invoices raised in-platform</p>
+          </div>
+          <ul className="mt-4 divide-y divide-zinc-100">
+            {invoices.map((iv) => (
+              <li
+                key={iv.id}
+                className="flex items-center justify-between gap-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <Link
+                    href={`/invoices/${iv.id}`}
+                    className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+                  >
+                    {iv.invoiceNumber}
+                  </Link>
+                  <span className="ml-2 text-zinc-400">
+                    {fmtDate(iv.issuedDate)}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className={`${statusPill} bg-zinc-100 text-zinc-600`}>
+                    {iv.status}
+                  </span>
+                  <span className="font-medium text-zinc-900">
+                    {money(iv.totalCents, iv.currency)}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <Card className="mt-5 p-6">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold text-zinc-900">Order history</h2>
@@ -127,7 +176,7 @@ export function CompanyHistory({
                     href={`/modules/production/po/${p.id}`}
                     className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
                   >
-                    PO #{p.poNumber}
+                    {formatPoNumber(p.poNumber)}
                   </Link>
                   <span className="ml-2 text-zinc-400">
                     issued {fmtDate(p.issuedDate)}
