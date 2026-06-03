@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,9 +85,6 @@ export function SendForm({
       {sent && <p className="mt-3 text-sm text-emerald-600">{sent}</p>}
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="outline" onClick={() => window.print()}>
-          <Printer className="h-4 w-4" /> Print
-        </Button>
         <Button onClick={send} disabled={busy}>
           <Send className="h-4 w-4" /> {busy ? "Sending…" : "Send"}
         </Button>

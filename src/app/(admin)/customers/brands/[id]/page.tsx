@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -17,7 +16,6 @@ import {
 } from "@/lib/schema";
 import { leadDisplayName } from "@/lib/crm/display";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
 import { InboundMessages } from "@/components/crm/inbound-messages";
 import { CompanyPeople } from "@/components/crm/company-people";
 import { CompanyHistory } from "@/components/crm/company-history";
@@ -174,12 +172,7 @@ export default async function CustomerDetailPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4">
-        <PageHeader title={companyRow.name} />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/customers/brands">Back</Link>
-        </Button>
-      </div>
+      <PageHeader title={companyRow.name} />
       <CustomerDetailView
         customer={{
           id: companyRow.id,

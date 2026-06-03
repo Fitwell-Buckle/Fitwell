@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { supplier } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
 import { InboundMessages } from "@/components/crm/inbound-messages";
 import { SupplierDetailView } from "./supplier-detail-view";
 
@@ -31,12 +29,7 @@ export default async function SupplierDetailPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4">
-        <PageHeader title={supplierRow.name} />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/modules/production/suppliers">Back</Link>
-        </Button>
-      </div>
+      <PageHeader title={supplierRow.name} />
       <SupplierDetailView
         supplier={{
           id: supplierRow.id,

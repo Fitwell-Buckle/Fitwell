@@ -149,7 +149,7 @@ export default async function InvoiceDetailPage({
           <InvoiceStatusSelect invoiceId={inv.id} status={inv.status} />
           <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/invoices/${inv.id}/send`}>Print &amp; Send</Link>
+              <Link href={`/invoices/${inv.id}/send`}>Print or Send</Link>
             </Button>
             {editable && (
               <Button variant="outline" size="sm" asChild>
@@ -162,9 +162,6 @@ export default async function InvoiceDetailPage({
               deleteUrl={`/api/invoices/${inv.id}`}
               redirectTo="/invoices"
             />
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/invoices">Back</Link>
-            </Button>
           </div>
         </div>
       </div>

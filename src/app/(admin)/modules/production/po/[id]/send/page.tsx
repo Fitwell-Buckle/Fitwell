@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getPoDetail, getSupplierLineCosts } from "@/lib/production/service";
 import { getShopifyClient } from "@/lib/shopify/client";
@@ -12,7 +11,6 @@ import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { formatPoNumber, planSubPos } from "@/lib/production/sub-po";
 import { usesRawBlankSummary, summarizeRawBlanks } from "@/lib/production/raw-blank";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableHeader,
@@ -22,6 +20,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { SendForm } from "./send-form";
+import { PrintButton } from "@/app/(admin)/invoices/[id]/print/print-button";
 
 export const metadata: Metadata = {
   title: "Send PO | Fitwell Admin",
@@ -150,12 +149,8 @@ export default async function SendPoPage({
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between print:hidden">
         <PageHeader title={`Send ${poNumberDisplay}`} />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/modules/production/po/${po.id}`}>Back</Link>
-        </Button>
+        <PrintButton />
       </div>
-
-      <SendForm poId={po.id} defaultTo={defaultTo} ccEmail={session.user?.email ?? null} />
 
       {/* Printable document */}
       <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-8 print:border-0 print:p-0">
@@ -345,6 +340,8 @@ export default async function SendPoPage({
 
         {po.notes && <p className="mt-6 text-sm text-zinc-600">{po.notes}</p>}
       </div>
+
+      <SendForm poId={po.id} defaultTo={defaultTo} ccEmail={session.user?.email ?? null} />
     </div>
   );
 }

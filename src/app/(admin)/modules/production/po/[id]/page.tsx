@@ -220,7 +220,7 @@ export default async function PoDetailPage({
         />
         <div className="flex gap-2">
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/modules/production/po/${po.id}/send`}>Print &amp; Send</Link>
+            <Link href={`/modules/production/po/${po.id}/send`}>Print or Send</Link>
           </Button>
           {!isSubPo && (
             <>
@@ -236,9 +236,6 @@ export default async function PoDetailPage({
             deleteUrl={`/api/production/po/${po.id}`}
             redirectTo="/modules/production"
           />
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/modules/production">Back</Link>
-          </Button>
         </div>
       </div>
 
@@ -341,7 +338,7 @@ export default async function PoDetailPage({
                   </div>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                  <Link href={`/modules/production/po/${s.id}/send`}>Print &amp; Send</Link>
+                  <Link href={`/modules/production/po/${s.id}/send`}>Print or Send</Link>
                 </Button>
               </div>
             ))}

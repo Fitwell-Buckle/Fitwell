@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getInvoiceDetail } from "@/lib/invoicing/service";
-import { Button } from "@/components/ui/button";
 import { InvoiceDocument } from "../invoice-document";
 import { PrintButton } from "./print-button";
 
@@ -27,9 +25,6 @@ export default async function InvoicePrintPage({
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between print:hidden">
         <PrintButton />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/invoices/${inv.id}`}>Back</Link>
-        </Button>
       </div>
 
       <div className="mt-6">

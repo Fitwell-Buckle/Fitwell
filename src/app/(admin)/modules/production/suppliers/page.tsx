@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { supplier } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
 import { listCustomerMessages } from "@/lib/crm/customer-messages";
 import { CustomerMessagesPanel } from "@/components/crm/customer-messages-panel";
 import { SupplierManager } from "./supplier-manager";
@@ -29,12 +27,7 @@ export default async function SuppliersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <PageHeader title="Suppliers" />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/modules/production">Back</Link>
-        </Button>
-      </div>
+      <PageHeader title="Suppliers" />
 
       <CustomerMessagesPanel
         audience="supplier"

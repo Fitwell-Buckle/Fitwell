@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -10,7 +9,6 @@ import { invoiceForPo } from "@/lib/invoicing/service";
 import { getCatalogCached } from "@/lib/catalog/load";
 import { skuSize } from "@/lib/production/display";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
 import { InvoiceForm, type InvoiceFormInitial } from "../invoice-form";
 
 export const metadata: Metadata = {
@@ -111,12 +109,7 @@ export default async function NewInvoicePage({
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <PageHeader title={sourcePoId ? "New invoice from PO" : "New invoice"} />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/invoices">Back</Link>
-        </Button>
-      </div>
+      <PageHeader title={sourcePoId ? "New invoice from PO" : "New invoice"} />
       <InvoiceForm
         companies={companyOptions}
         priceTiers={tiers}

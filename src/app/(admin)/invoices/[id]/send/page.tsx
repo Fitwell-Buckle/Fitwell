@@ -6,6 +6,7 @@ import { getInvoiceDetail } from "@/lib/invoicing/service";
 import { Button } from "@/components/ui/button";
 import { InvoiceDocument } from "../invoice-document";
 import { InvoiceSendForm } from "./send-form";
+import { PrintButton } from "../print/print-button";
 
 export const metadata: Metadata = {
   title: "Send invoice | Fitwell Admin",
@@ -26,6 +27,7 @@ export default async function InvoiceSendPage({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between print:hidden">
+        <PrintButton />
         <Button variant="ghost" size="sm" asChild>
           <Link href={`/invoices/${inv.id}`}>Back to invoice</Link>
         </Button>
