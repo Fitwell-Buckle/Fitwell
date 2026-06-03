@@ -330,6 +330,13 @@
       "when": 1780446484535,
       "tag": "0046_numerous_blazing_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1780494413748,
+      "tag": "0047_true_lester",
+      "breakpoints": true
     }
   ]
 }

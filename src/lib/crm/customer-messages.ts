@@ -1,4 +1,5 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import {
   adminNotification,
@@ -174,6 +175,7 @@ export interface CustomerMessageView {
   threadId: string | null;
   fromEmail: string;
   displayName: string;
+  company: string | null;
   subject: string | null;
   snippet: string | null;
   receivedAt: Date | null;
@@ -191,6 +193,10 @@ export interface CustomerMessageView {
 export async function listCustomerMessages(
   audience: "b2b" | "consumer" | "supplier" | "influencer",
 ): Promise<CustomerMessageView[]> {
+  // The company can be matched directly (B2B message → companyId) OR inferred
+  // from the matched customer's own company link (a consumer who belongs to a
+  // company) — resolve both via a second aliased company join.
+  const customerCompany = alias(company, "customer_company");
   const rows = await db
     .select({
       id: customerMessage.id,
@@ -211,12 +217,14 @@ export async function listCustomerMessages(
       custFirst: customer.firstName,
       custLast: customer.lastName,
       coName: company.name,
+      custCoName: customerCompany.name,
       supName: supplier.name,
       infName: influencer.name,
     })
     .from(customerMessage)
     .leftJoin(customer, eq(customerMessage.customerId, customer.id))
     .leftJoin(company, eq(customerMessage.companyId, company.id))
+    .leftJoin(customerCompany, eq(customer.companyId, customerCompany.id))
     .leftJoin(supplier, eq(customerMessage.supplierId, supplier.id))
     .leftJoin(influencer, eq(customerMessage.influencerId, influencer.id))
     .leftJoin(userTable, eq(customerMessage.mailboxUserId, userTable.id))
@@ -242,6 +250,7 @@ export async function listCustomerMessages(
       threadId: r.threadId,
       fromEmail: r.fromEmail,
       displayName,
+      company: r.coName ?? r.custCoName ?? null,
       subject: r.subject,
       snippet: r.snippet,
       receivedAt: r.receivedAt,

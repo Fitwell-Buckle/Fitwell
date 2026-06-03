@@ -15,6 +15,8 @@ export interface MessageInput {
   subject: string | null;
   status: string;
   sentAt: Date | null;
+  openCount: number;
+  lastOpenedAt: Date | null;
 }
 
 export interface TimelineComment {
@@ -33,6 +35,8 @@ export interface TimelineMessage {
   subject: string | null;
   status: string;
   sentAt: Date | null;
+  openCount: number;
+  lastOpenedAt: Date | null;
 }
 
 export type TimelineItem = TimelineComment | TimelineMessage;
@@ -63,6 +67,8 @@ export function buildLeadTimeline(
         subject: m.subject,
         status: m.status,
         sentAt: m.sentAt,
+        openCount: m.openCount,
+        lastOpenedAt: m.lastOpenedAt,
       }),
     ),
   ];

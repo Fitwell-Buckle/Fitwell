@@ -1605,6 +1605,15 @@ export const outboundMessage = pgTable(
     // Which model drafted it (audit / future re-draft), e.g. claude-sonnet-4-5.
     generatedByModel: text("generated_by_model"),
     createdByUserId: text("created_by_user_id").references(() => user.id),
+    // Open tracking: a unique token embedded as an invisible 1×1 pixel in the
+    // sent email's HTML part. The public /api/track/open/[token] route bumps
+    // open_count + first/last when the recipient's client loads the pixel.
+    // Opens are APPROXIMATE — proxies (Apple Mail Privacy Protection) pre-load
+    // pixels → false opens; image-blockers / text-only clients → missed opens.
+    trackToken: text("track_token").$defaultFn(() => crypto.randomUUID()),
+    openCount: integer("open_count").notNull().default(0),
+    firstOpenedAt: timestamp("first_opened_at", { mode: "date" }),
+    lastOpenedAt: timestamp("last_opened_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
     sentAt: timestamp("sent_at", { mode: "date" }),
@@ -1619,6 +1628,7 @@ export const outboundMessage = pgTable(
     index("outbound_message_status_idx").on(t.status),
     index("outbound_message_created_at_idx").on(t.createdAt),
     index("outbound_message_scheduled_at_idx").on(t.scheduledAt),
+    uniqueIndex("outbound_message_track_token_idx").on(t.trackToken),
   ],
 );
 

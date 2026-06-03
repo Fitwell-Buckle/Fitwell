@@ -21,6 +21,8 @@ describe("buildLeadTimeline", () => {
         subject: "Nice to meet you",
         status: "sent",
         sentAt: d("2026-01-02"),
+        openCount: 0,
+        lastOpenedAt: null,
       },
     ];
     const order = buildLeadTimeline(comments, messages).map((i) => i.id);
@@ -36,13 +38,21 @@ describe("buildLeadTimeline", () => {
           createdAt: d("2026-01-01"),
           sequenceStep: 2,
           subject: null,
-          status: "draft",
-          sentAt: null,
+          status: "sent",
+          sentAt: d("2026-01-01"),
+          openCount: 4,
+          lastOpenedAt: d("2026-01-02"),
         },
       ],
     );
     expect(out[0]).toMatchObject({ kind: "comment", id: "c1", author: null });
-    expect(out[1]).toMatchObject({ kind: "message", id: "m1", sequenceStep: 2 });
+    expect(out[1]).toMatchObject({
+      kind: "message",
+      id: "m1",
+      sequenceStep: 2,
+      openCount: 4,
+      lastOpenedAt: d("2026-01-02"),
+    });
   });
 
   it("orders a comment before a message when timestamps tie", () => {
@@ -57,6 +67,8 @@ describe("buildLeadTimeline", () => {
           subject: "s",
           status: "sent",
           sentAt: t,
+          openCount: 0,
+          lastOpenedAt: null,
         },
       ],
     );

@@ -15,6 +15,7 @@ export interface CustomerMessageItem {
   threadId: string | null;
   fromEmail: string;
   displayName: string;
+  company: string | null;
   subject: string | null;
   snippet: string | null;
   receivedAt: string | null; // ISO
@@ -56,6 +57,7 @@ export function CustomerMessagesPanel({
     from: `${m.displayName} <${m.fromEmail}>`,
     fromEmail: m.fromEmail,
     contactName: m.displayName,
+    company: m.company,
     subject: m.subject,
     snippet: m.snippet,
     dateMs: m.receivedAt ? Date.parse(m.receivedAt) : 0,

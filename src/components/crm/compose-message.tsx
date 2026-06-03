@@ -134,6 +134,7 @@ function ComposeModal({
           body,
           cc: cc.trim() || null,
           bcc: bcc.trim() || null,
+          threadId: target.threadId ?? null,
         }),
       });
       const json = await res.json().catch(() => ({}));

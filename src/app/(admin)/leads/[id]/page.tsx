@@ -126,6 +126,8 @@ export default async function LeadDetailPage({
           status: m.status,
           createdAt: m.createdAt,
           sentAt: m.sentAt,
+          openCount: m.openCount,
+          lastOpenedAt: m.lastOpenedAt,
         }))}
         comments={comments.map((c) => ({
           id: c.id,

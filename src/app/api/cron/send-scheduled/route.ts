@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyCronOrAdmin } from "@/lib/cron-auth";
 import { sendGmail } from "@/lib/gmail/send";
 import {
+  ensureTrackToken,
   findDueScheduledMessages,
   updateOutboundMessage,
 } from "@/lib/crm/messages";
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
       continue;
     }
     try {
+      const trackToken = await ensureTrackToken(m.id, m.trackToken);
       const result = await sendGmail(m.createdByUserId, {
         to: m.toEmail,
         subject: m.subject ?? "(no subject)",
@@ -36,6 +38,7 @@ export async function GET(req: NextRequest) {
         bcc: m.bcc,
         threadId: m.threadId,
         inReplyTo: m.inReplyTo,
+        trackToken,
       });
       if (!result.ok) {
         failed++;

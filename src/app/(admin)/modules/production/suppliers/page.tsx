@@ -43,6 +43,7 @@ export default async function SuppliersPage() {
           threadId: m.threadId,
           fromEmail: m.fromEmail,
           displayName: m.displayName,
+          company: m.company,
           subject: m.subject,
           snippet: m.snippet,
           receivedAt: m.receivedAt ? m.receivedAt.toISOString() : null,

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -9,14 +9,17 @@ import {
   customer,
   customerAddress,
   lead,
+  order,
   priceTier,
+  productionPo,
+  supplier,
 } from "@/lib/schema";
 import { leadDisplayName } from "@/lib/crm/display";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { InboundMessages } from "@/components/crm/inbound-messages";
 import { CompanyPeople } from "@/components/crm/company-people";
+import { CompanyHistory } from "@/components/crm/company-history";
 import { CustomerDetailView } from "./customer-detail-view";
 
 export const metadata: Metadata = {
@@ -92,6 +95,67 @@ export default async function CustomerDetailPage({
       })
     : [];
 
+  // Order history = Shopify orders from every customer linked to this company
+  // (its primary linked customer + any attached People customers). PO history =
+  // purchase orders routed directly to this company.
+  const orderCustomerIds = Array.from(
+    new Set(
+      [companyRow.customerId, ...peopleCustomers.map((c) => c.id)].filter(
+        (x): x is string => Boolean(x),
+      ),
+    ),
+  );
+  const [orders, pos] = await Promise.all([
+    orderCustomerIds.length > 0
+      ? db
+          .select({
+            id: order.id,
+            number: order.shopifyOrderNumber,
+            processedAt: order.processedAt,
+            totalCents: order.totalPrice,
+            currency: order.currency,
+            financialStatus: order.financialStatus,
+            fulfillmentStatus: order.fulfillmentStatus,
+            customerFirstName: customer.firstName,
+            customerLastName: customer.lastName,
+            customerEmail: customer.email,
+          })
+          .from(order)
+          .leftJoin(customer, eq(order.customerId, customer.id))
+          .where(inArray(order.customerId, orderCustomerIds))
+          .orderBy(desc(order.processedAt))
+          .limit(50)
+      : Promise.resolve([]),
+    db
+      .select({
+        id: productionPo.id,
+        poNumber: productionPo.shopifyPoNumber,
+        issuedDate: productionPo.issuedDate,
+        expectedDeliveryDate: productionPo.expectedDeliveryDate,
+        status: productionPo.status,
+        supplierName: supplier.name,
+      })
+      .from(productionPo)
+      .leftJoin(supplier, eq(productionPo.supplierId, supplier.id))
+      .where(eq(productionPo.companyId, companyRow.id))
+      .orderBy(desc(productionPo.issuedDate)),
+  ]);
+
+  const orderRows = orders.map((o) => ({
+    id: o.id,
+    number: o.number,
+    processedAt: o.processedAt,
+    totalCents: o.totalCents,
+    currency: o.currency,
+    financialStatus: o.financialStatus,
+    fulfillmentStatus: o.fulfillmentStatus,
+    customerName: leadDisplayName({
+      firstName: o.customerFirstName,
+      lastName: o.customerLastName,
+      email: o.customerEmail,
+    }),
+  }));
+
   return (
     <div>
       <div className="flex items-center justify-between gap-4">
@@ -121,6 +185,21 @@ export default async function CustomerDetailPage({
           email: c.email,
           name: c.name,
         }))}
+        addresses={addresses.map((a) => ({
+          id: a.id,
+          firstName: a.firstName,
+          lastName: a.lastName,
+          company: a.company,
+          address1: a.address1,
+          address2: a.address2,
+          city: a.city,
+          province: a.province,
+          provinceCode: a.provinceCode,
+          zip: a.zip,
+          country: a.country,
+          phone: a.phone,
+          isDefault: a.isDefault,
+        }))}
         priceTiers={tiers}
       />
 
@@ -138,6 +217,8 @@ export default async function CustomerDetailPage({
         }
       />
 
+      <CompanyHistory orders={orderRows} pos={pos} />
+
       <InboundMessages
         emails={[
           companyRow.contactEmail,
@@ -145,67 +226,6 @@ export default async function CustomerDetailPage({
         ].filter((e): e is string => Boolean(e))}
         relationship="b2b_customer"
       />
-
-      {companyRow.customerId && (
-        <Card className="mt-5 p-6">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold text-zinc-900">
-              Shopify addresses
-            </h2>
-            <p className="text-xs text-zinc-400">
-              Synced from the linked Shopify customer
-            </p>
-          </div>
-          {addresses.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-400">
-              No addresses on file. They&apos;ll appear here after the next
-              customer sync from Shopify.
-            </p>
-          ) : (
-            <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-              {addresses.map((a) => {
-                const name = [a.firstName, a.lastName]
-                  .filter(Boolean)
-                  .join(" ");
-                const cityLine = [a.city, a.provinceCode ?? a.province, a.zip]
-                  .filter(Boolean)
-                  .join(", ");
-                return (
-                  <li
-                    key={a.id}
-                    className="rounded-md border border-zinc-200 p-3 text-sm text-zinc-700"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-zinc-900">
-                        {name || "—"}
-                      </span>
-                      {a.isDefault && (
-                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
-                          Default
-                        </span>
-                      )}
-                    </div>
-                    {a.company && (
-                      <div className="text-xs text-zinc-500">{a.company}</div>
-                    )}
-                    {a.address1 && <div>{a.address1}</div>}
-                    {a.address2 && <div>{a.address2}</div>}
-                    {cityLine && <div>{cityLine}</div>}
-                    {a.country && (
-                      <div className="text-xs text-zinc-500">{a.country}</div>
-                    )}
-                    {a.phone && (
-                      <div className="mt-1 text-xs text-zinc-500">
-                        {a.phone}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-      )}
     </div>
   );
 }

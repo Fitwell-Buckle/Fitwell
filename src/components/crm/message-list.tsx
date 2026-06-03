@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { mailboxColor as colorFor } from "@/lib/crm/mailbox-color";
@@ -22,6 +22,9 @@ export interface MessageListItem {
   // Parsed sender address + name, used to seed a Compose reply.
   fromEmail: string;
   contactName: string | null;
+  // The company this contact belongs to, when known — shown in the preview so
+  // you can tell who's emailing without opening the thread.
+  company?: string | null;
   subject: string | null;
   snippet: string | null;
   dateMs: number;
@@ -116,6 +119,17 @@ export function MessageList({
     onDismiss?.(m);
   }
 
+  // Dismiss every message in a collapsed group at once (one click instead of
+  // expanding + dismissing each).
+  function dismissAll(msgs: MessageListItem[]) {
+    setHidden((h) => {
+      const next = new Set(h);
+      for (const m of msgs) next.add(m.id);
+      return next;
+    });
+    for (const m of msgs) onDismiss?.(m);
+  }
+
   // Group by the person on the other end so multiple messages with the same
   // contact collapse into one card. fromEmail is the contact in both directions;
   // WhatsApp falls back to its display string. Groups + their messages are
@@ -171,6 +185,12 @@ export function MessageList({
           </div>
         </div>
         <p className="mt-0.5 text-xs text-zinc-500">{m.from}</p>
+        {m.company && m.company !== m.contactName && (
+          <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-500">
+            <Building2 className="h-3 w-3 shrink-0 text-zinc-400" />
+            <span className="truncate">{m.company}</span>
+          </p>
+        )}
         <p className="mt-1 text-sm text-zinc-600">{m.snippet}</p>
       </>
     );
@@ -287,33 +307,55 @@ export function MessageList({
           const latest = g.msgs[0];
           const isOpen = expanded.has(g.key);
           const person = latest.contactName || latest.fromEmail || latest.from;
+          const company =
+            latest.company && latest.company !== person ? latest.company : null;
           return (
             <div key={g.key} className="rounded-md border border-zinc-100">
-              <button
-                type="button"
-                onClick={() => toggle(g.key)}
-                className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-zinc-50"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-zinc-900">
-                    {person}
-                    <span className="ml-2 font-normal text-zinc-400">
-                      {g.msgs.length} messages
-                    </span>
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-zinc-500">
-                    {latest.subject || latest.snippet}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <p className="text-xs text-zinc-400">{fmtDate(latest.dateMs)}</p>
-                  {isOpen ? (
-                    <ChevronDown className="h-4 w-4 text-zinc-400" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-zinc-400" />
-                  )}
-                </div>
-              </button>
+              <div className="flex w-full items-center gap-1 pr-2">
+                <button
+                  type="button"
+                  onClick={() => toggle(g.key)}
+                  className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-zinc-50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-zinc-900">
+                      {person}
+                      <span className="ml-2 font-normal text-zinc-400">
+                        {g.msgs.length} messages
+                      </span>
+                    </p>
+                    {company && (
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-zinc-500">
+                        <Building2 className="h-3 w-3 shrink-0 text-zinc-400" />
+                        <span className="truncate">{company}</span>
+                      </p>
+                    )}
+                    <p className="mt-0.5 truncate text-xs text-zinc-500">
+                      {latest.subject || latest.snippet}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <p className="text-xs text-zinc-400">
+                      {fmtDate(latest.dateMs)}
+                    </p>
+                    {isOpen ? (
+                      <ChevronDown className="h-4 w-4 text-zinc-400" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-zinc-400" />
+                    )}
+                  </div>
+                </button>
+                {onDismiss && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => dismissAll(g.msgs)}
+                  >
+                    Dismiss all
+                  </Button>
+                )}
+              </div>
               {isOpen && (
                 <div className="space-y-1 border-t border-zinc-100 px-1 pb-1 pt-1">
                   {g.msgs.map((m) => renderRow(m))}

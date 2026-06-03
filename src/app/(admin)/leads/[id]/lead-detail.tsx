@@ -71,6 +71,8 @@ export interface LeadMessageView {
   status: string;
   createdAt: Date;
   sentAt: Date | null;
+  openCount: number;
+  lastOpenedAt: Date | null;
 }
 
 export interface LeadCommentView {
@@ -451,6 +453,12 @@ export function LeadDetail({
               companies={companies}
               companyId={draft.companyId}
               companyName={draft.companyName ?? ""}
+              contact={{
+                name:
+                  [draft.firstName, draft.lastName].filter(Boolean).join(" ") ||
+                  null,
+                email: draft.email,
+              }}
               onChange={(v) => {
                 set("companyId", v.companyId);
                 set("companyName", v.companyName || null);
@@ -654,6 +662,23 @@ export function LeadDetail({
                         ? ` · sent ${item.sentAt.toLocaleDateString("en-US")}`
                         : ""}
                     </p>
+                    {item.sentAt && (
+                      <p
+                        className="mt-0.5 text-xs"
+                        title="Approximate — some clients pre-load or block tracking pixels"
+                      >
+                        {item.openCount > 0 ? (
+                          <span className="font-medium text-emerald-600">
+                            Opened {item.openCount}×
+                            {item.lastOpenedAt
+                              ? ` · last ${item.lastOpenedAt.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                              : ""}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">Not opened yet</span>
+                        )}
+                      </p>
+                    )}
                   </div>
                 </li>
               ),

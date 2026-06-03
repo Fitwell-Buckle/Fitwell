@@ -17,6 +17,7 @@ export function CompanyPicker({
   onChange,
   disabled,
   placeholder = "Search companies…",
+  contact,
 }: {
   companies: CompanyOption[];
   companyId: string | null;
@@ -24,6 +25,10 @@ export function CompanyPicker({
   onChange: (v: { companyId: string | null; companyName: string }) => void;
   disabled?: boolean;
   placeholder?: string;
+  // The person this company is being created for (the lead on the form). Seeds
+  // the new company's contact name/email so the server auto-attaches them as
+  // the primary contact — "turning a lead into a company" keeps the person.
+  contact?: { name?: string | null; email?: string | null };
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -54,7 +59,11 @@ export function CompanyPicker({
       const res = await fetch("/api/production/companies", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: companyName.trim() }),
+        body: JSON.stringify({
+          name: companyName.trim(),
+          contactName: contact?.name?.trim() || null,
+          contactEmail: contact?.email?.trim() || null,
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {

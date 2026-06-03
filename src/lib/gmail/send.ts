@@ -1,4 +1,6 @@
 import { ensureFreshAccessToken, getGoogleAccount } from "./token";
+import { plainTextToHtml } from "./mime";
+import { trackingPixelUrl } from "@/lib/crm/tracking";
 
 export interface SendResult {
   ok: boolean;
@@ -25,24 +27,52 @@ function buildRawMessage(msg: {
   cc?: string | null;
   bcc?: string | null;
   inReplyTo?: string | null;
+  // When set, send as multipart text+HTML with an invisible open-tracking pixel
+  // pointing at this token. Without it, send plain text exactly as before.
+  trackToken?: string | null;
 }): string {
   const headers = [`To: ${msg.to}`];
   // Cc is visible to all recipients; Bcc is delivered but Gmail strips the
   // header from the copies recipients receive.
   if (msg.cc) headers.push(`Cc: ${msg.cc}`);
   if (msg.bcc) headers.push(`Bcc: ${msg.bcc}`);
-  headers.push(
-    `Subject: ${encodeSubject(msg.subject)}`,
-    "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: 8bit",
-  );
+  headers.push(`Subject: ${encodeSubject(msg.subject)}`, "MIME-Version: 1.0");
   // Thread the reply under the original: In-Reply-To + References point Gmail
   // (and other clients) at the original Message-ID so it nests in the thread.
   if (msg.inReplyTo) {
     headers.push(`In-Reply-To: ${msg.inReplyTo}`, `References: ${msg.inReplyTo}`);
   }
+
   // CRLF line endings per RFC 5322; blank line separates headers from body.
+  if (msg.trackToken) {
+    // multipart/alternative: a plain-text part (so it still reads as a normal
+    // text email) + an HTML part carrying the invisible tracking pixel.
+    const boundary = `=_fitwell_${crypto.randomUUID().replace(/-/g, "")}`;
+    const html = plainTextToHtml(msg.body, trackingPixelUrl(msg.trackToken));
+    headers.push(
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    );
+    const body = [
+      `--${boundary}`,
+      'Content-Type: text/plain; charset="UTF-8"',
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      msg.body,
+      `--${boundary}`,
+      'Content-Type: text/html; charset="UTF-8"',
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      html,
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+    return headers.join("\r\n") + "\r\n\r\n" + body;
+  }
+
+  headers.push(
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: 8bit",
+  );
   return headers.join("\r\n") + "\r\n\r\n" + msg.body;
 }
 
@@ -64,6 +94,8 @@ export async function sendGmail(
     // thread id (Gmail request) + the original Message-ID (In-Reply-To header).
     threadId?: string | null;
     inReplyTo?: string | null;
+    // When set, embed an open-tracking pixel for this token (HTML multipart).
+    trackToken?: string | null;
   },
 ): Promise<SendResult> {
   const acc = await getGoogleAccount(userId);
@@ -79,6 +111,7 @@ export async function sendGmail(
       cc: msg.cc,
       bcc: msg.bcc,
       inReplyTo: msg.inReplyTo,
+      trackToken: msg.trackToken,
     }),
     "utf8",
   ).toString("base64url");

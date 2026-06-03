@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { sendGmail } from "@/lib/gmail/send";
 import {
+  ensureTrackToken,
   getOutboundMessage,
   updateOutboundMessage,
 } from "@/lib/crm/messages";
@@ -39,6 +40,7 @@ export async function POST(
     );
   }
 
+  const trackToken = await ensureTrackToken(msg.id, msg.trackToken);
   const result = await sendGmail(session.user.id, {
     to: msg.toEmail,
     subject: msg.subject ?? "(no subject)",
@@ -47,6 +49,7 @@ export async function POST(
     bcc: msg.bcc,
     threadId: msg.threadId,
     inReplyTo: msg.inReplyTo,
+    trackToken,
   });
 
   if (!result.ok) {

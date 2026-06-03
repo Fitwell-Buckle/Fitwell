@@ -118,6 +118,68 @@ export async function getOutboundMessage(id: string) {
   });
 }
 
+// Ensure a queued message has an open-tracking token before it's sent. New rows
+// get one at insert (schema default); this backfills any pre-tracking row.
+export async function ensureTrackToken(
+  id: string,
+  existing: string | null,
+): Promise<string> {
+  if (existing) return existing;
+  const token = crypto.randomUUID();
+  await db
+    .update(outboundMessage)
+    .set({ trackToken: token })
+    .where(eq(outboundMessage.id, id));
+  return token;
+}
+
+// Record an open: bump the count and stamp first/last opened. Called by the
+// public tracking-pixel route when a recipient's client loads the pixel.
+// Idempotent-ish — every pixel load counts (proxies may load more than once).
+export async function recordOpen(token: string): Promise<void> {
+  await db
+    .update(outboundMessage)
+    .set({
+      openCount: sql`${outboundMessage.openCount} + 1`,
+      lastOpenedAt: sql`now()`,
+      firstOpenedAt: sql`coalesce(${outboundMessage.firstOpenedAt}, now())`,
+    })
+    .where(eq(outboundMessage.trackToken, token));
+}
+
+// Persist an ad-hoc Compose reply (sent directly, not from the queue) as a
+// `sent` outbound_message so its opens are tracked alongside everything else.
+// No draft notification — it's already gone out.
+export async function logSentMessage(input: {
+  toEmail: string;
+  cc?: string | null;
+  bcc?: string | null;
+  subject?: string | null;
+  body: string;
+  threadId?: string | null;
+  inReplyTo?: string | null;
+  createdByUserId?: string | null;
+  trackToken: string;
+}): Promise<{ id: string }> {
+  const [row] = await db
+    .insert(outboundMessage)
+    .values({
+      toEmail: input.toEmail,
+      cc: normalizeRecipients(input.cc),
+      bcc: normalizeRecipients(input.bcc),
+      subject: input.subject ?? null,
+      body: input.body,
+      threadId: input.threadId ?? null,
+      inReplyTo: input.inReplyTo ?? null,
+      createdByUserId: input.createdByUserId ?? null,
+      trackToken: input.trackToken,
+      status: "sent",
+      sentAt: new Date(),
+    })
+    .returning({ id: outboundMessage.id });
+  return { id: row.id };
+}
+
 // All messages for one lead (any status), newest first — drives the lead
 // detail "History" tab.
 export async function listMessagesForLead(leadId: string) {
@@ -129,6 +191,8 @@ export async function listMessagesForLead(leadId: string) {
       status: outboundMessage.status,
       createdAt: outboundMessage.createdAt,
       sentAt: outboundMessage.sentAt,
+      openCount: outboundMessage.openCount,
+      lastOpenedAt: outboundMessage.lastOpenedAt,
     })
     .from(outboundMessage)
     .where(eq(outboundMessage.leadId, leadId))
@@ -269,6 +333,7 @@ export async function findDueScheduledMessages(limit = 25) {
       createdByUserId: outboundMessage.createdByUserId,
       threadId: outboundMessage.threadId,
       inReplyTo: outboundMessage.inReplyTo,
+      trackToken: outboundMessage.trackToken,
     })
     .from(outboundMessage)
     .where(

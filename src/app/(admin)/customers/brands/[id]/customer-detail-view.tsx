@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CompanyForm,
   type CompanyDraft,
@@ -29,6 +30,23 @@ export interface CustomerDetail {
   notes: string | null;
   assignedCollectionIds: string[];
   assignedProductIds: string[];
+}
+
+// Shopify-synced address for the linked customer (subset of `customer_address`).
+export interface CompanyAddress {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  company: string | null;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  province: string | null;
+  provinceCode: string | null;
+  zip: string | null;
+  country: string | null;
+  phone: string | null;
+  isDefault: boolean | null;
 }
 
 function toDraft(c: CustomerDetail): CompanyDraft {
@@ -62,10 +80,12 @@ function DetailField({ label, value }: { label: string; value: string | null }) 
 export function CustomerDetailView({
   customer,
   contacts,
+  addresses,
   priceTiers,
 }: {
   customer: CustomerDetail;
   contacts: CompanyLogin[];
+  addresses: CompanyAddress[];
   priceTiers: CompanyFormPriceTier[];
 }) {
   const router = useRouter();
@@ -124,9 +144,11 @@ export function CustomerDetailView({
           .filter(Boolean)
           .join(" + ");
 
-  return (
-    <div className="mt-6 space-y-5">
-      {editing ? (
+  // While editing, swap the whole card for the full company form (its own
+  // Save/Cancel). Otherwise show the tabbed read-only view.
+  if (editing) {
+    return (
+      <div className="mt-6">
         <CompanyForm
           title="Edit customer"
           draft={draft}
@@ -141,22 +163,37 @@ export function CustomerDetailView({
           }}
           onSave={save}
         />
-      ) : (
-        <Card className="p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-zinc-900">Customer details</h2>
-            <div className="flex gap-2">
-              <Button asChild size="sm">
-                <Link href={`/invoices/new?customerId=${customer.id}`}>
-                  Create B2B Order
-                </Link>
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-                Edit customer
-              </Button>
-            </div>
+      </div>
+    );
+  }
+
+  return (
+    <Card className="mt-6 p-6">
+      <Tabs defaultValue="details">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="addresses">
+              Addresses ({addresses.length})
+            </TabsTrigger>
+            <TabsTrigger value="logins">
+              Portal logins ({contacts.length})
+            </TabsTrigger>
+          </TabsList>
+          <div className="flex gap-2">
+            <Button asChild size="sm">
+              <Link href={`/invoices/new?customerId=${customer.id}`}>
+                Create B2B Order
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              Edit customer
+            </Button>
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        </div>
+
+        <TabsContent value="details">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <DetailField label="Name" value={customer.name} />
             <DetailField
               label="Price tier"
@@ -188,10 +225,66 @@ export function CustomerDetailView({
               <DetailField label="Customer notes" value={customer.notes} />
             </div>
           </div>
-        </Card>
-      )}
+        </TabsContent>
 
-      <CompanyLogins companyId={customer.id} contacts={contacts} />
-    </div>
+        <TabsContent value="addresses">
+          <p className="mb-3 text-xs text-zinc-400">
+            Synced from the linked Shopify customer
+          </p>
+          {!customer.customerId ? (
+            <p className="text-sm text-zinc-400">
+              No Shopify customer linked — link one in Edit to pull addresses.
+            </p>
+          ) : addresses.length === 0 ? (
+            <p className="text-sm text-zinc-400">
+              No addresses on file. They&apos;ll appear here after the next
+              customer sync from Shopify.
+            </p>
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {addresses.map((a) => {
+                const name = [a.firstName, a.lastName].filter(Boolean).join(" ");
+                const cityLine = [a.city, a.provinceCode ?? a.province, a.zip]
+                  .filter(Boolean)
+                  .join(", ");
+                return (
+                  <li
+                    key={a.id}
+                    className="rounded-md border border-zinc-200 p-3 text-sm text-zinc-700"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-zinc-900">
+                        {name || "—"}
+                      </span>
+                      {a.isDefault && (
+                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                          Default
+                        </span>
+                      )}
+                    </div>
+                    {a.company && (
+                      <div className="text-xs text-zinc-500">{a.company}</div>
+                    )}
+                    {a.address1 && <div>{a.address1}</div>}
+                    {a.address2 && <div>{a.address2}</div>}
+                    {cityLine && <div>{cityLine}</div>}
+                    {a.country && (
+                      <div className="text-xs text-zinc-500">{a.country}</div>
+                    )}
+                    {a.phone && (
+                      <div className="mt-1 text-xs text-zinc-500">{a.phone}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </TabsContent>
+
+        <TabsContent value="logins">
+          <CompanyLogins companyId={customer.id} contacts={contacts} embedded />
+        </TabsContent>
+      </Tabs>
+    </Card>
   );
 }

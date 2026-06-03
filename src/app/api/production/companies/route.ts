@@ -7,6 +7,7 @@ import {
   detectCompanyConflict,
   companyConflictMessage,
 } from "@/lib/b2b/company-conflict";
+import { attachPrimaryContactByEmail } from "@/lib/b2b/attach-contact";
 import { companySchema } from "./_schema";
 
 export async function POST(req: Request) {
@@ -63,6 +64,16 @@ export async function POST(req: Request) {
         notes: input.notes || null,
       })
       .returning({ id: company.id });
+
+    // If a contact email was given (e.g. creating the company from a lead),
+    // auto-attach the matching person as the primary contact — best-effort, so
+    // a hiccup here never blocks company creation.
+    try {
+      await attachPrimaryContactByEmail(created.id, input.contactEmail);
+    } catch (err) {
+      console.error("auto-attach primary contact failed:", err);
+    }
+
     return NextResponse.json({ data: { id: created.id } }, { status: 201 });
   } catch (err) {
     console.error("Create company failed:", err);

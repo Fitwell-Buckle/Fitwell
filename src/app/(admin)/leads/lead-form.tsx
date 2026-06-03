@@ -497,6 +497,10 @@ export function LeadForm({
                 companies={companies}
                 companyId={companyId}
                 companyName={companyName}
+                contact={{
+                  name: [firstName, lastName].filter(Boolean).join(" ") || null,
+                  email: email || null,
+                }}
                 onChange={(v) => {
                   setCompanyId(v.companyId);
                   setCompanyName(v.companyName);

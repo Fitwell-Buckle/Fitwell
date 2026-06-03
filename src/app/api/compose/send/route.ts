@@ -6,6 +6,7 @@ import {
   isValidRecipientList,
   normalizeRecipients,
 } from "@/lib/crm/email-recipients";
+import { logSentMessage } from "@/lib/crm/messages";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,9 @@ const schema = z.object({
     .max(1000)
     .nullish()
     .refine(isValidRecipientList, { message: "Bcc has an invalid email" }),
+  // The Gmail thread being replied to (for threading + a sent-row record).
+  threadId: z.string().max(200).nullish(),
+  inReplyTo: z.string().max(998).nullish(),
 });
 
 // Send a composed reply from the signed-in admin's Gmail (From = their
@@ -51,12 +55,20 @@ export async function POST(req: Request) {
     );
   }
 
+  // One token: embed it as the open-tracking pixel AND key the sent-row we log
+  // on success, so the open hits the right record.
+  const trackToken = crypto.randomUUID();
+  const cc = normalizeRecipients(input.cc);
+  const bcc = normalizeRecipients(input.bcc);
   const result = await sendGmail(session.user.id, {
     to: input.to,
     subject: input.subject || "(no subject)",
     body: input.body,
-    cc: normalizeRecipients(input.cc),
-    bcc: normalizeRecipients(input.bcc),
+    cc,
+    bcc,
+    threadId: input.threadId,
+    inReplyTo: input.inReplyTo,
+    trackToken,
   });
 
   if (!result.ok) {
@@ -82,6 +94,24 @@ export async function POST(req: Request) {
       { error: "Gmail send failed. Try again." },
       { status: 502 },
     );
+  }
+
+  // Record the sent reply so its opens are tracked alongside queued sends.
+  // Best-effort — the email already went out; don't fail the request on this.
+  try {
+    await logSentMessage({
+      toEmail: input.to,
+      cc,
+      bcc,
+      subject: input.subject || null,
+      body: input.body,
+      threadId: input.threadId,
+      inReplyTo: input.inReplyTo,
+      createdByUserId: session.user.id,
+      trackToken,
+    });
+  } catch (err) {
+    console.error("compose send: logSentMessage failed", err);
   }
 
   return NextResponse.json({ data: { ok: true } });

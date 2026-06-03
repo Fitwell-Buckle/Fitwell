@@ -20,9 +20,13 @@ export interface CompanyLogin {
 export function CompanyLogins({
   companyId,
   contacts,
+  // When embedded inside another card (e.g. the customer-details tabs), render
+  // bare — no surrounding Card or heading (the tab already labels it).
+  embedded = false,
 }: {
   companyId: string;
   contacts: CompanyLogin[];
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -74,9 +78,11 @@ export function CompanyLogins({
     }
   }
 
-  return (
-    <Card className="p-6">
-      <h2 className="text-sm font-semibold text-zinc-900">Portal logins</h2>
+  const body = (
+    <>
+      {!embedded && (
+        <h2 className="text-sm font-semibold text-zinc-900">Portal logins</h2>
+      )}
       <p className="mt-1 text-xs text-zinc-500">
         Anyone on this list can sign in (magic link) to the B2B portal and order
         at this brand’s pricing.
@@ -110,6 +116,8 @@ export function CompanyLogins({
         </Button>
       </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-    </Card>
+    </>
   );
+
+  return embedded ? <div>{body}</div> : <Card className="p-6">{body}</Card>;
 }
