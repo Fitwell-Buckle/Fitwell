@@ -94,7 +94,31 @@ export function CustomerDetailView({
   const [draft, setDraft] = useState<CompanyDraft>(toDraft(customer));
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [syncingAddr, setSyncingAddr] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Pull the linked Shopify customers' addresses into our table on demand —
+  // persists, so the tab + invoices show real synced data.
+  async function syncAddresses() {
+    setSyncingAddr(true);
+    try {
+      const res = await fetch(
+        `/api/production/companies/${customer.id}/sync-addresses`,
+        { method: "POST" },
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json?.error ?? "Couldn't sync addresses.");
+        return;
+      }
+      toast.success(json?.data?.message ?? "Synced from Shopify.");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't sync addresses.");
+    } finally {
+      setSyncingAddr(false);
+    }
+  }
 
   // Delete this B2B customer. The API unlinks soft references (attached people,
   // detected messages) and blocks if it still has invoices/POs. On success the
@@ -272,17 +296,23 @@ export function CustomerDetailView({
         </TabsContent>
 
         <TabsContent value="addresses">
-          <p className="mb-3 text-xs text-zinc-400">
-            Synced from the linked Shopify customer
-          </p>
-          {!customer.customerId ? (
-            <p className="text-sm text-zinc-400">
-              No Shopify customer linked — link one in Edit to pull addresses.
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-xs text-zinc-400">
+              Synced from the linked Shopify customer(s)
             </p>
-          ) : addresses.length === 0 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={syncAddresses}
+              disabled={syncingAddr}
+            >
+              {syncingAddr ? "Syncing…" : "Sync from Shopify"}
+            </Button>
+          </div>
+          {addresses.length === 0 ? (
             <p className="text-sm text-zinc-400">
-              No addresses on file. They&apos;ll appear here after the next
-              customer sync from Shopify.
+              No addresses on file yet — click <strong>Sync from Shopify</strong>{" "}
+              to pull them in now (or they appear after the next customer sync).
             </p>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
