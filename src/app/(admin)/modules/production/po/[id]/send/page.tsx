@@ -339,6 +339,10 @@ export default async function SendPoPage({
         )}
 
         {po.notes && <p className="mt-6 text-sm text-zinc-600">{po.notes}</p>}
+
+        <p className="mt-8 text-center text-lg font-medium text-zinc-700">
+          Purchasing and Supply Chain Management by Fitwell Systems
+        </p>
       </div>
 
       <SendForm poId={po.id} defaultTo={defaultTo} ccEmail={session.user?.email ?? null} />

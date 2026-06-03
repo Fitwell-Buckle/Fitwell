@@ -16,7 +16,8 @@ import { sendEmail } from "@/lib/email/resend";
 
 const bodySchema = z.object({
   to: z.string().email(),
-  additional: z.array(z.string().email()).max(20).optional(),
+  cc: z.array(z.string().email()).max(20).optional(),
+  message: z.string().max(5000).nullish(),
 });
 
 type Po = NonNullable<Awaited<ReturnType<typeof getPoDetail>>>;
@@ -36,6 +37,7 @@ function buildPoEmailHtml(
   supplierUnit: Map<string, number | null>,
   stageLabels: StageLabels,
   order: readonly string[],
+  message: string | null,
 ): string {
   const cell = "padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;";
   const th = "padding:6px 10px;border-bottom:2px solid #ddd;font-size:11px;text-transform:uppercase;color:#888;text-align:left;";
@@ -143,6 +145,7 @@ function buildPoEmailHtml(
   return `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:680px;">
     <h2 style="margin:0 0 4px;">Purchase Order ${esc(numberDisplay)}</h2>
     <p style="margin:0 0 16px;color:#666;font-size:13px;">Fitwell Buckle Co.</p>
+    ${message ? `<p style="margin:0 0 16px;white-space:pre-line;font-size:14px;color:#111;">${esc(message)}</p>` : ""}
     <table style="font-size:13px;color:#333;margin-bottom:16px;">
       <tr><td style="padding:2px 16px 2px 0;color:#888;">Supplier</td><td>${esc(po.supplier?.name ?? "—")}</td></tr>
       <tr><td style="padding:2px 16px 2px 0;color:#888;">Customer</td><td>${esc(po.company?.name ?? "—")}</td></tr>
@@ -235,17 +238,24 @@ export async function POST(
     }
   }
 
-  const to = [input.to, ...(input.additional ?? [])];
-  const cc = session.user.email ?? undefined; // CC the logged-in user
+  const to = input.to;
+  // CC = the logged-in user + any CCs entered on the form.
+  const cc = Array.from(
+    new Set(
+      [session.user.email, ...(input.cc ?? [])].filter(
+        (x): x is string => Boolean(x),
+      ),
+    ),
+  );
 
   try {
     await sendEmail({
       to,
-      cc,
+      cc: cc.length ? cc : undefined,
       subject: `Purchase Order ${numberDisplay} — Fitwell Buckle Co.`,
-      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit, stageLabels, order),
+      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit, stageLabels, order, input.message ?? null),
     });
-    return NextResponse.json({ data: { sentTo: to, cc } });
+    return NextResponse.json({ data: { sentTo: [to], cc } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Send failed";
     if (message.includes("RESEND_API_KEY")) {

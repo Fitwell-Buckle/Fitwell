@@ -24,7 +24,7 @@ function isScopeError(msg: string): boolean {
 const bodySchema = z
   .object({
     to: z.string().email().optional(),
-    additional: z.array(z.string().email()).max(20).optional(),
+    cc: z.array(z.string().email()).max(20).optional(),
     message: z.string().max(5000).nullish(),
   })
   .partial();
@@ -61,7 +61,15 @@ export async function POST(
   // Recipients: the editable "To" from the preview (falls back to the brand's
   // contact email) plus any additional addresses.
   const primary = body.to ?? inv.company?.contactEmail ?? null;
-  const recipients = primary ? [primary, ...(body.additional ?? [])] : [];
+  const recipients = primary ? [primary] : [];
+  // CC = the logged-in user + any CCs entered on the preview.
+  const ccList = Array.from(
+    new Set(
+      [session.user.email, ...(body.cc ?? [])].filter(
+        (x): x is string => Boolean(x),
+      ),
+    ),
+  );
   const message = body.message ?? null;
   const shopifyCustomerId = inv.company?.customer?.shopifyId ?? null;
   const notes: string[] = [];
@@ -187,7 +195,7 @@ export async function POST(
           to: recipients,
           subject,
           html,
-          cc: session.user.email ?? undefined,
+          cc: ccList.length ? ccList : undefined,
         });
         notes.push(`emailed ${recipients.join(", ")}`);
       } catch (err) {

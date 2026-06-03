@@ -20,7 +20,7 @@ export function InvoiceSendForm({
   ccEmail: string | null;
 }) {
   const [to, setTo] = useState(defaultTo);
-  const [additional, setAdditional] = useState("");
+  const [cc, setCc] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export function InvoiceSendForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: to.trim(),
-          additional: parseEmails(additional),
+          cc: parseEmails(cc),
           message: message.trim() || null,
         }),
       });
@@ -79,10 +79,10 @@ export function InvoiceSendForm({
           />
         </div>
         <div>
-          <label className={fieldLabel}>Additional recipients (comma-separated)</label>
+          <label className={fieldLabel}>Cc (comma-separated)</label>
           <Input
-            value={additional}
-            onChange={(e) => setAdditional(e.target.value)}
+            value={cc}
+            onChange={(e) => setCc(e.target.value)}
             placeholder="a@example.com, b@example.com"
           />
         </div>

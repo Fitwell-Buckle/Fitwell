@@ -18,7 +18,8 @@ export function SendForm({
   ccEmail: string | null;
 }) {
   const [to, setTo] = useState(defaultTo);
-  const [additional, setAdditional] = useState("");
+  const [cc, setCc] = useState("");
+  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
@@ -39,7 +40,11 @@ export function SendForm({
       const res = await fetch(`/api/production/po/${poId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: to.trim(), additional: parseEmails(additional) }),
+        body: JSON.stringify({
+          to: to.trim(),
+          cc: parseEmails(cc),
+          message: message.trim() || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -69,13 +74,23 @@ export function SendForm({
           />
         </div>
         <div>
-          <label className={fieldLabel}>Additional recipients (comma-separated)</label>
+          <label className={fieldLabel}>Cc (comma-separated)</label>
           <Input
-            value={additional}
-            onChange={(e) => setAdditional(e.target.value)}
+            value={cc}
+            onChange={(e) => setCc(e.target.value)}
             placeholder="a@example.com, b@example.com"
           />
         </div>
+      </div>
+      <div className="mt-4">
+        <label className={fieldLabel}>Message to the vendor (optional)</label>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={3}
+          placeholder="Add a note — appears at the top of the email."
+          className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
+        />
       </div>
       <p className="mt-2 text-xs text-zinc-500">
         {ccEmail ? <>A copy is CC’d to you ({ccEmail}).</> : "You'll be CC'd."}
