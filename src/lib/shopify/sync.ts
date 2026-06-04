@@ -151,6 +151,24 @@ async function syncCustomerAddresses(
 
 // ── Order upsert ────────────────────────────────────────────────────
 
+/**
+ * Total amount refunded on an order, in cents. Refunds are embedded in the
+ * order payload; each carries `transactions` with the actual money moved. We
+ * sum successful refund transactions — this nets refunded item value, tax and
+ * shipping together, which is exactly what Shopify's "Total sales" subtracts.
+ */
+export function sumRefundedCents(shopifyOrder: ShopifyOrder): number {
+  let cents = 0;
+  for (const refund of shopifyOrder.refunds ?? []) {
+    for (const tx of refund.transactions ?? []) {
+      if (tx.kind === "refund" && tx.status === "success") {
+        cents += toCents(tx.amount);
+      }
+    }
+  }
+  return cents;
+}
+
 export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
   // Upsert the customer first if present
   let customerId: string | null = null;
@@ -166,6 +184,12 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
     customerId,
     totalPrice: toCents(shopifyOrder.total_price),
     subtotalPrice: toCents(shopifyOrder.subtotal_price),
+    totalTax: toCents(shopifyOrder.total_tax),
+    totalDiscounts: toCents(shopifyOrder.total_discounts),
+    totalShipping: toCents(
+      shopifyOrder.total_shipping_price_set?.shop_money?.amount ?? "0",
+    ),
+    totalRefunded: sumRefundedCents(shopifyOrder),
     currency: shopifyOrder.currency,
     financialStatus: shopifyOrder.financial_status,
     fulfillmentStatus: shopifyOrder.fulfillment_status,
@@ -175,6 +199,9 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
     processedAt: shopifyOrder.processed_at
       ? new Date(shopifyOrder.processed_at)
       : new Date(shopifyOrder.created_at),
+    cancelledAt: shopifyOrder.cancelled_at
+      ? new Date(shopifyOrder.cancelled_at)
+      : null,
     updatedAt: new Date(),
   };
 
@@ -188,6 +215,10 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
         customerId: orderValues.customerId,
         totalPrice: orderValues.totalPrice,
         subtotalPrice: orderValues.subtotalPrice,
+        totalTax: orderValues.totalTax,
+        totalDiscounts: orderValues.totalDiscounts,
+        totalShipping: orderValues.totalShipping,
+        totalRefunded: orderValues.totalRefunded,
         currency: orderValues.currency,
         financialStatus: orderValues.financialStatus,
         fulfillmentStatus: orderValues.fulfillmentStatus,
@@ -195,6 +226,7 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
         landingSite: orderValues.landingSite,
         referringSite: orderValues.referringSite,
         processedAt: orderValues.processedAt,
+        cancelledAt: orderValues.cancelledAt,
         updatedAt: orderValues.updatedAt,
       },
     })

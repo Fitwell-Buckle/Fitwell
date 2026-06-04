@@ -174,6 +174,15 @@ export const order = pgTable(
     customerId: text("customer_id").references(() => customer.id),
     totalPrice: integer("total_price").default(0),
     subtotalPrice: integer("subtotal_price").default(0),
+    // Money breakdown (cents) for reconciling with Shopify "Total sales":
+    //   Total sales = total_price - total_refunded   (per non-cancelled order).
+    // total_price already nets discounts and adds tax + shipping, so subtracting
+    // refunds nets item/tax/shipping returns in one shot. The tax/discount/
+    // shipping splits are stored for the Shopify-style columnar breakdown.
+    totalTax: integer("total_tax").default(0),
+    totalDiscounts: integer("total_discounts").default(0),
+    totalShipping: integer("total_shipping").default(0),
+    totalRefunded: integer("total_refunded").default(0),
     currency: text("currency").default("USD"),
     financialStatus: text("financial_status"),
     fulfillmentStatus: text("fulfillment_status"),
@@ -187,6 +196,9 @@ export const order = pgTable(
     // How the order was linked to a pre-purchase touch: 'pixel' | 'email_match' | null
     linkMethod: text("link_method"),
     processedAt: timestamp("processed_at", { mode: "date" }),
+    // Set when Shopify cancelled the order; null otherwise. Used to exclude
+    // cancelled orders from "Total sales".
+    cancelledAt: timestamp("cancelled_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },

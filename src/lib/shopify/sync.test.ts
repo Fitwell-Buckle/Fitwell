@@ -9,7 +9,13 @@ vi.mock("./client", () => ({
     v ? Math.round(parseFloat(v) * 100) : 0,
 }));
 
-import { parseUtmParams } from "@/lib/shopify/sync";
+import { parseUtmParams, sumRefundedCents } from "@/lib/shopify/sync";
+import type { ShopifyOrder } from "@/types/shopify";
+
+// Minimal ShopifyOrder factory — only the fields sumRefundedCents reads.
+function orderWithRefunds(refunds: ShopifyOrder["refunds"]): ShopifyOrder {
+  return { refunds } as unknown as ShopifyOrder;
+}
 
 describe("parseUtmParams", () => {
   it("returns empty object for a null landing site", () => {
@@ -54,5 +60,52 @@ describe("parseUtmParams", () => {
 
   it("returns empty object for an empty string (base URL, no params)", () => {
     expect(parseUtmParams("")).toEqual({});
+  });
+});
+
+describe("sumRefundedCents", () => {
+  it("is 0 when there are no refunds", () => {
+    expect(sumRefundedCents(orderWithRefunds([]))).toBe(0);
+  });
+
+  it("is 0 when refunds exist but carry no transactions", () => {
+    expect(
+      sumRefundedCents(orderWithRefunds([{ id: 1, created_at: "x" }])),
+    ).toBe(0);
+  });
+
+  it("sums successful refund transactions across multiple refunds (in cents)", () => {
+    const cents = sumRefundedCents(
+      orderWithRefunds([
+        {
+          id: 1,
+          created_at: "x",
+          transactions: [{ amount: "10.00", kind: "refund", status: "success" }],
+        },
+        {
+          id: 2,
+          created_at: "y",
+          transactions: [{ amount: "5.50", kind: "refund", status: "success" }],
+        },
+      ]),
+    );
+    expect(cents).toBe(1550);
+  });
+
+  it("ignores non-refund kinds and non-success statuses", () => {
+    const cents = sumRefundedCents(
+      orderWithRefunds([
+        {
+          id: 1,
+          created_at: "x",
+          transactions: [
+            { amount: "10.00", kind: "refund", status: "success" }, // counts
+            { amount: "99.00", kind: "sale", status: "success" }, // wrong kind
+            { amount: "99.00", kind: "refund", status: "pending" }, // not success
+          ],
+        },
+      ]),
+    );
+    expect(cents).toBe(1000);
   });
 });

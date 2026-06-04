@@ -53,11 +53,26 @@ export interface ShopifyOrder {
   subtotal_price: string;
   total_discounts: string;
   total_tax: string;
+  /** Shipping charged, in a money-set. `shop_money.amount` is the store-currency value. */
+  total_shipping_price_set?: {
+    shop_money: { amount: string; currency_code: string };
+  };
   currency: string;
   financial_status: string;
   fulfillment_status: string | null;
+  /** Set when the order was cancelled; null/absent otherwise. */
+  cancelled_at?: string | null;
   discount_codes: Array<{ code: string; amount: string; type: string }>;
-  refunds: Array<{ id: number; created_at: string }>;
+  /**
+   * Refunds embedded in the order payload. Each refund's `transactions` carry
+   * the actual money moved — sum `kind === 'refund' && status === 'success'`
+   * for the total refunded amount (see `sumRefundedCents`).
+   */
+  refunds: Array<{
+    id: number;
+    created_at: string;
+    transactions?: Array<{ amount: string; kind: string; status: string }>;
+  }>;
   processed_at: string;
   created_at: string;
   updated_at: string;

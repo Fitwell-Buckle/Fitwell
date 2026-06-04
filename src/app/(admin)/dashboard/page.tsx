@@ -62,22 +62,27 @@ export default async function DashboardPage({
         ? sql`date_trunc('week', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
         : sql`date_trunc('month', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`;
 
+  // "Total sales" reconciles with Shopify: each order's net contribution is
+  // total_price minus refunds (which nets item/tax/shipping returns), summed
+  // over orders that weren't cancelled. Pending/wholesale orders are included,
+  // exactly as Shopify counts them — unlike the old paid-only "Revenue".
+  const netSales = sql`COALESCE(SUM(${order.totalPrice} - ${order.totalRefunded}), 0)`.mapWith(Number);
+  const notCancelled = sql`${order.cancelledAt} IS NULL`;
+
   const [revenueResult, orderCountResult, customerCountResult, recentOrders] =
     await Promise.all([
       db
-        .select({ total: sum(order.totalPrice) })
+        .select({ total: netSales })
         .from(order)
         .where(
-          and(
-            sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
-            gte(order.processedAt, from),
-            lte(order.processedAt, to),
-          ),
+          and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({ count: count() })
         .from(order)
-        .where(and(gte(order.processedAt, from), lte(order.processedAt, to))),
+        .where(
+          and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
+        ),
       db
         .select({ count: count() })
         .from(customer)
@@ -118,14 +123,14 @@ export default async function DashboardPage({
             WHEN ${order.landingSite} ILIKE '%gad_source%' OR ${order.landingSite} ILIKE '%gclid%' OR ${order.landingSite} ILIKE '%utm_source=google%' THEN 'google'
             ELSE 'organic'
           END`,
-          revenue: sum(order.totalPrice).mapWith(Number),
+          revenue: netSales,
         })
         .from(order)
         .where(
           and(
+            notCancelled,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
-            sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
           ),
         )
         .groupBy(bucketExpr, sql`CASE
@@ -160,14 +165,14 @@ export default async function DashboardPage({
       db
         .select({
           bucket: bucketExpr,
-          revenue: sum(order.totalPrice).mapWith(Number),
+          revenue: netSales,
         })
         .from(order)
         .where(
           and(
+            notCancelled,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
-            sql`${order.financialStatus} IN ('paid', 'partially_refunded')`,
             sql`${order.sourceName} = 'web'`,
           ),
         )
@@ -245,7 +250,7 @@ export default async function DashboardPage({
       </div>
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Revenue" value={fmt(totalRevenue)} />
+        <MetricCard label="Total sales" value={fmt(totalRevenue)} />
         <MetricCard label="Orders" value={totalOrders.toLocaleString()} />
         <MetricCard label="Customers" value={totalCustomers.toLocaleString()} />
         <MetricCard label="Avg Order Value" value={fmt(avgOrderValue)} />
