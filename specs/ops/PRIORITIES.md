@@ -1,19 +1,37 @@
 # Priorities
 
-Last updated: 2026-06-03
+Last updated: 2026-06-04
 
-## ⚠️ Action needed — Greg (Shopify scope deploy)
+## ⚠️ Action needed — Shopify scope deploy (Oliver / Greg)
 
-`shopify.app.toml` now requests **`write_customers`** (needed by the new
-"Add to Shopify addresses" button on leads — pushes a lead's business-card
-address as an *additional* address, never overwriting). It won't work until the
-scope is released + the store re-authorizes:
+`shopify.app.toml` now requests two scopes that aren't live yet. Both ship in a
+single deploy + re-auth (anyone with Partner-org access can do it):
 
-1. `shopify app deploy --message "add write_customers scope"`
+1. `shopify app deploy --message "add read_all_orders + write_customers scopes"`
 2. `shopify app release --version <name> --allow-updates`
 3. Re-authorize the app in Shopify Admin (scope changes force a re-grant — UI only).
 
-Until then the button returns a graceful 502. See `specs/current/shopify-app-config.md`.
+See `specs/current/shopify-app-config.md`.
+
+**`write_customers`** — needed by the "Add to Shopify addresses" button on leads
+(pushes a lead's business-card address as an *additional* address, never
+overwriting). Until live, the button returns a graceful 502.
+
+**`read_all_orders`** — needed to import historical orders. The Orders API is
+capped to the last ~60 days without it; Shopify has **1,694 orders back to Feb
+2024** but only ~596 (last 60 days) are currently retrievable, leaving ~1,098
+historical orders unreachable. NOTE: `read_all_orders` is a *protected* scope —
+Shopify may require an approval/justification step before it grants. **Once it's
+live**, run the one-time import (it's ready, idempotent):
+
+```bash
+npx vercel --global-config ~/.vercel-fitwell env pull .env.production.local --environment=production --yes
+grep -v '^NEXT_PUBLIC_POSTHOG_KEY=' .env.production.local > .env.import && mv .env.import .env.production.local  # suppress historical attribution events
+npx dotenv -e .env.production.local -- node --import tsx/esm scripts/import-history.ts 2024-02-01
+rm -f .env.production.local
+```
+
+Then the dashboard / segments / LTV extend back to Feb 2024.
 
 ## Current Strategic Focus (2026-05-25)
 
