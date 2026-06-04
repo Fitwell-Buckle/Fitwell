@@ -117,3 +117,23 @@
     - src/app/(admin)/attribution/page.tsx
     - src/app/(admin)/funnel/page.tsx
     - src/app/api/admin/funnel/route.ts
+
+- date: "2026-06-04"
+  title: "Dashboard: Avg Lifetime Value (LTV) by Consumer vs B2B"
+  priority: 1
+  layer: 1
+  notes: |
+    New all-time "Avg Lifetime Value (LTV)" card: Avg LTV, avg orders/customer,
+    repeat rate, and customer count for Consumer vs B2B. Method = historic CLV
+    (net revenue per customer to date) — the assumption-free industry standard
+    (= Shopify's "lifetime value"). Predictive CLV (AOV × frequency × lifespan)
+    was intentionally NOT used: the store is only ~6 months old (first order
+    Nov 25 2025), so a churn/lifespan estimate would be fabricated. Card is
+    all-time and ignores the date filter. Customer segmentation: B2B = ever
+    placed a wholesale draft order; Consumer = everyone else (D2C + Trade Show).
+    Current values: Consumer ~$72 (504 customers, 7% repeat), B2B ~$521 (64
+    customers, 56% repeat). Follow-up when there's ~12mo+ of history: add a
+    predictive CLV with a data-derived lifespan, or switch B2B detection to a
+    Shopify customer tag.
+  artifacts:
+    - src/app/(admin)/dashboard/page.tsx

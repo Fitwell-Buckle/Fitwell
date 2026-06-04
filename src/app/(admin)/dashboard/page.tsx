@@ -85,6 +85,7 @@ export default async function DashboardPage({
     customerCountResult,
     recentOrders,
     segmentResult,
+    perCustomerLtv,
   ] = await Promise.all([
       db
         .select({ total: netSales })
@@ -126,6 +127,18 @@ export default async function DashboardPage({
           and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
         )
         .groupBy(segmentExpr),
+      // Per-customer ALL-TIME aggregates (ignores the date filter) for LTV.
+      // One row per customer: whether they're B2B (ever placed a draft order),
+      // their net revenue to date, and their order count. No bound params.
+      db
+        .select({
+          isB2b: sql<boolean>`bool_or(${order.sourceName} = 'shopify_draft_order')`,
+          netRev: sql<number>`COALESCE(SUM(${order.totalPrice} - ${order.totalRefunded}), 0)`.mapWith(Number),
+          orders: sql<number>`count(*)`.mapWith(Number),
+        })
+        .from(order)
+        .where(and(notCancelled, sql`${order.customerId} IS NOT NULL`))
+        .groupBy(order.customerId),
     ]);
 
   const totalRevenue = Number(revenueResult[0]?.total ?? 0);
@@ -155,6 +168,35 @@ export default async function DashboardPage({
       orders: segOf("b2b")?.orders ?? 0,
     },
   ];
+
+  // ── Customer Lifetime Value (historic, all-time) ─────────────────
+  // Historic CLV = net revenue per customer to date — the assumption-free
+  // industry-standard method (what Shopify reports as a customer's "lifetime
+  // value"). A predictive CLV (AOV × frequency × lifespan) is intentionally NOT
+  // used: the store is only ~6 months old, so a customer-lifespan/churn estimate
+  // would be fabricated. Consumer = D2C + Trade Show; B2B = ever placed a draft
+  // order. Tally per-customer rows in JS (small set).
+  const ltvAgg = {
+    consumer: { customers: 0, rev: 0, orders: 0, repeat: 0 },
+    b2b: { customers: 0, rev: 0, orders: 0, repeat: 0 },
+  };
+  for (const c of perCustomerLtv) {
+    const bucket = c.isB2b ? ltvAgg.b2b : ltvAgg.consumer;
+    bucket.customers += 1;
+    bucket.rev += c.netRev ?? 0;
+    bucket.orders += c.orders ?? 0;
+    if ((c.orders ?? 0) > 1) bucket.repeat += 1;
+  }
+  const ltvRows = [
+    { label: "Consumer", ...ltvAgg.consumer },
+    { label: "B2B", ...ltvAgg.b2b },
+  ].map((s) => ({
+    label: s.label,
+    avgLtv: s.customers > 0 ? Math.round(s.rev / s.customers) : 0,
+    avgOrders: s.customers > 0 ? s.orders / s.customers : 0,
+    repeatRate: s.customers > 0 ? Math.round((s.repeat / s.customers) * 100) : 0,
+    customers: s.customers,
+  }));
 
   // ── Chart data: Revenue trend + Ad Spend vs Revenue ──────────────
   const [revenueByBucket, metaByBucket, googleByBucket, orderRevenueByBucket] =
@@ -335,6 +377,51 @@ export default async function DashboardPage({
                     {totalRevenue > 0
                       ? `${Math.round((s.sales / totalRevenue) * 100)}%`
                       : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Avg Lifetime Value (LTV)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-xs text-zinc-500">
+            Historic CLV — net revenue per customer to date. All-time, so this
+            does <em>not</em> change with the date filter above. Consumer = D2C +
+            Trade Show; B2B = wholesale accounts.
+          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Segment</TableHead>
+                <TableHead className="text-right">Avg LTV</TableHead>
+                <TableHead className="text-right">Avg orders / customer</TableHead>
+                <TableHead className="text-right">Repeat rate</TableHead>
+                <TableHead className="text-right">Customers</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ltvRows.map((s) => (
+                <TableRow key={s.label}>
+                  <TableCell className="font-medium text-zinc-900">
+                    {s.label}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{fmt(s.avgLtv)}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {s.avgOrders.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-right text-zinc-500">
+                    {s.repeatRate}%
+                  </TableCell>
+                  <TableCell className="text-right text-zinc-500">
+                    {s.customers.toLocaleString()}
                   </TableCell>
                 </TableRow>
               ))}
