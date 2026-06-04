@@ -44,6 +44,9 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 | Adding/modifying API routes | `specs/current/routes.md` + `specs/current/contributing.md` (API Routes) |
 | Shopify integration work | `specs/current/integrations.md` (Shopify section) |
 | Changing Shopify scopes, embed flag, or anything in `shopify.app.toml` | `specs/current/shopify-app-config.md` |
+| Editing the live storefront theme (page templates, sections, snippets, theme.liquid) | `specs/current/shopify-theme-edits.md` |
+| Adding or modifying PostHog event tracking, instrumentation, or HogQL queries | `specs/current/posthog-instrumentation.md` + `specs/strategy/event-taxonomy.md` |
+| Adding measurement to a new landing page (data-section / data-cta tags) | `specs/current/posthog-instrumentation.md` (recipe) + `specs/current/shopify-theme-edits.md` (CLI workflow) |
 | Analytics or tracking changes | `specs/current/integrations.md` + `specs/current/data-flows.md` |
 | UI components | `specs/current/components.md` + `specs/current/contributing.md` (UI Components) |
 | Adding marketing pages | `specs/current/routes.md` + `(marketing)` route group |
@@ -231,14 +234,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 ## 9. Shopify Integration Rules
 
 - **App config in code**: Shopify app configuration (scopes, embed flag, app URL, declared webhook topics) lives in `shopify.app.toml` at the repo root. Edit like any other file; any contributor with Shopify Partner-org access deploys via `shopify app deploy && shopify app release` from their laptop after merge. Never make app-config changes directly in the Shopify Dev Dashboard — they'll be overwritten on the next deploy. **Full workflow in `specs/current/shopify-app-config.md`** — read it before changing scopes or anything else in the toml. **CLI setup**: `specs/ops/contributor-setup.md` §5.
-- **Theme edits via `shopify` CLI**: when a task requires editing the live storefront theme (PostHog instrumentation tags, page templates, sections, custom Liquid blocks), use the Shopify CLI rather than the admin code editor. Standard workflow:
-  ```bash
-  mkdir -p /tmp/fitwell-theme && cd /tmp/fitwell-theme
-  shopify theme pull --store fitwell-buckles.myshopify.com --live
-  # edit files locally
-  shopify theme push --store fitwell-buckles.myshopify.com --live --allow-live --nodelete --only "templates/<file>.json"
-  ```
-  The CLI authenticates via browser on first use. `--allow-live` is required because pushing to the live theme is destructive; `--nodelete` prevents pushing local deletions back. The storefront CDN may serve cached HTML for a few minutes after a push — re-pull and grep for your change to confirm it's on the remote before assuming a failure. **If the CLI isn't installed**, `npm i -g @shopify/cli @shopify/theme` (or `brew install shopify-cli`).
+- **Theme edits via `shopify` CLI**: when a task requires editing the live storefront theme (PostHog instrumentation tags, page templates, sections, custom Liquid blocks), use the Shopify CLI rather than the admin code editor. **Full workflow: `specs/current/shopify-theme-edits.md`** (pull/push commands, JSONC page templates, finding the right template via `template_suffix`, CDN cache verification). If the CLI isn't installed: `npm i -g @shopify/cli @shopify/theme` (or `brew install shopify-cli`).
 - **Not embedded**: The app runs standalone at `admin.fitwellbuckle.co`, not inside the Shopify Admin iframe (`embedded = false` in the toml, `frame-ancestors 'none'` in `next.config.ts`). Flipping either requires wiring App Bridge + Shopify session token auth across the admin — a substantial change, not a config flip. Surface it in the working session before starting.
 - **Webhook verification**: All incoming webhooks verified via HMAC-SHA256 using `SHOPIFY_WEBHOOK_SECRET`.
 - **Sync is additive**: Never delete Shopify-sourced records. Update existing or soft-delete (set a `deleted_at` timestamp).
