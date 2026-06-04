@@ -69,11 +69,15 @@ export default async function DashboardPage({
   const netSales = sql`COALESCE(SUM(${order.totalPrice} - ${order.totalRefunded}), 0)`.mapWith(Number);
   const notCancelled = sql`${order.cancelledAt} IS NULL`;
 
-  // B2B = wholesale draft orders; Consumer = web + in-person POS (everything
-  // else). No B2B customer tags exist in the data, so `source_name` is the
-  // segmentation signal. (Literal in the CASE — no bound param — so it's safe to
-  // reuse across SELECT + GROUP BY.)
-  const segmentExpr = sql<string>`CASE WHEN ${order.sourceName} = 'shopify_draft_order' THEN 'b2b' ELSE 'consumer' END`;
+  // Segment by order source (no B2B customer tags exist in the data, so
+  // `source_name` is the signal): B2B = wholesale draft orders, Trade Show =
+  // in-person POS, D2C = web + everything else. (Literals in the CASE — no bound
+  // params — so it's safe to reuse across SELECT + GROUP BY.)
+  const segmentExpr = sql<string>`CASE
+    WHEN ${order.sourceName} = 'shopify_draft_order' THEN 'b2b'
+    WHEN ${order.sourceName} = 'pos' THEN 'tradeshow'
+    ELSE 'd2c'
+  END`;
 
   const [
     revenueResult,
@@ -136,9 +140,14 @@ export default async function DashboardPage({
     orders > 0 ? Math.round(sales / orders) : 0;
   const segments = [
     {
-      label: "Consumer (D2C)",
-      sales: Number(segOf("consumer")?.sales ?? 0),
-      orders: segOf("consumer")?.orders ?? 0,
+      label: "D2C (Online)",
+      sales: Number(segOf("d2c")?.sales ?? 0),
+      orders: segOf("d2c")?.orders ?? 0,
+    },
+    {
+      label: "Trade Show",
+      sales: Number(segOf("tradeshow")?.sales ?? 0),
+      orders: segOf("tradeshow")?.orders ?? 0,
     },
     {
       label: "B2B (Wholesale)",
