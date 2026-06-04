@@ -65,3 +65,35 @@
     - specs/current/schema.md
     - specs/current/components.md
     - specs/strategy/b2b-pipeline.md
+
+- date: "2026-06-04"
+  title: "Dashboard reconciles with Shopify: store-tz dates + refund-aware Total sales"
+  priority: 1
+  layer: 1
+  notes: |
+    Two fixes to make the admin dashboard agree with Shopify. (1) Timezone:
+    "Today" and all date filters + daily chart buckets now compute in the store
+    timezone (America/Los_Angeles, src/lib/timezone.ts) instead of UTC — fixes
+    the "Today shows $0" evening-Pacific rollover. (2) Total sales: the headline
+    metric is now SUM(total_price - total_refunded) over non-cancelled orders
+    (includes pending/wholesale, subtracts returns), replacing the paid-only
+    "Revenue". New order columns (migration 0049): total_tax, total_discounts,
+    total_shipping, total_refunded, cancelled_at; sync maps them; full-history
+    backfill run on prod. total_refunded = returned-item value (refund line
+    items + adjustments), not cash. 30-day window: $14,015 -> ~$25,364.
+    Component columns (discounts/shipping/tax) reconcile with Shopify. Exact
+    parity with this sandbox's Analytics report is blocked by source-data
+    inconsistency (its Orders API lacks the returns the report claims); on a
+    real store the same code reconciles.
+  artifacts:
+    - specs/work-plans/completed/shopify-total-sales-parity.md
+    - src/lib/timezone.ts
+    - src/lib/date-range.ts
+    - src/components/layout/date-range-picker.tsx
+    - src/lib/schema.ts
+    - drizzle/migrations/0049_noisy_lord_tyger.sql
+    - src/lib/shopify/sync.ts
+    - src/types/shopify.ts
+    - src/app/(admin)/dashboard/page.tsx
+    - scripts/backfill-order-money.ts
+    - specs/current/schema.md

@@ -71,9 +71,29 @@ to attribution/funnel pages; duties (≈$0 for this store).
 - [ ] Move this plan to `completed/`, add `releases.yaml` entry.
 
 ## Notes
-- Refunds are embedded in the order REST payload (`order.refunds[].transactions`),
-  so no extra API calls; the existing `fetchAll` sync already pulls full orders.
+- Refunds are embedded in the order REST payload (`order.refunds[]`), so no extra
+  API calls; the existing `fetchAll` sync already pulls full orders.
 - Net definition (`total_price − total_refunded`) nets item/tax/shipping refunds
   in one shot, matching Shopify's Total sales without reconstructing each column.
-- Between deploy and backfill, existing rows have `total_refunded = 0`, so the
-  number is briefly the gross (~$26k) before settling (~$20k). Backfill promptly.
+
+## Outcome (2026-06-04) — shipped
+All phases done. Migration 0049 applied to prod; code at commits 9fda988 +
+8850792; full-history backfill run (591 orders, 28 with refunds).
+
+- **30-day "Total sales": $14,015 → ~$25,364** (includes the ~$12.3k of pending
+  wholesale Shopify counts; subtracts canonical returns).
+- **Component columns reconcile** with Shopify: Discounts $5,136.82 vs $5,135.05,
+  Shipping $932.11 vs $901.92, Taxes $404.44 vs ~$366.64.
+- **`total_refunded` = returned-item value** (`refund_line_items` + `order_adjustments`,
+  clamped to `total_price`), NOT cash transactions — the cash basis undercounts
+  store-credit/exchange returns. (`sumRefundedCents` in `src/lib/shopify/sync.ts`.)
+
+### Known limitation — sandbox data inconsistency
+Exact penny-parity with the Shopify **Analytics report** is **not achievable in
+this environment**: the report claims $6,231.91 of returns for May 4–Jun 3, but
+the Shopify **Orders API** (our sync source) contains only ~$1.2k (in-window) /
+~$2.9k (all) of return data, and has impossible records (order #2646: $246
+refunded on a $132 order). The two Shopify surfaces disagree at the source. On a
+real production store they're computed from the same data and reconcile, so this
+code matches there. Residual delta here = missing sandbox return data + returns
+attributed to order date vs Shopify's refund date.

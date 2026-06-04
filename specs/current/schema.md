@@ -88,10 +88,12 @@ Synced from Shopify. One row per Shopify order.
 | `email` | text | Order-level email |
 | `financial_status` | text | paid, refunded, etc. |
 | `fulfillment_status` | text | fulfilled, partial, null |
-| `total_price` | numeric(10,2) | |
-| `subtotal_price` | numeric(10,2) | |
-| `total_discount` | numeric(10,2) | |
-| `total_tax` | numeric(10,2) | |
+| `total_price` | integer (cents) | Amount charged (nets discounts, adds tax + shipping) |
+| `subtotal_price` | integer (cents) | |
+| `total_discounts` | integer (cents) | |
+| `total_tax` | integer (cents) | |
+| `total_shipping` | integer (cents) | From `total_shipping_price_set.shop_money` |
+| `total_refunded` | integer (cents) | **Returned-item value** (refund line items + order adjustments), clamped to `total_price`. NOT cash transactions — matches Shopify's "Returns" |
 | `currency` | text | USD default |
 | `discount_codes` | jsonb | Array of applied discounts |
 | `note` | text | |
@@ -99,10 +101,12 @@ Synced from Shopify. One row per Shopify order.
 | `source_name` | text | web, pos, api, etc. |
 | `landing_site` | text | URL customer arrived on |
 | `referring_site` | text | External referrer |
-| `ordered_at` | timestamptz | Shopify `created_at` |
+| `processed_at` | timestamptz | Shopify `processed_at` (falls back to `created_at`) |
+| `cancelled_at` | timestamptz | Shopify cancellation time; null otherwise. Excluded from "Total sales" |
 | `created_at` | timestamptz | Our insert time |
 | `updated_at` | timestamptz | |
-| `synced_at` | timestamptz | |
+
+**"Total sales" (dashboard headline)** = `SUM(total_price - total_refunded)` over **non-cancelled** orders in range (includes pending orders, subtracts returns), bucketed in the **store timezone** (`America/Los_Angeles`, see `src/lib/timezone.ts`). This is what reconciles with Shopify's "Total sales" report — unlike the former paid-only "Revenue", which excluded pending/wholesale orders and ignored returns.
 
 ### `order_line_item`
 
