@@ -157,7 +157,7 @@ export async function getPixelAttributedChannelPerformance(
     .innerJoin(
       utmAttribution,
       and(
-        eq(utmAttribution.fwDistinctId, order.fwDistinctId),
+        eq(utmAttribution.posthogDistinctId, order.posthogDistinctId),
         eq(utmAttribution.converted, true),
       ),
     )

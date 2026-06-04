@@ -34,8 +34,77 @@ posthog.init('phc_xhdBzfsf47Vy5MU9spMMtaJWtBuAJFkGxg2DcRiGN7Aq', {
     try { writeCartIdentity(ph); } catch (e) {}
     try { fwAttribution(ph); } catch (e) {}
     try { fireLandingPdpView(ph); } catch (e) {}
+    try { wireEngagementListeners(ph); } catch (e) {}
   }
 });
+
+// Section dwell + CTA click instrumentation. Theme opts elements in
+// with attributes — no per-element JS required:
+//   <section data-section="hero">...</section>
+//   <a data-cta="buy_buckle_hero" href="/cart/add">Buy now</a>
+// Events fire once per pageview per element. See
+// specs/strategy/event-taxonomy.md.
+function wireEngagementListeners(ph) {
+  if ('IntersectionObserver' in window) {
+    var dwellTimers = {};
+    var firedScrolledIn = {};
+    var firedDwelled = {};
+    var io = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i];
+        var sectionId = entry.target.getAttribute('data-section');
+        if (!sectionId) continue;
+        if (entry.isIntersecting) {
+          if (!firedScrolledIn[sectionId]) {
+            firedScrolledIn[sectionId] = 1;
+            ph.capture('section_scrolled_into_view', { section_id: sectionId });
+          }
+          if (!firedDwelled[sectionId] && !dwellTimers[sectionId]) {
+            (function (sid) {
+              dwellTimers[sid] = setTimeout(function () {
+                if (!firedDwelled[sid]) {
+                  firedDwelled[sid] = 1;
+                  ph.capture('section_dwelled', {
+                    section_id: sid,
+                    dwell_seconds: 3
+                  });
+                }
+                delete dwellTimers[sid];
+              }, 3000);
+            })(sectionId);
+          }
+        } else if (dwellTimers[sectionId]) {
+          clearTimeout(dwellTimers[sectionId]);
+          delete dwellTimers[sectionId];
+        }
+      }
+    }, { threshold: 0.1 });
+    var sections = document.querySelectorAll('[data-section]');
+    for (var j = 0; j < sections.length; j++) io.observe(sections[j]);
+  }
+
+  // CTA clicks — delegation pattern so dynamically-added elements work.
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    while (t && t !== document) {
+      if (t.getAttribute) {
+        var ctaId = t.getAttribute('data-cta');
+        if (ctaId) {
+          var label = (t.textContent || '').trim().slice(0, 100);
+          var dest = t.getAttribute('href') ||
+                     t.getAttribute('data-destination') || null;
+          ph.capture('cta_clicked', {
+            cta_id: ctaId,
+            cta_label: label,
+            destination: dest
+          });
+          return;
+        }
+      }
+      t = t.parentNode;
+    }
+  }, true);
+}
 
 // Custom product_viewed for "landing PDPs" — Shopify pages that function
 // as product detail pages but live at /pages/* so the Custom Pixel's
@@ -144,7 +213,7 @@ function fwAttribution(ph) {
   // fetch({keepalive:true}) silently drops on cross-origin JSON POSTs.
   // The endpoint parses the body via req.json() regardless of content-type.
   var payload = JSON.stringify({
-    fwDistinctId: distinctId,
+    posthogDistinctId: distinctId,
     sessionId: sessionId,
     source: utm.source,
     medium: utm.medium,

@@ -25,18 +25,26 @@ function corsHeaders(origin: string | null): Record<string, string> {
   };
 }
 
-const trackingSchema = z.object({
-  fwDistinctId: z.string().min(1).max(200),
-  sessionId: z.string().min(1).max(200),
-  source: z.string().max(500).nullish(),
-  medium: z.string().max(500).nullish(),
-  campaign: z.string().max(500).nullish(),
-  term: z.string().max(500).nullish(),
-  content: z.string().max(500).nullish(),
-  gclid: z.string().max(500).nullish(),
-  landingPage: z.string().max(2048).nullish(),
-  referrer: z.string().max(2048).nullish(),
-});
+// Accept both `posthogDistinctId` (current) and `fwDistinctId` (legacy snippet
+// name) so a snippet deploy lag doesn't drop tracking writes.
+const trackingSchema = z
+  .object({
+    posthogDistinctId: z.string().min(1).max(200).optional(),
+    fwDistinctId: z.string().min(1).max(200).optional(),
+    sessionId: z.string().min(1).max(200),
+    source: z.string().max(500).nullish(),
+    medium: z.string().max(500).nullish(),
+    campaign: z.string().max(500).nullish(),
+    term: z.string().max(500).nullish(),
+    content: z.string().max(500).nullish(),
+    gclid: z.string().max(500).nullish(),
+    landingPage: z.string().max(2048).nullish(),
+    referrer: z.string().max(2048).nullish(),
+  })
+  .refine((d) => d.posthogDistinctId || d.fwDistinctId, {
+    message: "posthogDistinctId or fwDistinctId is required",
+    path: ["posthogDistinctId"],
+  });
 
 export function OPTIONS(req: NextRequest) {
   return new NextResponse(null, {
@@ -65,7 +73,7 @@ export async function POST(req: NextRequest) {
     await db
       .insert(utmAttribution)
       .values({
-        fwDistinctId: parsed.fwDistinctId,
+        posthogDistinctId: parsed.posthogDistinctId ?? parsed.fwDistinctId,
         sessionId: parsed.sessionId,
         source: parsed.source ?? null,
         medium: parsed.medium ?? null,

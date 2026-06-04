@@ -43,14 +43,14 @@ export async function linkOrderToAttribution(
 
       await db
         .update(order)
-        .set({ fwDistinctId, linkMethod })
+        .set({ posthogDistinctId: fwDistinctId, linkMethod })
         .where(eq(order.id, orderId));
 
       if (customerId) {
         await db
           .update(customer)
           .set({
-            fwDistinctId: sql`COALESCE(${customer.fwDistinctId}, ${fwDistinctId})`,
+            posthogDistinctId: sql`COALESCE(${customer.posthogDistinctId}, ${fwDistinctId})`,
           })
           .where(eq(customer.id, customerId));
       }
@@ -61,7 +61,7 @@ export async function linkOrderToAttribution(
         .from(utmAttribution)
         .where(
           and(
-            eq(utmAttribution.fwDistinctId, fwDistinctId),
+            eq(utmAttribution.posthogDistinctId, fwDistinctId),
             gte(utmAttribution.capturedAt, windowStart),
           ),
         )
@@ -69,9 +69,18 @@ export async function linkOrderToAttribution(
         .limit(1);
 
       if (touch && !touch.converted) {
+        // Also backfill visitor_id so the email_match fallback path
+        // can resolve subsequent orders from this same customer (e.g.,
+        // a different browser/device on a repeat purchase). The snippet
+        // can't know the customer at write time — they're anonymous when
+        // the touch is captured — so we stamp it here at link time.
         await db
           .update(utmAttribution)
-          .set({ converted: true, convertedAt: new Date() })
+          .set({
+            converted: true,
+            convertedAt: new Date(),
+            ...(customerId ? { visitorId: customerId } : {}),
+          })
           .where(eq(utmAttribution.id, touch.id));
       }
 

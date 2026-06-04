@@ -100,8 +100,11 @@ export const customer = pgTable(
     utmSource: text("utm_source"),
     utmMedium: text("utm_medium"),
     utmCampaign: text("utm_campaign"),
-    // PostHog distinct_id bridged from the Shopify pixel/theme (identity stitch)
-    fwDistinctId: text("fw_distinct_id"),
+    // PostHog distinct_id observed at the customer's first pixel-linked
+    // order. The DB column name stays as fw_distinct_id for historical
+    // reasons (pre-rename); the actual column rename is queued for a
+    // focused drizzle-kit interactive session.
+    posthogDistinctId: text("fw_distinct_id"),
     // Optional link to a B2B company this person belongs to (a company's
     // "People" list = its leads + these customers). Manually associated in admin.
     // Annotated return type breaks the customer<->company circular inference.
@@ -112,7 +115,7 @@ export const customer = pgTable(
   (t) => [
     uniqueIndex("customer_shopify_id_idx").on(t.shopifyId),
     index("customer_email_idx").on(t.email),
-    index("customer_fw_distinct_id_idx").on(t.fwDistinctId),
+    index("customer_fw_distinct_id_idx").on(t.posthogDistinctId),
     index("customer_company_id_idx").on(t.companyId),
   ],
 );
@@ -177,8 +180,10 @@ export const order = pgTable(
     sourceName: text("source_name"),
     landingSite: text("landing_site"),
     referringSite: text("referring_site"),
-    // Identity-bridge: distinct_id carried from the pixel via checkout note attribute
-    fwDistinctId: text("fw_distinct_id"),
+    // PostHog distinct_id carried from the storefront snippet via the
+    // _fw_distinct_id checkout note attribute. (DB column name kept as
+    // fw_distinct_id; rename queued — see customer.posthogDistinctId.)
+    posthogDistinctId: text("fw_distinct_id"),
     // How the order was linked to a pre-purchase touch: 'pixel' | 'email_match' | null
     linkMethod: text("link_method"),
     processedAt: timestamp("processed_at", { mode: "date" }),
@@ -189,7 +194,7 @@ export const order = pgTable(
     uniqueIndex("order_shopify_id_idx").on(t.shopifyId),
     index("order_customer_id_idx").on(t.customerId),
     index("order_processed_at_idx").on(t.processedAt),
-    index("order_fw_distinct_id_idx").on(t.fwDistinctId),
+    index("order_fw_distinct_id_idx").on(t.posthogDistinctId),
   ],
 );
 
@@ -229,8 +234,9 @@ export const utmAttribution = pgTable(
     referrer: text("referrer"),
     gclid: text("gclid"),
     sessionId: text("session_id"),
-    // PostHog distinct_id from the theme snippet (first-touch identity)
-    fwDistinctId: text("fw_distinct_id"),
+    // PostHog distinct_id from the storefront snippet (first-touch identity).
+    // DB column kept as fw_distinct_id; see customer.posthogDistinctId note.
+    posthogDistinctId: text("fw_distinct_id"),
     // Set when this touch is linked to a purchase (attribution invariant §4)
     converted: boolean("converted").default(false),
     convertedAt: timestamp("converted_at", { mode: "date" }),
@@ -239,7 +245,7 @@ export const utmAttribution = pgTable(
   (t) => [
     index("utm_visitor_id_idx").on(t.visitorId),
     index("utm_captured_at_idx").on(t.capturedAt),
-    index("utm_fw_distinct_id_idx").on(t.fwDistinctId),
+    index("utm_fw_distinct_id_idx").on(t.posthogDistinctId),
     uniqueIndex("utm_session_id_idx").on(t.sessionId),
   ],
 );

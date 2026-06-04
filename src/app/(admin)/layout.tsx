@@ -6,6 +6,7 @@ import { AdminSidebar, SidebarProvider } from "@/components/layout/admin-sidebar
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { MobileHeader } from "@/components/layout/mobile-header";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { PosthogAdminIdentify } from "@/components/providers/posthog-admin-identify";
 import { StageLabelsProvider } from "@/components/production/stage-labels-provider";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
@@ -29,6 +30,9 @@ export default async function AdminLayout({
 
   return (
     <AuthSessionProvider>
+      {session.user.email && (
+        <PosthogAdminIdentify email={session.user.email} />
+      )}
       <StageLabelsProvider labels={stageLabels} order={stageOrder}>
       <SidebarProvider>
         <div className="flex h-screen print:block print:h-auto">

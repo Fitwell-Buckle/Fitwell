@@ -36,11 +36,11 @@ const { db, setSelectRows } = vi.hoisted(() => {
 
 vi.mock("@/lib/db", () => ({ db }));
 vi.mock("@/lib/schema", () => ({
-  customer: { id: "id", fwDistinctId: "fw" },
+  customer: { id: "id", posthogDistinctId: "fw" },
   order: { id: "id" },
   utmAttribution: {
     id: "id",
-    fwDistinctId: "fw",
+    posthogDistinctId: "fw",
     visitorId: "v",
     capturedAt: "c",
     convertedAt: "cv",

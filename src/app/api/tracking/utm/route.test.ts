@@ -10,6 +10,13 @@ const { onConflictDoNothing, values, insert } = vi.hoisted(() => {
 vi.mock("@/lib/db", () => ({ db: { insert } }));
 vi.mock("@/lib/schema", () => ({ utmAttribution: { sessionId: "session_id" } }));
 
+// Legacy field-name shim test (verifies backward compat for snippet deploy lag)
+const legacyValid = {
+  fwDistinctId: "ph_legacy",
+  sessionId: "sess_legacy",
+  source: "google",
+};
+
 import { POST, OPTIONS } from "./route";
 import { NextRequest } from "next/server";
 
@@ -22,7 +29,7 @@ function makeReq(body: unknown, origin = "https://www.fitwellbuckle.co") {
 }
 
 const valid = {
-  fwDistinctId: "ph_abc123",
+  posthogDistinctId: "ph_abc123",
   sessionId: "sess_1",
   source: "google",
   medium: "cpc",
@@ -51,7 +58,7 @@ describe("POST /api/tracking/utm", () => {
     expect(insert).toHaveBeenCalledOnce();
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({
-        fwDistinctId: "ph_abc123",
+        posthogDistinctId: "ph_abc123",
         sessionId: "sess_1",
         source: "google",
         gclid: "Cj0xyz",
@@ -70,6 +77,14 @@ describe("POST /api/tracking/utm", () => {
     const res = await POST(makeReq(valid, "https://evil.example"));
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
       "https://www.fitwellbuckle.co",
+    );
+  });
+
+  it("accepts the legacy fwDistinctId field and writes as posthogDistinctId", async () => {
+    const res = await POST(makeReq(legacyValid));
+    expect(res.status).toBe(200);
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ posthogDistinctId: "ph_legacy" }),
     );
   });
 
