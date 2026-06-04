@@ -57,10 +57,10 @@ export default async function DashboardPage({
   // orders fall into the next UTC day and the line is off by a day.
   const bucketExpr =
     granularity === "day"
-      ? sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
+      ? sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`
       : granularity === "week"
-        ? sql`date_trunc('week', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
-        : sql`date_trunc('month', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`;
+        ? sql`date_trunc('week', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`
+        : sql`date_trunc('month', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`;
 
   // "Total sales" reconciles with Shopify: each order's net contribution is
   // total_price minus refunds (which nets item/tax/shipping returns), summed

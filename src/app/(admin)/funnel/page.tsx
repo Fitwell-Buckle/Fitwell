@@ -118,10 +118,10 @@ export default async function FunnelPage({
   // ── Conversion trend chart data ──────────────────────────────────
   const orderBucketExpr =
     granularity === "day"
-      ? sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
+      ? sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`
       : granularity === "week"
-        ? sql`date_trunc('week', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
-        : sql`date_trunc('month', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`;
+        ? sql`date_trunc('week', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`
+        : sql`date_trunc('month', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`;
 
   const [sessionsByBucket, ordersByBucket] = await Promise.all([
     db

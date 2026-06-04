@@ -49,14 +49,14 @@ export async function GET() {
       // Revenue by day for last 30 days
       db
         .select({
-          date: sql<string>`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date::text`,
+          date: sql<string>`date_trunc('day', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date::text`,
           revenue: sum(order.totalPrice),
           orders: count(),
         })
         .from(order)
         .where(gte(order.processedAt, thirtyDaysAgo))
-        .groupBy(sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`)
-        .orderBy(sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`),
+        .groupBy(sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`)
+        .orderBy(sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`),
     ]);
 
   const totalRevenue = Number(revenueResult[0]?.total ?? 0);
