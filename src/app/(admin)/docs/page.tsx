@@ -11,6 +11,7 @@ import {
   Database,
   RefreshCw,
   Wrench,
+  Activity,
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -52,6 +53,13 @@ const sections = [
     description:
       "How data flows from Shopify, GA4, Google Ads, and PostHog into the platform.",
     icon: RefreshCw,
+  },
+  {
+    href: "/docs/user-tracking",
+    title: "User Tracking",
+    description:
+      "PostHog event taxonomy — which events the storefront snippet and Custom Pixel fire, the required properties, and the funnel-stage progression map.",
+    icon: Activity,
   },
   {
     href: "/docs/contributing",

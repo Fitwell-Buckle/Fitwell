@@ -24,6 +24,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import {
   getChannelPerformance,
   getLinkConfidence,
+  getPixelAttributedChannelPerformance,
 } from "@/lib/analytics/attribution";
 
 export const metadata: Metadata = {
@@ -35,6 +36,14 @@ function fmt(cents: number) {
     style: "currency",
     currency: "USD",
   });
+}
+
+function fmtDuration(seconds: number | null): string {
+  if (seconds == null) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.round((seconds / 3600) * 10) / 10}h`;
+  return `${Math.round((seconds / 86400) * 10) / 10}d`;
 }
 
 export default async function AttributionPage({
@@ -86,9 +95,10 @@ export default async function AttributionPage({
       .limit(15),
   ]);
 
-  const [channelPerf, linkConfidence] = await Promise.all([
+  const [channelPerf, linkConfidence, pixelChannelPerf] = await Promise.all([
     getChannelPerformance(from, to),
     getLinkConfidence(from, to),
+    getPixelAttributedChannelPerformance(from, to),
   ]);
   const linkTotal =
     linkConfidence.pixel +
@@ -148,6 +158,16 @@ export default async function AttributionPage({
   return (
     <div>
       <PageHeader title="Attribution" />
+      <p className="mt-1.5 max-w-3xl text-xs text-zinc-500">
+        Data sources: Shopify <code>order.landing_site</code> /{" "}
+        <code>referring_site</code> (top three cards) and{" "}
+        <code>customer.utm_source/medium</code> (the legacy first-touch
+        card); the storefront PostHog snippet&apos;s{" "}
+        <code>utm_attribution</code> table joined via{" "}
+        <code>order.fw_distinct_id</code> (the pixel-attributed card);{" "}
+        <code>order.link_method</code> (the pixel/email-match/unattributed
+        confidence split). No GA4 — that lives on the Campaigns page.
+      </p>
 
       <Card className="mt-6">
         <CardHeader>
@@ -268,6 +288,60 @@ export default async function AttributionPage({
                       <TableCell className="text-right">{row.orders}</TableCell>
                       <TableCell className="text-right">
                         {fmt(row.revenue)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">
+              Pixel-attributed channel performance (true first-touch)
+            </CardTitle>
+            <p className="mt-1 text-xs text-zinc-400">
+              Joins each order to the <em>storefront snippet&apos;s</em>{" "}
+              earliest UTM capture for that visitor (via{" "}
+              <code>fw_distinct_id</code>), not the converting visit&apos;s{" "}
+              <code>landing_site</code>. Only pixel-linked orders qualify —
+              effectively orders placed after the 2026-06-03 install.
+              Time-to-convert is from first-touch capture to order placement.
+            </p>
+          </CardHeader>
+          <CardContent className="max-h-64 overflow-auto">
+            {pixelChannelPerf.length === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No pixel-attributed orders in this date range yet. The
+                snippet started populating fw_distinct_id on 2026-06-03; this
+                card lights up as orders from post-deploy visitors come in.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Channel</TableHead>
+                    <TableHead className="text-right">Orders</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="text-right">
+                      Median time to convert
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pixelChannelPerf.map((row) => (
+                    <TableRow key={row.channel}>
+                      <TableCell className="font-medium capitalize">
+                        {row.channel.replace(/_/g, " ")}
+                      </TableCell>
+                      <TableCell className="text-right">{row.orders}</TableCell>
+                      <TableCell className="text-right">
+                        {fmt(row.revenue)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-zinc-600">
+                        {fmtDuration(row.medianTimeToConvertSeconds)}
                       </TableCell>
                     </TableRow>
                   ))}

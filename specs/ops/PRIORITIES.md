@@ -38,15 +38,17 @@ Until then the button returns a graceful 502. See `specs/current/shopify-app-con
 
 ### What "Rightness" Looks Like (Initial Targets — Refine with Data)
 
-| Stage | Current | Target | Notes |
-|---|---|---|---|
-| Visitor → product page view | ? | 60%+ | Filter bots first |
-| Product page → add to cart | ? | 8–12% | Industry baseline for considered purchase |
-| Add to cart → checkout start | ? | 50%+ | |
-| Checkout start → checkout complete | ? | 70%+ | Friction here is highest-leverage to fix |
-| **Visitor → purchase (overall)** | **~1.5%** | **3%+** | Doubling is the near-term target |
+Measured as an **event-based** funnel (HogQL `windowFunnel`, route-agnostic), not a strict URL flow. Visitors can enter on any page (`/`, `/pages/m1-micro-adjust-buckle`, `/collections/*`, `/products/*`) and traverse via any route — the stages are progression *events*, not page visits.
 
-Each `?` gets a real number once PostHog instrumentation lands. Targets are placeholders based on industry norms — replace with our own once we have baseline.
+| Stage (event) | Current | Target | Notes |
+|---|---|---|---|
+| `$pageview` → `product_viewed` | ? | 60%+ | `product_viewed` includes Shopify's standard event on `/products/*` AND the storefront snippet's custom emission on declared landing PDPs (currently `/pages/m1-micro-adjust-buckle`). |
+| `product_viewed` → `product_added_to_cart` | ? | 8–12% | Industry baseline for considered purchase. |
+| `product_added_to_cart` → `checkout_started` | ? | 50%+ | |
+| `checkout_started` → `purchase_completed` | ? | 70%+ | Friction here is highest-leverage to fix. |
+| **`$pageview` → `purchase_completed` (overall)** | **~1.5%** | **3%+** | Doubling is the near-term target. |
+
+Each `?` gets a real number once `posthog_daily` accumulates and the `/funnel` page's event-funnel card has data. Targets are placeholders based on industry norms — replace with our own once we have baseline. The `/funnel` page's "Entry Pages" card complements this view by showing which doors visitors actually come in through.
 
 ### Catalog of Unknowns
 
@@ -164,26 +166,31 @@ Deferred — Shopify is the primary web property for now. Decision logged in `sp
 ---
 
 ### 6. 🔨 Conversion Funnel Observability (PostHog)
-**Last worked**: 2026-05-25 (active — promoted from deferred)
+**Last worked**: 2026-06-03 (Phases 0–6 code-complete; awaiting Shopify theme redeploy + data accumulation)
 **Source of truth**: `specs/work-plans/todo/posthog-integration.md`, `specs/strategy/event-taxonomy.md`, `specs/strategy/funnel.md`
 **Owner**: Greg
 
 **Goal:** end-to-end visibility into the existing Shopify storefront funnel so we know where visitors actually bail. Drives the bottom-up strategy in "Current Strategic Focus" above — we cannot make data-driven calls about ad spend or landing pages until we can see the funnel.
 
-**Done:**
-- [x] Funnel stage vocabulary defined (`specs/strategy/funnel.md`)
-- [x] Event taxonomy and naming conventions defined (`specs/strategy/event-taxonomy.md`)
-- [x] Persona framework defined (`specs/strategy/personas.md`)
-- [x] Initial hypotheses register seeded (`specs/strategy/hypotheses.md`)
+**Done (2026-06-03):**
+- [x] **Phase 0 spike:** vanilla install confirmed default stitching works (no `fw_distinct_id` bridge needed). Same-origin Custom Pixel iframe shares the `.fitwellbuckle.co` cookie. Findings: `specs/research/posthog-shopify-stitching.md`.
+- [x] **Phase 1:** vanilla theme snippet + Custom Pixel live on production.
+- [x] **Phase 2:** UTM capture + first-touch write-through to `utm_attribution` via `/api/tracking/utm` (CORS, idempotent on session_id). `fw_attribution` cookie marks first-touch.
+- [x] **Phase 3:** `_fw_distinct_id` cart attribute backstop → orders/create webhook reads it, stamps `link_method = 'pixel'`, marks `utm_attribution.converted`, server-side enriches the PostHog Person with order + first-touch UTM.
+- [x] **Phase 4:** server-side posthog-node client.
+- [x] **Phase 5:** extraction cron (every 3h) populating `posthog_daily`.
+- [x] **Phase 6:** pixel subscribes to `checkout_started`, `checkout_completed`, `product_viewed`, `product_added_to_cart`.
+- [x] **Phase 7 (partial):** `/funnel` page now has a PostHog 5-stage funnel card; `/attribution` already shows orders+revenue by first-touch channel with link-confidence split.
 
-**Next:**
-- [ ] Decide PostHog instrumentation architecture: install on Shopify storefront directly, or proxy through this admin app? (Storefront is the funnel, but Shopify theme code is the constraint.)
-- [ ] Instrument required event properties on every page (`page`, `page_goal_stage`, `page_target_persona`, `funnel_stage_inferred`, `referrer_source`)
-- [ ] Instrument stage-progression events (`section_dwelled`, `video_progress`, `cart_item_added`, `checkout_started`)
-- [ ] Capture `checkout_completed` server-side from Shopify webhook (client-side checkout completion is unreliable)
-- [ ] Build baseline funnel report showing actual conversion at each stage
-- [ ] Compare baseline against the "Rightness" targets above — identify the biggest leak
-- [ ] Define next-action criteria based on where the leak is (landing page work, checkout friction, etc.)
+**Greg's deploy steps:**
+1. Re-paste `shopify/theme-posthog-snippet.html` into `theme.liquid` (replaces the Phase 0 minimal snippet — now includes UTM capture, cart-attribute backstop, person properties)
+2. Re-paste `shopify/custom-pixel.js` into the existing `posthog` Custom Pixel (Settings → Customer events → edit code — now includes `product_viewed` and `product_added_to_cart`)
+
+**Then:**
+- [ ] Wait 24–72h for `posthog_daily` to accumulate baseline data (cron runs every 3h; needs a few cycles plus traffic).
+- [ ] Compare PostHog funnel card on `/funnel` against the "Rightness" targets above — identify the biggest leak.
+- [ ] Future: identify admin staff in the admin posthog-provider (so staff Persons aren't created backwards via test purchases — Greg's admin events were back-stitched onto his email Person during the Phase 0 test).
+- [ ] Future: backfill pre-pixel orders via email-match for historical attribution. Not load-bearing — defer until the live funnel is settled.
 
 **Why this matters now:** every dollar of additional ad spend without instrumentation is a dollar we can't learn from. Until the funnel is observable, scaling top-of-funnel is throwing darts.
 

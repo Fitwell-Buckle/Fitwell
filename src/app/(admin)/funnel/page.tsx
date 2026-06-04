@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/charts/metric-card";
 import { Mono } from "@/components/ui/data-table";
+import { getFunnelData, getLandingPageBreakdown } from "@/lib/admin/funnel";
 
 export const metadata: Metadata = {
   title: "Conversion Funnel | Fitwell Admin",
@@ -50,6 +51,8 @@ export default async function FunnelPage({
     webOrders,
     draftOrders,
     repeatCustomers,
+    posthogStages,
+    landingPages,
   ] = await Promise.all([
     db
       .select({
@@ -90,6 +93,9 @@ export default async function FunnelPage({
       .select({ total: count() })
       .from(customer)
       .where(sql`${customer.orderCount} > 1`),
+
+    getFunnelData(),
+    getLandingPageBreakdown(),
   ]);
 
   const sessions = sessionData[0]?.sessions ?? 0;
@@ -240,6 +246,95 @@ export default async function FunnelPage({
             <p className="mt-4 text-xs text-zinc-400">
               Session → Purchase: <Mono>{pct(webOrderCount, sessions)}</Mono>
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>PostHog Event Funnel — Last 30 Days</CardTitle>
+            <p className="mt-1 text-xs text-zinc-400">
+              Cohort progression via HogQL <Mono>windowFunnel</Mono>: each
+              count is the number of unique persons who reached at least
+              this step within a 30-day window, in time order. Route-agnostic
+              — entry can be any page.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {posthogStages[0].count === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No PostHog events in this window yet. Storefront snippet + Custom Pixel installed 2026-06-03 — data fills in as traffic accumulates.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {posthogStages.map((stage, i) => {
+                  const prev = i > 0 ? posthogStages[i - 1].count : stage.count;
+                  const width = posthogStages[0].count > 0
+                    ? Math.max(8, (stage.count / posthogStages[0].count) * 100)
+                    : 100;
+                  return (
+                    <div key={stage.name}>
+                      <div className="mb-1 flex items-baseline justify-between text-sm">
+                        <span className="text-zinc-600">{stage.name}</span>
+                        <span className="font-mono font-medium text-zinc-900">
+                          {stage.count.toLocaleString()}
+                          {i > 0 && (
+                            <span className="ml-2 text-xs text-zinc-400">
+                              {pct(stage.count, prev)} of prev
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="h-6 rounded bg-zinc-100">
+                        <div
+                          className="h-6 rounded bg-zinc-900 transition-all"
+                          style={{ width: `${width}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Entry Pages — Last 30 Days</CardTitle>
+            <p className="mt-1 text-xs text-zinc-400">
+              Where visitors actually land. <Mono>conv.</Mono> = those visitors who later added to cart.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {landingPages.length === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No entry-page data yet.
+              </p>
+            ) : (
+              <div className="space-y-2 text-sm">
+                <div className="flex items-baseline justify-between border-b border-zinc-100 pb-1.5 text-xs font-medium uppercase tracking-wider text-zinc-500">
+                  <span>Path</span>
+                  <span className="flex gap-6">
+                    <span>visitors</span>
+                    <span className="w-16 text-right">conv.</span>
+                  </span>
+                </div>
+                {landingPages.map((row) => {
+                  const cvr = row.visitors > 0 ? (row.conversions / row.visitors) * 100 : 0;
+                  return (
+                    <div key={row.path} className="flex items-baseline justify-between gap-3 border-b border-zinc-50 pb-1.5 last:border-b-0">
+                      <span className="truncate font-mono text-xs text-zinc-700">{row.path}</span>
+                      <span className="flex shrink-0 items-baseline gap-6 font-mono text-xs">
+                        <span className="text-zinc-900">{row.visitors.toLocaleString()}</span>
+                        <span className="w-16 text-right text-zinc-500">
+                          {row.conversions} <span className="text-[10px] text-zinc-400">({cvr.toFixed(1)}%)</span>
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -10,6 +10,7 @@ import {
   Database,
   Wrench,
   RefreshCw,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const docsNavItems = [
   { href: "/docs/architecture", label: "Architecture", icon: Layers },
   { href: "/docs/schema", label: "Schema & Data Model", icon: Database },
   { href: "/docs/data-sync", label: "Data Sync", icon: RefreshCw },
+  { href: "/docs/user-tracking", label: "User Tracking", icon: Activity },
   { href: "/docs/contributing", label: "Contributing", icon: Wrench },
 ];
 

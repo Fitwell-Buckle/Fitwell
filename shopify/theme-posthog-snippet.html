@@ -1,20 +1,27 @@
 {%- comment -%}
-  Fitwell · PostHog + first-touch attribution (storefront / landing pages)
+  Fitwell · PostHog storefront install (landing + storefront)
 
   Paste this block into theme.liquid immediately before </head>.
-  This is NOT the checkout — the checkout uses shopify/custom-pixel.js.
+  Checkout pixel: shopify/custom-pixel.js (Settings → Customer events).
 
-  What it does:
-   1. Loads posthog-js and inits the project.
-   2. Mirrors PostHog's distinct_id into a first-party cookie `fw_distinct_id`
-      scoped to .fitwellbuckle.co so the sandboxed checkout pixel can read the
-      same identity (the bridge the official PostHog Shopify guide omits).
-   3. Captures first-touch UTM/referrer once per session:
-        - as PostHog person properties ($set_once), and
-        - POSTed to https://admin.fitwellbuckle.co/api/tracking/utm, and
-        - written to the Shopify cart as the `_fw_distinct_id` attribute so
-          the order webhook has a deterministic server-side link too.
-  See specs/invariants/attribution.md and specs/work-plans/todo/posthog-integration.md
+  Phase 0 spike (2026-06-03) confirmed: PostHog's default cookie handling
+  stitches the storefront's anonymous person to the pixel's identified person
+  without an fw_distinct_id bridge. Shopify hosts the Custom Pixel iframe at
+  www.fitwellbuckle.co/web-pixels@.../sandbox/... — same origin as the
+  storefront — so the .fitwellbuckle.co posthog cookie is shared between the
+  two posthog-js instances. The pixel's posthog.identify(email) merges the
+  storefront's anonymous distinct_id forward via posthog-js's standard
+  $anon_distinct_id mechanism. Findings:
+  specs/research/posthog-shopify-stitching.md.
+
+  Phase 2 (2026-06-03) adds first-touch UTM capture: parses utm_*/gclid from
+  the landing URL, sets PostHog person properties (immutable $set_once for
+  first-touch, $set for last_*), writes a durable copy to the
+  utm_attribution table via POST /api/tracking/utm on the admin app.
+  First-touch only — gated by an fw_attribution cookie per
+  specs/invariants/attribution.md §2.
+
+  Plan: specs/work-plans/todo/posthog-integration.md.
 {%- endcomment -%}
 <script>
 !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageViewId captureTraceFeedback captureTraceMetric".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
@@ -22,80 +29,144 @@
 posthog.init('phc_xhdBzfsf47Vy5MU9spMMtaJWtBuAJFkGxg2DcRiGN7Aq', {
   api_host: 'https://us.i.posthog.com',
   person_profiles: 'identified_only',
-  // Share the cookie across the whole funnel (landing → storefront → checkout).
-  cross_subdomain_cookie: true,
-  persistence: 'localStorage+cookie',
   loaded: function (ph) {
-    try { fwAttribution(ph); } catch (e) { /* never break the storefront */ }
+    // All best-effort, must never throw into the storefront.
+    try { writeCartIdentity(ph); } catch (e) {}
+    try { fwAttribution(ph); } catch (e) {}
+    try { fireLandingPdpView(ph); } catch (e) {}
   }
 });
+
+// Custom product_viewed for "landing PDPs" — Shopify pages that function
+// as product detail pages but live at /pages/* so the Custom Pixel's
+// product_viewed event (only fires on /products/*) doesn't see them.
+// Without this, the funnel's "product view" stage drops 80% of Meta/IG
+// landing traffic. See specs/strategy/event-taxonomy.md.
+function fireLandingPdpView(ph) {
+  var LANDING_PDPS = {
+    '/pages/m1-micro-adjust-buckle': {
+      product_handle: 'm1-micro-adjust-buckle',
+      product_title: 'Fitwell M1 Micro-Adjust Buckle',
+      product_type: 'buckle'
+    }
+  };
+  var meta = LANDING_PDPS[location.pathname];
+  if (!meta) return;
+  var props = { source: 'theme_snippet', landing_page: location.pathname };
+  for (var k in meta) { if (meta.hasOwnProperty(k)) props[k] = meta[k]; }
+  ph.capture('product_viewed', props);
+}
+
+// Stamp the visitor's posthog distinct_id onto the Shopify cart as a
+// `_fw_distinct_id` attribute. The attribute survives to the order
+// payload (`note_attributes`) and lets the orders/create webhook
+// link the order to its pre-purchase utm_attribution row
+// deterministically — see linkOrderToAttribution in
+// src/lib/analytics/order-attribution.ts. Without this, only the
+// lower-confidence email_match fallback can resolve attribution.
+function writeCartIdentity(ph) {
+  var distinctId = ph.get_distinct_id && ph.get_distinct_id();
+  if (!distinctId) return;
+  fetch('/cart/update.js', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ attributes: { _fw_distinct_id: distinctId } })
+  }).catch(function () {});
+}
 
 function fwAttribution(ph) {
   var DOMAIN = '.fitwellbuckle.co';
   var TRACK_ENDPOINT = 'https://admin.fitwellbuckle.co/api/tracking/utm';
 
+  function getCookie(name) {
+    var m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? decodeURIComponent(m.pop()) : '';
+  }
   function setCookie(name, value, days) {
     var d = new Date(); d.setTime(d.getTime() + days * 864e5);
     document.cookie = name + '=' + encodeURIComponent(value) +
       ';expires=' + d.toUTCString() + ';path=/;domain=' + DOMAIN +
       ';SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
   }
-  function getCookie(name) {
-    var m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-    return m ? decodeURIComponent(m.pop()) : '';
-  }
 
-  // 1. Identity bridge: mirror PostHog's distinct_id to a readable cookie.
-  var distinctId = ph.get_distinct_id();
-  if (distinctId) setCookie('fw_distinct_id', distinctId, 400);
-
-  // 2. First-touch only — one attribution record per session.
+  // First-touch only per specs/invariants/attribution.md §2.
   if (getCookie('fw_attribution')) return;
 
   var q = new URLSearchParams(location.search);
-  var sessionId = (ph.get_session_id && ph.get_session_id()) ||
-    (distinctId + ':' + Date.now());
   var utm = {
-    fwDistinctId: distinctId,
-    sessionId: sessionId,
     source: q.get('utm_source'),
     medium: q.get('utm_medium'),
     campaign: q.get('utm_campaign'),
     term: q.get('utm_term'),
     content: q.get('utm_content'),
-    gclid: q.get('gclid'),
-    landingPage: location.href,
-    referrer: document.referrer || null
+    gclid: q.get('gclid')
   };
+  var referrer = document.referrer || null;
 
-  // Only record a real touch (has a source/gclid) or a genuine referral.
-  if (!utm.source && !utm.gclid && !utm.referrer) { setCookie('fw_attribution', '1', 30); return; }
+  // Skip pure-direct visits — no signal worth recording.
+  if (!utm.source && !utm.medium && !utm.campaign && !utm.gclid && !referrer) {
+    setCookie('fw_attribution', '1', 30);
+    return;
+  }
 
-  setCookie('fw_attribution', '1', 30);
+  var sessionId = ph.get_session_id && ph.get_session_id();
+  var distinctId = ph.get_distinct_id && ph.get_distinct_id();
+  if (!sessionId || !distinctId) {
+    setCookie('fw_attribution', '1', 30);
+    return;
+  }
 
-  // a) PostHog person — first-touch is immutable.
+  // Mark the cookie immediately so concurrent pageviews don't double-POST.
+  setCookie('fw_attribution', sessionId, 30);
+
   ph.setPersonProperties(
-    { last_utm_source: utm.source, last_referrer: utm.referrer },
-    { utm_source: utm.source, utm_medium: utm.medium, utm_campaign: utm.campaign,
-      utm_term: utm.term, utm_content: utm.content, gclid: utm.gclid,
-      landing_page: utm.landingPage, first_referrer: utm.referrer }
+    {
+      last_utm_source: utm.source,
+      last_utm_medium: utm.medium,
+      last_utm_campaign: utm.campaign,
+      last_referrer: referrer,
+      last_landing_page: location.href
+    },
+    {
+      utm_source: utm.source,
+      utm_medium: utm.medium,
+      utm_campaign: utm.campaign,
+      utm_term: utm.term,
+      utm_content: utm.content,
+      gclid: utm.gclid,
+      first_referrer: referrer,
+      first_landing_page: location.href
+    }
   );
 
-  // b) Durable copy in our DB.
-  fetch(TRACK_ENDPOINT, {
-    method: 'POST', mode: 'cors', keepalive: true,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(utm)
-  }).catch(function () {});
-
-  // c) Server-side deterministic backstop: stamp the cart so the order
-  //    webhook receives `_fw_distinct_id` in note_attributes even if the
-  //    checkout pixel beacon is blocked.
-  if (distinctId) {
-    fetch('/cart/update.js', {
+  // sendBeacon with text/plain is a "simple" CORS request — no preflight,
+  // works reliably from iOS in-app browsers (Instagram, Facebook) where
+  // fetch({keepalive:true}) silently drops on cross-origin JSON POSTs.
+  // The endpoint parses the body via req.json() regardless of content-type.
+  var payload = JSON.stringify({
+    fwDistinctId: distinctId,
+    sessionId: sessionId,
+    source: utm.source,
+    medium: utm.medium,
+    campaign: utm.campaign,
+    term: utm.term,
+    content: utm.content,
+    gclid: utm.gclid,
+    landingPage: location.href,
+    referrer: referrer
+  });
+  var sent = false;
+  if (navigator.sendBeacon) {
+    try {
+      sent = navigator.sendBeacon(TRACK_ENDPOINT, new Blob([payload], { type: 'text/plain' }));
+    } catch (e) { sent = false; }
+  }
+  if (!sent) {
+    fetch(TRACK_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ attributes: { _fw_distinct_id: distinctId } })
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: payload
     }).catch(function () {});
   }
 }

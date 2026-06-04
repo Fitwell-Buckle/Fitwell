@@ -1,9 +1,10 @@
 # Shopify-side PostHog install (manual)
 
-These two artifacts live in this repo for version control but are **installed
+These artifacts live in this repo for version control but are **installed
 by hand in the Shopify admin** — they cannot be deployed from this codebase.
-They pair with the in-repo backend (tracking endpoint, webhook enrichment,
-extraction cron, dashboard). Plan: `specs/work-plans/todo/posthog-integration.md`.
+They pair with the in-repo backend (extraction cron, admin dashboard, and
+in future, UTM write-through + webhook enrichment).
+Plan: `specs/work-plans/todo/posthog-integration.md`.
 Invariant: `specs/invariants/attribution.md`.
 
 | File | Where it goes |
@@ -26,44 +27,28 @@ POSTHOG_PERSONAL_API_KEY=<server-only secret, for the extraction cron>
 The first two are also safe in the public theme/pixel. `POSTHOG_PERSONAL_API_KEY`
 is server-only (Vercel) — never in the theme or pixel.
 
-## ⚠️ Do Phase 0 BEFORE trusting the bridge
+## How identity stitches across surfaces
 
-The whole point of the `fw_distinct_id` bridge is to fix an *unverified*
-assumption: that the sandboxed checkout pixel can't read the storefront
-cookie. Confirm empirically first (see plan Phase 0):
+Storefront snippet and pixel are both posthog-js instances on `.fitwellbuckle.co`.
+Shopify hosts the Custom Pixel iframe at
+`https://www.fitwellbuckle.co/web-pixels@.../sandbox/...` — same origin as the
+storefront — so the first-party posthog-js cookie is shared between them.
 
-1. Install both artifacts on a **dev/preview theme + test pixel**.
-2. Open `https://www.fitwellbuckle.co/?utm_source=spiketest&utm_medium=qa`,
-   browse a product, complete a real test checkout.
-3. In PostHog → Activity, find the person for that checkout:
-   - **Same person** holds the `$pageview` (with `utm_source=spiketest`) **and**
-     `purchase_completed` → stitching works; the bridge is hardening.
-   - **Two persons** → the bridge is load-bearing; keep it.
-4. Compare the `fw_distinct_id` cookie value (storefront devtools) against the
-   pixel's `distinct_id` on the purchase event — equal confirms the bridge.
-5. Record the result in `specs/research/posthog-shopify-stitching.md`.
+1. First storefront pageview → posthog-js mints anonymous distinct_id, writes
+   `.fitwellbuckle.co` cookie. Person row created lazily on identify (we run
+   `person_profiles: 'identified_only'`).
+2. Subsequent pageviews accumulate against the same anonymous distinct_id.
+3. Checkout page loads → Custom Pixel inits its own posthog-js, which reads the
+   shared cookie and bootstraps with the same anonymous distinct_id.
+4. On `checkout_completed`, pixel calls `posthog.identify(email)`. posthog-js
+   sends a `$identify` event with `$anon_distinct_id` set, and PostHog merges
+   the anonymous person onto the email-keyed person.
+5. Result: one Person carries the full journey — pre-checkout pageviews +
+   purchase + post-checkout activity.
 
-## How the pieces connect
-
-```
-theme snippet ──► posthog-js ($pageview, $set_once UTM)
-      │
-      ├──► POST /api/tracking/utm ──► utm_attribution (durable, DB)
-      ├──► /cart/update.js attributes._fw_distinct_id  (server backstop)
-      └──► fw_distinct_id cookie (.fitwellbuckle.co)
-                                   │
-checkout pixel ──► bootstrap(distinctID) ─┘ ──► purchase_completed + identify(email)
-
-Shopify orders/create webhook
-      └──► linkOrderToAttribution(): reads note_attributes._fw_distinct_id
-           → stamps order.fw_distinct_id + link_method='pixel'
-           → marks utm_attribution.converted
-           → server-side PostHog identify + purchase_completed (belt & suspenders)
-
-extract-posthog cron (every 3h) ──► posthog_daily rollups
-Attribution page ──► Channel Performance (orders+revenue, first-touch) + link confidence
-```
-
-Two independent paths produce the deterministic link (client pixel **and**
-the server webhook via the cart note attribute), so a blocked beacon does not
-lose attribution.
+This was empirically confirmed on 2026-06-03: see
+`specs/research/posthog-shopify-stitching.md`. Earlier drafts of the plan
+included an `fw_distinct_id` identity bridge to work around a presumed
+cookie-isolation problem in the pixel sandbox; the spike showed the pixel
+iframe is same-origin and the problem doesn't exist on Shopify's current
+implementation, so the bridge was removed.

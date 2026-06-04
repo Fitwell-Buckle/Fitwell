@@ -9,6 +9,7 @@ import {
   googleAdsDaily,
   gscDaily,
   metaAdsDaily,
+  posthogDaily,
 } from "@/lib/schema";
 import { max } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +63,7 @@ export default async function DataSyncPage() {
     lastGoogleAds,
     lastGsc,
     lastMeta,
+    lastPosthog,
   ] = await Promise.all([
     db.select({ latest: max(order.updatedAt) }).from(order),
     db.select({ latest: max(customer.updatedAt) }).from(customer),
@@ -69,6 +71,7 @@ export default async function DataSyncPage() {
     db.select({ latest: max(googleAdsDaily.date) }).from(googleAdsDaily),
     db.select({ latest: max(gscDaily.date) }).from(gscDaily),
     db.select({ latest: max(metaAdsDaily.date) }).from(metaAdsDaily),
+    db.select({ latest: max(posthogDaily.date) }).from(posthogDaily),
   ]);
 
   const shopifyLastRun = [
@@ -140,13 +143,14 @@ export default async function DataSyncPage() {
     {
       id: "extract-posthog",
       name: "PostHog Events",
-      description: "Event rollups for landing page analytics",
+      description:
+        "Daily event rollups (pageviews, product views, cart adds, checkouts, purchases) into posthog_daily — feeds the funnel + attribution dashboards",
       schedule: "Every 3 hours",
       cron: "0 */3 * * *",
       path: "/api/cron/extract-posthog",
-      status: "deferred",
+      status: "active",
       supportsDateRange: true,
-      note: "Not configured — deferred until landing pages are built",
+      lastRun: timeAgo(lastPosthog[0]?.latest ?? null),
     },
     {
       id: "health",

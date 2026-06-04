@@ -43,107 +43,56 @@ Excluded:
 
 ## Implementation Phases
 
-### Phase 0: Spike — does default Shopify-pixel stitching already work? (de-risk, ~half day)
-**Goal:** empirically settle whether the official vanilla install already stitches anonymous browsing → identified buyer, *before* committing to build the `fw_distinct_id` bridge. Outcome decides whether Phase 1's bridge is the mechanism or a safeguard.
+### Phase 0: Spike — does default Shopify-pixel stitching already work? ✅ DONE 2026-06-03
+**Result: yes.** Vanilla install (no `fw_distinct_id` bridge) stitches the storefront's anonymous person to the pixel's identified person on Chrome desktop. Mechanism: Shopify hosts the Custom Pixel iframe at `https://www.fitwellbuckle.co/web-pixels@.../sandbox/...` — same origin as the storefront — so the first-party `.fitwellbuckle.co` posthog-js cookie is shared between both posthog-js instances. The pixel's `posthog.identify(email)` triggers posthog-js's standard `$anon_distinct_id` merge.
 
-- [ ] Stand up the **official guide install only** — `posthog-js` snippet in `theme.liquid` + a minimal Custom Pixel that does `posthog.identify(email)` + `posthog.capture('purchase_completed')`. No `fw_distinct_id` bridge yet.
-- [ ] Use a Shopify dev/preview theme or test storefront; place a real test order end-to-end (landing with `?utm_source=spiketest` → product → checkout).
-- [ ] In PostHog, inspect the resulting person: does the `purchase_completed` event share a person with the pre-purchase `$pageview`/UTM events (single timeline), or are they two separate persons?
-- [ ] Record the anonymous `distinct_id` from the storefront cookie and the `distinct_id` the pixel used — same or different? (Answers the sandbox-cookie-sharing question directly.)
-- [ ] Test on at least: desktop Chrome, mobile Safari (ITP), and with the pixel sandbox in Shopify's stricter mode if configurable.
-- [ ] Write findings to `specs/research/posthog-shopify-stitching.md`: which case (stitches / doesn't), under what conditions, and the decision: bridge required vs. safeguard vs. unnecessary.
+- [x] Stand up the vanilla install: `posthog-js` snippet in `theme.liquid` + minimal Custom Pixel that does `posthog.identify(email)` + `posthog.capture('purchase_completed')`. No bridge.
+- [x] One controlled test order (Greg, Chrome desktop, 100% discount): pre-purchase pageviews + `purchase_completed` landed on one Person `127e9a10-edc3-59a8-8865-ca245daeb61f`.
+- [x] Findings + reasoning recorded in `specs/research/posthog-shopify-stitching.md`.
+- [x] Mobile Safari verification skipped — Safari ITP affects third-party cookies, not first-party same-origin, so the chosen mechanism doesn't have a plausible Safari-specific failure mode. Will swap to bridged install if real-customer Safari traffic ever shows split Persons.
 
-#### Exit criteria / branch
-- **Stitches reliably** → demote the `fw_distinct_id` bridge in Phase 1 to optional hardening; proceed mostly on the official path.
-- **Does not stitch (or flaky by browser)** → bridge is load-bearing; Phase 1 proceeds as written.
-- Either way, the overstated "default silently breaks attribution" framing is replaced by the measured result.
+### Phase 1: PostHog on Shopify — vanilla install ✅ DONE 2026-06-03
+Steady-state install is what was deployed in Phase 0. Files: `shopify/theme-posthog-snippet.html` (theme.liquid) + `shopify/custom-pixel.js` (Settings → Customer events, `posthog`). Both are vanilla (no `fw_distinct_id` bridge). The pixel subscribes to `checkout_started` and `checkout_completed`; `$pageview`/autocapture come from the theme snippet.
 
-### Phase 1: PostHog on Shopify — theme snippet + checkout pixel + identity bridge
-- [ ] **Theme snippet (landing + storefront):** add the official `posthog-js` snippet to `theme.liquid` before `</head>`, init `phc_xhdBzfsf47Vy5MU9spMMtaJWtBuAJFkGxg2DcRiGN7Aq`, `api_host: https://us.i.posthog.com`. Autocapture + `$pageview` come for free here.
-- [ ] **Identity bridge:** immediately after `posthog.init`, write `posthog.get_distinct_id()` into a first-party cookie `fw_distinct_id` (`Domain=.fitwellbuckle.co`, 400-day, `SameSite=Lax`). This is the seam the official guide leaves unaddressed.
-- [ ] **Checkout pixel:** create the Custom Pixel (Settings → Customer events → Add custom pixel, name `posthog`). Load `posthog-js` in the pixel per the official guide, **but bootstrap its distinct_id from the `fw_distinct_id` cookie** read via the sandbox `browser.cookie` API (do not let the pixel mint a fresh anonymous id) — `posthog.init(token, { bootstrap: { distinctID: fwId } })`.
-- [ ] Subscribe to Shopify standard events: `checkout_started`, `checkout_completed` (purchase handled in Phase 3). Theme snippet already covers `$pageview`/`product_viewed`.
-- [ ] Guard all `browser`/`init`/`analytics` sandbox accessors (can be undefined on some surfaces); pixel must fail safe.
-- [ ] CORS note (per official guide): use the pixel for *conversion* events only; rely on the theme snippet for general events to avoid cross-origin warnings.
+### Phase 2: UTM capture & first-touch attribution ✅ CODE COMPLETE 2026-06-03 — awaiting theme redeploy
+- [x] UTM parser added to `shopify/theme-posthog-snippet.html` (`source`/`medium`/`campaign`/`term`/`content`/`gclid` from `location.search`, plus `document.referrer`).
+- [x] First-touch guard: `fw_attribution` cookie (`Domain=.fitwellbuckle.co`, 30 days, SameSite=Lax). Subsequent pageviews short-circuit. Direct visits (no UTM/gclid/referrer) just set the cookie and skip the POST.
+- [x] PostHog person properties: `$set_once` first-touch (`utm_*`, `first_referrer`, `first_landing_page`); `$set` last-touch.
+- [x] Write-through to `utm_attribution`: POST to `https://admin.fitwellbuckle.co/api/tracking/utm` (already-deployed Next.js endpoint, Zod-validated, idempotent upsert on `session_id`, CORS for `www.fitwellbuckle.co`).
+- [x] Endpoint tests pass (`src/app/api/tracking/utm/route.test.ts`).
 
-#### Tests
-- Unit: identity-bridge cookie write/read (present / absent / malformed).
-- Unit: pixel bootstrap-id selection (cookie id used, not a new uuid).
-- Manual: load landing → storefront → checkout, confirm one stable `distinct_id` across all three in PostHog Activity.
+### Phase 3: Purchase → PostHog link enrichment ✅ CODE COMPLETE 2026-06-03 — awaiting theme redeploy
+- [x] Pixel emits `purchase_completed` with `order_id`, `checkout_token`, `order_value`, `currency`.
+- [x] Pixel `$set` `last_order_at`, `$set_once` `first_order_at` (`shopify/custom-pixel.js`).
+- [x] Cart-attribute backstop: theme snippet POSTs `/cart/update.js` with `{ attributes: { _fw_distinct_id: <posthog distinct_id> } }` on every storefront pageview. Survives to the order webhook as `note_attributes._fw_distinct_id`.
+- [x] `orders/create` webhook handler (via `linkOrderToAttribution` in `src/lib/analytics/order-attribution.ts`, called from `src/lib/shopify/sync.ts:241`) reads the note attribute, stamps `link_method = 'pixel'` on `order.linkMethod` and `customer.fwDistinctId`, marks the matching `utm_attribution.converted = true`, and server-side captures the purchase in PostHog with first-touch UTM enrichment.
+- [x] Email-match fallback (lower confidence, `link_method = 'email_match'`) wired for orders missing the note attribute.
+- [ ] Backfill pre-pixel orders (pre-2026-06-03) via the email-match path. Defer until baseline funnel is up; not load-bearing.
 
-### Phase 2: UTM capture & first-touch attribution (theme snippet — not the pixel)
-- [ ] In a small `theme.liquid` script (runs after posthog-js init, has real `window`/`document`), parse UTM params (`source`, `medium`, `campaign`, `term`, `content`) + `gclid` from the URL. (Official guide does not cover this — our addition.)
-- [ ] First-touch only: if `fw_attribution` cookie absent, write it (`Domain=.fitwellbuckle.co`, 30-day, `SameSite=Lax`) with session_id, utm_*, referrer, landing_page, timestamp. Do not overwrite on later pageviews (per specs/invariants/attribution.md §2/§3).
-- [ ] Send PostHog person properties via `posthog.setPersonProperties`: UTM + referrer + landing_page as **`$set_once`** (first-touch, immutable); `last_*` as `$set`.
-- [ ] Write-through to `utm_attribution`: POST to a new public route `POST /api/tracking/utm` (Next.js app) with `fw_distinct_id`, utm_*, landing_page, referrer, captured_at. Zod-validated, idempotent upsert per session_id.
-- [ ] Add CORS for `https://www.fitwellbuckle.co` on `/api/tracking/utm`.
+### Phase 4: Server-side PostHog client ✅ DONE
+- [x] Lazy singleton `posthog-node` client at `src/lib/analytics/posthog.ts`. `captureEvent`, `identify`, `aliasIdentity`, `captureServerEvent`, `flushEvents`. Used by `linkOrderToAttribution`.
 
-#### Tests
-- Unit: UTM parse across URL shapes (missing params, encoded, gclid-only).
-- Unit: first-touch guard (cookie present ⇒ no new record).
-- Integration: `/api/tracking/utm` round-trip → `utm_attribution` row, idempotent on replay.
+### Phase 5: PostHog → NeonDB extraction cron ✅ DONE
+- [x] HogQL query, daily aggregate by event name + person → `posthog_daily`. Wired to `/api/cron/extract-posthog` on every 3h cron (`vercel.json`).
 
-### Phase 3: Deterministic purchase → PostHog link
-- [ ] On the pixel `checkout_completed` event (posthog-js bootstrapped from `fw_distinct_id` per Phase 1): `posthog.identify(email)` then `posthog.capture('purchase_completed', { order_id, order_value, currency, line_items, utm_* })` — the official guide's pattern, but anchored to the bridged distinct_id so it merges with the pre-purchase anonymous person instead of a fresh id.
-- [ ] Pixel also sends `$set` person props: `last_order_at`, `total_orders`+, and `$set_once` `first_order_at` — the person profile now carries first-touch UTM **and** revenue, keyed to the original anonymous visitor.
-- [ ] Backstop (server, deterministic): in the pixel `checkout_started`/`checkout_completed`, write `fw_distinct_id` into a Shopify cart/checkout **note attribute** (`_fw_distinct_id`) so the `orders/create` webhook can read it server-side even if the client beacon is blocked.
-- [ ] Extend the existing `orders/create` webhook handler: read `_fw_distinct_id` attribute; if present, server-side `posthog.capture(distinct_id, 'purchase_completed', …)` and `posthog.identify` merging the customer email; store `fw_distinct_id` on the `customer`/`order` record for future cross-reference.
-- [ ] Backfill path (pre-pixel orders only): retain probabilistic email match (`utm_attribution` email ↔ order email, most-recent within 30-day window per attribution invariant §4). Mark these `link_method = 'email_match'` vs `'pixel'` for confidence reporting.
+### Phase 6: Conversion events (pixel) — feature flags deferred ✅ CODE COMPLETE 2026-06-03
+- [x] `checkout_started`, `checkout_completed`, `product_viewed`, `product_added_to_cart` subscribed in `shopify/custom-pixel.js`.
+- [x] Storefront `$pageview` + autocapture from the theme snippet.
+- [ ] **Feature flags / landing-page A/B testing: deferred** (see Scope). Custom Pixel sandbox cannot gate theme rendering; would require a Shopify theme app embed — separate plan.
 
-#### Tests
-- Unit: note-attribute extraction from webhook payload.
-- Unit: link_method selection (pixel id present ⇒ deterministic; absent ⇒ email fallback).
-- Integration: simulate `orders/create` with `_fw_distinct_id` ⇒ server PostHog capture (mocked) + customer row stamped.
-
-### Phase 4: Server-side PostHog client
-- [ ] Build singleton lazy `posthog-node` client in `src/lib/analytics/posthog.ts` (extend the existing 28-line stub).
-- [ ] Methods: `capture(distinctId, event, properties)`, `identify(distinctId, properties)`, `shutdown()`.
-- [ ] `flushAsync()` before every serverless handler returns (Vercel kills the process after response — current stub's per-call `flush()` is acceptable but centralize it).
-- [ ] Server-side capture for key admin actions (login, report viewed) using the Next admin client — distinct from the visitor pixel.
-
-#### Tests
-- Unit: singleton behavior, lazy init without env (no throw in dev).
-- Unit: flush invoked on shutdown.
-
-### Phase 5: PostHog → NeonDB extraction cron
-- [ ] Extend `src/lib/analytics/posthog.ts` with extraction via PostHog query API (project ID `430335`).
-- [ ] Daily aggregate by event name + date → upsert `posthog_daily` (event_name, date, count, unique_users).
-- [ ] Key events: `$pageview`, `purchase_completed`, plus per-source uniques for the attribution dashboard.
-- [ ] Wire `/api/cron/extract-posthog` (every 3h per vercel.json); cron-auth protected.
-- [ ] Backfill script: `scripts/backfill-posthog.ts`.
-
-#### Tests
-- Unit: query API response parsing.
-- Unit: daily aggregation.
-- Integration: extract one day → `posthog_daily` rows.
-
-### Phase 6: Conversion events (pixel) — feature flags deferred
-- [ ] Add pixel events for funnel steps available from Shopify standard events: `product_viewed`, `checkout_started` (the Shopify equivalent of the old "shopify_redirect" — there is no separate redirect now; landing and store are one Shopify site).
-- [ ] Ensure every pixel event carries `fw_distinct_id` + UTM context from `fw_attribution`.
-- [ ] **Feature flags / landing-page A/B testing: deferred** (see Scope). Document the constraint in specs/current/integrations.md: Custom Pixel sandbox cannot gate theme rendering; would require a Shopify theme app embed — separate plan.
-
-#### Tests
-- Unit: event property construction includes distinct_id + utm context.
-- Manual: walk product_viewed → checkout_started → checkout_completed, verify ordered funnel in PostHog.
-
-### Phase 7: Admin dashboard attribution & funnel
-- [ ] `/api/admin/attribution`: combine `utm_attribution` + linked Shopify orders → channel → conversion + revenue (not just visits). Show `link_method` confidence split.
-- [ ] `/api/admin/funnel`: pageview → product_viewed → checkout_started → purchase, distinct persons per step (from `posthog_daily` + Shopify orders).
-- [ ] Replace the customers-only UTM card on the attribution page with orders + revenue by first-touch channel (resolves the order-vs-customer grain mismatch noted in prior review).
-- [ ] "Full journey" view for a customer: PostHog events → Shopify order.
-
-#### Tests
-- Unit: funnel conversion-rate math.
-- Unit: attribution query joining UTM + orders.
-- E2E: attribution page shows channel breakdown with conversion + revenue.
+### Phase 7: Admin dashboard attribution & funnel — partially done
+- [x] `getChannelPerformance(from, to)` + `getLinkConfidence(from, to)` in `src/lib/analytics/attribution.ts`; the `/attribution` page renders both (orders+revenue by first-touch channel, link confidence split).
+- [x] `getFunnelData()` (PostHog `$pageview` → `product_viewed` → `product_added_to_cart` → `checkout_started` → `purchase`) wired into `/funnel` page as a new card. Empty until events accumulate.
+- [ ] "Full journey" view for a customer: PostHog events → Shopify order. Deferred — requires customer-detail PostHog query.
+- [ ] Baseline funnel comparison against "Rightness" targets in `specs/ops/PRIORITIES.md` — review once 7+ days of data have flowed.
 
 ## Notes
-- **Deterministic vs probabilistic (the core upgrade):** because all pages share `fitwellbuckle.co`, the same `fw_distinct_id` cookie is present at first landing pageview and at `checkout_completed`. The link is exact. The old plan's email-match approach is demoted to a backfill for orders predating the pixel and is explicitly labeled lower-confidence (`link_method`).
-- **Two-surface model (per official PostHog Shopify guide):** `theme.liquid` runs the full `posthog-js` snippet with real `window`/`document` (landing + storefront — autocapture, $pageview, UTM, person props all work normally). The **checkout** page rejects the snippet, so it uses a Custom Pixel; the official guide *does* load `posthog-js` inside that pixel and calls `posthog.capture`/`posthog.identify`. (Correction to an earlier draft of this plan: posthog-js is used in the pixel — not raw fetch.)
-- **The gap the official guide leaves open (our core add):** it relies on "default cookie handling," but the checkout pixel is sandboxed and won't reliably read the `.fitwellbuckle.co` posthog-js cookie set by the theme — so a naive install attaches the purchase to a *new* anonymous person and breaks attribution. Fix = the `fw_distinct_id` identity bridge (theme writes it, pixel bootstraps from it via `browser.cookie`). The Custom Pixel sandbox exposes only `analytics`/`browser`/`init`; `browser.cookie` can still set/read `Domain=.fitwellbuckle.co`. Code defensively — sandbox accessors may be undefined on some surfaces.
+- **Stitching works without a bridge** (confirmed 2026-06-03, `specs/research/posthog-shopify-stitching.md`). Shopify hosts the Custom Pixel iframe at `https://www.fitwellbuckle.co/web-pixels@.../sandbox/...` — same origin as the storefront — so the first-party `.fitwellbuckle.co` posthog-js cookie is shared. Earlier drafts of this plan assumed the pixel sandbox couldn't read the storefront cookie and prescribed an `fw_distinct_id` bridge. That assumption was wrong for Shopify's current implementation; the bridge was dropped.
+- **Two-surface model (per official PostHog Shopify guide):** `theme.liquid` runs the full `posthog-js` snippet with real `window`/`document` (landing + storefront — autocapture, $pageview, UTM, person props all work normally). The **checkout** page rejects the snippet, so it uses a Custom Pixel; the pixel loads its own posthog-js instance and calls `posthog.capture`/`posthog.identify`.
+- **Linkage mechanism:** posthog-js's standard `$identify` event carries `$anon_distinct_id`. On `checkout_completed` the pixel calls `posthog.identify(email)`; PostHog merges the pre-purchase anonymous Person onto the email-keyed Person.
 - Project token is the public write-only key (safe in the pixel/client). `POSTHOG_PERSONAL_API_KEY` is server-only for the extraction cron — never ship it in the pixel.
-- `person_profiles: identified_only` is fine: anonymous visitors still generate events under `fw_distinct_id`; the profile is created/enriched when `identify` runs (purchase or email capture).
-- Cookie attributes are now specified in specs/invariants/attribution.md §3 (`Domain=.fitwellbuckle.co`). Keep the two cookies in sync with that invariant.
+- `person_profiles: identified_only` is fine: anonymous visitors still generate events under their posthog-js distinct_id; the Person profile is created/enriched when `identify` runs (purchase).
+- Cookie attributes are specified in specs/invariants/attribution.md §3 (`Domain=.fitwellbuckle.co`). The `fw_attribution` cookie now just marks first-touch capture; visitor identity rides on PostHog's own cookie.
 - Flush on Vercel: serverless dies after response — always `flushAsync()` before returning from webhook/cron handlers.
 - PostHog free tier 1M events/month — ample for this funnel volume.
 - Optional uplift: an email-capture form on the Shopify landing section increases identified-rate before purchase, but is no longer required for attribution correctness given the deterministic pixel link.
