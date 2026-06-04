@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { Granularity } from "@/lib/date-range";
 
 const PRESETS = [
+  // days = -2 is a sentinel for "Today" (from = to = today).
+  { label: "Today", days: -2 },
   { label: "7d", days: 7 },
   { label: "30d", days: 30 },
   { label: "90d", days: 90 },
@@ -25,6 +27,7 @@ function formatDate(d: Date) {
 function getPresetRange(days: number): { from: string; to: string } | null {
   const to = formatDate(new Date());
   if (days === 0) return null;
+  if (days === -2) return { from: to, to }; // Today
   if (days === -1) {
     const ytd = new Date();
     ytd.setMonth(0, 1);
@@ -37,6 +40,8 @@ function getPresetRange(days: number): { from: string; to: string } | null {
 
 function getActiveDays(from: string | null, to: string | null): number | null {
   if (!from) return 30;
+  const todayStr = formatDate(new Date());
+  if (from === todayStr && to === todayStr) return -2; // Today
   const now = new Date();
   const fromDate = new Date(from);
   const ytd = new Date();

@@ -11,7 +11,12 @@ export function parseDateRange(
   params: Record<string, string | string[] | undefined>,
 ): DateRange {
   const now = new Date();
-  const to = typeof params.to === "string" ? new Date(params.to) : now;
+  // Treat an explicit `to` date as the END of that day (inclusive) so a range
+  // like from=to=today captures all of today, not just its midnight instant.
+  const to =
+    typeof params.to === "string"
+      ? new Date(new Date(params.to).getTime() + 24 * 60 * 60 * 1000 - 1)
+      : now;
 
   let from: Date;
   if (typeof params.from === "string") {
