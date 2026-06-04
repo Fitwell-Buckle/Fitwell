@@ -3,6 +3,7 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { Granularity } from "@/lib/date-range";
+import { storeToday, shiftDate } from "@/lib/timezone";
 
 const PRESETS = [
   // days = -2 is a sentinel for "Today" (from = to = today).
@@ -20,35 +21,25 @@ const GRANULARITIES: { label: string; value: Granularity }[] = [
   { label: "Month", value: "month" },
 ];
 
-function formatDate(d: Date) {
-  return d.toISOString().split("T")[0];
-}
-
+// All preset math anchors to "today" in the *store* timezone (see
+// src/lib/timezone.ts), not the viewer's UTC date. Otherwise an evening-Pacific
+// click of "Today" resolves to the next UTC day and reads $0.
 function getPresetRange(days: number): { from: string; to: string } | null {
-  const to = formatDate(new Date());
+  const to = storeToday();
   if (days === 0) return null;
   if (days === -2) return { from: to, to }; // Today
-  if (days === -1) {
-    const ytd = new Date();
-    ytd.setMonth(0, 1);
-    return { from: formatDate(ytd), to };
-  }
-  const from = new Date();
-  from.setDate(from.getDate() - days);
-  return { from: formatDate(from), to };
+  if (days === -1) return { from: `${to.slice(0, 4)}-01-01`, to }; // YTD
+  return { from: shiftDate(to, -days), to };
 }
 
 function getActiveDays(from: string | null, to: string | null): number | null {
   if (!from) return 30;
-  const todayStr = formatDate(new Date());
-  if (from === todayStr && to === todayStr) return -2; // Today
-  const now = new Date();
-  const fromDate = new Date(from);
-  const ytd = new Date();
-  ytd.setMonth(0, 1);
-  if (formatDate(fromDate) === formatDate(ytd)) return -1;
+  const today = storeToday();
+  if (from === today && to === today) return -2; // Today
+  if (from === `${today.slice(0, 4)}-01-01`) return -1; // YTD
   const diff = Math.round(
-    (now.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24),
+    (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+      (1000 * 60 * 60 * 24),
   );
   for (const p of PRESETS) {
     if (p.days === diff) return diff;

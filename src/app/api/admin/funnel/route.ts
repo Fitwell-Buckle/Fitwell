@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { order, customer } from "@/lib/schema";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
+import { STORE_TZ } from "@/lib/timezone";
 
 export async function GET() {
   const session = await auth();
@@ -48,14 +49,14 @@ export async function GET() {
       // Revenue by day for last 30 days
       db
         .select({
-          date: sql<string>`date_trunc('day', ${order.processedAt})::date::text`,
+          date: sql<string>`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date::text`,
           revenue: sum(order.totalPrice),
           orders: count(),
         })
         .from(order)
         .where(gte(order.processedAt, thirtyDaysAgo))
-        .groupBy(sql`date_trunc('day', ${order.processedAt})::date`)
-        .orderBy(sql`date_trunc('day', ${order.processedAt})::date`),
+        .groupBy(sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`)
+        .orderBy(sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`),
     ]);
 
   const totalRevenue = Number(revenueResult[0]?.total ?? 0);

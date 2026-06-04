@@ -1,3 +1,5 @@
+import { storeDayStartUtc, storeDayEndUtc } from "@/lib/timezone";
+
 export type Granularity = "day" | "week" | "month";
 
 export interface DateRange {
@@ -11,19 +13,20 @@ export function parseDateRange(
   params: Record<string, string | string[] | undefined>,
 ): DateRange {
   const now = new Date();
-  // Treat an explicit `to` date as the END of that day (inclusive) so a range
-  // like from=to=today captures all of today, not just its midnight instant.
-  const to =
-    typeof params.to === "string"
-      ? new Date(new Date(params.to).getTime() + 24 * 60 * 60 * 1000 - 1)
-      : now;
+  // `from`/`to` arrive as YYYY-MM-DD calendar dates and are interpreted as
+  // *store-local* days (see src/lib/timezone.ts), then converted to the UTC
+  // instants that bound that day. `to` is the inclusive end of its day, so
+  // from=to=today captures the whole store day — not just its midnight instant.
+  // This is what makes "Today" reconcile with Shopify instead of reading $0
+  // during the evening-Pacific UTC rollover.
+  const to = typeof params.to === "string" ? storeDayEndUtc(params.to) : now;
 
   let from: Date;
   if (typeof params.from === "string") {
-    from = new Date(params.from);
+    from = storeDayStartUtc(params.from);
   } else {
-    from = new Date();
-    from.setDate(from.getDate() - 30);
+    // No explicit range: a rolling 30×24h window ending now.
+    from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   }
 
   const days = Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));

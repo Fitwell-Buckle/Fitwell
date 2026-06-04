@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { order, customer, ga4Daily } from "@/lib/schema";
 import { sql, gte, lte, and, count, sum } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import { STORE_TZ } from "@/lib/timezone";
 import {
   formatBucketLabel,
   dateToBucketKey,
@@ -117,10 +118,10 @@ export default async function FunnelPage({
   // ── Conversion trend chart data ──────────────────────────────────
   const orderBucketExpr =
     granularity === "day"
-      ? sql`date_trunc('day', ${order.processedAt})::date`
+      ? sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
       : granularity === "week"
-        ? sql`date_trunc('week', ${order.processedAt})::date`
-        : sql`date_trunc('month', ${order.processedAt})::date`;
+        ? sql`date_trunc('week', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
+        : sql`date_trunc('month', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`;
 
   const [sessionsByBucket, ordersByBucket] = await Promise.all([
     db

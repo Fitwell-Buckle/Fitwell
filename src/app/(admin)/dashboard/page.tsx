@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { order, customer, metaAdsDaily, googleAdsDaily } from "@/lib/schema";
 import { sql, eq, desc, count, sum, gte, lte, and } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import { STORE_TZ } from "@/lib/timezone";
 import {
   formatBucketLabel,
   dateToBucketKey,
@@ -51,12 +52,15 @@ export default async function DashboardPage({
   const params = await searchParams;
   const { from, to, granularity } = parseDateRange(params);
 
+  // Bucket by the STORE timezone so the daily trend lines up with Shopify
+  // (whose reports use the store day). Without `AT TIME ZONE`, evening-Pacific
+  // orders fall into the next UTC day and the line is off by a day.
   const bucketExpr =
     granularity === "day"
-      ? sql`date_trunc('day', ${order.processedAt})::date`
+      ? sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
       : granularity === "week"
-        ? sql`date_trunc('week', ${order.processedAt})::date`
-        : sql`date_trunc('month', ${order.processedAt})::date`;
+        ? sql`date_trunc('week', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
+        : sql`date_trunc('month', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`;
 
   const [revenueResult, orderCountResult, customerCountResult, recentOrders] =
     await Promise.all([

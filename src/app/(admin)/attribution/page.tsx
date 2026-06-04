@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { order } from "@/lib/schema";
 import { sql, desc, count, sum, and, gte, lte } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import { STORE_TZ } from "@/lib/timezone";
 import {
   formatBucketLabel,
   dateToBucketKey,
@@ -108,10 +109,10 @@ export default async function AttributionPage({
   // ── Revenue by source over time chart ──────────────────────────────
   const bucketExpr =
     granularity === "day"
-      ? sql`date_trunc('day', ${order.processedAt})::date`
+      ? sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
       : granularity === "week"
-        ? sql`date_trunc('week', ${order.processedAt})::date`
-        : sql`date_trunc('month', ${order.processedAt})::date`;
+        ? sql`date_trunc('week', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`
+        : sql`date_trunc('month', (${order.processedAt} AT TIME ZONE ${STORE_TZ}))::date`;
 
   const channelExpr = sql`CASE
     WHEN ${order.sourceName} != 'web' THEN 'wholesale'
