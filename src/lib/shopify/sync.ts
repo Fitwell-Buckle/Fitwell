@@ -81,7 +81,17 @@ export async function upsertCustomer(
     })
     .returning({ id: customer.id });
 
-  await syncCustomerAddresses(result.id, shopifyCustomer);
+  // Address sync is best-effort — a bad address must NOT fail the whole customer
+  // upsert (which would also fail every order that upserts this customer first,
+  // silently stalling the dashboard). Log and continue.
+  try {
+    await syncCustomerAddresses(result.id, shopifyCustomer);
+  } catch (err) {
+    console.error(
+      `syncCustomerAddresses failed for customer ${shopifyId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   return result.id;
 }
@@ -247,10 +257,11 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
 
 export async function syncRecentOrders(
   since: Date,
-): Promise<{ synced: number; errors: number }> {
+): Promise<{ synced: number; errors: number; firstError?: string }> {
   const shopify = getShopifyClient();
   let synced = 0;
   let errors = 0;
+  let firstError: string | undefined;
 
   const endpoint = `/orders.json?limit=250&status=any&updated_at_min=${since.toISOString()}`;
 
@@ -264,6 +275,7 @@ export async function syncRecentOrders(
         synced++;
       } catch (err) {
         errors++;
+        firstError ??= err instanceof Error ? err.message : String(err);
         console.error(
           `Failed to upsert order ${shopifyOrder.id}:`,
           err instanceof Error ? err.message : err,
@@ -275,15 +287,16 @@ export async function syncRecentOrders(
   console.log(
     `syncRecentOrders: ${synced} synced, ${errors} errors (since ${since.toISOString()})`,
   );
-  return { synced, errors };
+  return { synced, errors, firstError };
 }
 
 export async function syncRecentCustomers(
   since: Date,
-): Promise<{ synced: number; errors: number }> {
+): Promise<{ synced: number; errors: number; firstError?: string }> {
   const shopify = getShopifyClient();
   let synced = 0;
   let errors = 0;
+  let firstError: string | undefined;
 
   const endpoint = `/customers.json?limit=250&updated_at_min=${since.toISOString()}`;
 
@@ -297,10 +310,9 @@ export async function syncRecentCustomers(
         synced++;
       } catch (err) {
         errors++;
-        console.error(
-          `Failed to upsert customer ${shopifyCustomer.id}:`,
-          err instanceof Error ? err.message : err,
-        );
+        const msg = err instanceof Error ? err.message : String(err);
+        firstError ??= msg;
+        console.error(`Failed to upsert customer ${shopifyCustomer.id}:`, msg);
       }
     }
   }
@@ -308,5 +320,5 @@ export async function syncRecentCustomers(
   console.log(
     `syncRecentCustomers: ${synced} synced, ${errors} errors (since ${since.toISOString()})`,
   );
-  return { synced, errors };
+  return { synced, errors, firstError };
 }
