@@ -13,8 +13,12 @@ import { parseUtmParams, sumRefundedCents } from "@/lib/shopify/sync";
 import type { ShopifyOrder } from "@/types/shopify";
 
 // Minimal ShopifyOrder factory — only the fields sumRefundedCents reads.
-function orderWithRefunds(refunds: ShopifyOrder["refunds"]): ShopifyOrder {
-  return { refunds } as unknown as ShopifyOrder;
+// `total_price` is the clamp ceiling (defaults high so it doesn't interfere).
+function orderWithRefunds(
+  refunds: ShopifyOrder["refunds"],
+  total_price = "100000.00",
+): ShopifyOrder {
+  return { refunds, total_price } as unknown as ShopifyOrder;
 }
 
 describe("parseUtmParams", () => {
@@ -68,44 +72,51 @@ describe("sumRefundedCents", () => {
     expect(sumRefundedCents(orderWithRefunds([]))).toBe(0);
   });
 
-  it("is 0 when refunds exist but carry no transactions", () => {
+  it("is 0 when refunds carry no line items or adjustments", () => {
     expect(
       sumRefundedCents(orderWithRefunds([{ id: 1, created_at: "x" }])),
     ).toBe(0);
   });
 
-  it("sums successful refund transactions across multiple refunds (in cents)", () => {
+  it("sums refunded item value (subtotal + tax) across refunds, in cents", () => {
     const cents = sumRefundedCents(
       orderWithRefunds([
         {
           id: 1,
           created_at: "x",
-          transactions: [{ amount: "10.00", kind: "refund", status: "success" }],
+          refund_line_items: [{ subtotal: "10.00", total_tax: "0.80" }],
         },
         {
           id: 2,
           created_at: "y",
-          transactions: [{ amount: "5.50", kind: "refund", status: "success" }],
+          refund_line_items: [{ subtotal: "5.00", total_tax: "0.40" }],
         },
       ]),
     );
-    expect(cents).toBe(1550);
+    expect(cents).toBe(1620);
   });
 
-  it("ignores non-refund kinds and non-success statuses", () => {
+  it("includes order adjustments (e.g. refunded shipping) by magnitude", () => {
     const cents = sumRefundedCents(
       orderWithRefunds([
         {
           id: 1,
           created_at: "x",
-          transactions: [
-            { amount: "10.00", kind: "refund", status: "success" }, // counts
-            { amount: "99.00", kind: "sale", status: "success" }, // wrong kind
-            { amount: "99.00", kind: "refund", status: "pending" }, // not success
-          ],
+          refund_line_items: [{ subtotal: "10.00" }],
+          order_adjustments: [{ amount: "-5.00", tax_amount: "-0.50" }],
         },
       ]),
     );
-    expect(cents).toBe(1000);
+    expect(cents).toBe(1550); // 1000 + 500 + 50
+  });
+
+  it("clamps to the order total so net sales never goes negative", () => {
+    const cents = sumRefundedCents(
+      orderWithRefunds(
+        [{ id: 1, created_at: "x", refund_line_items: [{ subtotal: "300.00" }] }],
+        "132.26",
+      ),
+    );
+    expect(cents).toBe(13226);
   });
 });

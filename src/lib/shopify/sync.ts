@@ -152,21 +152,28 @@ async function syncCustomerAddresses(
 // ── Order upsert ────────────────────────────────────────────────────
 
 /**
- * Total amount refunded on an order, in cents. Refunds are embedded in the
- * order payload; each carries `transactions` with the actual money moved. We
- * sum successful refund transactions — this nets refunded item value, tax and
- * shipping together, which is exactly what Shopify's "Total sales" subtracts.
+ * Returns value on an order, in cents — what Shopify subtracts as "Returns"
+ * when computing net/total sales. This is the *value of returned merchandise*,
+ * not the cash moved: `refund_line_items` (item subtotal + tax) plus
+ * `order_adjustments` (e.g. refunded shipping). Using cash `transactions`
+ * undercounts returns settled via store credit or exchange.
+ *
+ * Clamped to the order total so inconsistent source data (recorded refunds that
+ * exceed the order) can never push an order's net sales below zero.
  */
 export function sumRefundedCents(shopifyOrder: ShopifyOrder): number {
   let cents = 0;
   for (const refund of shopifyOrder.refunds ?? []) {
-    for (const tx of refund.transactions ?? []) {
-      if (tx.kind === "refund" && tx.status === "success") {
-        cents += toCents(tx.amount);
-      }
+    for (const li of refund.refund_line_items ?? []) {
+      cents += toCents(li.subtotal) + toCents(li.total_tax ?? "0");
+    }
+    for (const adj of refund.order_adjustments ?? []) {
+      // Adjustments (e.g. refunded shipping) are typically negative — take magnitude.
+      cents += Math.abs(toCents(adj.amount)) + Math.abs(toCents(adj.tax_amount ?? "0"));
     }
   }
-  return cents;
+  const total = toCents(shopifyOrder.total_price);
+  return Math.min(Math.max(0, cents), total);
 }
 
 export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {

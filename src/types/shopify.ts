@@ -64,14 +64,18 @@ export interface ShopifyOrder {
   cancelled_at?: string | null;
   discount_codes: Array<{ code: string; amount: string; type: string }>;
   /**
-   * Refunds embedded in the order payload. Each refund's `transactions` carry
-   * the actual money moved — sum `kind === 'refund' && status === 'success'`
-   * for the total refunded amount (see `sumRefundedCents`).
+   * Refunds embedded in the order payload. Shopify's "Returns" (what reduces
+   * net/total sales) is the *value of returned merchandise* — `refund_line_items`
+   * (item subtotal + tax) plus `order_adjustments` (e.g. refunded shipping) —
+   * which can exceed the cash actually moved (`transactions`) when returns are
+   * settled via store credit/exchange. See `sumRefundedCents`.
    */
   refunds: Array<{
     id: number;
     created_at: string;
     transactions?: Array<{ amount: string; kind: string; status: string }>;
+    refund_line_items?: Array<{ subtotal: string; total_tax?: string }>;
+    order_adjustments?: Array<{ amount: string; tax_amount?: string }>;
   }>;
   processed_at: string;
   created_at: string;
