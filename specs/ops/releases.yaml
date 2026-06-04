@@ -97,3 +97,23 @@
     - src/app/(admin)/dashboard/page.tsx
     - scripts/backfill-order-money.ts
     - specs/current/schema.md
+
+- date: "2026-06-04"
+  title: "Dashboard: B2B vs Consumer sales breakdown"
+  priority: 1
+  layer: 1
+  notes: |
+    New "Sales by Segment" card on the dashboard: Total sales, Orders, Avg
+    order, and % of sales for Consumer (D2C) vs B2B (Wholesale), over the
+    selected date range. Segmentation signal is order.source_name (no B2B
+    customer tags exist): B2B = shopify_draft_order; Consumer = everything else
+    (web + in-person POS). Uses the same refund-aware Total sales definition as
+    the headline. Also fixes a same-day GROUP BY 500 regression
+    (commit 492f846): the store-tz literal in date_trunc was a bound param,
+    which Drizzle numbered differently per reuse across SELECT/GROUP BY/ORDER BY
+    — inlined as a SQL literal.
+  artifacts:
+    - src/app/(admin)/dashboard/page.tsx
+    - src/app/(admin)/attribution/page.tsx
+    - src/app/(admin)/funnel/page.tsx
+    - src/app/api/admin/funnel/route.ts

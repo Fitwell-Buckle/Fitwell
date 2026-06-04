@@ -69,8 +69,19 @@ export default async function DashboardPage({
   const netSales = sql`COALESCE(SUM(${order.totalPrice} - ${order.totalRefunded}), 0)`.mapWith(Number);
   const notCancelled = sql`${order.cancelledAt} IS NULL`;
 
-  const [revenueResult, orderCountResult, customerCountResult, recentOrders] =
-    await Promise.all([
+  // B2B = wholesale draft orders; Consumer = web + in-person POS (everything
+  // else). No B2B customer tags exist in the data, so `source_name` is the
+  // segmentation signal. (Literal in the CASE — no bound param — so it's safe to
+  // reuse across SELECT + GROUP BY.)
+  const segmentExpr = sql<string>`CASE WHEN ${order.sourceName} = 'shopify_draft_order' THEN 'b2b' ELSE 'consumer' END`;
+
+  const [
+    revenueResult,
+    orderCountResult,
+    customerCountResult,
+    recentOrders,
+    segmentResult,
+  ] = await Promise.all([
       db
         .select({ total: netSales })
         .from(order)
@@ -104,12 +115,37 @@ export default async function DashboardPage({
         .where(and(gte(order.processedAt, from), lte(order.processedAt, to)))
         .orderBy(desc(order.processedAt))
         .limit(10),
+      db
+        .select({ segment: segmentExpr, sales: netSales, orders: count() })
+        .from(order)
+        .where(
+          and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
+        )
+        .groupBy(segmentExpr),
     ]);
 
   const totalRevenue = Number(revenueResult[0]?.total ?? 0);
   const totalOrders = orderCountResult[0]?.count ?? 0;
   const totalCustomers = customerCountResult[0]?.count ?? 0;
   const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+
+  // B2B vs Consumer split of Total sales (same definition as the headline).
+  const segOf = (name: string) =>
+    segmentResult.find((s) => s.segment === name);
+  const aov = (sales: number, orders: number) =>
+    orders > 0 ? Math.round(sales / orders) : 0;
+  const segments = [
+    {
+      label: "Consumer (D2C)",
+      sales: Number(segOf("consumer")?.sales ?? 0),
+      orders: segOf("consumer")?.orders ?? 0,
+    },
+    {
+      label: "B2B (Wholesale)",
+      sales: Number(segOf("b2b")?.sales ?? 0),
+      orders: segOf("b2b")?.orders ?? 0,
+    },
+  ];
 
   // ── Chart data: Revenue trend + Ad Spend vs Revenue ──────────────
   const [revenueByBucket, metaByBucket, googleByBucket, orderRevenueByBucket] =
@@ -255,6 +291,48 @@ export default async function DashboardPage({
         <MetricCard label="Customers" value={totalCustomers.toLocaleString()} />
         <MetricCard label="Avg Order Value" value={fmt(avgOrderValue)} />
       </div>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Sales by Segment</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Segment</TableHead>
+                <TableHead className="text-right">Total sales</TableHead>
+                <TableHead className="text-right">Orders</TableHead>
+                <TableHead className="text-right">Avg order</TableHead>
+                <TableHead className="text-right">% of sales</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {segments.map((s) => (
+                <TableRow key={s.label}>
+                  <TableCell className="font-medium text-zinc-900">
+                    {s.label}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{fmt(s.sales)}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {s.orders.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{fmt(aov(s.sales, s.orders))}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right text-zinc-500">
+                    {totalRevenue > 0
+                      ? `${Math.round((s.sales / totalRevenue) * 100)}%`
+                      : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <div className="mt-8 grid gap-5 lg:grid-cols-2">
         <Card>
