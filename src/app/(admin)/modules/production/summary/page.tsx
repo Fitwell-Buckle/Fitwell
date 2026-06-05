@@ -29,10 +29,11 @@ import {
 import { ListFilters } from "@/components/catalog/list-filters";
 import { ProductionViewToggle } from "../view-toggle";
 import { ProductionGroupToggle } from "../group-toggle";
-import { DrillPanel } from "../drill-panel";
-import { PoInventoryTableBody } from "../po-inventory-table";
 import { KanbanBoard, type KanbanCard } from "../kanban/kanban-board";
 import { ProductionTimeline } from "../production-timeline";
+import { PoExpandableList } from "../po-expandable-list";
+import { PoExpandableBoard } from "../po-expandable-board";
+import { PoExpandableTimeline } from "../po-expandable-timeline";
 
 export const metadata: Metadata = {
   title: "Production Summary | Fitwell Admin",
@@ -54,12 +55,9 @@ export default async function ProductionSummaryPage({
   const view: View = (VIEWS as readonly string[]).includes(viewParam)
     ? (viewParam as View)
     : "inventory";
-  // Grouping dimension for every view: "po" (default — one row/card/track per
-  // owning sub-PO) or "sku" (per line item). Drilling into a PO (see selectedPo)
-  // forces a SKU breakdown scoped to that PO.
+  // Grouping dimension for every view: "po" (default) or "sku" (per line item).
+  // Drill-downs are now client-side in-place (no URL navigation needed).
   const group: "sku" | "po" = params.group === "sku" ? "sku" : "po";
-  // Drill-down: clicking a PO in any "by PO" view expands to its SKU breakdown.
-  const selectedPo = typeof params.po === "string" ? params.po : "";
 
   const supplierId = typeof params.supplier === "string" ? params.supplier : "";
   const stage = typeof params.stage === "string" ? params.stage : "";
@@ -214,6 +212,16 @@ export default async function ProductionSummaryPage({
   );
   const incomingPoRows = aggregateIncomingByPo(order, incomingPoLines, estimates, today);
 
+  // Pre-compute per-PO SKU breakdowns server-side so client components don't
+  // need to re-import aggregation helpers or receive raw line data.
+  const skuRowsByPo: Record<string, ReturnType<typeof aggregateIncoming>> = {};
+  for (const poRow of incomingPoRows) {
+    const lines = incomingPoLines
+      .filter((l) => l.poNumber === poRow.poNumber)
+      .map((l) => ({ sku: l.sku, title: l.title, quantity: l.quantity, currentStage: l.currentStage }));
+    skuRowsByPo[poRow.poNumber] = aggregateIncoming(order, lines, estimates, today);
+  }
+
   // Board: one (non-draggable) card per sub-PO, placed in the column of its
   // least-advanced open line (where the PO is currently gated).
   const poCardMap = new Map<string, KanbanCard>();
@@ -303,42 +311,6 @@ export default async function ProductionSummaryPage({
     ],
   }));
 
-  // ── Drill-down links + scoped SKU breakdown for one PO ───────────────
-  // Base summary URL (preserving view + filters) for "open this PO's SKUs"
-  // links and the matching "back to all POs" link.
-  const drillParams = new URLSearchParams();
-  if (view !== "inventory") drillParams.set("view", view);
-  if (supplierId) drillParams.set("supplier", supplierId);
-  if (stage) drillParams.set("stage", stage);
-  if (status !== "active") drillParams.set("status", status);
-  if (skuSet.size) drillParams.set("sku", [...skuSet].join(","));
-  const drillBackHref = `/modules/production/summary${
-    drillParams.toString() ? `?${drillParams.toString()}` : ""
-  }`;
-  const poDrillHrefBase = `${drillBackHref}${drillBackHref.includes("?") ? "&" : "?"}po=`;
-
-  // When a PO is selected, expand to its per-SKU incoming breakdown.
-  const scopedIncomingLines: IncomingLine[] = selectedPo
-    ? allPos.flatMap((po) =>
-        po.lineItems
-          .filter(
-            (li) =>
-              !li.shopifyReceivedAt &&
-              (skuSet.size === 0 || skuSet.has(li.sku)) &&
-              lineOwner(po, li.currentStage).poNumber === selectedPo,
-          )
-          .map((li) => ({
-            sku: li.sku,
-            title: li.title,
-            quantity: li.quantity,
-            currentStage: li.currentStage,
-          })),
-      )
-    : [];
-  const scopedRows = aggregateIncoming(order, scopedIncomingLines, estimates, today);
-  const scopedTotal = scopedRows.reduce((s, r) => s + r.incomingQty, 0);
-  const selectedPoRow = incomingPoRows.find((r) => r.poNumber === selectedPo);
-
   const listFilters = (
     <ListFilters production={{ suppliers, supplierId, status, stage }} />
   );
@@ -347,102 +319,13 @@ export default async function ProductionSummaryPage({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title="Production Summary" />
-        {!selectedPo && (
-          <div className="flex flex-wrap items-center gap-2">
-            <ProductionGroupToggle group={group} />
-            <ProductionViewToggle view={view} />
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <ProductionGroupToggle group={group} />
+          <ProductionViewToggle view={view} />
+        </div>
       </div>
 
-      {selectedPo && (
-        <DrillPanel key={selectedPo} className="mt-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-            <div>
-              <div className="text-xs uppercase tracking-wider text-zinc-400">
-                PO breakdown (by SKU)
-              </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                <span className="font-mono text-sm font-medium text-zinc-900">
-                  {selectedPo}
-                </span>
-                {selectedPoRow?.supplier && (
-                  <span className="text-sm text-zinc-500">· {selectedPoRow.supplier}</span>
-                )}
-                {selectedPoRow?.poId && (
-                  <a
-                    href={`/modules/production/po/${selectedPoRow.poId}`}
-                    className="text-xs text-zinc-400 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-600"
-                  >
-                    Open PO →
-                  </a>
-                )}
-              </div>
-            </div>
-            <a
-              href={drillBackHref}
-              className="text-sm text-zinc-500 hover:text-zinc-900"
-            >
-              ← Back to all POs
-            </a>
-          </div>
-          <DataTable className="mt-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="whitespace-nowrap">SKU</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Incoming</TableHead>
-                  <TableHead>By stage</TableHead>
-                  <TableHead>Nearest ETA</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {scopedRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-zinc-400">
-                      Nothing in production for this PO.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  scopedRows.map((r) => (
-                    <TableRow key={r.sku}>
-                      <TableCell className="whitespace-nowrap">
-                        <Mono>{r.sku}</Mono>
-                      </TableCell>
-                      <TableCell className="text-zinc-700">{r.title}</TableCell>
-                      <TableCell className="text-right font-medium text-zinc-900">
-                        {r.incomingQty}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(r.byStage).map(([stg, qty]) => (
-                            <span
-                              key={stg}
-                              className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600"
-                            >
-                              {stageLabels[stg as keyof typeof stageLabels]}: {qty}
-                            </span>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-zinc-500">{fmtDate(r.nearestEta)}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </DataTable>
-          {scopedTotal > 0 && (
-            <p className="mt-3 text-right text-sm text-zinc-500">
-              Total incoming units:{" "}
-              <span className="font-medium text-zinc-900">{scopedTotal}</span>
-            </p>
-          )}
-        </DrillPanel>
-      )}
-
-      {!selectedPo && view === "inventory" && (
+      {view === "inventory" && (
         <>
           {listFilters}
           <div className="mt-6">
@@ -451,83 +334,79 @@ export default async function ProductionSummaryPage({
               yet, {group === "po" ? "by PO" : "by SKU"}. ETA is projected from
               cycle-time estimates.
             </p>
-            <DataTable className="mt-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {group === "po" ? (
-                      <>
-                        <TableHead className="whitespace-nowrap">PO #</TableHead>
-                        <TableHead>Supplier</TableHead>
-                      </>
-                    ) : (
-                      <>
+
+            {group === "po" ? (
+              /* Fully client-side expandable list — click a row to expand SKUs inline */
+              <div className="mt-4">
+                <PoExpandableList
+                  rows={incomingPoRows}
+                  skuRowsByPo={skuRowsByPo}
+                  stageLabels={stageLabels}
+                />
+              </div>
+            ) : (
+              /* By SKU: static server-rendered table */
+              <>
+                <DataTable className="mt-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
                         <TableHead className="whitespace-nowrap">SKU</TableHead>
                         <TableHead>Product</TableHead>
-                      </>
-                    )}
-                    <TableHead className="text-right">Incoming</TableHead>
-                    <TableHead>By stage</TableHead>
-                    <TableHead>Nearest ETA</TableHead>
-                    {group === "po" && <TableHead className="w-6" />}
-                  </TableRow>
-                </TableHeader>
-                {/* By PO: client component so the full row is clickable */}
-                {group === "po" ? (
-                  <PoInventoryTableBody
-                    rows={incomingPoRows}
-                    stageLabels={stageLabels}
-                    poDrillHrefBase={poDrillHrefBase}
-                  />
-                ) : (
-                <TableBody>
-                  {incomingRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-zinc-400">
-                        Nothing in production matches.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    incomingRows.map((r) => (
-                      <TableRow key={r.sku}>
-                        <TableCell className="whitespace-nowrap">
-                          <Mono>{r.sku}</Mono>
-                        </TableCell>
-                        <TableCell className="text-zinc-700">{r.title}</TableCell>
-                        <TableCell className="text-right font-medium text-zinc-900">
-                          {r.incomingQty}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1.5">
-                            {Object.entries(r.byStage).map(([stg, qty]) => (
-                              <span
-                                key={stg}
-                                className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600"
-                              >
-                                {stageLabels[stg as keyof typeof stageLabels]}: {qty}
-                              </span>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-zinc-500">{fmtDate(r.nearestEta)}</TableCell>
+                        <TableHead className="text-right">Incoming</TableHead>
+                        <TableHead>By stage</TableHead>
+                        <TableHead>Nearest ETA</TableHead>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
+                    </TableHeader>
+                    <TableBody>
+                      {incomingRows.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="py-8 text-center text-zinc-400">
+                            Nothing in production matches.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        incomingRows.map((r) => (
+                          <TableRow key={r.sku}>
+                            <TableCell className="whitespace-nowrap">
+                              <Mono>{r.sku}</Mono>
+                            </TableCell>
+                            <TableCell className="text-zinc-700">{r.title}</TableCell>
+                            <TableCell className="text-right font-medium text-zinc-900">
+                              {r.incomingQty}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1.5">
+                                {Object.entries(r.byStage).map(([stg, qty]) => (
+                                  <span
+                                    key={stg}
+                                    className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600"
+                                  >
+                                    {stageLabels[stg as keyof typeof stageLabels]}: {qty}
+                                  </span>
+                                ))}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-zinc-500">{fmtDate(r.nearestEta)}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </DataTable>
+                {totalIncoming > 0 && (
+                  <p className="mt-3 text-right text-sm text-zinc-500">
+                    Total incoming units:{" "}
+                    <span className="font-medium text-zinc-900">{totalIncoming}</span>
+                  </p>
                 )}
-              </Table>
-            </DataTable>
-            {totalIncoming > 0 && (
-              <p className="mt-3 text-right text-sm text-zinc-500">
-                Total incoming units:{" "}
-                <span className="font-medium text-zinc-900">{totalIncoming}</span>
-              </p>
+              </>
             )}
           </div>
         </>
       )}
 
-      {!selectedPo && view === "board" && (
+      {view === "board" && (
         <>
           {listFilters}
           <div className="mt-6">
@@ -535,11 +414,11 @@ export default async function ProductionSummaryPage({
               poCards.length === 0 ? (
                 <p className="text-sm text-zinc-400">No POs match.</p>
               ) : (
-                <KanbanBoard
+                <PoExpandableBoard
                   cards={poCards}
                   stages={order}
-                  readOnly
-                  poDrillHrefBase={poDrillHrefBase}
+                  skuRowsByPo={skuRowsByPo}
+                  stageLabels={stageLabels}
                 />
               )
             ) : cards.length === 0 ? (
@@ -551,16 +430,25 @@ export default async function ProductionSummaryPage({
         </>
       )}
 
-      {!selectedPo && view === "timeline" && (
+      {view === "timeline" && (
         <>
           {listFilters}
-          <ProductionTimeline
-            pos={group === "po" ? timelinePosByPo : timelinePos}
-            estimates={estimates}
-            stageLabels={stageLabels}
-            order={order}
-            poDrillHrefBase={group === "po" ? poDrillHrefBase : undefined}
-          />
+          {group === "po" ? (
+            <PoExpandableTimeline
+              pos={timelinePosByPo}
+              estimates={estimates}
+              stageLabels={stageLabels}
+              order={order}
+              skuRowsByPo={skuRowsByPo}
+            />
+          ) : (
+            <ProductionTimeline
+              pos={timelinePos}
+              estimates={estimates}
+              stageLabels={stageLabels}
+              order={order}
+            />
+          )}
         </>
       )}
     </div>
