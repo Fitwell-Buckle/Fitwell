@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/table";
 import { Mono } from "@/components/ui/data-table";
 import { fmtDate } from "@/lib/production/display";
+import { ChevronRight } from "lucide-react";
 import type { IncomingPoRow } from "@/lib/production/inventory";
 
 /**
@@ -46,7 +47,7 @@ export function PoInventoryTableBody({
           <TableRow
             key={r.poNumber}
             onClick={() => router.push(href)}
-            className="cursor-pointer hover:bg-zinc-50/80 active:bg-zinc-100/80 transition-colors"
+            className="group cursor-pointer hover:bg-zinc-50/80 active:bg-zinc-100/80 transition-colors"
             title="Expand to see this PO's SKUs"
           >
             <TableCell className="whitespace-nowrap">
@@ -69,6 +70,9 @@ export function PoInventoryTableBody({
               </div>
             </TableCell>
             <TableCell className="text-zinc-500">{fmtDate(r.nearestEta)}</TableCell>
+          <TableCell className="w-6 pr-3 text-right">
+            <ChevronRight className="ml-auto h-3.5 w-3.5 text-zinc-200 transition-colors group-hover:text-zinc-400" />
+          </TableCell>
           </TableRow>
         );
       })}

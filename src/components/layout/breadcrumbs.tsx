@@ -67,6 +67,17 @@ function labelFor(seg: string, parent: string | null): string {
   return seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * Override the default link for a breadcrumb path. Useful when a path has a
+ * real page (so it's navigable) but a different destination is more useful as a
+ * drill-up target — e.g. `/modules/production` exists (the PO list) but
+ * the Production Summary is the more logical breadcrumb landing for sub-pages.
+ */
+const LINK_OVERRIDES: Record<string, string> = {
+  // "Production" in the trail → go to the Summary overview, not the PO list.
+  "/modules/production": "/modules/production/summary",
+};
+
 // Auto breadcrumb trail derived from the URL, rendered on every admin page (in
 // the layout). Replaces the ad-hoc per-page "Back" buttons. Hidden on the
 // dashboard root and when printing.
@@ -97,11 +108,12 @@ export function Breadcrumbs() {
         // Linkify only crumbs that resolve to a real page. The last crumb is the
         // current page, and grouping-only paths (NON_NAVIGABLE) would 404.
         const navigable = !c.last && !NON_NAVIGABLE.has(c.href);
+        const href = LINK_OVERRIDES[c.href] ?? c.href;
         return (
           <span key={c.href} className="flex items-center gap-1">
             <ChevronRight className="h-3.5 w-3.5 text-zinc-300" />
             {navigable ? (
-              <Link href={c.href} className="hover:text-zinc-700">
+              <Link href={href} className="hover:text-zinc-700">
                 {c.label}
               </Link>
             ) : (

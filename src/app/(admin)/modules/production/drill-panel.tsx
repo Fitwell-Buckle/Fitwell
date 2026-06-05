@@ -35,16 +35,19 @@ export function DrillPanel({
   return (
     <div
       style={{
-        transitionProperty: "opacity, transform",
-        transitionDuration: "320ms",
-        // Spring-like easing: fast out, gentle settle
+        // Animate opacity, position, scale AND blur so the panel "materialises"
+        // from a blurry ghost into a crisp panel — unmissable even at a glance.
+        transitionProperty: "opacity, transform, filter",
+        transitionDuration: "500ms",
+        // Spring ease: snaps out fast, settles with a gentle tail.
         transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
-        willChange: "opacity, transform",
+        willChange: "opacity, transform, filter",
+        filter: ready ? "blur(0px)" : "blur(8px)",
       }}
       className={cn(
         ready
           ? "opacity-100 translate-y-0 scale-100"
-          : "opacity-0 translate-y-5 scale-[0.98]",
+          : "opacity-0 translate-y-10 scale-[0.93]",
         className,
       )}
     >

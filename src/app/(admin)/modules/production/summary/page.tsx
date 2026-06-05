@@ -469,6 +469,7 @@ export default async function ProductionSummaryPage({
                     <TableHead className="text-right">Incoming</TableHead>
                     <TableHead>By stage</TableHead>
                     <TableHead>Nearest ETA</TableHead>
+                    {group === "po" && <TableHead className="w-6" />}
                   </TableRow>
                 </TableHeader>
                 {/* By PO: client component so the full row is clickable */}
