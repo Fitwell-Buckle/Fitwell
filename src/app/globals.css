@@ -3,4 +3,10 @@
 @theme {
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "DM Mono", ui-monospace, monospace;
+
+  /* Brand primary — the navy used for buttons, selected states, the sidebar,
+     and any surface that previously used zinc-900 / zinc-800 as a background. */
+  --color-brand:        #2A3641;  /* base */
+  --color-brand-hover:  #3a4855;  /* slightly lighter for hover/active states */
+  --color-brand-border: #374451;  /* border inside brand surfaces */
 }

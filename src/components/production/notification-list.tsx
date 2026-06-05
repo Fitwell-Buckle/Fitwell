@@ -91,7 +91,7 @@ export function NotificationList({
     cn(
       "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
       active
-        ? "border-zinc-900 text-zinc-900"
+        ? "border-brand text-zinc-900"
         : "border-transparent text-zinc-500 hover:text-zinc-800",
     );
   const chip = "rounded-full px-2.5 py-1 text-xs font-medium transition-colors";
@@ -136,7 +136,7 @@ export function NotificationList({
             className={cn(
               chip,
               mailboxFilter === null
-                ? "bg-zinc-900 text-white"
+                ? "bg-brand text-white"
                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200",
             )}
           >

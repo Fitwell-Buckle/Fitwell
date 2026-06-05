@@ -276,7 +276,7 @@ export function MessageList({
             className={cn(
               chip,
               filter === null
-                ? "bg-zinc-900 text-white"
+                ? "bg-brand text-white"
                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200",
             )}
           >

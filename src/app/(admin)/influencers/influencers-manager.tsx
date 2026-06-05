@@ -437,7 +437,7 @@ function InfluencerForm({
                     onClick={() => toggleCollection(c.id)}
                     className={
                       on
-                        ? "rounded-full border border-zinc-900 bg-zinc-900 px-3 py-1 text-sm text-white"
+                        ? "rounded-full border border-brand bg-brand px-3 py-1 text-sm text-white"
                         : "rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50"
                     }
                   >

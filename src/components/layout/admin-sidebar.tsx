@@ -87,8 +87,8 @@ const navItems: NavItem[] = [
 
 const rowBase =
   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors";
-const activeCls = "bg-zinc-800 text-white";
-const idleCls = "text-zinc-400 hover:bg-zinc-800 hover:text-white";
+const activeCls = "bg-brand-hover text-white";
+const idleCls = "text-zinc-400 hover:bg-brand-hover hover:text-white";
 
 function isGroup(item: NavItem): item is NavGroup {
   return "children" in item;
@@ -206,7 +206,7 @@ function SidebarContent({
 
   return (
     <>
-      <div className="flex h-16 items-center border-b border-zinc-800 px-6">
+      <div className="flex h-16 items-center border-b border-brand-border px-6">
         <Link href="/dashboard" onClick={onNavigate}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -271,7 +271,7 @@ function SidebarContent({
                     onClick={() => toggle(item.label, childActive)}
                     aria-label={`Toggle ${item.label}`}
                     aria-expanded={expanded}
-                    className="ml-1 rounded-md p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                    className="ml-1 rounded-md p-2 text-zinc-400 transition-colors hover:bg-brand-hover hover:text-white"
                   >
                     <ChevronDown
                       className={cn(
@@ -321,8 +321,8 @@ function SidebarContent({
                         className={cn(
                           "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
                           active
-                            ? "bg-zinc-800 text-white"
-                            : "text-zinc-400 hover:bg-zinc-800 hover:text-white",
+                            ? "bg-brand-hover text-white"
+                            : "text-zinc-400 hover:bg-brand-hover hover:text-white",
                         )}
                       >
                         {ChildIcon && (
@@ -343,13 +343,13 @@ function SidebarContent({
           );
         })}
       </nav>
-      <div className="border-t border-zinc-800 px-6 py-4">
+      <div className="border-t border-brand-border px-6 py-4">
         {session?.user?.email && (
           <p className="mb-3 truncate text-xs text-zinc-500">{session.user.email}</p>
         )}
         <button
           onClick={() => signOut({ callbackUrl: "/auth/login" })}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 transition-colors hover:bg-brand-hover hover:text-white"
         >
           <LogOut className="h-4 w-4" />
           Sign out
@@ -375,7 +375,7 @@ export function AdminSidebar({ logoUrl }: { logoUrl?: string }) {
       {/* Mobile drawer */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-zinc-800 bg-zinc-900 transition-transform duration-200 md:hidden",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-brand-border bg-brand transition-transform duration-200 md:hidden",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -390,7 +390,7 @@ export function AdminSidebar({ logoUrl }: { logoUrl?: string }) {
       </aside>
 
       {/* Desktop sidebar */}
-      <aside className="hidden h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-900 md:flex">
+      <aside className="hidden h-screen w-64 flex-col border-r border-brand-border bg-brand md:flex">
         <SidebarContent logoUrl={logoUrl} />
       </aside>
     </>

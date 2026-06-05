@@ -77,7 +77,7 @@ export function PoExpandableList({
                 className={cn(
                   "group flex cursor-pointer items-center gap-4 px-4 py-3 transition-colors",
                   isSelected
-                    ? "bg-zinc-900 text-white"
+                    ? "bg-brand text-white"
                     : "hover:bg-zinc-50 active:bg-zinc-100",
                 )}
               >

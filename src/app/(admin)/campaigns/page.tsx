@@ -592,7 +592,7 @@ function PlatformBadge({ platform }: { platform: string }) {
   const styles: Record<string, string> = {
     facebook: "bg-blue-700 text-white",
     instagram: "bg-gradient-to-r from-purple-600 to-pink-500 text-white",
-    threads: "bg-zinc-900 text-white",
+    threads: "bg-brand text-white",
     audience_network: "bg-blue-400 text-white",
     messenger: "bg-blue-500 text-white",
     google: "bg-amber-500 text-white",

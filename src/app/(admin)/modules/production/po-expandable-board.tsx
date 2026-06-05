@@ -82,7 +82,7 @@ export function PoExpandableBoard({
                           className={cn(
                             "cursor-pointer rounded-lg border p-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] transition-all",
                             isSelected
-                              ? "border-zinc-900 bg-zinc-900 shadow-none"
+                              ? "border-brand bg-brand shadow-none"
                               : "border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm",
                           )}
                         >

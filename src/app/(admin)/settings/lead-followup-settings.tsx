@@ -76,7 +76,7 @@ export function LeadFollowupSettings({
               setInitialDraft(e.target.checked);
               setSaved(false);
             }}
-            className="h-4 w-4 rounded border-zinc-300 accent-zinc-900"
+            className="h-4 w-4 rounded border-zinc-300 accent-brand"
           />
           Draft an initial email for a new lead
         </label>
@@ -96,7 +96,7 @@ export function LeadFollowupSettings({
               setEnabled(e.target.checked);
               setSaved(false);
             }}
-            className="h-4 w-4 rounded border-zinc-300 accent-zinc-900"
+            className="h-4 w-4 rounded border-zinc-300 accent-brand"
           />
           Follow up on unanswered emails
         </label>

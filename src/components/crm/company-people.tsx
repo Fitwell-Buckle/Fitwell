@@ -126,7 +126,7 @@ export function CompanyPeople({
               {kind.toUpperCase()}
             </span>
             {primaryHere && (
-              <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              <span className="rounded bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">
                 PRIMARY
               </span>
             )}

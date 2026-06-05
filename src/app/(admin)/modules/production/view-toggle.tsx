@@ -39,7 +39,7 @@ export function ProductionViewToggle({ view }: { view: string }) {
           className={cn(
             "rounded-md px-3 py-1.5 font-medium transition-colors",
             view === v.key
-              ? "bg-zinc-900 text-white"
+              ? "bg-brand text-white"
               : "text-zinc-500 hover:text-zinc-900",
           )}
         >

@@ -41,7 +41,7 @@ export function DocsNav() {
             className={cn(
               "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               isActive
-                ? "bg-zinc-900 text-white"
+                ? "bg-brand text-white"
                 : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900",
             )}
           >

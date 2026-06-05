@@ -156,7 +156,7 @@ export function PoExpandableTimeline({
                       }
                       className={cn(
                         "flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors",
-                        isSelected ? "bg-zinc-900" : "hover:bg-zinc-50/80",
+                        isSelected ? "bg-brand" : "hover:bg-zinc-50/80",
                       )}
                     >
                       <div className="w-48 shrink-0">

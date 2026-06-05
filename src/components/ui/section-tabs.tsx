@@ -36,7 +36,7 @@ export function SectionTabs({
             className={cn(
               "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
               active
-                ? "border-zinc-900 text-zinc-900"
+                ? "border-brand text-zinc-900"
                 : "border-transparent text-zinc-500 hover:text-zinc-800",
             )}
           >

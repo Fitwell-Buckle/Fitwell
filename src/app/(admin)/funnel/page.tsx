@@ -236,7 +236,7 @@ export default async function FunnelPage({
                     </div>
                     <div className="h-6 rounded bg-zinc-100">
                       <div
-                        className="h-6 rounded bg-zinc-900 transition-all"
+                        className="h-6 rounded bg-brand transition-all"
                         style={{ width: `${width}%` }}
                       />
                     </div>
@@ -287,7 +287,7 @@ export default async function FunnelPage({
                       </div>
                       <div className="h-6 rounded bg-zinc-100">
                         <div
-                          className="h-6 rounded bg-zinc-900 transition-all"
+                          className="h-6 rounded bg-brand transition-all"
                           style={{ width: `${width}%` }}
                         />
                       </div>

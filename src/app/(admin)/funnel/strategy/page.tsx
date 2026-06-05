@@ -115,7 +115,7 @@ function RetentionStageBar({ row }: { row: RetentionStageRow }) {
       </div>
       <div className="h-5 rounded bg-zinc-100">
         <div
-          className="h-5 rounded bg-zinc-900 transition-all"
+          className="h-5 rounded bg-brand transition-all"
           style={{ width: `${widthPct}%` }}
         />
       </div>
@@ -197,7 +197,7 @@ function SegmentFilterPills({
         className={cn(
           pillBase,
           allPill
-            ? "border-zinc-900 bg-zinc-900 text-white"
+            ? "border-brand bg-brand text-white"
             : "border-zinc-200 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900",
         )}
       >
@@ -601,7 +601,7 @@ function PositionFilterPills({
             className={cn(
               pillBase,
               isActive
-                ? "border-zinc-900 bg-zinc-900 text-white"
+                ? "border-brand bg-brand text-white"
                 : "border-zinc-200 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900",
             )}
           >

@@ -165,7 +165,7 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
           onClick={() => setRange(preset.days)}
           className={`${pillCls} ${
             activeDays === preset.days
-              ? "bg-zinc-900 text-white"
+              ? "bg-brand text-white"
               : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
           }`}
         >
@@ -181,7 +181,7 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
           onClick={() => setGranularity(g.value)}
           className={`${pillCls} ${
             effectiveGranularity === g.value
-              ? "bg-zinc-900 text-white"
+              ? "bg-brand text-white"
               : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
           }`}
         >

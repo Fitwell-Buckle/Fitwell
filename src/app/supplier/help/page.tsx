@@ -30,7 +30,7 @@ export default function SupplierHelpPage() {
             <ol className="mt-5 space-y-6">
               {guide.steps.map((step, i) => (
                 <li key={i} className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-semibold text-white">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-semibold text-white">
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">

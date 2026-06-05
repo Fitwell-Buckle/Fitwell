@@ -259,7 +259,7 @@ export function ProductCombobox({
                   className={cn(
                     "rounded-full border px-2 py-0.5 text-xs transition-colors",
                     sizes.has(s)
-                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      ? "border-brand bg-brand text-white"
                       : "border-zinc-200 text-zinc-600 hover:bg-zinc-50",
                   )}
                 >
@@ -274,7 +274,7 @@ export function ProductCombobox({
                   className={cn(
                     "rounded-full border px-2 py-0.5 text-xs transition-colors",
                     colors.has(c)
-                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      ? "border-brand bg-brand text-white"
                       : "border-zinc-200 text-zinc-600 hover:bg-zinc-50",
                   )}
                 >
@@ -311,7 +311,7 @@ export function ProductCombobox({
                       : filteredAll,
                   )
                 }
-                className="rounded-md bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-zinc-800"
+                className="rounded-md bg-brand px-3 py-1 text-xs font-medium text-white hover:bg-brand-hover"
               >
                 {checked.size > 0 ? `Add ${checked.size}` : `Add all ${filteredAll.length}`}
               </button>
