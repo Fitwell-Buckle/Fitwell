@@ -164,6 +164,55 @@ Marketing campaign metadata for attribution grouping.
 | `created_at` | timestamptz | |
 | `updated_at` | timestamptz | |
 
+### `attribution_survey_response`
+
+Self-reported attribution captured by post-purchase surveys (Grapevine
+today; `provider` makes it multi-provider safe). One row per
+`(provider, provider_response_id)` — idempotent against retries. Powers
+`order.link_method = 'self_report'` per [attribution.md](../invariants/attribution.md).
+
+Per-question grain (one row per answered question per order) so the
+single-question survey today can grow to multi-question without a
+schema change.
+
+**Important distinction between `platform_hint` and `channel_hint`:**
+
+- `platform_hint` is the **platform the survey reveals** (e.g. `instagram`,
+  `google_search`). Set whenever the answer names a platform, even when
+  the paid-vs-organic split can't be determined from the survey alone.
+  Surveys can't tell us if a Meta touch was a paid ad or an organic post —
+  this column preserves what the survey *does* know.
+- `channel_hint` is a **committed canonical channel ID** from
+  [funnel.md](../strategy/funnel.md). Set only when the survey answer
+  commits to a single channel without paid/organic ambiguity
+  (`creator_partnerships`, `forum_*`, `in_person_sighting`,
+  `press_editorial`, `trade_shows`, `ai_search_recommendation`).
+- For ambiguous platform answers (Instagram / Facebook / TikTok / Google /
+  Fitwell-owned YouTube), `channel_hint` is left **NULL**. The attribution
+  engine (link_method `self_report`) reads `platform_hint` together with
+  `utm_attribution` and `order.landing_site` / `referring_site` to commit
+  to a funnel.md channel.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid | PK |
+| `provider` | text | `grapevine` (default); multi-provider safe |
+| `provider_response_id` | text | Idempotency key (provider-side response ID); unique with `provider` |
+| `survey_code` | text | Grapevine survey code, e.g. `698cc69eca3e5` |
+| `survey_name` | text | Human label for the survey |
+| `surface` | text | `checkout_app_block`, `pos_fitwell_south`, etc. |
+| `order_id` | uuid | FK → `order.id`. Nullable when the response arrived before the Shopify order webhook |
+| `shopify_order_id` | text | Kept even when `order_id` is null so the backfill resolver can join later |
+| `customer_email` | text | Denormalized from provider — supports late-arriving order matches |
+| `question_key` | text | Defaults to `where_first_heard`; required |
+| `raw_answer` | text | The chosen multiple-choice label, or the "Other" free-text when `is_other_text=true` |
+| `is_other_text` | boolean | True when the respondent picked "Other" and provided free text |
+| `platform_hint` | text | Survey-inferable platform: `instagram`, `facebook`, `tiktok`, `twitter`, `threads`, `youtube`, `google_search`, `duckduckgo`, `bing` |
+| `channel_hint` | text | Committed canonical channel ID from `funnel.md`. NULL for ambiguous platform answers — attribution engine commits with UTM context |
+| `channel_detail` | text | Specific creator/forum identifier (e.g. `watchchris`, `watchuseek`, `fitwell_owned`) |
+| `responded_at` | timestamptz | When the survey was completed |
+| `created_at` | timestamptz | Row insertion time |
+
 ## Analytics Staging Tables
 
 Daily snapshots extracted from external APIs. Append-only — one row per date per dimension.

@@ -193,7 +193,8 @@ export const order = pgTable(
     // _fw_distinct_id checkout note attribute. (DB column name kept as
     // fw_distinct_id; rename queued — see customer.posthogDistinctId.)
     posthogDistinctId: text("fw_distinct_id"),
-    // How the order was linked to a pre-purchase touch: 'pixel' | 'email_match' | null
+    // How the order was linked to a pre-purchase touch:
+    // 'self_report' (Grapevine survey response) | 'pixel' | 'email_match' | null
     linkMethod: text("link_method"),
     processedAt: timestamp("processed_at", { mode: "date" }),
     // Set when Shopify cancelled the order; null otherwise. Used to exclude
@@ -259,6 +260,66 @@ export const utmAttribution = pgTable(
     index("utm_captured_at_idx").on(t.capturedAt),
     index("utm_fw_distinct_id_idx").on(t.posthogDistinctId),
     uniqueIndex("utm_session_id_idx").on(t.sessionId),
+  ],
+);
+
+// Self-reported attribution from post-purchase surveys (Grapevine today;
+// multi-provider safe via `provider`). One row per (order, question) so the
+// same survey can carry multiple questions without a schema change.
+export const attributionSurveyResponse = pgTable(
+  "attribution_survey_response",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    provider: text("provider").notNull().default("grapevine"),
+    // Idempotency key from the provider; lets Shopify Flow retry safely.
+    providerResponseId: text("provider_response_id").notNull(),
+    surveyCode: text("survey_code"),
+    surveyName: text("survey_name"),
+    // Surface the response came in on: 'checkout_app_block', 'pos_*', 'email', 'standalone'.
+    surface: text("surface"),
+    // Resolved FK into order. Nullable to handle the race where the survey
+    // response arrives before the Shopify order webhook lands; a backfill pass
+    // resolves it via shopifyOrderId.
+    orderId: text("order_id").references(() => order.id),
+    shopifyOrderId: text("shopify_order_id"),
+    customerEmail: text("customer_email"),
+    // Multi-question safe — defaults to the current single-question survey.
+    questionKey: text("question_key").notNull(),
+    // The chosen multiple-choice label as the provider sent it.
+    rawAnswer: text("raw_answer"),
+    // True when the respondent picked "Other" and provided free text.
+    isOtherText: boolean("is_other_text").default(false),
+    // Platform the customer self-reported (e.g. 'instagram', 'tiktok',
+    // 'google_search'). Always set for platform-only answers where the
+    // paid-vs-organic distinction can't be inferred from the survey alone.
+    // The attribution engine (link_method='self_report') merges this with
+    // utm_attribution + order.landing_site / referring_site to commit to a
+    // specific funnel.md channel.
+    platformHint: text("platform_hint"),
+    // Canonical channel ID from specs/strategy/funnel.md — set only when the
+    // survey answer commits to one channel (e.g. creator_partnerships,
+    // press_editorial, in_person_sighting). Left NULL for ambiguous platform
+    // answers (Meta, TikTok, Google) where paid-vs-organic requires UTM
+    // context, and for unclassified "Other" free-text rows (Phase 4 normalizes).
+    channelHint: text("channel_hint"),
+    // Optional finer-grained detail (specific creator name, specific forum)
+    // preserved alongside the coarser channelHint for per-creator rollups.
+    channelDetail: text("channel_detail"),
+    respondedAt: timestamp("responded_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("asr_provider_response_id_idx").on(
+      t.provider,
+      t.providerResponseId,
+    ),
+    index("asr_order_id_idx").on(t.orderId),
+    index("asr_shopify_order_id_idx").on(t.shopifyOrderId),
+    index("asr_channel_hint_idx").on(t.channelHint),
+    index("asr_platform_hint_idx").on(t.platformHint),
+    index("asr_responded_at_idx").on(t.respondedAt),
   ],
 );
 
@@ -798,6 +859,16 @@ export const orderLineItemRelations = relations(orderLineItem, ({ one }) => ({
     references: [order.id],
   }),
 }));
+
+export const attributionSurveyResponseRelations = relations(
+  attributionSurveyResponse,
+  ({ one }) => ({
+    order: one(order, {
+      fields: [attributionSurveyResponse.orderId],
+      references: [order.id],
+    }),
+  }),
+);
 
 export const customerEventRelations = relations(customerEvent, ({ one }) => ({
   customer: one(customer, {

@@ -125,6 +125,48 @@ email) lands with the unified detail-tabs work.
 
 ---
 
+## Grapevine (post-purchase survey)
+
+**Purpose**: capture self-reported attribution from the post-purchase survey
+("Where did you first discover Fitwell?") and join it to specific Shopify
+orders. Powers the `link_method = 'self_report'` path in
+[attribution.md](../invariants/attribution.md) and the channel-mix dashboard.
+
+| Aspect | Detail |
+|---|---|
+| Provider | Grapevine Surveys (Shopify app, grapevine-surveys.com) |
+| Survey | "Post purchase survey", survey code `698cc69eca3e5`, single question (`where_first_heard`), surfaces: Checkout app block, POS Fitwell South, POS Fitwell North |
+| Inbound | `POST /api/webhooks/grapevine`. Shared-secret auth via `x-grapevine-secret` header (constant-time compare against `GRAPEVINE_WEBHOOK_SECRET`). Refuses all traffic when env unset |
+| Trigger path | Grapevine → Shopify Flow ("Response Completed" trigger) → "Send HTTP request" action → this endpoint |
+| Payload contract | `src/lib/grapevine/ingest.ts` (`grapevineWebhookPayload` Zod schema). Includes `providerResponseId`, `answer`, `isOther`/`otherText`, `shopifyOrderId`, `customerEmail`, `respondedAt` |
+| Storage | `attribution_survey_response` (idempotent on `(provider, provider_response_id)`); FK into `order` resolved via `shopify_id` lookup |
+| Channel mapping | `src/lib/grapevine/channel-mapping.ts` maps Grapevine answer labels → canonical channel IDs from [funnel.md](../strategy/funnel.md). Unknown labels and "Other" free-text store with `channel_hint=null` for Phase 4 normalization |
+| Order-resolution race | If a response arrives before the Shopify order webhook lands, `order_id` is null and `shopify_order_id` is kept; `backfillUnresolvedOrders` in `ingest.ts` resolves them after the next Shopify extract |
+| Env | `GRAPEVINE_WEBHOOK_SECRET` |
+
+### Setup ⚠️ REQUIRED (inert until done)
+1. Generate a strong shared secret (`openssl rand -base64 32`) and set
+   `GRAPEVINE_WEBHOOK_SECRET` in Vercel (Production + each dev env) and
+   in each contributor's `.env.local`.
+2. In Shopify Admin → **Apps → Flow → Create workflow**:
+   - **Trigger**: Grapevine "Response Completed" (search "Grapevine").
+   - **Action**: "Send HTTP request"
+     - URL: `https://admin.fitwellbuckle.co/api/webhooks/grapevine`
+     - Method: `POST`
+     - Headers: `x-grapevine-secret: <same secret as the env var>` plus
+       `content-type: application/json`
+     - Body: JSON template that maps the Grapevine trigger variables into
+       the payload contract above. The required key is
+       `providerResponseId`; the rest are optional but should all be
+       wired through.
+3. Activate the workflow. The first real response will hit the webhook
+   and show up in `attribution_survey_response`.
+
+Backfill of historical responses (pre-webhook era) is the Phase 2 script
+`scripts/grapevine-backfill-from-csv.ts` — see the work plan.
+
+---
+
 ## PostHog
 
 **Purpose**: Product analytics, event tracking, feature flags.
