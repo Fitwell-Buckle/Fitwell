@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
+import { NON_NAVIGABLE } from "./breadcrumb-nav";
 
 // Display labels for known path segments. Anything not here falls back to a
 // title-cased slug, and id-looking segments use the parent's singular noun.
@@ -92,18 +93,27 @@ export function Breadcrumbs() {
       <Link href="/dashboard" className="hover:text-zinc-700">
         Home
       </Link>
-      {crumbs.map((c) => (
-        <span key={c.href} className="flex items-center gap-1">
-          <ChevronRight className="h-3.5 w-3.5 text-zinc-300" />
-          {c.last ? (
-            <span className="font-medium text-zinc-600">{c.label}</span>
-          ) : (
-            <Link href={c.href} className="hover:text-zinc-700">
-              {c.label}
-            </Link>
-          )}
-        </span>
-      ))}
+      {crumbs.map((c) => {
+        // Linkify only crumbs that resolve to a real page. The last crumb is the
+        // current page, and grouping-only paths (NON_NAVIGABLE) would 404.
+        const navigable = !c.last && !NON_NAVIGABLE.has(c.href);
+        return (
+          <span key={c.href} className="flex items-center gap-1">
+            <ChevronRight className="h-3.5 w-3.5 text-zinc-300" />
+            {navigable ? (
+              <Link href={c.href} className="hover:text-zinc-700">
+                {c.label}
+              </Link>
+            ) : (
+              <span
+                className={c.last ? "font-medium text-zinc-600" : "text-zinc-400"}
+              >
+                {c.label}
+              </span>
+            )}
+          </span>
+        );
+      })}
     </nav>
   );
 }
