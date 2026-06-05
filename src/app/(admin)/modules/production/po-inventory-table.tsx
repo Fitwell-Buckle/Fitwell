@@ -10,6 +10,7 @@ import { Mono } from "@/components/ui/data-table";
 import { fmtDate } from "@/lib/production/display";
 import { ChevronRight } from "lucide-react";
 import type { IncomingPoRow } from "@/lib/production/inventory";
+import { DRILL_ORIGIN_KEY } from "./drill-panel";
 
 /**
  * Client-rendered table body for the "by PO" Incoming Inventory view. Renders
@@ -46,7 +47,11 @@ export function PoInventoryTableBody({
         return (
           <TableRow
             key={r.poNumber}
-            onClick={() => router.push(href)}
+            onClick={(e) => {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              sessionStorage.setItem(DRILL_ORIGIN_KEY, String(rect.top + window.scrollY));
+              router.push(href);
+            }}
             className="group cursor-pointer hover:bg-zinc-50/80 active:bg-zinc-100/80 transition-colors"
             title="Expand to see this PO's SKUs"
           >

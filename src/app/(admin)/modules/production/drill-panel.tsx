@@ -1,15 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Animated wrapper for the per-PO drill-down panel. On mount it plays a
- * spring-like enter animation (opacity + translateY + scale) so the user has
- * clear visual feedback that the view just expanded to show more detail.
+ * sessionStorage key written by each clickable row/card/track just before it
+ * calls router.push(). The DrillPanel reads this on mount to know where the
+ * user clicked and animates from that Y origin — so the panel appears to expand
+ * out of the row they tapped, like a directional reveal.
  *
- * Mount this with key={selectedPoNumber} so clicking a *different* PO
- * re-triggers the animation from scratch.
+ * Value: the absolute Y of the clicked element's top, in page coordinates
+ * (`element.getBoundingClientRect().top + window.scrollY`).
+ */
+export const DRILL_ORIGIN_KEY = "drillOriginY";
+
+/**
+ * Animated wrapper for the per-PO drill-down panel. On mount it reads the
+ * stored click position and plays a directional entrance animation: the panel
+ * slides UP from where the clicked row was and blurs in, so it's visually clear
+ * the content is "expanding out" of that row. Similar to the macOS genie effect
+ * but without the twist — purely a directional translate + blur reveal.
+ *
+ * Mount with key={selectedPoNumber} so clicking a different PO re-triggers the
+ * animation.
  */
 export function DrillPanel({
   children,
@@ -18,39 +31,59 @@ export function DrillPanel({
   children: React.ReactNode;
   className?: string;
 }) {
-  const [ready, setReady] = useState(false);
-  const rafRef = useRef<number | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Double-RAF: let the browser paint the initial (hidden) state before
-    // starting the transition, otherwise it snaps directly to the final state.
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = requestAnimationFrame(() => setReady(true));
+    const el = ref.current;
+    if (!el) return;
+
+    // Read and immediately clear the stored click origin.
+    const stored = sessionStorage.getItem(DRILL_ORIGIN_KEY);
+    sessionStorage.removeItem(DRILL_ORIGIN_KEY);
+
+    // Calculate the translateY start: distance from the clicked row to this
+    // panel's top edge (page-absolute). The panel slides up from there.
+    let originY = 48; // fallback when no stored position
+    if (stored) {
+      const rect = el.getBoundingClientRect();
+      const panelAbsTop = rect.top + window.scrollY;
+      const clickAbsY = parseFloat(stored);
+      // Clamp: at least 16px of travel (even if click was very close to the
+      // panel top), at most 500px so very far-down clicks don't look odd.
+      originY = Math.min(Math.max(16, clickAbsY - panelAbsTop), 500);
+    }
+
+    // 1. Imperatively set the INITIAL hidden state (no React re-render needed).
+    el.style.opacity = "0";
+    el.style.transform = `translateY(${originY}px) scale(0.93)`;
+    el.style.filter = "blur(10px)";
+    el.style.willChange = "opacity, transform, filter";
+
+    // 2. Let the browser paint the initial state, then wire up the transition
+    //    and flip to the final values in the following frame.
+    let r1: number, r2: number;
+    r1 = requestAnimationFrame(() => {
+      el.style.transitionProperty = "opacity, transform, filter";
+      el.style.transitionDuration = "520ms";
+      el.style.transitionTimingFunction = "cubic-bezier(0.16, 1, 0.3, 1)";
+
+      r2 = requestAnimationFrame(() => {
+        el.style.opacity = "1";
+        el.style.transform = "translateY(0px) scale(1)";
+        el.style.filter = "blur(0px)";
+      });
     });
+
     return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2!);
     };
   }, []);
 
   return (
-    <div
-      style={{
-        // Animate opacity, position, scale AND blur so the panel "materialises"
-        // from a blurry ghost into a crisp panel — unmissable even at a glance.
-        transitionProperty: "opacity, transform, filter",
-        transitionDuration: "500ms",
-        // Spring ease: snaps out fast, settles with a gentle tail.
-        transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
-        willChange: "opacity, transform, filter",
-        filter: ready ? "blur(0px)" : "blur(8px)",
-      }}
-      className={cn(
-        ready
-          ? "opacity-100 translate-y-0 scale-100"
-          : "opacity-0 translate-y-10 scale-[0.93]",
-        className,
-      )}
-    >
+    // opacity-0 keeps the element invisible until useEffect fires (prevents a
+    // flash of the un-animated content on SSR/hydration).
+    <div ref={ref} className={cn("opacity-0", className)}>
       {children}
     </div>
   );

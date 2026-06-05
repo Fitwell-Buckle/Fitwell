@@ -8,6 +8,7 @@ import { STAGES, type ProductionStage } from "@/lib/production/stages";
 import { useStageLabels } from "@/components/production/stage-labels-provider";
 import { skuSize } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
+import { DRILL_ORIGIN_KEY } from "../drill-panel";
 
 export interface KanbanCard {
   id: string;
@@ -147,10 +148,11 @@ export function KanbanBoard({
                     }
                     onClick={
                       poDrillHrefBase
-                        ? () =>
-                            router.push(
-                              `${poDrillHrefBase}${encodeURIComponent(c.poNumber)}`,
-                            )
+                        ? (e) => {
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            sessionStorage.setItem(DRILL_ORIGIN_KEY, String(rect.top + window.scrollY));
+                            router.push(`${poDrillHrefBase}${encodeURIComponent(c.poNumber)}`);
+                          }
                         : undefined
                     }
                     className={cn(

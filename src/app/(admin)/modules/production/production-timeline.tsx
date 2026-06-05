@@ -7,6 +7,7 @@ import { isTerminal, type ProductionStage } from "@/lib/production/stages";
 import { STAGE_BAR, fmtDate, skuSize } from "@/lib/production/display";
 import { projectEta } from "@/lib/production/cycle-time";
 import { formatPoNumber } from "@/lib/production/sub-po";
+import { DRILL_ORIGIN_KEY } from "./drill-panel";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -151,7 +152,15 @@ export function ProductionTimeline({
                   className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
                     drillHref ? "cursor-pointer hover:bg-zinc-50/80 active:bg-zinc-100/80" : ""
                   }`}
-                  onClick={drillHref ? () => router.push(drillHref) : undefined}
+                  onClick={
+                  drillHref
+                    ? (e) => {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        sessionStorage.setItem(DRILL_ORIGIN_KEY, String(rect.top + window.scrollY));
+                        router.push(drillHref);
+                      }
+                    : undefined
+                }
                 >
                   <div className="w-48 shrink-0">
                     {/* In drill mode the row itself navigates — show label as
