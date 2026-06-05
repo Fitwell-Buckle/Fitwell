@@ -72,6 +72,7 @@ const navItems: NavItem[] = [
     icon: Megaphone,
     children: [
       { href: "/attribution", label: "Attribution" },
+      { href: "/attribution/survey", label: "Self-report" },
       { href: "/campaigns", label: "Campaigns" },
       { href: "/funnel", label: "Funnel" },
       { href: "/funnel/strategy", label: "Funnel — Strategic" },

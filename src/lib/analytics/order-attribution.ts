@@ -7,7 +7,7 @@ import type { ShopifyOrder } from "@/types/shopify";
 /** Attribution window — keep in sync with specs/invariants/attribution.md §1. */
 const ATTRIBUTION_WINDOW_DAYS = 30;
 
-export type LinkMethod = "pixel" | "email_match";
+export type LinkMethod = "self_report" | "pixel" | "email_match";
 
 /** Pull the identity-bridge distinct_id the Shopify pixel stamped on the cart. */
 export function extractFwDistinctId(o: ShopifyOrder): string | null {

@@ -310,9 +310,53 @@ P5 Comfort entry. Worth testing as cheap discovery; volume unknown.
 **Journey role:** introducer
 **Measurement:** Meta insights; PostHog `referrer_source=social`
 **Cost shape:** organic / content
-**Status:** active
-**Notes:** Lower volume than paid but compounds with paid via
-look-alike audiences.
+**Status:** active — thin cadence per [[360-campaign]] Workstream 4.5
+**Notes:** In practice this is IG Feed + Reels — FB organic isn't a
+real volume lever for us. TikTok and YouTube each have their own
+entries below; treat them as distinct channels with distinct
+audiences and algorithms. Compounds with paid via look-alike
+audiences. The operational layer driving cadence across all four
+organic-social entries lives in [[360-campaign]] W4.5.
+
+#### `organic_tiktok`
+**Typical entry stage(s):** `unaware` → `problem_aware`
+**Hypothesized persona affinity:** P4 dominant; some P5 via comfort-pain content
+**Journey role:** introducer
+**Measurement:** TikTok analytics + PostHog `referrer_source=social`;
+link-in-bio UTM (`utm_source=tiktok&utm_medium=organic`)
+**Cost shape:** organic / content
+**Status:** active — thin cadence per [[360-campaign]] W4.5
+**Notes:** Distinct from Meta because the algorithm favours raw /
+native content over polished. Problem-pain hooks (P5 *"between
+holes"* vocabulary from [[vocabulary-map]]) have outsized reach
+potential at low production cost. Organic winners feed the paid
+creative pool — see [[360-campaign]] W4.5 organic-winners loop.
+
+#### `organic_youtube_shorts`
+**Typical entry stage(s):** `unaware` → `problem_aware` → `solution_aware`
+**Hypothesized persona affinity:** P2, P4
+**Journey role:** introducer
+**Measurement:** YouTube Studio + PostHog `referrer_source=social`;
+description-link UTM
+**Cost shape:** organic / content
+**Status:** active — thin cadence per [[360-campaign]] W4.5
+**Notes:** Vertical-video re-cut from the IG Reels / TikTok shoot
+pipeline; marginal production cost ~zero. Audience skews more
+Tier-2 "regular content" per [[personas]] consumption tiers —
+closer to P2 than TikTok's algo-fed P4 base.
+
+#### `organic_youtube_longform`
+**Typical entry stage(s):** `solution_aware` → `brand_aware`
+**Hypothesized persona affinity:** P1a, P1b, P2 (Tier-1 / Tier-2 content tiers)
+**Journey role:** accelerator + trust-builder
+**Measurement:** YouTube Studio + PostHog `referrer_source=social`;
+description-link UTM; subscribers as a leading indicator
+**Cost shape:** organic / content (higher per piece than Shorts)
+**Status:** aspirational — month 2+ in [[360-campaign]] W4.5
+**Notes:** Mechanism deep-dives, comparison content ("Fitwell vs
+Pelagos clasp"), watch-roll outfitting, founder pieces. Higher
+trust transfer; not a daily-cadence channel — one piece per month
+is plenty.
 
 #### `creator_partnerships`
 **Typical entry stage(s):** `solution_aware` → `brand_aware`
@@ -745,7 +789,7 @@ These apply *on top of* a persona path, not instead of:
 
 | Question | Why it matters | Owner | Status |
 |---|---|---|---|
-| What share of `branded_search_organic` is `post_creator_branded_search` in disguise? | Determines how much to credit creator channels | Tom | Needs PostHog touch-history instrumentation |
+| What share of `branded_search_organic` is `post_creator_branded_search` in disguise? | Determines how much to credit creator channels | Tom | Partial answer 2026-06-05: Grapevine survey on 178 orders shows Meta-family is 65%+ of self-reported introducer; Google branded is ~5%. See `/attribution/survey` admin view + delta sidebar. Strong evidence that converting Google traffic is mostly the closer leg of a Meta-introduced compound path. Sample is small for the UTM-cross-checked delta (~9 orders) until [[../work-plans/todo/utm-linking-gap]] is fixed. |
 | Is `paid_search_problem` real? Does search volume on comfort-pain terms support a budget? | Tests whether P5 search funnel is worth pursuing | Tom | Needs keyword research + pilot spend |
 | Where does the daily-sales floor (6–9/day post-Black-Friday) come from? Is it `paid_meta_retargeting`, `branded_search_organic`, repeat customers from [[retention-loop]], or interaction? | Tells us whether the floor is a feature or a ceiling | Tom | Open; instrumentation required |
 | What's the typical multi-touch journey length for P2 — 4 touches? 6? 10? | Determines retargeting frequency caps and email cadence | Tom | Open |
