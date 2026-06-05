@@ -26,6 +26,7 @@ export function KanbanBoard({
   stages = STAGES,
   poHrefBase = "/modules/production/po",
   readOnly = false,
+  poDrillHrefBase,
 }: {
   cards: KanbanCard[];
   /** Columns to render (defaults to every stage). The supplier portal passes a
@@ -36,6 +37,9 @@ export function KanbanBoard({
   /** When true, cards are a static overview (no drag-to-advance). The "By PO"
    *  view uses this — a card is a whole PO, not a single movable line. */
   readOnly?: boolean;
+  /** When set, the card's PO link drills into that PO's SKU breakdown
+   *  (`${base}${encodeURIComponent(poNumber)}`) instead of the PO detail page. */
+  poDrillHrefBase?: string;
 }) {
   const router = useRouter();
   const stageLabels = useStageLabels();
@@ -141,9 +145,21 @@ export function KanbanBoard({
                             setOverStage(null);
                           }
                     }
+                    onClick={
+                      poDrillHrefBase
+                        ? () =>
+                            router.push(
+                              `${poDrillHrefBase}${encodeURIComponent(c.poNumber)}`,
+                            )
+                        : undefined
+                    }
                     className={cn(
-                      "rounded-lg border border-zinc-200 bg-white p-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)]",
-                      readOnly ? "" : "cursor-grab active:cursor-grabbing",
+                      "rounded-lg border border-zinc-200 bg-white p-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] transition-[border-color,box-shadow]",
+                      poDrillHrefBase
+                        ? "cursor-pointer hover:border-zinc-400 hover:shadow-md"
+                        : readOnly
+                          ? ""
+                          : "cursor-grab active:cursor-grabbing",
                       dragId === c.id && "opacity-50",
                     )}
                   >
@@ -160,13 +176,19 @@ export function KanbanBoard({
                       {c.title}
                     </div>
                     <div className="mt-1.5 flex items-center justify-between text-xs text-zinc-400">
-                      <Link
-                        href={`${poHrefBase}/${c.poId}`}
-                        className="underline decoration-zinc-300 underline-offset-2 hover:text-zinc-600"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {c.poNumber}
-                      </Link>
+                      {/* In drill mode the whole card is the click target — show
+                          the PO number as plain text to avoid nested interactives. */}
+                      {poDrillHrefBase ? (
+                        <span>{c.poNumber}</span>
+                      ) : (
+                        <Link
+                          href={`${poHrefBase}/${c.poId}`}
+                          className="underline decoration-zinc-300 underline-offset-2 hover:text-zinc-600"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {c.poNumber}
+                        </Link>
+                      )}
                       <span>×{c.quantity}</span>
                     </div>
                     <div className="truncate text-xs text-zinc-400">{c.supplier}</div>

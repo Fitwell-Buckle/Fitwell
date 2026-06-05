@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { isTerminal, type ProductionStage } from "@/lib/production/stages";
 import { STAGE_BAR, fmtDate, skuSize } from "@/lib/production/display";
@@ -48,12 +51,17 @@ export function ProductionTimeline({
   estimates,
   stageLabels,
   order,
+  poDrillHrefBase,
 }: {
   pos: TimelinePo[];
   estimates: Record<ProductionStage, number>;
   stageLabels: Record<ProductionStage, string>;
   order: readonly string[];
+  /** When set, a track's label drills into that PO's SKU breakdown
+   *  (`${base}${encodeURIComponent(poNumber)}`) instead of the PO detail page. */
+  poDrillHrefBase?: string;
 }) {
+  const router = useRouter();
   const todayIso = isoDay(new Date());
   const todayMs = utcMidnight(todayIso);
 
@@ -133,50 +141,79 @@ export function ProductionTimeline({
       ) : (
         <Card className="mt-4 overflow-hidden p-0">
           <div className="divide-y divide-zinc-100">
-            {tracks.map((t) => (
-              <div key={t.key} className="flex items-center gap-3 px-4 py-2.5">
-                <div className="w-48 shrink-0">
-                  <Link
-                    href={`/modules/production/po/${t.poId}`}
-                    className="block truncate font-mono text-xs text-zinc-900 hover:underline"
-                    title={`${t.sku} — ${t.title}`}
-                  >
-                    {t.sku}
-                  </Link>
-                  <div className="truncate text-[11px] text-zinc-400">
-                    {t.poNumber} · {t.supplier}
+            {tracks.map((t) => {
+              const drillHref = poDrillHrefBase
+                ? `${poDrillHrefBase}${encodeURIComponent(t.poNumber)}`
+                : undefined;
+              return (
+                <div
+                  key={t.key}
+                  className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
+                    drillHref ? "cursor-pointer hover:bg-zinc-50/80 active:bg-zinc-100/80" : ""
+                  }`}
+                  onClick={drillHref ? () => router.push(drillHref) : undefined}
+                >
+                  <div className="w-48 shrink-0">
+                    {/* In drill mode the row itself navigates — show label as
+                        plain text to avoid nested interactives. */}
+                    {drillHref ? (
+                      <>
+                        <span
+                          className="block truncate font-mono text-xs font-medium text-zinc-900"
+                          title={t.sku}
+                        >
+                          {t.sku}
+                        </span>
+                        <div className="truncate text-[11px] text-zinc-400">
+                          {t.poNumber} · {t.supplier}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href={`/modules/production/po/${t.poId}`}
+                          className="block truncate font-mono text-xs text-zinc-900 hover:underline"
+                          title={`${t.sku} — ${t.title}`}
+                        >
+                          {t.sku}
+                        </Link>
+                        <div className="truncate text-[11px] text-zinc-400">
+                          {t.poNumber} · {t.supplier}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="relative h-6 flex-1 rounded bg-zinc-50">
+                    <div
+                      className="absolute top-0 z-10 h-full w-px bg-zinc-300"
+                      style={{ left: `${todayPct}%` }}
+                    />
+                    {t.segs.map((s, i) => (
+                      <div
+                        key={i}
+                        className={`absolute top-1 h-4 rounded-sm ${STAGE_BAR[s.stage] ?? "bg-zinc-300"} ${
+                          s.projected ? "opacity-30" : ""
+                        }`}
+                        style={{
+                          left: `${pct(s.startMs)}%`,
+                          width: `${Math.max(pct(s.endMs) - pct(s.startMs), 0.5)}%`,
+                        }}
+                        title={`${stageLabels[s.stage]}${s.projected ? " (projected)" : ""}`}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="w-24 shrink-0 text-right text-xs text-zinc-500">
+                    {isTerminal(order, t.currentStage)
+                      ? stageLabels[t.currentStage]
+                      : t.etaMs
+                        ? `ETA ${fmtDate(isoDay(new Date(t.etaMs)))}`
+                        : "—"}
                   </div>
                 </div>
-
-                <div className="relative h-6 flex-1 rounded bg-zinc-50">
-                  <div
-                    className="absolute top-0 z-10 h-full w-px bg-zinc-300"
-                    style={{ left: `${todayPct}%` }}
-                  />
-                  {t.segs.map((s, i) => (
-                    <div
-                      key={i}
-                      className={`absolute top-1 h-4 rounded-sm ${STAGE_BAR[s.stage] ?? "bg-zinc-300"} ${
-                        s.projected ? "opacity-30" : ""
-                      }`}
-                      style={{
-                        left: `${pct(s.startMs)}%`,
-                        width: `${Math.max(pct(s.endMs) - pct(s.startMs), 0.5)}%`,
-                      }}
-                      title={`${stageLabels[s.stage]}${s.projected ? " (projected)" : ""}`}
-                    />
-                  ))}
-                </div>
-
-                <div className="w-24 shrink-0 text-right text-xs text-zinc-500">
-                  {isTerminal(order, t.currentStage)
-                    ? stageLabels[t.currentStage]
-                    : t.etaMs
-                      ? `ETA ${fmtDate(isoDay(new Date(t.etaMs)))}`
-                      : "—"}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}

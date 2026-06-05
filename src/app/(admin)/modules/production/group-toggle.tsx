@@ -20,8 +20,11 @@ export function ProductionGroupToggle({ group }: { group: string }) {
 
   function setGroup(g: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (g === "sku") params.delete("group");
+    // "po" is the default → omit it to keep the URL clean; set group=sku only.
+    if (g === "po") params.delete("group");
     else params.set("group", g);
+    // Leaving a drill-down (selecting a grouping) clears the per-PO scope.
+    params.delete("po");
     const qs = params.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
   }
