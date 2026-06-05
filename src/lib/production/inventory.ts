@@ -22,6 +22,60 @@ export interface IncomingRow {
   nearestEta: string | null;
 }
 
+/** An incoming line tagged with its owning (sub-)PO, for the "by PO" view. */
+export interface IncomingPoLine extends IncomingLine {
+  /** Display number of the owning sub-PO (or standalone PO). */
+  poNumber: string;
+  /** id of the PO whose detail page this row links to. */
+  poId: string;
+  supplier: string;
+}
+
+export interface IncomingPoRow {
+  poNumber: string;
+  poId: string;
+  supplier: string;
+  incomingQty: number;
+  byStage: Partial<Record<ProductionStage, number>>;
+  nearestEta: string | null;
+}
+
+/**
+ * Same incoming inventory as `aggregateIncoming`, but grouped by the owning
+ * (sub-)PO instead of by SKU — for the Production Summary's "by PO" view.
+ */
+export function aggregateIncomingByPo(
+  order: readonly string[],
+  lines: IncomingPoLine[],
+  estimates: Record<ProductionStage, number>,
+  today: string,
+): IncomingPoRow[] {
+  const byPo = new Map<string, IncomingPoRow>();
+
+  for (const li of lines) {
+    const row =
+      byPo.get(li.poNumber) ??
+      ({
+        poNumber: li.poNumber,
+        poId: li.poId,
+        supplier: li.supplier,
+        incomingQty: 0,
+        byStage: {},
+        nearestEta: null,
+      } satisfies IncomingPoRow);
+
+    row.incomingQty += li.quantity;
+    row.byStage[li.currentStage] = (row.byStage[li.currentStage] ?? 0) + li.quantity;
+
+    const eta = projectEta(order, li.currentStage, today, estimates);
+    if (row.nearestEta === null || eta < row.nearestEta) row.nearestEta = eta;
+
+    byPo.set(li.poNumber, row);
+  }
+
+  return [...byPo.values()].sort((a, b) => a.poNumber.localeCompare(b.poNumber));
+}
+
 export function aggregateIncoming(
   order: readonly string[],
   lines: IncomingLine[],

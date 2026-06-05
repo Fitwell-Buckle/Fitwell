@@ -14,15 +14,21 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { derivePoStage } from "@/lib/production/stages";
+import { derivePoStage, type ProductionStage } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { supplierForStage } from "@/lib/production/stage-owners";
 import { formatPoNumber } from "@/lib/production/sub-po";
 import { fmtDate } from "@/lib/production/display";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
-import { aggregateIncoming, type IncomingLine } from "@/lib/production/inventory";
+import {
+  aggregateIncoming,
+  aggregateIncomingByPo,
+  type IncomingLine,
+  type IncomingPoLine,
+} from "@/lib/production/inventory";
 import { ListFilters } from "@/components/catalog/list-filters";
 import { ProductionViewToggle } from "../view-toggle";
+import { ProductionGroupToggle } from "../group-toggle";
 import { KanbanBoard, type KanbanCard } from "../kanban/kanban-board";
 import { ProductionTimeline } from "../production-timeline";
 
@@ -46,6 +52,9 @@ export default async function ProductionSummaryPage({
   const view: View = (VIEWS as readonly string[]).includes(viewParam)
     ? (viewParam as View)
     : "inventory";
+  // Grouping dimension for every view: "sku" (default, per line item) or "po"
+  // (aggregated to one row/card/track per owning sub-PO).
+  const group: "sku" | "po" = params.group === "po" ? "po" : "sku";
 
   const supplierId = typeof params.supplier === "string" ? params.supplier : "";
   const stage = typeof params.stage === "string" ? params.stage : "";
@@ -178,6 +187,117 @@ export default async function ProductionSummaryPage({
       })),
   }));
 
+  // ── "By PO" variants (group === "po"): aggregate to one row/card/track per
+  // owning sub-PO instead of per SKU/line. ───────────────────────────────────
+
+  // Inventory: incoming units grouped by owning sub-PO.
+  const incomingPoLines: IncomingPoLine[] = allPos.flatMap((po) =>
+    po.lineItems
+      .filter((li) => !li.shopifyReceivedAt && (skuSet.size === 0 || skuSet.has(li.sku)))
+      .map((li) => {
+        const owner = lineOwner(po, li.currentStage);
+        return {
+          sku: li.sku,
+          title: li.title,
+          quantity: li.quantity,
+          currentStage: li.currentStage,
+          poNumber: owner.poNumber,
+          poId: po.id,
+          supplier: owner.supplier,
+        };
+      }),
+  );
+  const incomingPoRows = aggregateIncomingByPo(order, incomingPoLines, estimates, today);
+
+  // Board: one (non-draggable) card per sub-PO, placed in the column of its
+  // least-advanced open line (where the PO is currently gated).
+  const poCardMap = new Map<string, KanbanCard>();
+  for (const c of cards) {
+    const ex = poCardMap.get(c.poNumber);
+    if (!ex) {
+      poCardMap.set(c.poNumber, {
+        ...c,
+        id: c.poNumber,
+        sku: c.poNumber,
+        title: c.supplier,
+        locked: false,
+      });
+    } else {
+      ex.quantity += c.quantity;
+      if (order.indexOf(c.stage) < order.indexOf(ex.stage)) ex.stage = c.stage;
+    }
+  }
+  const poCards = [...poCardMap.values()];
+
+  // Timeline: one synthetic track per sub-PO. Merge its lines' stage events
+  // (per stage: earliest entry, latest exit — null exit if any line is still in
+  // that stage) and use the least-advanced open stage as the PO's current stage.
+  const poTrackMap = new Map<
+    string,
+    {
+      poId: string;
+      poNumber: string;
+      supplier: string;
+      currentStage: ProductionStage;
+      events: Map<string, { enteredAt: Date; exitedAt: Date | null }>;
+    }
+  >();
+  for (const po of timelinePos) {
+    for (const li of po.lineItems) {
+      const key = li.poNumber;
+      const g =
+        poTrackMap.get(key) ??
+        {
+          poId: po.id,
+          poNumber: key,
+          supplier: li.supplierName,
+          currentStage: li.currentStage,
+          events: new Map<string, { enteredAt: Date; exitedAt: Date | null }>(),
+        };
+      if (order.indexOf(li.currentStage) < order.indexOf(g.currentStage)) {
+        g.currentStage = li.currentStage;
+      }
+      for (const ev of li.stageEvents) {
+        const e = g.events.get(ev.stage);
+        if (!e) {
+          g.events.set(ev.stage, { enteredAt: ev.enteredAt, exitedAt: ev.exitedAt });
+        } else {
+          if (ev.enteredAt < e.enteredAt) e.enteredAt = ev.enteredAt;
+          e.exitedAt =
+            e.exitedAt && ev.exitedAt
+              ? ev.exitedAt > e.exitedAt
+                ? ev.exitedAt
+                : e.exitedAt
+              : null;
+        }
+      }
+      poTrackMap.set(key, g);
+    }
+  }
+  const timelinePosByPo = [...poTrackMap.values()].map((g) => ({
+    id: g.poId,
+    shopifyPoNumber: g.poNumber,
+    supplier: { name: g.supplier },
+    lineItems: [
+      {
+        id: g.poNumber,
+        sku: g.poNumber,
+        title: g.supplier,
+        currentStage: g.currentStage,
+        supplierName: g.supplier,
+        poNumber: g.poNumber,
+        stageEvents: [...g.events.entries()]
+          .map(([stage, e]) => ({
+            id: `${g.poNumber}-${stage}`,
+            stage: stage as ProductionStage,
+            enteredAt: e.enteredAt,
+            exitedAt: e.exitedAt,
+          }))
+          .sort((a, b) => a.enteredAt.getTime() - b.enteredAt.getTime()),
+      },
+    ],
+  }));
+
   const listFilters = (
     <ListFilters production={{ suppliers, supplierId, status, stage }} />
   );
@@ -186,7 +306,10 @@ export default async function ProductionSummaryPage({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title="Production Summary" />
-        <ProductionViewToggle view={view} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ProductionGroupToggle group={group} />
+          <ProductionViewToggle view={view} />
+        </div>
       </div>
 
       {view === "inventory" && (
@@ -195,21 +318,69 @@ export default async function ProductionSummaryPage({
           <div className="mt-6">
             <p className="text-sm text-zinc-500">
               Units in production that haven&apos;t been received into Shopify
-              yet, by SKU. ETA is projected from cycle-time estimates.
+              yet, {group === "po" ? "by PO" : "by SKU"}. ETA is projected from
+              cycle-time estimates.
             </p>
             <DataTable className="mt-4">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="whitespace-nowrap">SKU</TableHead>
-                    <TableHead>Product</TableHead>
+                    {group === "po" ? (
+                      <>
+                        <TableHead className="whitespace-nowrap">PO #</TableHead>
+                        <TableHead>Supplier</TableHead>
+                      </>
+                    ) : (
+                      <>
+                        <TableHead className="whitespace-nowrap">SKU</TableHead>
+                        <TableHead>Product</TableHead>
+                      </>
+                    )}
                     <TableHead className="text-right">Incoming</TableHead>
                     <TableHead>By stage</TableHead>
                     <TableHead>Nearest ETA</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {incomingRows.length === 0 ? (
+                  {group === "po" ? (
+                    incomingPoRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-8 text-center text-zinc-400">
+                          Nothing in production matches.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      incomingPoRows.map((r) => (
+                        <TableRow key={r.poNumber}>
+                          <TableCell className="whitespace-nowrap">
+                            <a
+                              href={`/modules/production/po/${r.poId}`}
+                              className="font-mono text-sm text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+                            >
+                              {r.poNumber}
+                            </a>
+                          </TableCell>
+                          <TableCell className="text-zinc-700">{r.supplier}</TableCell>
+                          <TableCell className="text-right font-medium text-zinc-900">
+                            {r.incomingQty}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1.5">
+                              {Object.entries(r.byStage).map(([stg, qty]) => (
+                                <span
+                                  key={stg}
+                                  className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600"
+                                >
+                                  {stageLabels[stg as keyof typeof stageLabels]}: {qty}
+                                </span>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-zinc-500">{fmtDate(r.nearestEta)}</TableCell>
+                        </TableRow>
+                      ))
+                    )
+                  ) : incomingRows.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="py-8 text-center text-zinc-400">
                         Nothing in production matches.
@@ -244,7 +415,7 @@ export default async function ProductionSummaryPage({
                 </TableBody>
               </Table>
             </DataTable>
-            {incomingRows.length > 0 && (
+            {totalIncoming > 0 && (
               <p className="mt-3 text-right text-sm text-zinc-500">
                 Total incoming units:{" "}
                 <span className="font-medium text-zinc-900">{totalIncoming}</span>
@@ -258,7 +429,13 @@ export default async function ProductionSummaryPage({
         <>
           {listFilters}
           <div className="mt-6">
-            {cards.length === 0 ? (
+            {group === "po" ? (
+              poCards.length === 0 ? (
+                <p className="text-sm text-zinc-400">No POs match.</p>
+              ) : (
+                <KanbanBoard cards={poCards} stages={order} readOnly />
+              )
+            ) : cards.length === 0 ? (
               <p className="text-sm text-zinc-400">No line items match.</p>
             ) : (
               <KanbanBoard cards={cards} stages={order} />
@@ -270,7 +447,12 @@ export default async function ProductionSummaryPage({
       {view === "timeline" && (
         <>
           {listFilters}
-          <ProductionTimeline pos={timelinePos} estimates={estimates} stageLabels={stageLabels} order={order} />
+          <ProductionTimeline
+            pos={group === "po" ? timelinePosByPo : timelinePos}
+            estimates={estimates}
+            stageLabels={stageLabels}
+            order={order}
+          />
         </>
       )}
     </div>

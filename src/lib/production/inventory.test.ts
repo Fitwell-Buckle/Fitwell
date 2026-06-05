@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { aggregateIncoming, type IncomingLine } from "@/lib/production/inventory";
+import {
+  aggregateIncoming,
+  aggregateIncomingByPo,
+  type IncomingLine,
+  type IncomingPoLine,
+} from "@/lib/production/inventory";
 import { DEFAULT_STAGE_DAYS } from "@/lib/production/cycle-time";
 import { STAGES } from "@/lib/production/stages";
 
@@ -72,5 +77,43 @@ describe("aggregateIncoming", () => {
       today,
     );
     expect(rows[0].nearestEta).toBe(today);
+  });
+});
+
+describe("aggregateIncomingByPo", () => {
+  function poLine(overrides: Partial<IncomingPoLine> = {}): IncomingPoLine {
+    return { ...line(), poNumber: "PO-00100-A", poId: "m1", supplier: "EPower", ...overrides };
+  }
+
+  it("groups incoming qty + by-stage by owning PO, not SKU", () => {
+    const rows = aggregateIncomingByPo(
+      ORDER,
+      [
+        poLine({ poNumber: "PO-00100-A", sku: "X-16", quantity: 10, currentStage: "plating" }),
+        poLine({ poNumber: "PO-00100-A", sku: "X-18", quantity: 5, currentStage: "qc" }),
+        poLine({ poNumber: "PO-00101", poId: "p2", supplier: "Awake", quantity: 7, currentStage: "stamping" }),
+      ],
+      DEFAULT_STAGE_DAYS,
+      today,
+    );
+    expect(rows).toHaveLength(2);
+    const a = rows.find((r) => r.poNumber === "PO-00100-A")!;
+    expect(a.incomingQty).toBe(15);
+    expect(a.byStage).toEqual({ plating: 10, qc: 5 });
+    expect(a.supplier).toBe("EPower");
+    expect(rows.find((r) => r.poNumber === "PO-00101")!.incomingQty).toBe(7);
+  });
+
+  it("takes the nearest ETA across a PO's lines", () => {
+    const rows = aggregateIncomingByPo(
+      ORDER,
+      [
+        poLine({ currentStage: "packaging" }), // closest
+        poLine({ currentStage: "stamping" }), // further out
+      ],
+      DEFAULT_STAGE_DAYS,
+      today,
+    );
+    expect(rows[0].nearestEta).toBe("2026-05-25");
   });
 });

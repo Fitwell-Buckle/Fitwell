@@ -25,6 +25,7 @@ export function KanbanBoard({
   cards,
   stages = STAGES,
   poHrefBase = "/modules/production/po",
+  readOnly = false,
 }: {
   cards: KanbanCard[];
   /** Columns to render (defaults to every stage). The supplier portal passes a
@@ -32,6 +33,9 @@ export function KanbanBoard({
   stages?: readonly ProductionStage[];
   /** Base path for the per-card PO link (suppliers use /supplier/po). */
   poHrefBase?: string;
+  /** When true, cards are a static overview (no drag-to-advance). The "By PO"
+   *  view uses this — a card is a whole PO, not a single movable line. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const stageLabels = useStageLabels();
@@ -79,18 +83,30 @@ export function KanbanBoard({
           return (
             <div
               key={stage}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setOverStage(stage);
-              }}
-              onDragLeave={() => setOverStage((s) => (s === stage ? null : s))}
-              onDrop={(e) => {
-                e.preventDefault();
-                const id = e.dataTransfer.getData("text/plain");
-                setOverStage(null);
-                setDragId(null);
-                if (id) move(id, stage);
-              }}
+              onDragOver={
+                readOnly
+                  ? undefined
+                  : (e) => {
+                      e.preventDefault();
+                      setOverStage(stage);
+                    }
+              }
+              onDragLeave={
+                readOnly
+                  ? undefined
+                  : () => setOverStage((s) => (s === stage ? null : s))
+              }
+              onDrop={
+                readOnly
+                  ? undefined
+                  : (e) => {
+                      e.preventDefault();
+                      const id = e.dataTransfer.getData("text/plain");
+                      setOverStage(null);
+                      setDragId(null);
+                      if (id) move(id, stage);
+                    }
+              }
               className={cn(
                 "flex w-64 shrink-0 flex-col rounded-xl border border-zinc-200/80 bg-zinc-50/60",
                 overStage === stage && "border-zinc-400 bg-zinc-100",
@@ -107,18 +123,27 @@ export function KanbanBoard({
                 {items.map((c) => (
                   <div
                     key={c.id}
-                    draggable={!busy}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/plain", c.id);
-                      e.dataTransfer.effectAllowed = "move";
-                      setDragId(c.id);
-                    }}
-                    onDragEnd={() => {
-                      setDragId(null);
-                      setOverStage(null);
-                    }}
+                    draggable={!busy && !readOnly}
+                    onDragStart={
+                      readOnly
+                        ? undefined
+                        : (e) => {
+                            e.dataTransfer.setData("text/plain", c.id);
+                            e.dataTransfer.effectAllowed = "move";
+                            setDragId(c.id);
+                          }
+                    }
+                    onDragEnd={
+                      readOnly
+                        ? undefined
+                        : () => {
+                            setDragId(null);
+                            setOverStage(null);
+                          }
+                    }
                     className={cn(
-                      "cursor-grab rounded-lg border border-zinc-200 bg-white p-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] active:cursor-grabbing",
+                      "rounded-lg border border-zinc-200 bg-white p-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)]",
+                      readOnly ? "" : "cursor-grab active:cursor-grabbing",
                       dragId === c.id && "opacity-50",
                     )}
                   >
