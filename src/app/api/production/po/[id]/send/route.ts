@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { getPoDetail, getSupplierLineCosts } from "@/lib/production/service";
+import { getPoDetail, getSupplierLineCosts, setPoSent } from "@/lib/production/service";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { fmtMoney, fmtDate, STATUS_LABELS } from "@/lib/production/display";
 import { type ProductionStage } from "@/lib/production/stages";
@@ -255,6 +255,7 @@ export async function POST(
       subject: `Purchase Order ${numberDisplay} — Fitwell Buckle Co.`,
       html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit, stageLabels, order, input.message ?? null),
     });
+    await setPoSent(id, true, "email");
     return NextResponse.json({ data: { sentTo: [to], cc } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Send failed";

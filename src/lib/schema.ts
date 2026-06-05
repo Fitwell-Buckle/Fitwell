@@ -618,6 +618,11 @@ export const productionPo = pgTable(
     status: text("status").notNull().default("active"), // active | on_hold | complete | cancelled
     // Set manually when the user confirms they marked the PO received in Shopify.
     shopifyReceivedAt: timestamp("shopify_received_at", { mode: "date" }),
+    // When the PO was sent to the supplier. Emailing it auto-stamps this;
+    // "Mark as sent" sets it manually (WhatsApp / phone / in person). null = not
+    // sent. Per-row, so each sub-PO tracks its own send.
+    sentAt: timestamp("sent_at", { mode: "date" }),
+    sentVia: text("sent_via"), // 'email' | 'manual'
     // Multi-supplier split: a PO routed across several suppliers becomes a
     // "master" (parent_po_id null, has children); each supplier gets a sub-PO
     // (parent_po_id = master, po_suffix "A"/"B"…, supplier_id = that supplier,

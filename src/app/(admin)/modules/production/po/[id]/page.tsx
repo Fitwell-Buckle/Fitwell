@@ -36,6 +36,7 @@ import { PoReceive } from "./po-receive";
 import { PoStageTimeline } from "./po-stage-timeline";
 import { PoCreateInvoice } from "./po-create-invoice";
 import { SubPoCovers, type SubPoCoverRow } from "./sub-po-covers";
+import { PoSentControl } from "./po-sent-control";
 import { PoTimeline } from "@/components/production/po-timeline";
 import { buildPoTimeline } from "@/lib/production/timeline";
 import { DetailTabs } from "@/components/ui/detail-tabs";
@@ -316,6 +317,14 @@ export default async function PoDetailPage({
             <div className="text-xs text-zinc-400">Warehouse</div>
             <div className="mt-1 text-zinc-700">{po.locationName ?? "—"}</div>
           </div>
+          <div>
+            <div className="text-xs text-zinc-400">Sent to supplier</div>
+            <PoSentControl
+              poId={po.id}
+              sentAtIso={po.sentAt ? po.sentAt.toISOString() : null}
+              sentVia={po.sentVia}
+            />
+          </div>
         </div>
         {po.notes && <p className="mt-4 text-sm text-zinc-600">{po.notes}</p>}
       </Card>
@@ -338,6 +347,11 @@ export default async function PoDetailPage({
                     {formatPoNumber(s.shopifyPoNumber, { suffix: s.poSuffix })}
                   </Link>
                   <span className="ml-2 text-sm text-zinc-600">{s.supplier?.name ?? "—"}</span>
+                  {s.sentAt && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                      Sent ✓
+                    </span>
+                  )}
                   <div className="mt-0.5 truncate text-xs text-zinc-400">
                     {(stagesBySupplier.get(s.supplierId) ?? [])
                       .filter((st) => st !== order[0])

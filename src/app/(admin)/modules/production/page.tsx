@@ -94,12 +94,21 @@ export default async function ProductionPage({
   // Which listed POs are masters (have sub-POs)? Their supplier shows as
   // "Multiple suppliers" and their number as "00100-Master".
   const childRows = await db
-    .select({ parentPoId: productionPo.parentPoId })
+    .select({ parentPoId: productionPo.parentPoId, sentAt: productionPo.sentAt })
     .from(productionPo)
     .where(isNotNull(productionPo.parentPoId));
   const masterIds = new Set(
     childRows.map((r) => r.parentPoId).filter((x): x is string => !!x),
   );
+  // Per-master sub-PO send progress (each sub-PO is sent separately).
+  const masterSent = new Map<string, { sent: number; total: number }>();
+  for (const r of childRows) {
+    if (!r.parentPoId) continue;
+    const m = masterSent.get(r.parentPoId) ?? { sent: 0, total: 0 };
+    m.total += 1;
+    if (r.sentAt) m.sent += 1;
+    masterSent.set(r.parentPoId, m);
+  }
 
   const rows = pos
     .map((po) => ({
@@ -141,12 +150,13 @@ export default async function ProductionPage({
               <TableHead>SKUs</TableHead>
               <TableHead>Issued</TableHead>
               <TableHead>Expected delivery</TableHead>
+              <TableHead>Sent</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-zinc-400">
+                <TableCell colSpan={9} className="py-8 text-center text-zinc-400">
                   No POs match. Create one to start tracking.
                 </TableCell>
               </TableRow>
@@ -193,6 +203,31 @@ export default async function ProductionPage({
                   </TableCell>
                   <TableCell className="text-zinc-500">
                     {fmtDate(po.expectedDeliveryDate)}
+                  </TableCell>
+                  <TableCell>
+                    {po.isMaster ? (
+                      (() => {
+                        const m = masterSent.get(po.id) ?? { sent: 0, total: 0 };
+                        return (
+                          <span
+                            className={cn(
+                              "text-xs",
+                              m.total > 0 && m.sent === m.total
+                                ? "font-medium text-emerald-700"
+                                : "text-zinc-400",
+                            )}
+                          >
+                            {m.sent}/{m.total} sent
+                          </span>
+                        );
+                      })()
+                    ) : po.sentAt ? (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                        Sent ✓
+                      </span>
+                    ) : (
+                      <span className="text-zinc-300">—</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

@@ -297,6 +297,8 @@ export async function getSubPos(masterId: string) {
       status: true,
       shopifyReceivedAt: true,
       expectedDeliveryDate: true,
+      sentAt: true,
+      sentVia: true,
     },
     with: { supplier: { columns: { name: true } } },
     orderBy: asc(productionPo.poSuffix),
@@ -316,6 +318,26 @@ export async function setSubPoEta(
     .update(productionPo)
     .set({ expectedDeliveryDate, updatedAt: new Date() })
     .where(eq(productionPo.id, subPoId));
+}
+
+/**
+ * Mark a PO (or sub-PO) sent to its supplier, or clear it. Emailing a PO stamps
+ * `sent` via "email"; the "Mark as sent" button uses "manual" (WhatsApp / phone
+ * / in person). Per-row, so each sub-PO tracks its own send.
+ */
+export async function setPoSent(
+  poId: string,
+  sent: boolean,
+  via: "email" | "manual" = "manual",
+): Promise<void> {
+  await db
+    .update(productionPo)
+    .set(
+      sent
+        ? { sentAt: new Date(), sentVia: via, updatedAt: new Date() }
+        : { sentAt: null, sentVia: null, updatedAt: new Date() },
+    )
+    .where(eq(productionPo.id, poId));
 }
 
 /**
