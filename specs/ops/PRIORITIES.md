@@ -2,36 +2,39 @@
 
 Last updated: 2026-06-04
 
-## ⚠️ Action needed — Shopify scope deploy (Oliver / Greg)
+## ⚠️ Action needed — Shopify scope deploy + history import
 
-`shopify.app.toml` now requests two scopes that aren't live yet. Both ship in a
-single deploy + re-auth (anyone with Partner-org access can do it):
+**Owner**: Greg (Shopify Partner-org deploy + production import)
 
-1. `shopify app deploy --message "add read_all_orders + write_customers scopes"`
-2. `shopify app release --version <name> --allow-updates`
-3. Re-authorize the app in Shopify Admin (scope changes force a re-grant — UI only).
+`shopify.app.toml` requests two scopes that aren't live yet. Both ship in a
+single deploy + re-auth. See `specs/current/shopify-app-config.md`.
 
-See `specs/current/shopify-app-config.md`.
+- [ ] `shopify app deploy --message "add read_all_orders + write_customers scopes"`
+- [ ] `shopify app release --version <name> --allow-updates`
+- [ ] Re-authorize the app in Shopify Admin (scope change forces a re-grant — UI only)
+- [ ] **`read_all_orders` is a *protected* scope** — if the release prompts for it,
+      request access / justification in the Partner dashboard
+- [ ] Run the one-time history import (ready + idempotent), then sanity-check the
+      dashboard goes back to Feb 2024:
+      ```bash
+      npx vercel --global-config ~/.vercel-fitwell env pull .env.production.local --environment=production --yes
+      grep -v '^NEXT_PUBLIC_POSTHOG_KEY=' .env.production.local > .env.import && mv .env.import .env.production.local  # suppress historical attribution events
+      npx dotenv -e .env.production.local -- node --import tsx/esm scripts/import-history.ts 2024-02-01
+      rm -f .env.production.local
+      ```
 
-**`write_customers`** — needed by the "Add to Shopify addresses" button on leads
-(pushes a lead's business-card address as an *additional* address, never
-overwriting). Until live, the button returns a graceful 502.
+Why each scope:
+- **`write_customers`** — the "Add to Shopify addresses" button on leads (pushes a
+  lead's business-card address as an *additional* address, never overwriting).
+  Until live the button returns a graceful 502.
+- **`read_all_orders`** — the Orders API is capped to the last ~60 days without it.
+  Shopify has **1,694 orders back to Feb 2024**, but only ~596 (last 60 days) are
+  retrievable today — ~1,098 historical orders are unreachable. With the scope,
+  `scripts/import-history.ts` backfills them all (full fidelity: source/segment,
+  refunds, line items), extending Total sales / Segments / LTV back to launch.
 
-**`read_all_orders`** — needed to import historical orders. The Orders API is
-capped to the last ~60 days without it; Shopify has **1,694 orders back to Feb
-2024** but only ~596 (last 60 days) are currently retrievable, leaving ~1,098
-historical orders unreachable. NOTE: `read_all_orders` is a *protected* scope —
-Shopify may require an approval/justification step before it grants. **Once it's
-live**, run the one-time import (it's ready, idempotent):
-
-```bash
-npx vercel --global-config ~/.vercel-fitwell env pull .env.production.local --environment=production --yes
-grep -v '^NEXT_PUBLIC_POSTHOG_KEY=' .env.production.local > .env.import && mv .env.import .env.production.local  # suppress historical attribution events
-npx dotenv -e .env.production.local -- node --import tsx/esm scripts/import-history.ts 2024-02-01
-rm -f .env.production.local
-```
-
-Then the dashboard / segments / LTV extend back to Feb 2024.
+(Oliver or Tom can run the deploy too — all three have Partner-org access — but
+it's assigned to Greg as engineering owner.)
 
 ## Current Strategic Focus (2026-05-25)
 
