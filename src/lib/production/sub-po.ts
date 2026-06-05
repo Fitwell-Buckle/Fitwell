@@ -21,6 +21,22 @@ export function formatPoNumber(
   return base;
 }
 
+/**
+ * A master's rolled-up ETA across its sub-POs — the latest (max) supplier ETA,
+ * since the whole PO is only done once the last supplier delivers. ISO date
+ * strings ("YYYY-MM-DD") compare chronologically. Null when none is set. Mirrors
+ * how the master rolls up sub-PO prices, but takes the max instead of the sum.
+ */
+export function rollupEta(
+  etas: readonly (string | null | undefined)[],
+): string | null {
+  let max: string | null = null;
+  for (const e of etas) {
+    if (e && (max === null || e > max)) max = e;
+  }
+  return max;
+}
+
 export interface SubPoPlan {
   supplierId: string;
   /** "A", "B", "C"… in stage-pipeline order. */

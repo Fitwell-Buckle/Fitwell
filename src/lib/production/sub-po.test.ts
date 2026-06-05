@@ -5,6 +5,7 @@ import {
   isMultiSupplier,
   subPoStageState,
   subPoTransitions,
+  rollupEta,
 } from "./sub-po";
 import { STAGES, type ProductionStage } from "./stages";
 
@@ -186,5 +187,20 @@ describe("sub-PO with non-contiguous owned stages", () => {
     expect(subPoStageState(ORDER, owned, ["edm"]).status).toBe("waiting");
     // ready to hand off the stamping run
     expect(subPoStageState(ORDER, owned, ["stamping"]).status).toBe("complete");
+  });
+});
+
+describe("rollupEta", () => {
+  it("returns null when there are no ETAs", () => {
+    expect(rollupEta([])).toBeNull();
+    expect(rollupEta([null, undefined, ""])).toBeNull();
+  });
+
+  it("takes the latest (max) ETA across sub-POs", () => {
+    expect(rollupEta(["2026-05-10", "2026-06-01", "2026-05-20"])).toBe("2026-06-01");
+  });
+
+  it("ignores nulls/blanks and returns the latest of the rest", () => {
+    expect(rollupEta([null, "2026-05-10", undefined, "2026-04-01"])).toBe("2026-05-10");
   });
 });

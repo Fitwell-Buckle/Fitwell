@@ -575,7 +575,9 @@ export function PoForm({
           body: JSON.stringify({
             supplierId: primaryId,
             issuedDate,
-            expectedDeliveryDate: expectedDeliveryDate || null,
+            // On a multi-supplier PO the ETA is set per sub-PO (the master's is
+            // derived = latest sub-PO), so don't push a master-level ETA.
+            expectedDeliveryDate: multiSupplier ? null : expectedDeliveryDate || null,
             notes: notes.trim() || null,
             companyId: companyId || null,
             shopifyLocationId: locationId || null,
@@ -705,9 +707,20 @@ export function PoForm({
             <label className={fieldLabel}>ETA / expected delivery (optional)</label>
             <Input
               type="date"
-              value={expectedDeliveryDate}
+              title={
+                multiSupplier
+                  ? "Set per sub-PO on a multi-supplier PO"
+                  : undefined
+              }
+              value={multiSupplier ? "" : expectedDeliveryDate}
+              disabled={multiSupplier}
               onChange={(e) => setExpectedDeliveryDate(e.target.value)}
             />
+            {multiSupplier && (
+              <p className="mt-1 text-xs text-zinc-400">
+                Each supplier sets their own ETA on their sub-PO.
+              </p>
+            )}
           </div>
         </div>
 

@@ -249,6 +249,17 @@ export async function syncMasterSubPos(
   });
   if (!master) return;
 
+  // Preserve each supplier's own ETA across regeneration — like line costs,
+  // which are keyed by supplier so they survive the delete+recreate. Snapshot
+  // supplier→ETA before deleting; a brand-new supplier seeds from the master.
+  const priorSubs = await db.query.productionPo.findMany({
+    where: eq(productionPo.parentPoId, masterId),
+    columns: { supplierId: true, expectedDeliveryDate: true },
+  });
+  const priorEta = new Map(
+    priorSubs.map((s) => [s.supplierId, s.expectedDeliveryDate]),
+  );
+
   await db.delete(productionPo).where(eq(productionPo.parentPoId, masterId));
   if (!multiSupplier) return;
 
@@ -264,7 +275,8 @@ export async function syncMasterSubPos(
       supplierId: p.supplierId,
       shopifyPoNumber: master.shopifyPoNumber,
       issuedDate: master.issuedDate,
-      expectedDeliveryDate: master.expectedDeliveryDate ?? null,
+      expectedDeliveryDate:
+        priorEta.get(p.supplierId) ?? master.expectedDeliveryDate ?? null,
       companyId: master.companyId ?? null,
       shopifyLocationId: master.shopifyLocationId ?? null,
       locationName: master.locationName ?? null,
@@ -284,10 +296,26 @@ export async function getSubPos(masterId: string) {
       shopifyPoNumber: true,
       status: true,
       shopifyReceivedAt: true,
+      expectedDeliveryDate: true,
     },
     with: { supplier: { columns: { name: true } } },
     orderBy: asc(productionPo.poSuffix),
   });
+}
+
+/**
+ * Set a sub-PO's own ETA (expected_delivery_date). Each supplier's sub-PO has an
+ * independent ETA; the master's is locked/derived when split (see rollupEta).
+ * The route verifies this PO is a sub-PO first, mirroring the line-costs route.
+ */
+export async function setSubPoEta(
+  subPoId: string,
+  expectedDeliveryDate: string | null,
+): Promise<void> {
+  await db
+    .update(productionPo)
+    .set({ expectedDeliveryDate, updatedAt: new Date() })
+    .where(eq(productionPo.id, subPoId));
 }
 
 /**

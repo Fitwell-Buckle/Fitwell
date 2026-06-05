@@ -40,6 +40,7 @@ export function SubPoCovers({
   status,
   currentStage,
   stageOptions,
+  eta: initialEta,
 }: {
   poId: string;
   isRawBlank: boolean;
@@ -48,6 +49,7 @@ export function SubPoCovers({
   status: SubPoStageStatus;
   currentStage: string | null;
   stageOptions: { value: string; label: string }[];
+  eta: string | null;
 }) {
   const router = useRouter();
   const [prices, setPrices] = useState<Record<string, string>>(() => {
@@ -59,6 +61,10 @@ export function SubPoCovers({
   const [savedPrices, setSavedPrices] = useState(false);
   const [savingStage, setSavingStage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // This sub-PO's own ETA (independent of the master and the other sub-POs).
+  const [eta, setEta] = useState(initialEta ?? "");
+  const [savingEta, setSavingEta] = useState(false);
+  const [savedEta, setSavedEta] = useState(false);
 
   const supplierTotalCents = rows.reduce((sum, r) => {
     const v = Number(prices[r.key]);
@@ -101,6 +107,30 @@ export function SubPoCovers({
       setError("Network error — please try again.");
     } finally {
       setSavingPrices(false);
+    }
+  }
+
+  async function saveEta() {
+    setError(null);
+    setSavedEta(false);
+    setSavingEta(true);
+    try {
+      const res = await fetch(`/api/production/po/${poId}/eta`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedDeliveryDate: eta ? eta : null }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "Couldn't save the ETA.");
+      } else {
+        setSavedEta(true);
+        router.refresh();
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setSavingEta(false);
     }
   }
 
@@ -277,6 +307,28 @@ export function SubPoCovers({
             {fmtMoney(supplierTotalCents)}
           </span>
         </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-zinc-100 pt-3">
+        <label className="flex items-center gap-2 text-sm text-zinc-600">
+          <span className="font-medium">ETA / expected delivery</span>
+          <Input
+            type="date"
+            className="w-44"
+            value={eta}
+            onChange={(e) => {
+              setEta(e.target.value);
+              setSavedEta(false);
+            }}
+          />
+        </label>
+        <Button size="sm" variant="outline" disabled={savingEta} onClick={saveEta}>
+          {savingEta ? "Saving…" : "Save ETA"}
+        </Button>
+        {savedEta && <span className="text-xs text-emerald-600">Saved</span>}
+        <span className="ml-auto text-xs text-zinc-400">
+          This sub-PO&apos;s own delivery date.
+        </span>
       </div>
     </Card>
   );

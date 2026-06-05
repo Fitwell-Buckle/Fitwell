@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { nextStage, derivePoStage, isTerminal, type ProductionStage } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
-import { formatPoNumber, planSubPos, subPoStageState } from "@/lib/production/sub-po";
+import { formatPoNumber, planSubPos, rollupEta, subPoStageState } from "@/lib/production/sub-po";
 import { stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { usesRawBlankSummary, summarizeRawBlanks } from "@/lib/production/raw-blank";
@@ -65,6 +65,12 @@ export default async function PoDetailPage({
   const subPos = await getSubPos(po.id);
   const isMaster = subPos.length > 0;
   const isSubPo = !!po.parentPoId;
+
+  // Master's ETA is locked/derived = the latest across its sub-POs (each
+  // supplier sets their own). Standalone / sub-PO shows its own row value.
+  const displayEta = isMaster
+    ? rollupEta(subPos.map((s) => s.expectedDeliveryDate))
+    : po.expectedDeliveryDate;
   // One invoice per PO — if it's already been invoiced, link to it instead.
   const existingInvoice = isSubPo ? null : await invoiceForPo(po.id);
   const plan = isMaster ? planSubPos(order, workStages, po.stageAssignments, po.supplierId) : [];
@@ -286,8 +292,10 @@ export default async function PoDetailPage({
             </div>
           </div>
           <div>
-            <div className="text-xs text-zinc-400">Expected delivery</div>
-            <div className="mt-1 text-zinc-700">{fmtDate(po.expectedDeliveryDate)}</div>
+            <div className="text-xs text-zinc-400">
+              Expected delivery{isMaster ? " (latest sub-PO)" : ""}
+            </div>
+            <div className="mt-1 text-zinc-700">{fmtDate(displayEta)}</div>
           </div>
           <div>
             <div className="text-xs text-zinc-400">Issued</div>
@@ -336,6 +344,9 @@ export default async function PoDetailPage({
                       .map((st) => stageLabels[st])
                       .join(", ") || "—"}
                   </div>
+                  <div className="mt-0.5 text-xs text-zinc-400">
+                    ETA: {s.expectedDeliveryDate ? fmtDate(s.expectedDeliveryDate) : "—"}
+                  </div>
                 </div>
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/modules/production/po/${s.id}/send`}>Print or Send</Link>
@@ -355,6 +366,7 @@ export default async function PoDetailPage({
           status={subState.status}
           currentStage={subCurrentStageValue}
           stageOptions={subStageOptions}
+          eta={po.expectedDeliveryDate}
         />
       )}
 

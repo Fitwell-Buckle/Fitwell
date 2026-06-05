@@ -137,3 +137,25 @@
     switch B2B detection to a Shopify customer tag.
   artifacts:
     - src/app/(admin)/dashboard/page.tsx
+
+- date: "2026-06-05"
+  title: "Production: per-sub-PO ETA (master ETA locked on multi-supplier, like price)"
+  priority: 7
+  notes: |
+    Each sub-PO now has its own ETA (expected_delivery_date), mirroring how each
+    supplier sets their own price. The master PO's ETA is locked on the edit form
+    when split across suppliers (disabled, "set per sub-PO" — same pattern as the
+    per-line unit-cost lock) and the master display shows the rolled-up ETA =
+    latest sub-PO (rollupEta). No schema change: ETA reuses the existing
+    expected_delivery_date column on each sub-PO row, and is preserved per-supplier
+    across sub-PO regeneration in syncMasterSubPos (like line costs survive). New
+    admin-only, sub-PO-only route PUT /api/production/po/[id]/eta + setSubPoEta();
+    ETA input added to SubPoCovers; each sub-PO's ETA shown in the master's
+    sub-PO list. 557 tests pass (rollupEta unit-tested).
+  artifacts:
+    - src/lib/production/sub-po.ts
+    - src/lib/production/service.ts
+    - src/app/api/production/po/[id]/eta/route.ts
+    - src/app/(admin)/modules/production/po/[id]/sub-po-covers.tsx
+    - src/app/(admin)/modules/production/po/[id]/page.tsx
+    - src/app/(admin)/modules/production/po/new/po-form.tsx
