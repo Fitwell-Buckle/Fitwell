@@ -385,6 +385,210 @@ Clean background, eye level.
 
 ---
 
+## Workstream 4.5 — Organic Social (Fitwell brand accounts; daily aspiration, compass not contract)
+
+Brand-owned organic posting on Fitwell's IG, TikTok, and YouTube.
+All three accounts exist with Tom-access as of 2026-06-03; posting
+cadence is thin. This workstream brings them into the 360 because
+(a) the W4 / W2 production pipelines are already producing
+footage and UGC at marginal-zero cost to re-cut, and (b) Tom's
+validated workflow is **organic-first, then promote winners as
+paid creative** — so the brand feed sits structurally upstream of
+paid Meta creative selection.
+
+**Operating philosophy:** the doc is a guiding light, not a quota.
+Daily posting is the *aspiration*. A sustainable cadence Tom can
+hold in a bad week is the *floor*. Ship the floor; everything
+above is bonus. A 3-day-on / 4-day-silent rhythm in a busy week
+beats a 7-day burst followed by 3 silent weeks. If the
+shipping rate slips below the floor for 2+ weeks, debrief and
+restart at floor — don't sprint to catch up.
+
+### What's worked organically (validated 2026-06-03) — and what to test alongside it
+
+Three Tom-shot organic pieces have performed well enough to be
+promoted to paid creative. They share a common format — captured
+below as **one validated baseline, not the format every new piece
+must match.** "Tom hasn't tried it yet" is not evidence that
+something won't work; the strategy backlog ([[personas]] copy
+overlays, [[hypotheses]] H1–H13, [[vocabulary-map]] persona
+clusters, the bracelet-envy hook, P5 comfort-pain content, anchor
+reframes, founder-bio framing, founder-told-stories) is full of
+untested angles that should get cheap organic experiments. Bias
+the calendar toward a mix: ~60% in the proven format, ~40%
+deliberate deviations to surface new patterns. Revisit the mix as
+deviations win or lose.
+
+1. **Coffee + wrist.** Tom seated with coffee; shakes wrist
+   (loose), adjusts (tight), cutaway to tabletop mechanism
+   demonstration, back to settled wrist. On-screen arc: *"Watch
+   straps don't actually fit"* → *"Micro adjust on or off the
+   wrist, no tools"* → *"Comfort without compromise"* → Fitwell
+   logo.
+2. **Wrist swells during the day.** Tom at a desk; pulls away from
+   typing to adjust, returns to keyboard, mechanism closeup, back
+   to keyboard. On-screen arc: *"Your wrist size changes throughout
+   the day"* → *"Straps don't"* → *"One hole is too tight, the next
+   is too loose. Not any more"* → Fitwell logo. Often pairs with a
+   tail card on the M4 mechanism closeup: *"Micro adjust, no tools,
+   half hole precision"* → Fitwell logo.
+3. **Founder talking head.** Tom direct to camera, ~40s. Names the
+   problem ("one hole too tight, the next too loose, wrist changes
+   through the day"), names the false choice ("live with the
+   compromise, or punch a new hole where it was never meant to
+   be"), introduces Fitwell as the resolution; mechanism cutaway
+   mid-monologue. Closes: *"Once you wear it, you stop thinking
+   about how it fits. That's kind of the point."*
+
+**Pattern that runs through the three winners (worth keeping as
+the baseline; deviate consciously):**
+
+- **Tom is in the post.** Either on-camera or, at minimum, the
+  wrist is his — not stock, not a generic hand.
+- **Live demonstration of the problem before the solution.** Open
+  on the discomfort or the moment of adjustment, not on the
+  product.
+- **Mechanism cutaway mid-piece.** 2–4s closeup of the micro-adjust
+  in operation. The proof beat.
+- **On-screen text arc, not VO-heavy.** Three or four overlay
+  beats: name the problem → name the constraint → name the
+  resolution → Fitwell logo. Spoken VO is optional and Tom-only
+  when present.
+- **Fitwell logo closes every piece.**
+- **Repeated vernacular:** *"micro adjust"*, *"no tools"*, *"half
+  hole precision"*, *"comfort without compromise"*, *"one hole too
+  tight, the next too loose"*.
+
+**What the winners haven't tested (so any of these could be the
+next win — deliberately put some of each in the rotation):**
+
+- **Price-naming in organic.** $40, bundles, anchor reframes
+  ($300–500 bracelet swap, $80–200 deployant). Conventional wisdom
+  says cold organic shouldn't sell — but our wisdom is one shop's
+  experience. Worth one test post per anchor.
+- **CTAs and discount codes.** "Link in bio", limited-window
+  offers, in-box card reminders.
+- **Founder bio framing.** *"I'm Tom — I make Fitwell"*-style
+  opens. Different from Tom-as-presence; explicitly states the
+  relationship.
+- **Customer-told stories instead of Tom-told.** A post that's
+  *about* a specific customer (with permission) — vintage-watch
+  restorer, OCD-about-fit collector, comfort-pain sufferer.
+- **Static photo carousels** (no Tom video) on IG feed — different
+  format entirely, different algorithm. Untested.
+- **Comparison/listicle formats** ("3 watches that need a Fitwell"
+  / "before and after"). Untested.
+- **Reaction / commentary posts** to watch-content current events
+  (new releases, comparisons by other creators).
+- **Long-caption posts** with no video at all — text-led brand
+  storytelling.
+
+The cleanest mental model: **organic posts are short stories.**
+That's the baseline. But some stories sell, some stories pitch,
+some stories explain. Try multiple shapes; the audience tells you
+which ones work for Fitwell.
+
+When a post earns strong organic engagement (whether it follows
+the baseline pattern or deviates from it), the variant becomes the
+next paid creative test (per the Sourcing Loop below).
+
+### Content pillars
+
+The menu, not a schedule. Pick what's ready to shoot/write that
+day. Each post declares primary persona + funnel stage (per
+[[event-taxonomy]]). Aim to touch each pillar at least once a
+fortnight; don't grade yourself on it.
+
+| # | Pillar | Persona × Stage | Source |
+|---|---|---|---|
+| 1 | Problem-naming | P4/P5 × `unaware`→`problem_aware` | [[vocabulary-map]] P5 cluster; *"between holes"* hook |
+| 2 | Mechanism demo | All × `problem_aware`→`solution_aware` | W4 Session 1 footage re-cut |
+| 3 | Anchor reframes | P2 × `solution_aware`→`brand_aware` | Decision #1 bracelet-swap anchor; deployant secondary |
+| 4 | Bracelet-envy | Cross-persona overlay × `solution_aware`+ | Verbatim *"Micro adjust on bracelets... should exist on straps"* — highest-leverage untested hook per [[personas]] |
+| 5 | Collector identity / outfitting | P1/P2 × `brand_aware`→`considering` | The 360 organising idea; watch-roll content; named-watch use cases |
+| 6 | Social proof / advocate cuts | All × `considering` | [[personas]] Outfitter-reviewers table; Judge.me reviews |
+| 7 | Founder voice | P1a/P1b × trust-building | Tom on-camera: workshop, shoot day, decisions, brand history |
+
+### Sourcing loop
+
+- **W4 footage → organic feed first, paid second.** Session 1/2/3
+  cuts vertical for IG / TikTok / YT Shorts *before* any paid
+  promotion. The organic-winners-become-paid pipeline depends on
+  this sequencing.
+- **W2 creator UGC** (`rights_tier ∈ paid_30d`+) **→ reposted with
+  permission** on the Fitwell feed. Adds brand social proof and
+  rewards the creator with brand-account exposure.
+- **Judge.me reviews → static / voiceover posts.** Pillar 6 source,
+  drawn from the existing `review` table (W9 Phase 5 — already
+  shipped). The 8 named outfitter-reviewers in [[personas]] are
+  the warm seed.
+- **Organic winners → W6 paid creative.** Top-decile save/share in
+  the trailing 30d becomes a paid creative test within 7–14 days.
+  This loop closing is the workstream's main justification — it
+  means the paid pool is pre-validated for free.
+
+### Cadence
+
+**Floor (don't drop below; this is the contract):** 3 posts/week
+IG, 3 posts/week TikTok, 1 YT Short/week.
+
+**Aspiration:** ~daily IG (Reels-leaning), cross-cut to TikTok;
+1 YT Short/week; 1 YT long-form/month starting month 2.
+
+Tom decides per week which mode he's in. No retro-grading. No
+sprint-to-catch-up after a slow week.
+
+### Measurement
+
+Per-platform engagement matters as a leading indicator;
+**the real grading rubric remains 90-day LTV by
+`referrer_source=social` cohort** (consistent with the rest of
+the 360). Several metrics depend on PostHog client-side
+instrumentation (W6 in PRIORITIES) — until that lands, run on
+platform-native analytics and accept the attribution gap.
+
+| Metric | Frequency | Target |
+|---|---|---|
+| Posts shipped vs 3/3/1 floor | Weekly | Meet the floor |
+| Save rate per post (IG/TikTok) | Per post | >2% benchmark; track top decile |
+| Organic-winner → paid promotion | Monthly | 50%+ of organic winners tested as paid |
+| `referrer_source=social` sessions | Weekly | Trend positive — gated on PostHog install |
+| 90-day LTV, social-sourced cohort | Monthly | Compare to $76 baseline ([[personas]] Distribution) — gated on PostHog install + cohort maturity |
+
+### Engineering scope
+
+Minimal. Most lift is on Tom.
+
+- Channel entries added to [[funnel]] (`organic_tiktok`,
+  `organic_youtube_shorts`, `organic_youtube_longform`;
+  `organic_meta` clarified as IG) — done in this change.
+- **Future:** split `referrer_source` enum into
+  `instagram` / `tiktok` / `youtube` for cleaner per-channel
+  cohorting. Today the property is a single `social` value (per
+  [[event-taxonomy]]). Defer until volume justifies.
+- **Future:** small admin view surfacing the 8 outfitter-reviewer
+  rows for Pillar 6 picking. No new schema — reads from the
+  existing `review` table joined to `customer`.
+
+### Sustainability rules (the actual contract)
+
+1. **Floor is the contract; ceiling is the aspiration.** Bad-week
+   floor protects the brand from burst-and-silent.
+2. **One pillar per post.** Don't try to serve P2 collectors and P5
+   comfort buyers in the same artifact (per [[funnel]] anti-pattern).
+3. **Every post tagged persona + stage.** Even internal-note level.
+   Untagged posts pollute analytics later.
+4. **Organic-first, paid-second on creative.** No paid creative
+   test until a similar hook has run organically and either won
+   (promote) or signalled cleanly (iterate).
+5. **Repurpose freely.** Same hook across IG Reel / TikTok / YT
+   Short, same or staggered day. Don't insist on platform-native
+   production beyond what the algorithm actually rewards.
+6. **If posting dies 2+ weeks, debrief — don't sprint to catch up.**
+   Restart at floor.
+
+---
+
 ## Workstream 5 — Email (Klaviyo; rewrites + new flows ship week 1–3)
 
 Klaviyo is live. The **welcome flow is the only confirmed running
