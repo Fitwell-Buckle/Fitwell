@@ -272,10 +272,40 @@ Copy direction: *"$300–500 to swap your bracelet for one with micro-adjust. $4
 
 Execution: product page headline + first paragraph, ad copy, welcome email 3, anchor comparison video, creator brief.
 
-### 4. In-Box Card
-Physical card in every order. "$29 for your next buckle. 30-day expiry." Unique discount code.
+### 4. In-Box Card — **evaluated, declined; no card ships this iteration (2026-06-06)**
 
-Execution: Canva design → Moo.com print → Klaviyo day 7 reminder + day 25 last call. Target redemption: 25%+.
+The original $29-for-next-buckle / 30-day-expiry card with D7 + D25 reminder
+emails is cut. Full reasoning, all 6 cuts of analysis, and the brand-posture
+argument: [`in-box-card-strategy.md`](./in-box-card-strategy.md).
+
+Headline reasoning from `scripts/in-box-card-analysis.ts`
+(2025-11-01 → 2026-06-06, 548 D2C first-order customers):
+
+- At our actual ~91% gross margin ($3.65 COGS on $40 retail —
+  [`../ops/domains/costs.md`](../ops/domains/costs.md)), the card mechanic
+  IS plausibly net-positive at industry-typical 5+ pp lift on 30-day repeat
+  (R0 = 7%). Math alone supports printing.
+- **But:** 85% of natural repeats happen within 30 days — meaning people
+  who come back, come back fast because the product earned it. Subsidizing
+  that cohort is mostly margin transfer to demand already converting.
+- **And:** stacking welcome-flow + card + D7/D25 reminders + D30 outfit
+  code = 3-4 discount touchpoints in 30 days. Too much discount cadence
+  for a premium-precision $40 accessory. Brands that discount-train
+  customers eventually have to keep discounting.
+- The W5 post-purchase posture this implies: **product-experience-led,
+  not discount-led.** D1 install help / D14 engagement / D21 review /
+  D30 outfit code — one discount touchpoint at the moment of greatest
+  leverage, not a 30-day drumbeat.
+
+**Execution change vs v3.1:** drop card design / Moo.com print / D7
+reminder / D25 last call from this iteration's W1 calendar entirely. The
+W5 post-purchase flow ships as 4 emails (D1 / D14 / D21 / D30) — see W5
+section below.
+
+Revisit if (i) a future audit of the post-purchase flow surfaces a real
+job for a physical artifact (install guide, tactile sizing helper, UGC
+ask), or (ii) we want to A/B card-vs-no-card once attribution wiring
+supports it.
 
 ### 5. Collector's Promise — **cut from this plan** (see Decisions #6)
 
@@ -669,13 +699,26 @@ workstream**, ahead of rewrites.
 - E2 (24 hours): size objection + size finder.
 - E3 (48 hours): guarantee offer.
 
-### New — Post-Purchase Series
-- D1: install guide + tips
-- D7: in-box card reminder
-- D14: "How many watches do you own?" — reply segments the customer (segmentation feeds back into creator outreach prioritization)
-- D21: Judge.me review request
-- D25: last call on in-box card discount
-- D30: collection upsell (segmented from D14 reply: 1–2 watches → single reorder; 3+ watches → outfit-the-collection code, 5+ units, ~25% off, 30-day expiry. Replaces the original 3-pack/5-pack mapping 2026-06-06 — see W1 §2 and [`bundle-strategy.md`](./bundle-strategy.md))
+### New — Post-Purchase Series (v1 = 4 emails, 2026-06-06)
+
+Ships as 4 emails. D7 + D25 were originally scoped as in-box card reminders;
+card declined in W1 §4, so those slots are dropped. Posture is product-
+experience-led with a single discount touchpoint at D30.
+
+- **D1:** install guide + tips (product experience)
+- **D14:** "How many watches do you own?" — intel + engagement, replies
+  inform creator-outreach prioritization but no longer gate any downstream
+  email content (changed 2026-06-06)
+- **D21:** Judge.me review request
+- **D30:** outfit-the-collection code (25% off 5+, 30-day expiry, goes to
+  everyone in the flow regardless of D14 reply — the one discount push at
+  the moment of greatest leverage. Replaces the original 3-pack/5-pack
+  mapping; see W1 §2 and [`bundle-strategy.md`](./bundle-strategy.md). Card
+  context: see W1 §4 and [`in-box-card-strategy.md`](./in-box-card-strategy.md))
+
+Future iterations may add D7 / D25 / other slots if a real job for them
+emerges (e.g. install-help engagement, M4 cross-sell tease, UGC ask). Don't
+pre-build empty slots.
 
 ### New — Win-Back (60–90 days post-purchase, no second order)
 - D60: "Still only have one?" — collection angle
