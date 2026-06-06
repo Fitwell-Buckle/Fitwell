@@ -82,7 +82,14 @@ describe("aggregateIncoming", () => {
 
 describe("aggregateIncomingByPo", () => {
   function poLine(overrides: Partial<IncomingPoLine> = {}): IncomingPoLine {
-    return { ...line(), poNumber: "PO-00100-A", poId: "m1", supplier: "EPower", ...overrides };
+    return {
+      ...line(),
+      poNumber: "PO-00100-A",
+      poId: "m1",
+      supplier: "EPower",
+      status: "open",
+      ...overrides,
+    };
   }
 
   it("groups incoming qty + by-stage by owning PO, not SKU", () => {

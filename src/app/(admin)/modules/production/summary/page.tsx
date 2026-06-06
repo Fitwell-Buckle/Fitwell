@@ -7,7 +7,6 @@ import { db } from "@/lib/db";
 import { productionPo, productionStageEvent } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { DataTable, Mono } from "@/components/ui/data-table";
 import {
   Table,
@@ -21,20 +20,15 @@ import { derivePoStage, type ProductionStage } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { supplierForStage } from "@/lib/production/stage-owners";
 import { formatPoNumber } from "@/lib/production/sub-po";
-import {
-  STATUS_LABELS,
-  statusBadgeClass,
-  stageBadgeClass,
-  fmtDate,
-} from "@/lib/production/display";
+import { fmtDate } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 import { parseDateRange } from "@/lib/date-range";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
+import { projectEta } from "@/lib/production/cycle-time";
 import {
   aggregateIncoming,
-  aggregateIncomingByPo,
   type IncomingLine,
-  type IncomingPoLine,
+  type IncomingPoRow,
 } from "@/lib/production/inventory";
 import { ListFilters } from "@/components/catalog/list-filters";
 import { ProductionViewToggle } from "../view-toggle";
@@ -143,9 +137,27 @@ export default async function ProductionPage({
     };
   };
 
-  // ── Master grouping (PO-list parity) ────────────────────────────────────
-  // One row per master PO. Sub-POs roll up into a `N/M sent` counter against
-  // their parent. Honours the date range on issued date.
+  const allLines = allPos.flatMap((po) => po.lineItems);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Master→child-count lookup used by both Sub-PO grouping (to skip masters
+  // that are represented by their children) and Master grouping (to render
+  // the "Multiple suppliers" label + N/M sent chip).
+  const childCountByMaster = new Map<string, number>();
+  for (const p of allPos) {
+    if (!p.parentPoId) continue;
+    childCountByMaster.set(p.parentPoId, (childCountByMaster.get(p.parentPoId) ?? 0) + 1);
+  }
+  const masterById = new Map(
+    allPos.filter((p) => !p.parentPoId).map((p) => [p.id, p]),
+  );
+
+  // ── Master grouping ────────────────────────────────────────────────────
+  // One row per master PO. Per-row data follows the canonical 6-col shape
+  // shared with Sub-PO/SKU: incoming qty (units not yet received), per-stage
+  // breakdown, nearest projected ETA, status badge — so the three groupings
+  // read as the same table with different identifiers. Sub-PO send progress
+  // (N/M sent) lives as a small chip under the PO# cell.
   const masterRows = (() => {
     const masters = allPos.filter((p) => !p.parentPoId);
     const childrenByMaster = new Map<string, typeof allPos>();
@@ -160,12 +172,23 @@ export default async function ProductionPage({
         const children = childrenByMaster.get(po.id) ?? [];
         const isMaster = children.length > 0;
         const sent = children.filter((c) => c.sentAt).length;
+        // In-flight aggregation across this master's own line items (sub-POs
+        // route stages but don't own line items in the schema).
+        const incomingLis = po.lineItems.filter((li) => !li.shopifyReceivedAt);
+        const byStage: Partial<Record<ProductionStage, number>> = {};
+        let nearestEta: string | null = null;
+        for (const li of incomingLis) {
+          byStage[li.currentStage] = (byStage[li.currentStage] ?? 0) + li.quantity;
+          const eta = projectEta(order, li.currentStage, today, estimates);
+          if (nearestEta === null || eta < nearestEta) nearestEta = eta;
+        }
         return {
           po,
           isMaster,
           derivedStage: derivePoStage(po.lineItems.map((li) => li.currentStage)),
-          qtyTotal: po.lineItems.reduce((s, li) => s + li.quantity, 0),
-          skuList: po.lineItems.map((li) => li.sku).join(", "),
+          incomingQty: incomingLis.reduce((s, li) => s + li.quantity, 0),
+          byStage,
+          nearestEta,
           sentCount: isMaster ? sent : po.sentAt ? 1 : 0,
           sentTotal: isMaster ? children.length : 1,
         };
@@ -177,7 +200,48 @@ export default async function ProductionPage({
       .filter((r) => dateFiltered(r.po.issuedDate));
   })();
 
-  const allLines = allPos.flatMap((po) => po.lineItems);
+  // Map Master rows into PoExpandableList's row shape so the Inventory Master
+  // view gets the same inline cascade-down animation Sub-PO uses. SKU drill
+  // data is computed off the same set so every master row has a key. The
+  // `sent` chip lives in `masterSubtitles` (rendered under the PO# cell).
+  const incomingMasterRows: IncomingPoRow[] = masterRows.map(
+    ({ po, isMaster, incomingQty, byStage, nearestEta }) => ({
+      poNumber: formatPoNumber(po.shopifyPoNumber, { isMaster }),
+      poId: po.id,
+      supplier: isMaster ? "Multiple suppliers" : po.supplier?.name ?? "—",
+      status: po.status,
+      incomingQty,
+      byStage,
+      nearestEta,
+    }),
+  );
+  const skuRowsByMasterRow: Record<string, ReturnType<typeof aggregateIncoming>> = {};
+  const masterSubtitles: Record<string, React.ReactNode> = {};
+  for (const { po, isMaster, sentCount, sentTotal } of masterRows) {
+    const number = formatPoNumber(po.shopifyPoNumber, { isMaster });
+    const lines = po.lineItems
+      .filter((li) => !li.shopifyReceivedAt && (skuSet.size === 0 || skuSet.has(li.sku)))
+      .map((li) => ({
+        sku: li.sku,
+        title: li.title,
+        quantity: li.quantity,
+        currentStage: li.currentStage,
+      }));
+    skuRowsByMasterRow[number] = aggregateIncoming(order, lines, estimates, today);
+    if (isMaster) {
+      const allSent = sentTotal > 0 && sentCount === sentTotal;
+      masterSubtitles[number] = (
+        <span className={allSent ? "font-medium text-emerald-700" : undefined}>
+          {sentCount}/{sentTotal} sent
+        </span>
+      );
+    } else if (po.sentAt) {
+      masterSubtitles[number] = (
+        <span className="font-medium text-emerald-700">Sent ✓</span>
+      );
+    }
+  }
+
 
   // ── Incoming inventory: produced-but-not-received lines for the chosen product ──
   const incomingLines: IncomingLine[] = allLines
@@ -188,7 +252,6 @@ export default async function ProductionPage({
       quantity: li.quantity,
       currentStage: li.currentStage,
     }));
-  const today = new Date().toISOString().slice(0, 10);
   const incomingRows = aggregateIncoming(order, incomingLines, estimates, today);
   const totalIncoming = incomingRows.reduce((sum, r) => sum + r.incomingQty, 0);
 
@@ -248,34 +311,108 @@ export default async function ProductionPage({
       })),
   }));
 
-  // ── "By PO" variants (group === "po"): aggregate to one row/card/track per
-  // owning sub-PO instead of per SKU/line. ───────────────────────────────────
-
-  const incomingPoLines: IncomingPoLine[] = allPos.flatMap((po) =>
-    po.lineItems
-      .filter((li) => !li.shopifyReceivedAt && (skuSet.size === 0 || skuSet.has(li.sku)))
-      .map((li) => {
-        const owner = lineOwner(po, li.currentStage);
-        return {
-          sku: li.sku,
-          title: li.title,
-          quantity: li.quantity,
-          currentStage: li.currentStage,
-          poNumber: owner.poNumber,
-          poId: po.id,
-          supplier: owner.supplier,
-        };
-      }),
-  );
-  const incomingPoRows = aggregateIncomingByPo(order, incomingPoLines, estimates, today);
-
+  // ── "By PO" rows (group === "po"): one row per active sub-PO + standalone
+  // master. Walk the PO records (NOT line items) so every sub-PO appears even
+  // when its assigned stages currently have no in-flight lines — otherwise a
+  // sub-PO whose work has all moved past its stages (or been received) would
+  // silently disappear from the list. Masters that have children are skipped
+  // here because they're represented by their children rows. ─────────────────
+  const incomingPoRows: IncomingPoRow[] = [];
   const skuRowsByPo: Record<string, ReturnType<typeof aggregateIncoming>> = {};
-  for (const poRow of incomingPoRows) {
-    const lines = incomingPoLines
-      .filter((l) => l.poNumber === poRow.poNumber)
-      .map((l) => ({ sku: l.sku, title: l.title, quantity: l.quantity, currentStage: l.currentStage }));
-    skuRowsByPo[poRow.poNumber] = aggregateIncoming(order, lines, estimates, today);
+  for (const po of allPos) {
+    const isSubPo = po.parentPoId !== null;
+    const hasChildren = (childCountByMaster.get(po.id) ?? 0) > 0;
+    if (!isSubPo && hasChildren) continue; // master with children → skip
+
+    const master = isSubPo ? masterById.get(po.parentPoId!) : po;
+    if (!master) continue;
+
+    const poNumber = isSubPo
+      ? formatPoNumber(master.shopifyPoNumber, { suffix: po.poSuffix ?? undefined })
+      : formatPoNumber(master.shopifyPoNumber);
+    const supplierLabel =
+      supplierName.get(po.supplierId) ?? po.supplier?.name ?? "—";
+
+    // Owned line items: master's unreceived lines that are currently at a
+    // stage assigned to this entry's supplier. Standalone masters own all of
+    // their unreceived lines.
+    const ownedLines = master.lineItems.filter((li) => {
+      if (li.shopifyReceivedAt) return false;
+      if (skuSet.size > 0 && !skuSet.has(li.sku)) return false;
+      if (!isSubPo) return true;
+      const stageOwnerSupplier =
+        supplierForStage(order, master.stageAssignments, master.supplierId, li.currentStage) ??
+        master.supplierId;
+      return stageOwnerSupplier === po.supplierId;
+    });
+
+    let incomingQty = 0;
+    const byStage: Partial<Record<ProductionStage, number>> = {};
+    let nearestEta: string | null = null;
+    for (const li of ownedLines) {
+      incomingQty += li.quantity;
+      byStage[li.currentStage] = (byStage[li.currentStage] ?? 0) + li.quantity;
+      const eta = projectEta(order, li.currentStage, today, estimates);
+      if (nearestEta === null || eta < nearestEta) nearestEta = eta;
+    }
+
+    incomingPoRows.push({
+      poNumber,
+      poId: master.id,
+      supplier: supplierLabel,
+      status: master.status,
+      incomingQty,
+      byStage,
+      nearestEta,
+    });
+
+    skuRowsByPo[poNumber] = aggregateIncoming(
+      order,
+      ownedLines.map((li) => ({
+        sku: li.sku,
+        title: li.title,
+        quantity: li.quantity,
+        currentStage: li.currentStage,
+      })),
+      estimates,
+      today,
+    );
   }
+  incomingPoRows.sort((a, b) => a.poNumber.localeCompare(b.poNumber));
+
+  // For the Master cascade: when a master row is expanded, surface its
+  // children sub-PO rows (already shaped as IncomingPoRow inside
+  // incomingPoRows) keyed by the master's display PO number. A standalone
+  // master has no entry here — its expansion falls through to the SKU
+  // breakdown directly.
+  const incomingPoRowByPoNumber = new Map(
+    incomingPoRows.map((r) => [r.poNumber, r] as const),
+  );
+  const subRowsByMasterPoNumber: Record<string, IncomingPoRow[]> = {};
+  for (const { po, isMaster } of masterRows) {
+    if (!isMaster) continue; // solo master, no children
+    const masterPoNumber = formatPoNumber(po.shopifyPoNumber, { isMaster });
+    const children = allPos.filter((p) => p.parentPoId === po.id);
+    const childRows: IncomingPoRow[] = [];
+    for (const child of children) {
+      const subPoNumber = formatPoNumber(po.shopifyPoNumber, {
+        suffix: child.poSuffix ?? undefined,
+      });
+      const row = incomingPoRowByPoNumber.get(subPoNumber);
+      if (row) childRows.push(row);
+    }
+    if (childRows.length > 0) {
+      subRowsByMasterPoNumber[masterPoNumber] = childRows;
+    }
+  }
+
+  // Merged SKU map covers both levels: keys for master poNumbers (used when
+  // a standalone master cascades straight to its SKU breakdown) and keys
+  // for sub-PO poNumbers (used when a sub-PO inside the nested list expands).
+  const skuRowsForMasterCascade: Record<
+    string,
+    ReturnType<typeof aggregateIncoming>
+  > = { ...skuRowsByMasterRow, ...skuRowsByPo };
 
   const poCardMap = new Map<string, KanbanCard>();
   for (const c of cards) {
@@ -361,14 +498,133 @@ export default async function ProductionPage({
     ],
   }));
 
+  // ── Master grouping for Board / Timeline ──────────────────────────────
+  // Line items live on the master PO, so we aggregate per `po.id`. A master's
+  // supplier label collapses to "Multiple suppliers" once sub-POs route stages
+  // to more than one supplier; otherwise it's just the master's own supplier.
+  const masterDisplay = (po: { id: string; shopifyPoNumber: string; supplier: { name: string } | null }) => {
+    const isMaster = (childCountByMaster.get(po.id) ?? 0) > 0;
+    return {
+      isMaster,
+      number: formatPoNumber(po.shopifyPoNumber, { isMaster }),
+      supplier: isMaster ? "Multiple suppliers" : po.supplier?.name ?? "—",
+    };
+  };
+
+  // Cards: one per master PO, qty summed across that master's line items;
+  // stage = the earliest (least-advanced) open stage among them.
+  const masterCardMap = new Map<string, KanbanCard>();
+  for (const c of cards) {
+    const ex = masterCardMap.get(c.poId);
+    if (!ex) {
+      const po = filtered.find((p) => p.id === c.poId);
+      if (!po) continue;
+      const { number, supplier } = masterDisplay(po);
+      masterCardMap.set(c.poId, {
+        ...c,
+        id: c.poId,
+        sku: number,
+        title: supplier,
+        poNumber: number,
+        supplier,
+        locked: false,
+      });
+    } else {
+      ex.quantity += c.quantity;
+      if (order.indexOf(c.stage) < order.indexOf(ex.stage)) ex.stage = c.stage;
+    }
+  }
+  const masterCards = [...masterCardMap.values()];
+
+  // Tracks: one per master PO, with stage events merged across ALL of the
+  // master's line items.
+  const masterTrackMap = new Map<
+    string,
+    {
+      poId: string;
+      poNumber: string;
+      supplier: string;
+      currentStage: ProductionStage;
+      events: Map<string, { enteredAt: Date; exitedAt: Date | null }>;
+    }
+  >();
+  for (const po of timelinePos) {
+    const { number, supplier } = masterDisplay(po);
+    for (const li of po.lineItems) {
+      const g =
+        masterTrackMap.get(po.id) ??
+        {
+          poId: po.id,
+          poNumber: number,
+          supplier,
+          currentStage: li.currentStage,
+          events: new Map<string, { enteredAt: Date; exitedAt: Date | null }>(),
+        };
+      if (order.indexOf(li.currentStage) < order.indexOf(g.currentStage)) {
+        g.currentStage = li.currentStage;
+      }
+      for (const ev of li.stageEvents) {
+        const e = g.events.get(ev.stage);
+        if (!e) {
+          g.events.set(ev.stage, { enteredAt: ev.enteredAt, exitedAt: ev.exitedAt });
+        } else {
+          if (ev.enteredAt < e.enteredAt) e.enteredAt = ev.enteredAt;
+          e.exitedAt =
+            e.exitedAt && ev.exitedAt
+              ? ev.exitedAt > e.exitedAt
+                ? ev.exitedAt
+                : e.exitedAt
+              : null;
+        }
+      }
+      masterTrackMap.set(po.id, g);
+    }
+  }
+  const timelinePosByMaster = [...masterTrackMap.values()].map((g) => ({
+    id: g.poId,
+    shopifyPoNumber: g.poNumber,
+    supplier: { name: g.supplier },
+    lineItems: [
+      {
+        id: g.poNumber,
+        sku: g.poNumber,
+        title: g.supplier,
+        currentStage: g.currentStage,
+        supplierName: g.supplier,
+        poNumber: g.poNumber,
+        stageEvents: [...g.events.entries()]
+          .map(([stage, e]) => ({
+            id: `${g.poNumber}-${stage}`,
+            stage: stage as ProductionStage,
+            enteredAt: e.enteredAt,
+            exitedAt: e.exitedAt,
+          }))
+          .sort((a, b) => a.enteredAt.getTime() - b.enteredAt.getTime()),
+      },
+    ],
+  }));
+
+  // SKU breakdown keyed by master PO label — for the drill-down panel on
+  // Board / Timeline when a master card or track is selected.
+  const skuRowsByMaster: Record<string, ReturnType<typeof aggregateIncoming>> = {};
+  for (const po of filtered) {
+    const { number } = masterDisplay(po);
+    const lines = po.lineItems
+      .filter((li) => !li.shopifyReceivedAt && (skuSet.size === 0 || skuSet.has(li.sku)))
+      .map((li) => ({ sku: li.sku, title: li.title, quantity: li.quantity, currentStage: li.currentStage }));
+    if (lines.length > 0) {
+      skuRowsByMaster[number] = aggregateIncoming(order, lines, estimates, today);
+    }
+  }
+
   const listFilters = (
     <ListFilters production={{ suppliers, supplierId, status, stage }} />
   );
 
-  // Board / Timeline have no master rollup yet → fall through to po for the
-  // visualisation. The toggle still shows the URL state so the user sees what's
-  // selected and can switch back to Inventory to see the master grid.
-  const renderGroup: "po" | "sku" = group === "sku" ? "sku" : "po";
+  // Board and Timeline render at the chosen grouping. Master uses the
+  // master-PO cards / tracks built above (line items live on the master, so
+  // they aggregate naturally); Sub-PO and SKU use the existing rollups.
+  const renderGroup: "master" | "po" | "sku" = group;
 
   return (
     <div>
@@ -395,99 +651,21 @@ export default async function ProductionPage({
           {listFilters}
 
           {group === "master" ? (
-            <DataTable className="mt-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>PO #</TableHead>
-                    <TableHead>Supplier</TableHead>
-                    <TableHead>Stage</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead>SKUs</TableHead>
-                    <TableHead>Issued</TableHead>
-                    <TableHead>Expected delivery</TableHead>
-                    <TableHead>Sent</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {masterRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="py-8 text-center text-zinc-400">
-                        No POs match. Create one to start tracking.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    masterRows.map(({ po, isMaster, derivedStage, qtyTotal, skuList, sentCount, sentTotal }) => (
-                      <TableRow key={po.id}>
-                        <TableCell>
-                          <Link
-                            href={`/modules/production/po/${po.id}`}
-                            className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
-                          >
-                            <Mono>{formatPoNumber(po.shopifyPoNumber, { isMaster })}</Mono>
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          {isMaster ? "Multiple suppliers" : po.supplier?.name ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          {derivedStage ? (
-                            <Badge className={cn(stageBadgeClass(derivedStage))}>
-                              {derivedStage === "mixed" ? "Mixed" : stageLabels[derivedStage]}
-                            </Badge>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={cn(statusBadgeClass(po.status))}>
-                            {STATUS_LABELS[po.status as keyof typeof STATUS_LABELS] ?? po.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right text-zinc-500">{qtyTotal}</TableCell>
-                        <TableCell
-                          className="max-w-xs font-mono text-xs text-zinc-500"
-                          title={skuList}
-                        >
-                          <div className="truncate">{skuList || "—"}</div>
-                        </TableCell>
-                        <TableCell className="text-zinc-500">{fmtDate(po.issuedDate)}</TableCell>
-                        <TableCell className="text-zinc-500">{fmtDate(po.expectedDeliveryDate)}</TableCell>
-                        <TableCell>
-                          {isMaster ? (
-                            <span
-                              className={cn(
-                                "text-xs",
-                                sentTotal > 0 && sentCount === sentTotal
-                                  ? "font-medium text-emerald-700"
-                                  : "text-zinc-400",
-                              )}
-                            >
-                              {sentCount}/{sentTotal} sent
-                            </span>
-                          ) : po.sentAt ? (
-                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                              Sent ✓
-                            </span>
-                          ) : (
-                            <span className="text-zinc-300">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </DataTable>
+            // Master grouping cascades twice: clicking a master row reveals
+            // its sub-PO list inline, and clicking a sub-PO row inside that
+            // reveals its SKU breakdown. A standalone master skips the
+            // sub-PO level and cascades straight to SKUs.
+            <div className="mt-4">
+              <PoExpandableList
+                rows={incomingMasterRows}
+                skuRowsByPo={skuRowsForMasterCascade}
+                stageLabels={stageLabels}
+                subtitles={masterSubtitles}
+                subRowsByPoNumber={subRowsByMasterPoNumber}
+              />
+            </div>
           ) : (
-            <div className="mt-6">
-              <p className="text-sm text-zinc-500">
-                Units in production that haven&apos;t been received into Shopify
-                yet, {group === "po" ? "by PO" : "by SKU"}. ETA is projected from
-                cycle-time estimates.
-              </p>
-
+            <div className="mt-4">
               {group === "po" ? (
                 <div className="mt-4">
                   <PoExpandableList
@@ -562,7 +740,18 @@ export default async function ProductionPage({
         <>
           {listFilters}
           <div className="mt-6">
-            {renderGroup === "po" ? (
+            {renderGroup === "master" ? (
+              masterCards.length === 0 ? (
+                <p className="text-sm text-zinc-400">No POs match.</p>
+              ) : (
+                <PoExpandableBoard
+                  cards={masterCards}
+                  stages={order}
+                  skuRowsByPo={skuRowsByMaster}
+                  stageLabels={stageLabels}
+                />
+              )
+            ) : renderGroup === "po" ? (
               poCards.length === 0 ? (
                 <p className="text-sm text-zinc-400">No POs match.</p>
               ) : (
@@ -585,7 +774,15 @@ export default async function ProductionPage({
       {view === "timeline" && (
         <>
           {listFilters}
-          {renderGroup === "po" ? (
+          {renderGroup === "master" ? (
+            <PoExpandableTimeline
+              pos={timelinePosByMaster}
+              estimates={estimates}
+              stageLabels={stageLabels}
+              order={order}
+              skuRowsByPo={skuRowsByMaster}
+            />
+          ) : renderGroup === "po" ? (
             <PoExpandableTimeline
               pos={timelinePosByPo}
               estimates={estimates}

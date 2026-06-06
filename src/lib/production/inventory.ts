@@ -29,12 +29,17 @@ export interface IncomingPoLine extends IncomingLine {
   /** id of the PO whose detail page this row links to. */
   poId: string;
   supplier: string;
+  /** Owning master-PO status (open/fulfilled/cancelled/…) — surfaced so the
+   * by-PO table can show a status badge alongside the in-flight inventory.
+   * Lines that share a poNumber are assumed to share a status. */
+  status: string;
 }
 
 export interface IncomingPoRow {
   poNumber: string;
   poId: string;
   supplier: string;
+  status: string;
   incomingQty: number;
   byStage: Partial<Record<ProductionStage, number>>;
   nearestEta: string | null;
@@ -59,6 +64,7 @@ export function aggregateIncomingByPo(
         poNumber: li.poNumber,
         poId: li.poId,
         supplier: li.supplier,
+        status: li.status,
         incomingQty: 0,
         byStage: {},
         nearestEta: null,

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { asc, isNotNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { company, customer, lead, priceTier } from "@/lib/schema";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { CUSTOMERS_TABS } from "@/lib/nav-tabs";
@@ -108,7 +110,15 @@ export default async function BrandsPage() {
 
   return (
     <div>
-      <PageHeader title="Customers" />
+      <div className="flex items-center justify-between gap-2">
+        <PageHeader title="Customers" />
+        {/* Mirror Leads' header action: the page-level "Add B2B customer"
+            entry navigates with ?new=true; CompaniesManager reads the URL
+            param and opens its new-company form. */}
+        <Button asChild size="sm">
+          <Link href="?new=true">+ Add B2B customer</Link>
+        </Button>
+      </div>
       <SectionTabs tabs={tabs} />
 
       <CustomerMessagesPanel

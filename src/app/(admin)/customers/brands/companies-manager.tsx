@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,11 +61,32 @@ export function CompaniesManager({
   companies: Company[];
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // ── Companies ── (price tiers are managed in Settings now)
   const [companyEditing, setCompanyEditing] = useState<string | "new" | null>(null);
+
+  // The page header's "+ Add B2B customer" button navigates to ?new=true, so
+  // clicking it opens the new-company form. Sync the URL param with our local
+  // open state and clear it on close, so back/forward navigation works.
+  const wantsNew = searchParams.get("new") === "true";
+  useEffect(() => {
+    if (wantsNew && companyEditing !== "new") {
+      openCompany("new");
+    }
+    // openCompany is stable enough; we only want to react to the URL toggle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsNew]);
+  function clearNewParam() {
+    if (!wantsNew) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("new");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }
   // The edit panel (incl. the Delete button) renders below the table — scroll it
   // into view when opened so it's not missed on a long page.
   const editPanelRef = useRef<HTMLDivElement>(null);
@@ -144,6 +165,7 @@ export function CompaniesManager({
         return;
       }
       setCompanyEditing(null);
+      clearNewParam();
       router.refresh();
     } catch {
       setError("Network error — please try again.");
@@ -174,6 +196,7 @@ export function CompaniesManager({
       }
       setRemovedIds((prev) => new Set(prev).add(id));
       setCompanyEditing(null);
+      clearNewParam();
       router.refresh();
     } catch {
       setError("Network error — please try again.");
@@ -191,12 +214,8 @@ export function CompaniesManager({
     <div className="mt-6 space-y-5">
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {/* Companies */}
-      <div className="flex justify-end">
-        {companyEditing !== "new" && (
-          <Button onClick={() => openCompany("new")}>Add B2B customer</Button>
-        )}
-      </div>
+      {/* "Add B2B customer" used to live here as a top-of-content button — it's
+          now in the page header (BrandsPage), driven by ?new=true. */}
 
       {companyEditing === "new" && (
         <CompanyForm
@@ -205,7 +224,10 @@ export function CompaniesManager({
           setDraft={setDraft}
           priceTiers={priceTiers}
           onSave={saveCompany}
-          onCancel={() => setCompanyEditing(null)}
+          onCancel={() => {
+            setCompanyEditing(null);
+            clearNewParam();
+          }}
           busy={busy}
         />
       )}
@@ -305,7 +327,10 @@ export function CompaniesManager({
             setDraft={setDraft}
             priceTiers={priceTiers}
             onSave={saveCompany}
-            onCancel={() => setCompanyEditing(null)}
+            onCancel={() => {
+            setCompanyEditing(null);
+            clearNewParam();
+          }}
             busy={busy}
           />
           <CompanyLogins companyId={editingCompany.id} contacts={editingCompany.contacts} />

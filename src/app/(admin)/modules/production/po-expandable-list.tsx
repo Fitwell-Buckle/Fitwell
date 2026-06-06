@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fmtDate } from "@/lib/production/display";
-import { Mono } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { fmtDate, STATUS_LABELS, statusBadgeClass } from "@/lib/production/display";
 import { PoSkuBreakdown } from "./po-sku-breakdown";
 import type { IncomingPoRow, IncomingRow } from "@/lib/production/inventory";
 
@@ -22,11 +22,22 @@ export function PoExpandableList({
   rows,
   skuRowsByPo,
   stageLabels,
+  subtitles,
+  subRowsByPoNumber,
 }: {
   rows: IncomingPoRow[];
   /** Pre-computed SKU rows per PO number, from the server. */
   skuRowsByPo: Record<string, IncomingRow[]>;
   stageLabels: Record<string, string>;
+  /** Optional small chip rendered under the PO# cell — used by Master
+   * grouping for the "0/2 sent" / "Sent ✓" indicator. Key = row's poNumber. */
+  subtitles?: Record<string, React.ReactNode>;
+  /** Optional nested rows per outer row — used by Master grouping to cascade
+   * into a sub-PO list. When a row's poNumber maps to a non-empty array, the
+   * expansion renders another PoExpandableList of those sub-rows (which in
+   * turn cascade to the SKU breakdown). Falls back to the SKU breakdown
+   * panel otherwise. */
+  subRowsByPoNumber?: Record<string, IncomingPoRow[]>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -51,6 +62,7 @@ export function PoExpandableList({
         <div className="w-24 shrink-0 text-right">Incoming</div>
         <div className="min-w-0 flex-1">By stage</div>
         <div className="w-24 shrink-0 text-right">Nearest ETA</div>
+        <div className="w-24 shrink-0">Status</div>
         {/* Placeholder matching the row's chevron (h-4 w-4 + ml-1) */}
         <div className="ml-1 h-4 w-4 shrink-0" aria-hidden />
       </div>
@@ -95,6 +107,16 @@ export function PoExpandableList({
                 {/* PO # */}
                 <div className="w-36 shrink-0 font-mono text-sm font-medium">
                   {r.poNumber}
+                  {subtitles?.[r.poNumber] != null && (
+                    <div
+                      className={cn(
+                        "mt-0.5 font-sans text-xs",
+                        isSelected ? "text-zinc-300" : "text-zinc-500",
+                      )}
+                    >
+                      {subtitles[r.poNumber]}
+                    </div>
+                  )}
                 </div>
                 {/* Supplier */}
                 <div className={cn("w-36 shrink-0 text-sm", isSelected ? "text-zinc-300" : "text-zinc-700")}>
@@ -124,6 +146,12 @@ export function PoExpandableList({
                 <div className={cn("w-24 shrink-0 text-right text-sm", isSelected ? "text-zinc-300" : "text-zinc-500")}>
                   {fmtDate(r.nearestEta)}
                 </div>
+                {/* Status */}
+                <div className="w-24 shrink-0">
+                  <Badge className={cn(statusBadgeClass(r.status))}>
+                    {STATUS_LABELS[r.status as keyof typeof STATUS_LABELS] ?? r.status}
+                  </Badge>
+                </div>
                 {/* Expand chevron */}
                 <div className="ml-1 shrink-0">
                   <ChevronDown
@@ -137,17 +165,29 @@ export function PoExpandableList({
                 </div>
               </div>
 
-              {/* Inline SKU breakdown (only rendered when selected) */}
-              {isSelected && (
-                <PoSkuBreakdown
-                  poNumber={r.poNumber}
-                  poId={r.poId}
-                  supplier={r.supplier}
-                  rows={skuRowsByPo[r.poNumber] ?? []}
-                  stageLabels={stageLabels}
-                  onClose={() => setSelected(null)}
-                />
-              )}
+              {/* Inline expansion (only rendered when selected). When the
+                  row has child sub-rows (Master grouping → its sub-POs),
+                  cascade into a nested PoExpandableList. Otherwise show the
+                  SKU breakdown panel. */}
+              {isSelected &&
+                (subRowsByPoNumber?.[r.poNumber]?.length ? (
+                  <div className="border-t border-zinc-100 bg-zinc-50/40 p-3">
+                    <PoExpandableList
+                      rows={subRowsByPoNumber[r.poNumber]}
+                      skuRowsByPo={skuRowsByPo}
+                      stageLabels={stageLabels}
+                    />
+                  </div>
+                ) : (
+                  <PoSkuBreakdown
+                    poNumber={r.poNumber}
+                    poId={r.poId}
+                    supplier={r.supplier}
+                    rows={skuRowsByPo[r.poNumber] ?? []}
+                    stageLabels={stageLabels}
+                    onClose={() => setSelected(null)}
+                  />
+                ))}
             </div>
           </div>
         );

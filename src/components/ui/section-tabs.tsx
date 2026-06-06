@@ -39,6 +39,11 @@ export function SectionTabs({
           <Link
             key={t.href}
             href={t.href}
+            // Don't auto-scroll on tab change — Next's default scrolls the
+            // viewport to top, which makes the page jump every time you
+            // switch tabs even though the tab bar (and the content area
+            // below it) is what the user is looking at.
+            scroll={false}
             className={cn(tabBaseCls, active ? tabActiveCls : tabInactiveCls)}
           >
             <span className="inline-flex items-center gap-1.5">

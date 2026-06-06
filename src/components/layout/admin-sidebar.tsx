@@ -29,6 +29,12 @@ interface NavChild {
   label: string;
   // Order/"action" pages get an icon + bolder label to stand out.
   icon?: LucideIcon;
+  // Optional explicit list of path prefixes used for the active-state match.
+  // Useful when one sidebar entry covers multiple sibling routes that don't
+  // necessarily share a prefix — e.g. "Leads" stays highlighted on both
+  // /leads and /messages (Next Steps), "Customers" on /customers and
+  // /customers/brands. When unset, the active match falls back to `href`.
+  matchPrefixes?: string[];
 }
 
 interface NavLeaf {
@@ -52,9 +58,21 @@ const navItems: NavItem[] = [
     label: "Customer",
     icon: Users,
     children: [
-      { href: "/leads", label: "Leads" },
-      { href: "/customers/brands", label: "Customers" },
-      { href: "/invoices", label: "Orders", icon: ShoppingBag },
+      // Click target is the Leads list; active state also covers the Next
+      // Steps tab which lives at /messages.
+      { href: "/leads", label: "Leads", matchPrefixes: ["/leads", "/messages"] },
+      // Click target is the B2B list; active state covers /customers (Consumer
+      // list) and any /customers/* detail page too.
+      { href: "/customers/brands", label: "Customers", matchPrefixes: ["/customers"] },
+      // Click target is B2B (/invoices); active state also covers the
+      // Consumer tab (/orders) so switching between Orders tabs keeps the
+      // sidebar entry highlighted.
+      {
+        href: "/invoices",
+        label: "Orders",
+        icon: ShoppingBag,
+        matchPrefixes: ["/invoices", "/orders"],
+      },
     ],
   },
   {
@@ -243,13 +261,26 @@ function SidebarContent({
           // Display in the order declared in navItems (not alphabetical) so
           // each group's sequence is intentional.
           const children = item.children;
-          // Active child = the longest href that prefixes the current path.
-          const matchPath = (href: string) =>
-            pathname === href || pathname.startsWith(`${href}/`);
+          // Active child = the longest matching prefix vs the current path.
+          // A child's match scope is its `matchPrefixes` (any path under any
+          // of them) if set, else just its href. Sorting by the longest
+          // matched prefix length keeps a more-specific sibling winning over
+          // a broader one when both match.
+          const matchPath = (path: string) =>
+            pathname === path || pathname.startsWith(`${path}/`);
+          const longestMatch = (c: NavChild): number | null => {
+            const scopes = c.matchPrefixes ?? [c.href];
+            let longest = -1;
+            for (const s of scopes) {
+              if (matchPath(s) && s.length > longest) longest = s.length;
+            }
+            return longest >= 0 ? longest : null;
+          };
           const activeChildHref =
             children
-              .filter((c) => matchPath(c.href))
-              .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
+              .map((c) => ({ c, len: longestMatch(c) }))
+              .filter((x): x is { c: NavChild; len: number } => x.len !== null)
+              .sort((a, b) => b.len - a.len)[0]?.c.href ?? null;
           const childActive = activeChildHref !== null;
           const selfActive = item.href ? pathname.startsWith(item.href) : false;
           const expanded = open[item.label] ?? childActive;

@@ -114,10 +114,10 @@ export default async function B2BOrdersPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <PageHeader title="Orders" />
-        <Button asChild>
-          <Link href="/invoices/new">New order</Link>
+        <Button asChild size="sm">
+          <Link href="/invoices/new">+ New order</Link>
         </Button>
       </div>
 

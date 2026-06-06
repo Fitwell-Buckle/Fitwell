@@ -70,7 +70,7 @@ export default async function LeadsPage({
       <div className="flex items-center justify-between gap-2">
         <PageHeader title="Leads" />
         <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm">
+          <Button asChild size="sm">
             <Link href="/leads/new">+ Add lead</Link>
           </Button>
           <Button asChild size="sm">
