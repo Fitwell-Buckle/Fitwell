@@ -208,13 +208,62 @@ Execution:
 
 Test: 30 days. Expected outcome: CVR +20–30%, return rate stays in single digits.
 
-### 2. Bundle Ladder
-Restructure pricing to make multi-unit obvious.
-- 1 buckle: $40 (anchor)
-- 3-pack: $92 (save $28 — "one for every daily wear")
-- 5-pack: $134 (save $66 — "outfit the collection")
+### 2. Bundle — **evaluated, declined; leverage redirects to W5 retention motion (2026-06-06)**
 
-Execution: bundle products in Shopify, bundle selector on product pages, post-purchase email references bundle pricing.
+The original $40 / $92 / $134 single/3-pack/5-pack ladder is cut.
+No public bundle SKU ships in this iteration of the 360. Full
+reasoning, all 7 cuts of analysis, and adjacent-category framing:
+[`bundle-strategy.md`](./bundle-strategy.md).
+
+Headline reasoning from `scripts/bundle-strategy-analysis.ts`
+(2025-11-01 → 2026-06-06, 670 D2C orders):
+
+- 88.4% of orders are 1 or 2 units; only 8.7% are 3+; 5-unit orders
+  are 0.4% (three in seven months). No demand above 2 units to
+  build a public SKU against.
+- Median 3-unit first-order buyer already pays $120 (full retail).
+  A public 3-pack at $92 is a $28/order margin transfer to demand
+  already converting at full price.
+- For the 1→2 move where adjacent demand does exist, free shipping
+  at 2+ is already firing on 85% of 2-unit orders. A public 2-pack
+  at $68 transfers ~$12/order to the ~67% of existing 2-unit buyers
+  who'd have paid full anyway — and clears that ~$1,400-over-window
+  give-away only under aggressive 1→2 conversion lift assumptions.
+- **Units distribution is identical between first orders and repeat
+  orders** (62% / 26% in both). Repeat buyers don't bulk up — they
+  place more small orders. Multi-order retention is the structural
+  mechanism; the outfit-the-collection move belongs in a time-
+  shifted post-purchase code (W5 D30), not a public ladder.
+
+**Direction this iteration of the 360 takes instead:**
+
+**(a) No public bundle SKU.** Single SKU at $40 stays as the only
+PDP offer. Free shipping at 2+ stays as the implicit multi-unit
+incentive.
+
+**(b) Lift acquisition-side email signup rate** — the prerequisite
+to every downstream Klaviyo retention play. 67.5% of first orders
+use no discount and are mostly not on the email list; every one is
+a missed downstream retention opportunity. New workstream (W5 §6 or
+as referenced in [`bundle-strategy.md`](./bundle-strategy.md)):
+measure signup rate at first purchase, identify the C1–C4 leakage
+shape (creator-code redemption vs welcome-flow vs no-discount), run
+interventions (trust-frame popup, post-add-to-cart capture, gift-
+friendly checkout, creator-code attribution).
+
+**(c) Ship the W5 post-purchase Klaviyo retention motion in full.**
+This is the highest-leverage gap in the 360 plan ($551 across 5
+orders in 7 months currently — essentially unbuilt). The
+"outfit-the-collection" offer lives here as the D30 send segmented
+off the D14 reply ladder — buyers who said "3+ watches" get an
+outfit code (5+ units, ~25% off).
+
+Execution change vs v3.1: drop "bundle products in Shopify" from
+the W1 calendar entirely. The bundle work returns to zero in this
+workstream; offer-stack effort concentrates on the guarantee
+(W1 §1), the anchor (W1 §3), and the in-box card (W1 §4). The
+signup-lift work is new; the W5 retention motion was already
+priority-1 within W5 and stays so.
 
 ### 3. Reframed Anchor (vs. premium aftermarket bracelets)
 Stop comparing to deployant clasps. Compare to the cost of swapping your bracelet to one with built-in micro-adjust.
@@ -626,7 +675,7 @@ workstream**, ahead of rewrites.
 - D14: "How many watches do you own?" — reply segments the customer (segmentation feeds back into creator outreach prioritization)
 - D21: Judge.me review request
 - D25: last call on in-box card discount
-- D30: collection upsell (segmented from D14 reply: 1–2 watches → single reorder, 3–5 → 3-pack, 6+ → 5-pack)
+- D30: collection upsell (segmented from D14 reply: 1–2 watches → single reorder; 3+ watches → outfit-the-collection code, 5+ units, ~25% off, 30-day expiry. Replaces the original 3-pack/5-pack mapping 2026-06-06 — see W1 §2 and [`bundle-strategy.md`](./bundle-strategy.md))
 
 ### New — Win-Back (60–90 days post-purchase, no second order)
 - D60: "Still only have one?" — collection angle
@@ -735,8 +784,7 @@ Workstream 2 (Creator Program) depends on a separate engineering work plan: `spe
 
 ### Week 1 — all workstreams kick off
 - [ ] **Pre-launch:** baselines into SCORECARD (Tom + Claude Code)
-- [ ] **W1 Offer:** guarantee copy, anchor copy, bundle copy (Claude Code drafts → Tom approves)
-- [ ] **W1 Offer:** bundle products in Shopify (Tom or Greg)
+- [ ] **W1 Offer:** guarantee copy, anchor copy (Claude Code drafts → Tom approves) — bundle ladder cut 2026-06-06; no public bundle SKU ships this iteration. Outfit-the-collection moves to W5 D30 send. See W1 §2 and [`bundle-strategy.md`](./bundle-strategy.md)
 - [ ] **W1 Offer:** in-box card designed, ordered from Moo.com (Tom)
 - [ ] **W2 Creator:** creator-management-system Phase 1 — schema + 735-creator CSV import (Greg + Claude Code, if Decision #7 = compress)
 - [ ] **W2 Creator:** Wave 1 outreach drafted — top 50 creators by fit_score (Tom + Claude Code)
