@@ -45,7 +45,7 @@ export interface TimelinePo {
 /**
  * Per-line-item production Gantt: solid segments from actual stage history plus
  * a faded segment projected to ETA. Data (the filtered POs + cycle-time
- * estimates) is supplied by the Production Summary page.
+ * estimates) is supplied by the POs & Production page.
  */
 export function ProductionTimeline({
   pos,

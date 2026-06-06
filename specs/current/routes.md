@@ -56,15 +56,14 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/products` | Product performance breakdown (+ incoming production qty per SKU) |
 | `/inventory` | Incoming inventory — per-SKU units in production, stage breakdown, projected ETA |
 | `/modules` | Modules hub (Production; Marketing coming soon) |
-| `/modules/production` | "Purchase Orders" — PO list only (date range + instant filters: supplier, status, stage, size, colour; defaults to Open, last 30 days by issued date) |
-| `/modules/production/summary` | "Production Summary" — the kanban board + production timeline (Gantt), with the same instant filters as Purchase Orders (supplier, status, stage, size, colour) applied to both |
+| `/modules/production` | "POs & Production" — unified PO list + production tracking. Group toggle: Master (one row per master PO, cascades to sub-POs and SKUs) / Sub-PO (one row per sub-PO, cascades to SKUs) / SKU. View toggle: Incoming Inventory (default) / Production Board (kanban) / Production Timeline (Gantt). Instant filters: supplier, status, stage, size, colour, date range. Absorbed the standalone Purchase Orders and Production Summary pages |
 | `/modules/production/po/new` | Create a PO with line items (inline "Add new" for supplier + B2B customer; the customer contact email searches synced Shopify customers and links the matched customer) |
 | `/modules/production/po/[id]` | PO detail — stage advance, status, stage timeline, and a unified notes & documents timeline (notes + uploads in one feed; posting notifies the supplier by email + supplier-portal notification) |
 | `/modules/production/po/[id]/edit` | Edit PO header + line items (add/update/remove) |
 | `/modules/production/po/[id]/send` | Printable PO preview; email it (HTML) to the customer |
 | `/modules/production/kanban` | Kanban board — drag line items across stage columns |
 | `/modules/production/suppliers` | Supplier CRUD |
-| `/settings` | Admin settings (nav bottom) — env/DB info **plus** the consolidated config: wire-transfer/billing details (moved from Orders), production-stage editor (moved from Production Summary), and B2B **price tiers** (moved from the B2B Customers page). Brands still pick a tier on the B2B customer form |
+| `/settings` | Admin settings (nav bottom) — env/DB info **plus** the consolidated config: wire-transfer/billing details (moved from Orders), production-stage editor (moved from POs & Production), and B2B **price tiers** (moved from the B2B Customers page). Brands still pick a tier on the B2B customer form |
 
 ## supplier — Supplier Portal
 
@@ -140,7 +139,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | DELETE | `/api/production/po/[id]` | Hard-delete a PO and its dependents (line items, stage events, costs, attachments, comments, sub-POs) via schema FK cascade; admin-only. Confirmation required in UI. Linked Shopify drafts / invoices are NOT auto-revoked |
 | POST | `/api/production/line-items/[id]/stage` | Set a line item's stage (kanban drag); locked POs move together |
 | GET | `/api/production/stages` | List the active production stages (key + label + position) for the editor |
-| PUT | `/api/production/stages` | Replace the pipeline — rename/add/delete/reorder stages. Deleting a stage with items in it requires a `{moves:{key:"forward"\|"back"}}` direction; it soft-deletes (history kept) and moves stranded line items. Admin-only. Drives the Production Summary "Setup" modal |
+| PUT | `/api/production/stages` | Replace the pipeline — rename/add/delete/reorder stages. Deleting a stage with items in it requires a `{moves:{key:"forward"\|"back"}}` direction; it soft-deletes (history kept) and moves stranded line items. Admin-only. Drives the POs & Production "Setup" modal |
 | PATCH | `/api/production/stage-events/[id]` | Edit a stage transition date (entered_at, day-granularity); syncs the previous stage's exited_at; chronological bounds; admin-only |
 | POST | `/api/production/suppliers` | Create a supplier |
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |

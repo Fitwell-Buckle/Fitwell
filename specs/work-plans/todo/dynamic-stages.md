@@ -2,7 +2,7 @@
 
 ## Context
 
-The Production Summary "Setup" modal currently only **renames** the 9 fixed
+The POs & Production "Setup" modal currently only **renames** the 9 fixed
 stages. Oliver wants to **add new stages, delete stages, and reorder** them.
 
 The 9 stages are currently a Postgres enum (`production_stage`) and a hardcoded

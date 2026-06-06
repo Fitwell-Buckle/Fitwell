@@ -388,7 +388,7 @@ Two follow-up rules, edited in **Settings → Lead follow-ups**. One row,
 ### `production_stage_def` (dynamic stages)
 
 The pipeline's stages are now **data-driven** — admins add / rename / delete /
-reorder them in the Production Summary "Setup" modal. Each row is a stage:
+reorder them in the POs & Production "Setup" modal. Each row is a stage:
 
 | Column | Type | Notes |
 |--------|------|-------|

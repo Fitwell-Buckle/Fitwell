@@ -16,7 +16,7 @@ import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { getFollowupSettings } from "@/lib/crm/followup-settings";
 import { getStages } from "@/lib/production/stage-labels";
 import { WireInfoSetup } from "@/app/(admin)/invoices/wire-info-setup";
-import { StageSetup } from "@/app/(admin)/modules/production/summary/stage-setup";
+import { StageSetup } from "@/app/(admin)/modules/production/stage-setup";
 import { PriceTiersManager } from "@/components/production/price-tiers-manager";
 import { LeadFollowupSettings } from "./lead-followup-settings";
 

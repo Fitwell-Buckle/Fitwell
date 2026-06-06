@@ -47,7 +47,7 @@ export interface IncomingPoRow {
 
 /**
  * Same incoming inventory as `aggregateIncoming`, but grouped by the owning
- * (sub-)PO instead of by SKU — for the Production Summary's "by PO" view.
+ * (sub-)PO instead of by SKU — for the POs & Production "by PO" view.
  */
 export function aggregateIncomingByPo(
   order: readonly string[],

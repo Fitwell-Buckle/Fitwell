@@ -13,7 +13,7 @@ interface Row {
   label: string;
 }
 
-// "Setup" on the Production Summary page → add / rename / delete / reorder the
+// "Setup" on the POs & Production page → add / rename / delete / reorder the
 // production stages. The first stage opens POs + routes sub-POs; the last stage
 // triggers the Shopify receive. Deleting a stage that still holds items prompts
 // to move them forward or back; history is kept (soft delete).

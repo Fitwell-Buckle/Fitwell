@@ -257,7 +257,7 @@ export interface LineAttrInput {
 /**
  * Resolve a stored production/invoice line's size + colour from the catalog (by
  * variant id), falling back to the SKU's trailing digits for size. Shared by
- * the Purchase Orders and Production Summary filters so they stay in sync.
+ * the POs & Production filters so they stay in sync across views.
  */
 export function makeLineAttrs(catalog: CatalogVariant[]) {
   const byVariant = new Map(

@@ -79,9 +79,11 @@ const navItems: NavItem[] = [
     label: "Product",
     icon: Package,
     children: [
-      { href: "/modules/production", label: "Purchase Orders", icon: ClipboardList },
+      // POs & Production absorbed the old standalone "Purchase Orders" and
+      // "Production Summary" entries — Master grouping covers the PO list,
+      // Sub-PO / SKU views cover in-flight production tracking.
+      { href: "/modules/production", label: "POs & Production", icon: ClipboardList },
       { href: "/modules/production/suppliers", label: "Suppliers" },
-      { href: "/modules/production/summary", label: "Production Summary" },
       { href: "/products", label: "Products" },
     ],
   },

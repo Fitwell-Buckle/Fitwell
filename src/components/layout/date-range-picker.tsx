@@ -64,8 +64,8 @@ const PICKER_PREFIXES = [
   "/influencer-tracking",
 ];
 // Pages that show the picker only on that exact path (not subpaths) — e.g. the
-// Production page itself, but not /po/new, /po/[id], or /suppliers.
-const PICKER_EXACT = ["/modules/production", "/modules/production/summary"];
+// POs & Production page itself, but not /po/new, /po/[id], or /suppliers.
+const PICKER_EXACT = ["/modules/production"];
 // Create/edit forms where a date filter is meaningless — hidden even though a
 // prefix above would otherwise match (e.g. /invoices/new, /influencer-tracking/new).
 const PICKER_EXCLUDE = ["/invoices/new", "/influencer-tracking/new"];

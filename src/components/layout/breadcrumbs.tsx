@@ -27,10 +27,9 @@ const LABELS: Record<string, string> = {
   inventory: "Inventory",
   modules: "Modules",
   production: "Production",
-  po: "Purchase Orders",
+  po: "POs",
   suppliers: "Suppliers",
   kanban: "Kanban",
-  summary: "Summary",
   settings: "Settings",
   messages: "Next Steps",
   notifications: "Notifications",
@@ -70,13 +69,9 @@ function labelFor(seg: string, parent: string | null): string {
 /**
  * Override the default link for a breadcrumb path. Useful when a path has a
  * real page (so it's navigable) but a different destination is more useful as a
- * drill-up target — e.g. `/modules/production` exists (the PO list) but
- * the Production Summary is the more logical breadcrumb landing for sub-pages.
+ * drill-up target. Currently empty — kept as a hook for future overrides.
  */
-const LINK_OVERRIDES: Record<string, string> = {
-  // "Production" in the trail → go to the Summary overview, not the PO list.
-  "/modules/production": "/modules/production/summary",
-};
+const LINK_OVERRIDES: Record<string, string> = {};
 
 // Auto breadcrumb trail derived from the URL, rendered on every admin page (in
 // the layout). Replaces the ad-hoc per-page "Back" buttons. Hidden on the

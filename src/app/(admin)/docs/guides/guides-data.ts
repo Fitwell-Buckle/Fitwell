@@ -44,7 +44,7 @@ export const guides: Guide[] = [
         shot: "The dashboard with the left sidebar expanded.",
       },
       {
-        text: "Under Customers you'll find Consumer List, B2B Customer List, B2B Orders, and Consumer Orders. Under Products you'll find the Product List, Supplier POs, Production Summary, and Supplier List. (Incoming inventory now lives inside Production Summary.)",
+        text: "Under Customers you'll find Consumer List, B2B Customer List, B2B Orders, and Consumer Orders. Under Products you'll find the Product List, POs & Production, and Supplier List. (Incoming inventory and the standalone Purchase Orders list have both folded into POs & Production.)",
         shot: "The Products group expanded in the sidebar.",
       },
     ],
@@ -84,7 +84,7 @@ export const guides: Guide[] = [
     category: "Production",
     steps: [
       {
-        text: "Go to Products → Production Summary, then use the toggle in the top-right to switch to Production Board. It shows every in-progress line item as a card, in columns for each stage (Supplier PO → … → Complete).",
+        text: "Go to Products → POs & Production, then use the toggle in the top-right to switch to Production Board. It shows every in-progress line item as a card, in columns for each stage (Supplier PO → … → Complete).",
         shot: "The Production Board view with cards across stage columns.",
       },
       {
@@ -150,8 +150,8 @@ export const guides: Guide[] = [
     category: "Production",
     steps: [
       {
-        text: "Go to Products → Production Summary — it opens on the Incoming Inventory view, which lists, per SKU, how many units are in production (not yet received), broken down by stage, with the soonest projected ETA.",
-        shot: "The Production Summary page on its Incoming Inventory view.",
+        text: "Go to Products → POs & Production — it opens on the Incoming Inventory view, which lists, per PO, how many units are in production (not yet received), broken down by stage, with the soonest projected ETA.",
+        shot: "The POs & Production page on its Incoming Inventory view.",
       },
       {
         text: "The Product List page also shows an “Incoming” column per SKU, alongside units sold and revenue.",
