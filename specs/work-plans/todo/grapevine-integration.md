@@ -1,9 +1,31 @@
 # Grapevine Survey Integration
 
-> **Status:** awaiting Greg sign-off per Critical Rule 5 (new external
-> integration, new DB table, new webhook endpoint). Do not start Phase
-> 1 until that conversation happens. Mirrors the gating used on
-> `klaviyo-integration.md`.
+> **Status (2026-06-06):** Phases 1–3 shipped to production. Live state:
+>
+> - **Phase 1** — webhook live at `/api/webhooks/grapevine`; Shopify Flow
+>   workflow on; smoke-tested via curl + verified DB write.
+> - **Phase 2** — 258 historical survey responses backfilled from CSV to
+>   prod. 178 linked to orders; 80 orphan (pre-Shopify-sync orders).
+> - **Phase 3** — `/admin/attribution/survey` view live; `commitAttribution`
+>   merge function (survey-first, UTM fallback); `link_method='self_report'`
+>   backfilled to 169 prod orders; `attribution.md` updated.
+>
+> **Still pending:**
+>
+> - **Phase 4** (this file, §Phase 4 below) — aggregate dashboard,
+>   "Other" free-text normalization via Claude API. Not blocking; nice
+>   to have once live workflow has accumulated post-Phase-2 data.
+> - **Grapevine UI cleanup** (§"Grapevine-side cleanup" below) — Tom to
+>   merge `WatchChris` / `Watch Chris` duplicate options in Grapevine
+>   Admin so future responses don't split the same creator across two
+>   buckets. Pure config, no engineering.
+> - **UTM linking gap** — filed separately at
+>   [[utm-linking-gap]]. Once that's fixed, Phase 3 can grow the
+>   `(platform_hint + utm) → committed funnel.md channel` refinement
+>   noted in `attribution.md`.
+>
+> Don't move this file to `completed/` until Phase 4 ships AND the
+> Grapevine UI cleanup is confirmed done.
 
 ## Context
 
