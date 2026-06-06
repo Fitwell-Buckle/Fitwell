@@ -4,14 +4,21 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const GROUPS = [
-  { key: "sku", label: "By SKU" },
-  { key: "po", label: "By PO" },
+  { key: "master", label: "Master" },
+  { key: "po", label: "Sub-PO" },
+  { key: "sku", label: "SKU" },
 ] as const;
 
 /**
- * "By SKU / By PO" grouping toggle for the Production Summary. Sets the `group`
- * query param (omitted for the default `sku` so the bare URL stays clean) and
- * preserves the active view + filters.
+ * Grouping switch for the Production page — controls the data dimension
+ * (Master PO / Sub-PO / SKU). Sets the `group` query param (omitted for the
+ * default `po` so the bare URL stays clean) and preserves the active view +
+ * filters.
+ *
+ * Visual: compact segmented button group with a navy active state. Distinct
+ * from the lifted-pill view tabs (which use white active state on no
+ * container) so the eye reads them as two different kinds of control —
+ * "data slicing" vs "visualisation mode".
  */
 export function ProductionGroupToggle({ group }: { group: string }) {
   const router = useRouter();
@@ -20,7 +27,7 @@ export function ProductionGroupToggle({ group }: { group: string }) {
 
   function setGroup(g: string) {
     const params = new URLSearchParams(searchParams.toString());
-    // "po" is the default → omit it to keep the URL clean; set group=sku only.
+    // "po" is the default → omit it to keep the URL clean; set group=sku|master only.
     if (g === "po") params.delete("group");
     else params.set("group", g);
     // Leaving a drill-down (selecting a grouping) clears the per-PO scope.
@@ -30,7 +37,7 @@ export function ProductionGroupToggle({ group }: { group: string }) {
   }
 
   return (
-    <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-sm">
+    <div className="inline-flex rounded-md bg-zinc-100 p-0.5 text-xs font-medium">
       {GROUPS.map((g) => (
         <button
           key={g.key}
@@ -38,10 +45,10 @@ export function ProductionGroupToggle({ group }: { group: string }) {
           onClick={() => setGroup(g.key)}
           aria-pressed={group === g.key}
           className={cn(
-            "rounded-md px-3 py-1.5 font-medium transition-colors",
+            "rounded px-2.5 py-1 transition-colors",
             group === g.key
-              ? "bg-brand text-white"
-              : "text-zinc-500 hover:text-zinc-900",
+              ? "bg-brand text-white shadow-sm"
+              : "text-zinc-600 hover:bg-white hover:text-zinc-900",
           )}
         >
           {g.label}

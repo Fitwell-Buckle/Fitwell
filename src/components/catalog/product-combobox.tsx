@@ -217,7 +217,14 @@ export function ProductCombobox({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-md border border-zinc-200 bg-white shadow-lg">
+        // Wider than the trigger so the full variant label ("SKU · Title — Variant
+        // — material / finish") is readable end-to-end. w-max sizes to the widest
+        // item's full intrinsic text width (since items use `truncate` =
+        // white-space:nowrap, the intrinsic width is the un-truncated label).
+        // Floors at the trigger width + 560px so short label sets still get room
+        // for the chips and search box; ceils at min(960px, 95vw) so it can't
+        // overflow the viewport on narrower screens.
+        <div className="absolute left-0 z-30 mt-1 w-max min-w-[max(100%,560px)] max-w-[min(960px,95vw)] overflow-hidden rounded-md border border-zinc-200 bg-white shadow-lg">
           {collections && collections.length > 0 && (
             <div className="border-b border-zinc-100 px-2.5 py-2">
               <select

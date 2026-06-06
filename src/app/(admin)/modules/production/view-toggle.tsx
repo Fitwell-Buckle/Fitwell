@@ -2,6 +2,12 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import {
+  tabBarInlineCls,
+  tabBaseCls,
+  tabActiveCls,
+  tabInactiveCls,
+} from "@/components/ui/tab-styles";
 
 const VIEWS = [
   { key: "inventory", label: "Incoming Inventory" },
@@ -10,10 +16,12 @@ const VIEWS = [
 ] as const;
 
 /**
- * Segmented control for the Production Summary page. Switches between the
- * Incoming Inventory (default), Production Board, and Production Timeline views
- * by setting the `view` query param (omitted for the default inventory view so
- * the bare URL stays clean). Existing filter params are preserved.
+ * View toggle for the Production page (Inventory / Board / Timeline). Sets the
+ * `view` query param (omitted for the default inventory view so the bare URL
+ * stays clean). Existing filter params are preserved.
+ *
+ * Visual: lifted-pill tabs (see `tab-styles.ts`). The active tab and the
+ * content card below share the same white + shadow-sm language.
  */
 export function ProductionViewToggle({ view }: { view: string }) {
   const router = useRouter();
@@ -29,7 +37,7 @@ export function ProductionViewToggle({ view }: { view: string }) {
   }
 
   return (
-    <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-sm">
+    <div className={tabBarInlineCls}>
       {VIEWS.map((v) => (
         <button
           key={v.key}
@@ -37,10 +45,8 @@ export function ProductionViewToggle({ view }: { view: string }) {
           onClick={() => setView(v.key)}
           aria-pressed={view === v.key}
           className={cn(
-            "rounded-md px-3 py-1.5 font-medium transition-colors",
-            view === v.key
-              ? "bg-brand text-white"
-              : "text-zinc-500 hover:text-zinc-900",
+            tabBaseCls,
+            view === v.key ? tabActiveCls : tabInactiveCls,
           )}
         >
           {v.label}

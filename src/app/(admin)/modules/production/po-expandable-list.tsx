@@ -44,6 +44,17 @@ export function PoExpandableList({
 
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-200">
+      {/* Column header — column widths must mirror the data row below. */}
+      <div className="flex items-center gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+        <div className="w-36 shrink-0">PO #</div>
+        <div className="w-36 shrink-0">Supplier</div>
+        <div className="w-24 shrink-0 text-right">Incoming</div>
+        <div className="min-w-0 flex-1">By stage</div>
+        <div className="w-24 shrink-0 text-right">Nearest ETA</div>
+        {/* Placeholder matching the row's chevron (h-4 w-4 + ml-1) */}
+        <div className="ml-1 h-4 w-4 shrink-0" aria-hidden />
+      </div>
+
       {rows.map((r, i) => {
         const isSelected = selected === r.poNumber;
         const isCollapsed = selected !== null && !isSelected;

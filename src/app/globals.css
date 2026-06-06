@@ -9,4 +9,8 @@
   --color-brand:        #2A3641;  /* base */
   --color-brand-hover:  #3a4855;  /* slightly lighter for hover/active states */
   --color-brand-border: #374451;  /* border inside brand surfaces */
+
+  /* Warm tan accent — used for the active state on modern pill tab bars. */
+  --color-accent:        #C08A4D;
+  --color-accent-hover:  #b07b3f;
 }

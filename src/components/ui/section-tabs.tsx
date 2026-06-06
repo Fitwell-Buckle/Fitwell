@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import {
+  tabBarFlexCls,
+  tabBaseCls,
+  tabActiveCls,
+  tabInactiveCls,
+} from "./tab-styles";
 
 export interface SectionTab {
   href: string;
@@ -24,7 +30,7 @@ export function SectionTabs({
 }) {
   const pathname = usePathname();
   return (
-    <div className={cn("mt-4 flex gap-1 border-b border-zinc-200", className)}>
+    <div className={cn(tabBarFlexCls, className)}>
       {tabs.map((t) => {
         const active = t.prefix
           ? pathname === t.href || pathname.startsWith(t.href + "/")
@@ -33,12 +39,7 @@ export function SectionTabs({
           <Link
             key={t.href}
             href={t.href}
-            className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "border-brand text-zinc-900"
-                : "border-transparent text-zinc-500 hover:text-zinc-800",
-            )}
+            className={cn(tabBaseCls, active ? tabActiveCls : tabInactiveCls)}
           >
             <span className="inline-flex items-center gap-1.5">
               {t.label}
