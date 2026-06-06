@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useStageLabels } from "@/components/production/stage-labels-provider";
@@ -15,6 +16,11 @@ import type { IncomingRow } from "@/lib/production/inventory";
  *
  * Clicking a card collapses all other cards (they fade + scale down) and
  * expands the SKU breakdown directly below the board area. No page navigation.
+ *
+ * Cards that carry `lineItemIdsAtStage` (the sub-PO rollup) are draggable —
+ * dropping a sub-PO card on a different stage column calls the stage-advance
+ * API for every line item at the card's current stage. Cards without that
+ * field (e.g. master rollups) stay click-to-expand only.
  */
 export function PoExpandableBoard({
   cards,
@@ -27,7 +33,12 @@ export function PoExpandableBoard({
   skuRowsByPo: Record<string, IncomingRow[]>;
   stageLabels: Record<string, string>;
 }) {
+  const router = useRouter();
   const [selected, setSelected] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overStage, setOverStage] = useState<ProductionStage | null>(null);
   const boardStageLabels = useStageLabels();
 
   const selectedCard = selected ? cards.find((c) => c.sku === selected) : null;
@@ -36,19 +47,82 @@ export function PoExpandableBoard({
     setSelected((prev) => (prev === poNumber ? null : poNumber));
   }
 
+  // Bulk-advance: walk the card's `lineItemIdsAtStage` and POST a stage
+  // change for each in parallel. The endpoint is the same one the per-line
+  // KanbanBoard uses, so server-side validation (locks, stage order) applies
+  // unchanged.
+  async function moveCard(card: KanbanCard, toStage: ProductionStage) {
+    if (!card.lineItemIdsAtStage?.length || card.stage === toStage) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const results = await Promise.all(
+        card.lineItemIdsAtStage.map((id) =>
+          fetch(`/api/production/line-items/${id}/stage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stage: toStage }),
+          }).then(async (res) => ({
+            ok: res.ok,
+            body: (await res.json().catch(() => ({}))) as { error?: string },
+          })),
+        ),
+      );
+      const failures = results.filter((r) => !r.ok);
+      if (failures.length > 0) {
+        setError(
+          failures[0].body.error ??
+            `${failures.length} of ${results.length} moves failed.`,
+        );
+      } else {
+        router.refresh();
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const byStage = (stage: ProductionStage) =>
     cards.filter((c) => c.stage === stage);
 
   return (
     <div>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
       {/* Board */}
-      <div className="flex gap-3 overflow-x-auto pb-4">
+      <div
+        className={cn(
+          "flex gap-3 overflow-x-auto pb-4",
+          busy && "opacity-60",
+        )}
+      >
         {stages.map((stage) => {
           const items = byStage(stage);
           return (
             <div
               key={stage}
-              className="flex w-64 shrink-0 flex-col rounded-xl border border-zinc-200/80 bg-zinc-50/60"
+              onDragOver={(e) => {
+                if (!dragId) return;
+                e.preventDefault();
+                setOverStage(stage);
+              }}
+              onDragLeave={() =>
+                setOverStage((s) => (s === stage ? null : s))
+              }
+              onDrop={(e) => {
+                if (!dragId) return;
+                e.preventDefault();
+                const card = cards.find((c) => c.id === dragId);
+                setDragId(null);
+                setOverStage(null);
+                if (card) void moveCard(card, stage);
+              }}
+              className={cn(
+                "flex w-64 shrink-0 flex-col rounded-xl border border-zinc-200/80 bg-zinc-50/60",
+                overStage === stage && "border-zinc-400 bg-zinc-100",
+              )}
             >
               <div className="flex items-center justify-between border-b border-zinc-200/80 px-3 py-2">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
@@ -77,13 +151,27 @@ export function PoExpandableBoard({
                         <div
                           role="button"
                           tabIndex={0}
+                          draggable={!busy && !!c.lineItemIdsAtStage?.length}
+                          onDragStart={(e) => {
+                            if (!c.lineItemIdsAtStage?.length) return;
+                            e.dataTransfer.setData("text/plain", c.id);
+                            e.dataTransfer.effectAllowed = "move";
+                            setDragId(c.id);
+                          }}
+                          onDragEnd={() => {
+                            setDragId(null);
+                            setOverStage(null);
+                          }}
                           onClick={() => toggle(c.sku)}
                           onKeyDown={(e) => e.key === "Enter" && toggle(c.sku)}
                           className={cn(
-                            "cursor-pointer rounded-lg border p-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] transition-all",
+                            "rounded-lg border p-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] transition-all",
                             isSelected
-                              ? "border-brand bg-brand shadow-none"
-                              : "border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm",
+                              ? "border-brand bg-brand shadow-none cursor-pointer"
+                              : c.lineItemIdsAtStage?.length
+                                ? "border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm cursor-grab active:cursor-grabbing"
+                                : "border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm cursor-pointer",
+                            dragId === c.id && "opacity-50",
                           )}
                         >
                           <div className="font-mono text-xs font-medium">
@@ -112,7 +200,7 @@ export function PoExpandableBoard({
                           </div>
                           <div
                             className={cn(
-                              "mt-1.5 flex items-center justify-between text-xs",
+                              "mt-1.5 flex items-end justify-between text-xs",
                               isSelected ? "text-zinc-400" : "text-zinc-400",
                             )}
                           >
@@ -123,7 +211,15 @@ export function PoExpandableBoard({
                             >
                               {c.poNumber}
                             </Link>
-                            <span>×{c.quantity}</span>
+                            {/* qty is the PO's full incoming quantity (not the
+                                SKU-filtered slice) — label it "total" so the
+                                number doesn't get misread as a filter result. */}
+                            <div className="text-right leading-none">
+                              <div>×{c.quantity.toLocaleString()}</div>
+                              <div className="mt-0.5 text-[10px] uppercase tracking-wider">
+                                total
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>

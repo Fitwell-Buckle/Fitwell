@@ -20,6 +20,13 @@ export interface KanbanCard {
   poNumber: string;
   supplier: string;
   locked: boolean;
+  /** Line item ids that currently sit at the card's `stage`. Set on aggregated
+   * cards (sub-PO rollups) so dragging the card calls the stage-advance API
+   * for each id — bulk-advance all the work this card represents at its
+   * current stage to the drop target. Undefined for cards that represent a
+   * single line item (id IS the line item id then) or rollups we don't want
+   * draggable (e.g. master cards). */
+  lineItemIdsAtStage?: string[];
 }
 
 export function KanbanBoard({

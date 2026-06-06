@@ -424,10 +424,24 @@ export default async function ProductionPage({
         sku: c.poNumber,
         title: c.supplier,
         locked: false,
+        // `c.id` is the line item id from `cards` (one entry per line). The
+        // sub-PO's card column is the earliest open stage among its lines, so
+        // we collect ids that match that stage — those are the ones that get
+        // bulk-advanced when the card is dragged.
+        lineItemIdsAtStage: [c.id],
       });
     } else {
       ex.quantity += c.quantity;
-      if (order.indexOf(c.stage) < order.indexOf(ex.stage)) ex.stage = c.stage;
+      const cIdx = order.indexOf(c.stage);
+      const exIdx = order.indexOf(ex.stage);
+      if (cIdx < exIdx) {
+        // Earlier stage discovered → that's the new column for this card.
+        ex.stage = c.stage;
+        ex.lineItemIdsAtStage = [c.id];
+      } else if (cIdx === exIdx) {
+        ex.lineItemIdsAtStage?.push(c.id);
+      }
+      // c at a later stage → not at the card's column, skip.
     }
   }
   const poCards = [...poCardMap.values()];
