@@ -174,8 +174,8 @@ export const guides: Guide[] = [
         shot: "The Find this supplier in your Gmail block with a search query and a results list.",
       },
       {
-        text: "Click “Edit” on the supplier. In the “Authorized logins” card, add the email of anyone at the vendor who should access the portal. Add as many as you like — one email maps to one supplier. The same Gmail search is available here too if you don't have the address handy.",
-        shot: "The Authorized logins card with an email being added.",
+        text: "The supplier's Contact email is granted access automatically as soon as you save the supplier — they can sign in to the portal right away. To add teammates from the same vendor, click “Edit” on the supplier and use the “Additional supplier logins” card. Add as many as you like — one email maps to one supplier. The same Gmail search is available here too if you don't have the address handy.",
+        shot: "The Additional supplier logins card with an email being added.",
       },
       {
         text: "That's it — those people can now sign in at /supplier/login with a magic link and see only that supplier's POs.",
@@ -281,8 +281,8 @@ export const guides: Guide[] = [
     category: "B2B & invoicing",
     steps: [
       {
-        text: "Go to Customers → B2B Customer List → Edit the brand. In the “Portal logins” card, add the buyer's email.",
-        shot: "The Portal logins card on a brand.",
+        text: "The brand's contact email is granted access automatically the moment you save the brand. To add additional buyers from the same brand, go to Customers → B2B Customer List → Edit the brand and use the “Additional B2B portal logins” card.",
+        shot: "The Additional B2B portal logins card on a brand.",
       },
       {
         text: "The buyer signs in at /portal/login with a magic link, then browses the catalog at their tier price, builds a cart, and checks out.",

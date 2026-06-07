@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   company,
+  companyContact,
   customer,
   customerMessage,
   invoice,
@@ -106,6 +107,24 @@ export async function PATCH(
     if (!updated) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+
+    // Auto-promote contact_email to a B2B portal login when the PATCH sets
+    // one. Idempotent via the email uniqueness index; never auto-removes —
+    // clearing or changing contact_email does NOT revoke a previously-granted
+    // address (that's an explicit Remove in the Additional B2B portal logins
+    // UI).
+    const loginEmail = input.contactEmail?.trim().toLowerCase();
+    if (loginEmail) {
+      await db
+        .insert(companyContact)
+        .values({
+          companyId: updated.id,
+          email: loginEmail,
+          name: input.contactName?.trim() || null,
+        })
+        .onConflictDoNothing({ target: companyContact.email });
+    }
+
     return NextResponse.json({ data: { id: updated.id } });
   } catch (err) {
     console.error("Update company failed:", err);

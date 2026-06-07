@@ -7,6 +7,7 @@ import {
   customerMessage,
   productionPo,
   supplier,
+  supplierContact,
   whatsappMessage,
 } from "@/lib/schema";
 import { supplierSchema } from "../_schema";
@@ -63,6 +64,24 @@ export async function PATCH(
     if (!updated) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+
+    // Auto-promote the supplier's contact_email to an authorized login when
+    // the PATCH sets one. Idempotent via the email uniqueness index; never
+    // removes existing logins (clearing or changing contact_email does NOT
+    // revoke a previously-granted address — that's an explicit Remove in
+    // the Additional supplier logins UI).
+    const loginEmail = input.contactEmail?.trim().toLowerCase();
+    if (loginEmail) {
+      await db
+        .insert(supplierContact)
+        .values({
+          supplierId: updated.id,
+          email: loginEmail,
+          name: input.contactName?.trim() || null,
+        })
+        .onConflictDoNothing({ target: supplierContact.email });
+    }
+
     return NextResponse.json({ data: { id: updated.id } });
   } catch (err) {
     console.error("Update supplier failed:", err);

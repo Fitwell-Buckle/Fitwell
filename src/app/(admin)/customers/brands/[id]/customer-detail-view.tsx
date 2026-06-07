@@ -236,7 +236,7 @@ export function CustomerDetailView({
               Addresses ({addresses.length})
             </TabsTrigger>
             <TabsTrigger value="logins">
-              Portal logins ({contacts.length})
+              Additional logins ({contacts.length})
             </TabsTrigger>
           </TabsList>
           <div className="flex gap-2">

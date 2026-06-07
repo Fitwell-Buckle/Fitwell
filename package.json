@@ -20,6 +20,8 @@
     "db:pending:prod": "vercel --global-config ~/.vercel-fitwell env pull .env.production.local --environment=production --yes && dotenv -e .env.production.local -- node --import tsx/esm scripts/check-pending-migrations.ts; rm -f .env.production.local",
     "check:supplier-login": "node --env-file=.env.local --import tsx/esm scripts/check-supplier-login.ts",
     "check:supplier-login:prod": "bash scripts/check-supplier-login-prod.sh",
+    "backfill:portal-logins": "node --env-file=.env.local --import tsx/esm scripts/backfill-portal-logins.ts",
+    "backfill:portal-logins:prod": "bash scripts/backfill-portal-logins-prod.sh",
     "db:studio": "drizzle-kit studio",
     "vc": "vercel --global-config ~/.vercel-fitwell",
     "shopify": "node --env-file=.env.local --import tsx/esm scripts/shopify-cli.ts",

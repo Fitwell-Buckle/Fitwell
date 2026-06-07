@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Mail, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { GmailContactSearch } from "./gmail-contact-search";
+import type { GmailContactMatch } from "./gmail-contact-search";
 
 export interface SupplierLogin {
   id: string;
@@ -14,8 +15,10 @@ export interface SupplierLogin {
 }
 
 /**
- * Authorized-logins allowlist for a supplier. Adds / removes magic-link
- * signin emails. Shared between the supplier list manager and the new
+ * Portal-login allowlist for a supplier. Adds / removes magic-link signin
+ * emails. The same input feeds either flow: type a known email and hit Add,
+ * or type a search term and hit Search Gmail — picking a match populates the
+ * input so the next click is Add. Used by the supplier list manager and the
  * supplier detail page.
  */
 export function SupplierLogins({
@@ -26,12 +29,18 @@ export function SupplierLogins({
   contacts: SupplierLogin[];
 }) {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [matches, setMatches] = useState<GmailContactMatch[] | null>(null);
+
+  // Loose email shape — only used to gate the Add button; the API rejects
+  // anything malformed server-side, so false negatives here aren't dangerous.
+  const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
   async function add() {
-    const e = email.trim().toLowerCase();
+    const e = value.trim().toLowerCase();
     if (!e) return;
     setError(null);
     setBusy(true);
@@ -45,13 +54,38 @@ export function SupplierLogins({
         const d = await res.json().catch(() => ({}));
         setError(d.error || "Failed to add.");
       } else {
-        setEmail("");
+        setValue("");
+        setMatches(null);
         router.refresh();
       }
     } catch {
       setError("Network error — please try again.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function searchGmail() {
+    const q = value.trim();
+    if (!q) return;
+    setError(null);
+    setMatches(null);
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/gmail/search?q=${encodeURIComponent(q)}`);
+      const d = (await res.json().catch(() => ({}))) as {
+        data?: GmailContactMatch[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(d.error || "Gmail search failed.");
+        return;
+      }
+      setMatches(d.data ?? []);
+    } catch {
+      setError("Network error.");
+    } finally {
+      setSearching(false);
     }
   }
 
@@ -77,9 +111,13 @@ export function SupplierLogins({
 
   return (
     <Card className="p-6">
-      <h2 className="text-sm font-semibold text-zinc-900">Authorized logins</h2>
+      <h2 className="text-sm font-semibold text-zinc-900">
+        Additional supplier logins
+      </h2>
       <p className="mt-1 text-xs text-zinc-500">
-        Anyone on this list can sign in (magic link) and update this supplier’s POs.
+        The supplier&apos;s contact email above is granted access automatically.
+        Add anyone else on this list who should also sign in (magic link) and
+        update this supplier&apos;s POs.
       </p>
       <div className="mt-3 space-y-2">
         {contacts.length === 0 ? (
@@ -91,29 +129,87 @@ export function SupplierLogins({
               className="flex items-center justify-between rounded-md border border-zinc-100 px-3 py-1.5"
             >
               <span className="text-sm text-zinc-700">{c.email}</span>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => remove(c.id)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => remove(c.id)}
+              >
                 Remove
               </Button>
             </div>
           ))
         )}
       </div>
-      <GmailContactSearch
-        className="mt-4 border-t border-zinc-100 pt-4"
-        onPick={(m) => setEmail(m.email)}
-      />
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-4 flex gap-2">
         <Input
-          type="email"
-          placeholder="teammate@vendor.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type="text"
+          placeholder="teammate@vendor.com — or a name / domain to search Gmail"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            if (looksLikeEmail) void add();
+            else if (value.trim()) void searchGmail();
+          }}
         />
-        <Button onClick={add} disabled={busy || !email.trim()}>
+        <Button
+          variant="outline"
+          onClick={() => void searchGmail()}
+          disabled={searching || !value.trim()}
+          title="Search your Gmail messages for this name or domain to find their email"
+        >
+          {searching ? (
+            <>
+              <Search className="h-4 w-4" />
+              Searching…
+            </>
+          ) : (
+            <>
+              <Mail className="h-4 w-4" />
+              Search Gmail
+            </>
+          )}
+        </Button>
+        <Button onClick={() => void add()} disabled={busy || !looksLikeEmail}>
           Add
         </Button>
       </div>
+
+      {matches && matches.length === 0 && (
+        <p className="mt-2 text-xs text-zinc-400">
+          No emails found in messages matching that query.
+        </p>
+      )}
+      {matches && matches.length > 0 && (
+        <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
+          {matches.map((m) => (
+            <li key={m.email}>
+              <button
+                type="button"
+                className="w-full rounded-md border border-zinc-100 px-3 py-1.5 text-left text-sm text-zinc-700 hover:border-zinc-200 hover:bg-zinc-50"
+                onClick={() => {
+                  setValue(m.email);
+                  setMatches(null);
+                }}
+              >
+                <span className="font-medium text-zinc-900">{m.email}</span>
+                {m.name && (
+                  <span className="ml-2 text-xs text-zinc-500">{m.name}</span>
+                )}
+                {m.snippet && (
+                  <div className="truncate text-xs text-zinc-400">
+                    {m.snippet}
+                  </div>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </Card>
   );
