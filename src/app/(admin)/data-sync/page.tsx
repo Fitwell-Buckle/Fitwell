@@ -235,7 +235,7 @@ export default async function DataSyncPage() {
                 collections/* (the last two refresh the catalog cache)
               </p>
               <p className="mt-1 font-mono text-[11px] text-zinc-400">
-                → admin.fitwellbuckle.co/api/webhooks/shopify
+                → portal.fitwellbuckle.co/api/webhooks/shopify
               </p>
             </div>
           </div>

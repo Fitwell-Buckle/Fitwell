@@ -13,7 +13,8 @@ export default function LoginPage() {
           alt="Fitwell Buckle Co."
           width={200}
           height={48}
-          className="mx-auto"
+          // Brand wordmark is black on white; invert for this dark login bg.
+          className="mx-auto invert"
           priority
         />
         <p className="mt-4 text-sm text-zinc-500">

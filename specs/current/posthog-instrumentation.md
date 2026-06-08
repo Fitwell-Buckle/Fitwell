@@ -10,7 +10,7 @@ End-to-end map of the visitor → buyer instrumentation, and the recipes for add
 |---|---|---|---|
 | Storefront theme snippet | `www.fitwellbuckle.co` (every storefront page) | `shopify/theme-posthog-snippet.html` → pasted into `theme.liquid` | `$pageview`, `$autocapture`, `$pageleave`, `$web_vitals` |
 | Shopify Custom Pixel | Sandboxed iframe at `www.fitwellbuckle.co/web-pixels@.../sandbox/...` (same origin) | `shopify/custom-pixel.js` → pasted into Customer Events → pixel `posthog` | `product_viewed`, `product_added_to_cart`, `checkout_started`, `purchase_completed` |
-| Admin Next.js client | `admin.fitwellbuckle.co/*` | `src/components/providers/posthog-provider.tsx` + `posthog-admin-identify.tsx` | `$pageview` + identifies signed-in admins so staff Persons don't get back-stitched onto buyer profiles |
+| Admin Next.js client | `portal.fitwellbuckle.co/*` | `src/components/providers/posthog-provider.tsx` + `posthog-admin-identify.tsx` | `$pageview` + identifies signed-in admins so staff Persons don't get back-stitched onto buyer profiles |
 
 Identity stitches across all three because they all run posthog-js against `.fitwellbuckle.co` first-party cookies, and the Custom Pixel iframe is same-origin (Shopify hosts it under the storefront domain). The pixel's `posthog.identify(email)` triggers posthog-js's standard `$anon_distinct_id` merge → one Person carries the full pre-purchase + purchase + post-purchase timeline. The spike that confirmed this: `specs/research/posthog-shopify-stitching.md`.
 

@@ -47,7 +47,7 @@ vi.mock("@/lib/shopify/client", () => ({
 import { POST } from "./route";
 
 function makeReq(body: unknown = { to: "buyer@acme.com" }) {
-  return new Request("https://admin.fitwellbuckle.co/api/invoices/inv1/send", {
+  return new Request("https://portal.fitwellbuckle.co/api/invoices/inv1/send", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),

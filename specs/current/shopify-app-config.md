@@ -100,7 +100,7 @@ Until the merchant approves, the new scopes are *declared* but not *granted* —
 
 ## Embed trap
 
-The Dev Dashboard ships new apps with `embedded = true`. With embedding on, Shopify Admin tries to load `admin.fitwellbuckle.co` inside an iframe. Our app sets `frame-ancestors 'none'` (`next.config.ts`) and uses NextAuth — neither is compatible with embedding. Result: "refused to connect" inside the Shopify Admin app slot, and a half-stuck merchant install (this hit us 2026-05-24).
+The Dev Dashboard ships new apps with `embedded = true`. With embedding on, Shopify Admin tries to load `portal.fitwellbuckle.co` inside an iframe. Our app sets `frame-ancestors 'none'` (`next.config.ts`) and uses NextAuth — neither is compatible with embedding. Result: "refused to connect" inside the Shopify Admin app slot, and a half-stuck merchant install (this hit us 2026-05-24).
 
 **Keep `embedded = false`.** Flipping back requires wiring App Bridge + Shopify session token auth across the admin, which we don't have today — a substantial change, not a config flip.
 
@@ -133,7 +133,7 @@ If we ever do automate it, a GitHub Action triggered by `paths: [shopify.app.tom
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| App shows "admin.fitwellbuckle.co refused to connect" inside Shopify Admin | `embedded = true` + CSP `frame-ancestors 'none'` | Set `embedded = false`, deploy, release, merchant re-auths |
+| App shows "portal.fitwellbuckle.co refused to connect" inside Shopify Admin | `embedded = true` + CSP `frame-ancestors 'none'` | Set `embedded = false`, deploy, release, merchant re-auths |
 | `Failed to prompt: Create this project as a new app?` from `shopify app config link` | Non-TTY shell (Claude Code `!`, CI) with no toml yet | Pass `--client-id <id>` |
 | `--allow-updates cannot also be provided when using --no-release` | Flags are mutually exclusive | Use one or the other; `--no-release` already skips the prompt |
 | `Nonexistent flag: --force` | Removed in CLI v4 | Use `--allow-updates` for non-interactive runs |

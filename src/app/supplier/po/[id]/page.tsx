@@ -125,6 +125,11 @@ export default async function SupplierPoDetailPage({
         totalCents={totalCents}
         ownedStages={ownedStages as string[]}
         stageOptions={stageOptions}
+        // The packaging label is only meaningful for the supplier that
+        // physically packages the product — surface the Label link only when
+        // they own the packaging stage on this PO. The stage KEY ("packaging")
+        // is stable even if its display label is renamed.
+        canDownloadLabels={ownedStages.includes("packaging")}
         lineItems={sortedLineItems.map((li) => ({
           id: li.id,
           title: li.title,

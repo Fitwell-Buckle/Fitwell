@@ -16,7 +16,7 @@ vi.mock("@/lib/grapevine/ingest", async (importOriginal) => {
 import { POST } from "./route";
 
 const SECRET = "test-secret-value";
-const ENDPOINT = "https://admin.fitwellbuckle.co/api/webhooks/grapevine";
+const ENDPOINT = "https://portal.fitwellbuckle.co/api/webhooks/grapevine";
 
 function makeReq(opts: {
   body?: unknown;

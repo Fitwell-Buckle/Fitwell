@@ -36,7 +36,7 @@ export const guides: Guide[] = [
     category: "Getting started",
     steps: [
       {
-        text: "Go to admin.fitwellbuckle.co and click “Sign in with Google”. Use your @fitwellbuckle.co account.",
+        text: "Go to portal.fitwellbuckle.co and click “Sign in with Google”. Use your @fitwellbuckle.co account.",
         shot: "The login screen with the Sign in with Google button.",
       },
       {

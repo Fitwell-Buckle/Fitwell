@@ -15,7 +15,7 @@ Last updated: 2026-05-28
 | Protocols | REST API (orders, customers) + GraphQL (bulk queries) |
 | Sync method | Cron polling (every 2h) + real-time webhooks |
 | App config source | `shopify.app.toml` at repo root |
-| Embedded in Shopify Admin | No (`embedded = false`) — app runs standalone at `admin.fitwellbuckle.co` |
+| Embedded in Shopify Admin | No (`embedded = false`) — app runs standalone at `portal.fitwellbuckle.co` |
 
 ### App configuration (scopes, embed, deploy)
 
@@ -117,7 +117,7 @@ in the **Notifications** inbox (channel "WhatsApp") and matched to a contact by
 1. Create a Meta app + add the **WhatsApp** product; add/verify a business phone number.
 2. Set the env vars above (verify token is any random string you choose).
 3. In the Meta app's WhatsApp → Configuration, add the **callback URL**
-   `https://admin.fitwellbuckle.co/api/webhooks/whatsapp` with the same verify
+   `https://portal.fitwellbuckle.co/api/webhooks/whatsapp` with the same verify
    token, and **subscribe** to the `messages` field.
 Until configured, the webhook 403s the handshake and no messages flow.
 Weaving WhatsApp into the per-contact **Replies/Messages** views (alongside
@@ -151,7 +151,7 @@ orders. Powers the `link_method = 'self_report'` path in
 2. In Shopify Admin → **Apps → Flow → Create workflow**:
    - **Trigger**: Grapevine "Response Completed" (search "Grapevine").
    - **Action**: "Send HTTP request"
-     - URL: `https://admin.fitwellbuckle.co/api/webhooks/grapevine`
+     - URL: `https://portal.fitwellbuckle.co/api/webhooks/grapevine`
      - Method: `POST`
      - Headers: `x-grapevine-secret: <same secret as the env var>` plus
        `content-type: application/json`

@@ -34,10 +34,14 @@ Excluded:
 > Phases are ordered for **zero-downtime cutover** — each step adds the new host alongside the old before anything flips, so sign-in and Shopify never break mid-switch.
 
 ### Phase 1: DNS + Vercel domain (additive, no cutover yet)
-- [ ] In the Resend dashboard, record exactly which DNS records back `portal.fitwellbuckle.co` (expected: SPF/DKIM TXT + MX on deeper subnames like `send.portal…`, `resend._domainkey.portal…`, `_dmarc.portal…`, leaving the apex free).
-- [ ] Confirm the `portal.fitwellbuckle.co` apex has no record that would conflict with a web A record. If Resend put an MX/TXT directly on the apex, use an **A record** for Vercel (a CNAME cannot coexist with other records at the same name).
-- [ ] Add A record `portal.fitwellbuckle.co → 76.76.21.21` (Vercel).
-- [ ] Add `portal.fitwellbuckle.co` to the Vercel project (`npm run vc`); let Vercel auto-provision SSL. Do **not** yet make it the primary/redirect target.
+
+> **Discovered 2026-06-08:** `portal.fitwellbuckle.co` is currently a Shopify-managed subdomain — `CNAME → shops.myshopify.com`, serving a 301 to `www.fitwellbuckle.co`. The Resend records are correctly on deeper subnames (`send.portal.…` SPF/MX, `resend._domainkey.portal.…` DKIM) and don't conflict. But the Shopify CNAME at the bare `portal.` name must be removed before the Vercel A record can take its place. Confirm in Shopify Admin → Settings → Domains that nothing important hangs off the redirect before removing.
+
+- [ ] In Shopify Admin → Settings → Domains: locate `portal.fitwellbuckle.co`, confirm it's only a redirect (not backing a storefront/market), then remove it from Shopify's connected subdomains.
+- [ ] In Google Cloud DNS console: delete the `portal.fitwellbuckle.co` CNAME → `shops.myshopify.com`.
+- [ ] Add A record `portal.fitwellbuckle.co → 76.76.21.21` (Vercel), TTL 300.
+- [ ] Verify Resend records on `send.portal.…` and `resend._domainkey.portal.…` are untouched (they're separate rows; should remain intact).
+- [ ] In Vercel dashboard (https://vercel.com/fitwellbuckle/fitwell/settings/domains): add `portal.fitwellbuckle.co`. Let Vercel auto-provision SSL. Do **not** yet make it the primary/redirect target.
 - [ ] Verify: `https://portal.fitwellbuckle.co` serves the app (login page renders) AND a test email from Resend still sends/authenticates (SPF/DKIM pass).
 
 #### Tests

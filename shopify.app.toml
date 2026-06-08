@@ -2,7 +2,7 @@
 
 client_id = "baf6c9cee6ec6d1d64f15a820241b49f"
 name = "Fitwell Admin"
-application_url = "https://admin.fitwellbuckle.co"
+application_url = "https://portal.fitwellbuckle.co"
 embedded = false
 
 [webhooks]

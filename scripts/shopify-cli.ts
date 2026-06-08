@@ -365,7 +365,7 @@ const WEBHOOK_TOPICS = [
   "collections/delete",
 ];
 const DEFAULT_WEBHOOK_ADDRESS =
-  "https://admin.fitwellbuckle.co/api/webhooks/shopify";
+  "https://portal.fitwellbuckle.co/api/webhooks/shopify";
 
 async function cmdRegisterWebhooks(flags: Record<string, string>): Promise<void> {
   const address = flags.address ?? DEFAULT_WEBHOOK_ADDRESS;

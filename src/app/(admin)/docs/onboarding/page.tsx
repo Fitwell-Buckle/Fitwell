@@ -236,7 +236,7 @@ export default async function OnboardingPage() {
             You can check the deploy status at{" "}
             <code>vercel.com/fitwellbuckle/fitwell</code> or by
             running <code>npm run vc ls</code> in Terminal. The
-            production site at <code>admin.fitwellbuckle.co</code>{" "}
+            production site at <code>portal.fitwellbuckle.co</code>{" "}
             updates automatically once the build succeeds.
           </p>
           <p>

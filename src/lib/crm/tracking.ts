@@ -1,9 +1,9 @@
 // Open-tracking pixel URLs. The token lives on outbound_message.track_token;
 // the pixel hits the public /api/track/open/[token] route, which records the
-// open. Base URL resolves from NextAuth's own origin (correct admin host in
+// open. Base URL resolves from NextAuth's own origin (correct portal host in
 // every env) with a hardcoded production fallback.
 
-const FALLBACK_BASE = "https://admin.fitwellbuckle.co";
+const FALLBACK_BASE = "https://portal.fitwellbuckle.co";
 
 export function trackingBaseUrl(): string {
   const raw =

@@ -12,6 +12,8 @@ export function Footer() {
               alt="Fitwell Buckle Co."
               width={100}
               height={24}
+              // Brand wordmark is black on white; invert for this dark footer.
+              className="invert"
             />
             <p className="text-sm text-zinc-500">
               &copy; {new Date().getFullYear()} All rights reserved.

@@ -93,7 +93,7 @@ export async function receivePo(poId: string): Promise<ReceiveResult> {
         locationId: plan.locationId!,
         delta: plan.quantity,
         // Stamp the PO number onto the Shopify adjustment (referenceDocumentUri).
-        reference: `https://admin.fitwellbuckle.co/po/${po.shopifyPoNumber}`,
+        reference: `https://portal.fitwellbuckle.co/po/${po.shopifyPoNumber}`,
         // Total Cost ÷ qty = the line's unit cost basis for Shopify.
         costCents: supplierUnitByLine.get(li.id) ?? li.unitCostCents ?? null,
       });

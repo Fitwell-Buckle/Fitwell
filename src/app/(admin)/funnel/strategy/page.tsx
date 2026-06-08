@@ -353,7 +353,7 @@ function KlaviyoSection({ k }: { k: KlaviyoOverview }) {
           <p className="text-sm text-zinc-500">
             No data yet. The <Mono>/api/cron/extract-klaviyo</Mono> cron
             runs daily at 07:30 UTC. Trigger it manually with{" "}
-            <Mono>curl https://admin.fitwellbuckle.co/api/cron/extract-klaviyo</Mono>{" "}
+            <Mono>curl https://portal.fitwellbuckle.co/api/cron/extract-klaviyo</Mono>{" "}
             (signed in as admin) to populate.
           </p>
         </CardContent>

@@ -233,7 +233,13 @@ function SidebarContent({
           <img
             src={logoUrl ?? "/images/fitwell-logo.png"}
             alt="Fitwell Admin"
-            className="h-[29px] w-auto"
+            // Local brand asset is black on white; invert for this dark
+            // sidebar. The Shopify-uploaded logo (when provided) renders
+            // as-is — Shopify admins control its colors directly.
+            className={cn(
+              "h-[29px] w-auto",
+              !logoUrl && "invert",
+            )}
           />
         </Link>
       </div>

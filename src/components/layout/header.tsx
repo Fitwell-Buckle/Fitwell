@@ -12,6 +12,9 @@ export function Header() {
             width={150}
             height={36}
             priority
+            // Brand wordmark is black on white; invert for this dark header so
+            // it renders as the expected white-on-navy.
+            className="invert"
           />
         </Link>
         <nav className="hidden gap-6 md:flex">

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -38,9 +39,12 @@ export default async function ProductsPage({
   if (!session) redirect("/auth/login");
 
   const params = await searchParams;
-  // Item Chooser filter: the chosen product SKU(s) (comma-separated in the URL).
+  // Item Chooser filter: the chosen product SKU(s). Next can deliver either a
+  // single comma-separated string (?sku=A,B) or repeated keys (?sku=A&sku=B),
+  // so accept both shapes.
+  const rawSku = params.sku;
   const skuSet = new Set(
-    (typeof params.sku === "string" ? params.sku : "")
+    (Array.isArray(rawSku) ? rawSku.join(",") : (rawSku ?? ""))
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
@@ -149,13 +153,14 @@ export default async function ProductsPage({
               <TableHead className="text-right">Units Sold</TableHead>
               <TableHead className="text-right">Orders</TableHead>
               <TableHead className="text-right">Revenue</TableHead>
+              <TableHead className="w-0" aria-label="Actions" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {visibleProducts.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="py-8 text-center text-zinc-400"
                 >
                   {skuSet.size ? "No products match." : "No product data yet."}
@@ -185,6 +190,19 @@ export default async function ProductsPage({
                   </TableCell>
                   <TableCell className="text-right">
                     <Mono>{fmt(Number(p.revenue) || 0)}</Mono>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap pr-2 text-right">
+                    {p.sku ? (
+                      <Link
+                        href={`/products/${encodeURIComponent(p.sku)}/label`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800 hover:decoration-zinc-600"
+                        title="Open the printable packaging label for this SKU"
+                      >
+                        Label
+                      </Link>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))

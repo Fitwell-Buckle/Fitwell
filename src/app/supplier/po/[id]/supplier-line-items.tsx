@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ export function SupplierLineItems({
   totalCents,
   ownedStages,
   stageOptions,
+  canDownloadLabels = false,
 }: {
   poId: string;
   lineItems: LineItem[];
@@ -43,6 +45,9 @@ export function SupplierLineItems({
   ownedStages: string[];
   /** Dropdown options: the supplier's stages + the handoff to the next team. */
   stageOptions: { value: string; label: string }[];
+  /** Show the packaging label link per line item — only when this supplier
+   *  owns the packaging stage on the PO. */
+  canDownloadLabels?: boolean;
 }) {
   const router = useRouter();
   const stageLabels = useStageLabels();
@@ -92,6 +97,7 @@ export function SupplierLineItems({
               <TableHead>Qty</TableHead>
               <TableHead>Unit cost</TableHead>
               <TableHead className="text-right">Stage</TableHead>
+              {canDownloadLabels && <TableHead className="w-0" aria-label="Label" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -121,6 +127,19 @@ export function SupplierLineItems({
                     </Badge>
                   )}
                 </TableCell>
+                {canDownloadLabels && (
+                  <TableCell className="whitespace-nowrap pr-2 text-right">
+                    <Link
+                      href={`/supplier/products/${encodeURIComponent(li.sku)}/label`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800 hover:decoration-zinc-600"
+                      title="Open the printable packaging label for this SKU"
+                    >
+                      Label
+                    </Link>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

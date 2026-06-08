@@ -21,7 +21,7 @@ import { POST, OPTIONS } from "./route";
 import { NextRequest } from "next/server";
 
 function makeReq(body: unknown, origin = "https://www.fitwellbuckle.co") {
-  return new NextRequest("https://admin.fitwellbuckle.co/api/tracking/utm", {
+  return new NextRequest("https://portal.fitwellbuckle.co/api/tracking/utm", {
     method: "POST",
     headers: { "content-type": "application/json", origin },
     body: JSON.stringify(body),

@@ -235,7 +235,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 - **App config in code**: Shopify app configuration (scopes, embed flag, app URL, declared webhook topics) lives in `shopify.app.toml` at the repo root. Edit like any other file; any contributor with Shopify Partner-org access deploys via `shopify app deploy && shopify app release` from their laptop after merge. Never make app-config changes directly in the Shopify Dev Dashboard — they'll be overwritten on the next deploy. **Full workflow in `specs/current/shopify-app-config.md`** — read it before changing scopes or anything else in the toml. **CLI setup**: `specs/ops/contributor-setup.md` §5.
 - **Theme edits via `shopify` CLI**: when a task requires editing the live storefront theme (PostHog instrumentation tags, page templates, sections, custom Liquid blocks), use the Shopify CLI rather than the admin code editor. **Full workflow: `specs/current/shopify-theme-edits.md`** (pull/push commands, JSONC page templates, finding the right template via `template_suffix`, CDN cache verification). If the CLI isn't installed: `npm i -g @shopify/cli @shopify/theme` (or `brew install shopify-cli`).
-- **Not embedded**: The app runs standalone at `admin.fitwellbuckle.co`, not inside the Shopify Admin iframe (`embedded = false` in the toml, `frame-ancestors 'none'` in `next.config.ts`). Flipping either requires wiring App Bridge + Shopify session token auth across the admin — a substantial change, not a config flip. Surface it in the working session before starting.
+- **Not embedded**: The app runs standalone at `portal.fitwellbuckle.co`, not inside the Shopify Admin iframe (`embedded = false` in the toml, `frame-ancestors 'none'` in `next.config.ts`). Flipping either requires wiring App Bridge + Shopify session token auth across the admin — a substantial change, not a config flip. Surface it in the working session before starting.
 - **Webhook verification**: All incoming webhooks verified via HMAC-SHA256 using `SHOPIFY_WEBHOOK_SECRET`.
 - **Sync is additive**: Never delete Shopify-sourced records. Update existing or soft-delete (set a `deleted_at` timestamp).
 - **Dedup key**: `shopify_id` fields are unique indexes — use upsert patterns.
@@ -282,7 +282,7 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 - **Platform**: Vercel, auto-deploys from `main` branch on every push.
 - **Project**: https://vercel.com/fitwellbuckle/fitwell
-- **Production URL**: https://admin.fitwellbuckle.co (fallback: https://fitwell-ashy.vercel.app)
+- **Production URL**: https://portal.fitwellbuckle.co (fallback: https://fitwell-ashy.vercel.app; `admin.fitwellbuckle.co` 301-redirects to `portal.` for legacy bookmarks)
 - **Vercel CLI**: uses a separate config dir (`~/.vercel-fitwell`) so it doesn't collide with other Vercel projects on your machine. All `vercel` commands in this repo must use `npm run vc` or `vercel --global-config ~/.vercel-fitwell`. First-time setup (`npm run vc login` etc.) is in `specs/ops/contributor-setup.md` §3.
 - **Workflow**: Everyone works on `main`, pushes when ready. Vercel deploys automatically.
 - **Cron jobs**: Defined in `vercel.json` — health check (every 4h), Shopify extract (every 2h), GA4/Google Ads/GSC extract (daily morning), PostHog extract (every 3h).
