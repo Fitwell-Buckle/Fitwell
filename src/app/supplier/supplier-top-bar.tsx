@@ -30,13 +30,13 @@ export function SupplierTopBar({
 
   return (
     <header className="border-b border-zinc-200 bg-white print:hidden">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
         <Link href="/supplier" className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/images/fitwell-logo.png"
             alt="Fitwell"
-            className="h-7 w-auto"
+            className="h-[58px] w-auto"
           />
           <span className="text-sm font-medium text-zinc-400">Supplier portal</span>
         </Link>
