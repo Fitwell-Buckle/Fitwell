@@ -282,10 +282,26 @@ The project uses Neon branching to isolate environments. Each developer gets the
 
 - **Platform**: Vercel, auto-deploys from `main` branch on every push.
 - **Project**: https://vercel.com/fitwellbuckle/fitwell
-- **Production URL**: https://portal.fitwellbuckle.co (fallback: https://fitwell-ashy.vercel.app; `admin.fitwellbuckle.co` 301-redirects to `portal.` for legacy bookmarks)
+- **Production URL**: https://portal.fitwellbuckle.co (fallback: https://fitwell-ashy.vercel.app; `admin.fitwellbuckle.co` 307-redirects to `portal.` for legacy bookmarks)
 - **Vercel CLI**: uses a separate config dir (`~/.vercel-fitwell`) so it doesn't collide with other Vercel projects on your machine. All `vercel` commands in this repo must use `npm run vc` or `vercel --global-config ~/.vercel-fitwell`. First-time setup (`npm run vc login` etc.) is in `specs/ops/contributor-setup.md` §3.
 - **Workflow**: Everyone works on `main`, pushes when ready. Vercel deploys automatically.
 - **Cron jobs**: Defined in `vercel.json` — health check (every 4h), Shopify extract (every 2h), GA4/Google Ads/GSC extract (daily morning), PostHog extract (every 3h).
 - **Environment variables**: Managed in Vercel dashboard, mirrored in `.env.example` for local dev.
 - **Database migrations**: Applied manually to production before deploy. When pushing code with new migrations, apply to production first, then push (Vercel deploys immediately on push).
 - **Speed insights**: `@vercel/speed-insights` included for performance monitoring.
+
+### Where DNS lives (`fitwellbuckle.co`)
+
+DNS for `fitwellbuckle.co` is **managed by Shopify**, not by a separate DNS provider. Edit records at:
+
+> Shopify Admin → **Settings → Domains** → click `fitwellbuckle.co` (the root) → **DNS Settings**
+
+The "Add custom record" button on that page accepts A, AAAA, CNAME, MX, and TXT. Subdomain claims (the per-subdomain entries in the parent Domains list — `portal.fitwellbuckle.co`, `accounts.fitwellbuckle.co`, etc.) are a *separate concern*: connecting one auto-creates the CNAME → `shops.myshopify.com`; deleting one auto-removes the CNAME. So for an app subdomain hosted **outside** Shopify (e.g. on Vercel), the workflow is: remove the subdomain claim from Settings → Domains *first*, then add the A/CNAME you actually want in DNS Settings.
+
+Don't be fooled by `dig NS fitwellbuckle.co +short` returning `ns-cloud-d*.googledomains.com.` — that's the GCP infrastructure Shopify uses under the hood; it does **not** mean DNS edits happen in Google Cloud Console. There is no Cloud DNS zone you can administer for this domain; everything goes through Shopify's UI. (If you ever see a `fitwell-*` GCP project, it's unrelated to this DNS zone.)
+
+Resend email keeps working alongside Vercel web hosting because the records live at different names: `send.portal.…` SPF/MX, `resend._domainkey.portal.…` DKIM. Don't put anything at the bare `portal.fitwellbuckle.co` other than the Vercel A record.
+
+### Shopify store handle gotcha
+
+The Shopify admin URL uses store handle **`fitwell-buckles`** (with hyphen and "s"), not `fitwellbuckle`. So the right admin path is e.g. `https://admin.shopify.com/store/fitwell-buckles/settings/domains`, not `…/fitwellbuckle/…`. The latter returns a generic "There's a problem loading this page" error rather than a clean 404. Easy to lose 20 minutes to this.
