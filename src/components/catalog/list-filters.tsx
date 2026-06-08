@@ -63,6 +63,28 @@ export function ListFilters({ production }: { production?: ProductionFilterProps
     variants.filter((v) => skuSet.has(v.sku)).map((v) => v.shopifyVariantId),
   );
 
+  // Collapse chips: if the user's chosen SKUs cover an entire known
+  // collection, render that as a single "Collection name" chip instead of
+  // one chip per SKU. Greedy from largest collection down so the biggest
+  // group wins; SKUs not covered by any matched collection stay individual.
+  const collectionSkus = collections.map((c) => ({
+    id: c.id,
+    title: c.title,
+    skus: variants
+      .filter((v) => c.variantIds.has(v.shopifyVariantId) && v.sku)
+      .map((v) => v.sku),
+  }));
+  const matchedCollections: { id: string; title: string; skus: string[] }[] = [];
+  const consumedSkus = new Set<string>();
+  for (const c of [...collectionSkus].sort((a, b) => b.skus.length - a.skus.length)) {
+    if (c.skus.length === 0) continue;
+    if (c.skus.every((s) => skuSet.has(s))) {
+      matchedCollections.push(c);
+      c.skus.forEach((s) => consumedSkus.add(s));
+    }
+  }
+  const loneSkus = skus.filter((s) => !consumedSkus.has(s));
+
   return (
     <div className="mt-6 flex flex-wrap items-center gap-2">
       <div className="w-full sm:w-96">
@@ -78,7 +100,25 @@ export function ListFilters({ production }: { production?: ProductionFilterProps
         />
       </div>
 
-      {skus.map((s) => {
+      {matchedCollections.map((c) => {
+        const memberSet = new Set(c.skus);
+        return (
+          <button
+            key={`coll-${c.id}`}
+            type="button"
+            onClick={() => setSkus(skus.filter((x) => !memberSet.has(x)))}
+            className="flex h-9 items-center gap-1 rounded-lg border border-zinc-300 bg-zinc-50 px-2.5 text-xs font-medium text-zinc-800 hover:bg-zinc-100"
+            title={`${c.title} (${c.skus.length} products)`}
+            aria-label={`Remove ${c.title} from filter`}
+          >
+            <span className="max-w-[260px] truncate">{c.title}</span>
+            <span className="text-zinc-400">·</span>
+            <span className="text-zinc-500">{c.skus.length}</span>
+            <X className="h-3 w-3 shrink-0 text-zinc-400" />
+          </button>
+        );
+      })}
+      {loneSkus.map((s) => {
         const v = variants.find((x) => x.sku === s) ?? null;
         return (
           <button

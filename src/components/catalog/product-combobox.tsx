@@ -307,26 +307,33 @@ export function ProductCombobox({
             </div>
           )}
 
-          {onSelectMany && (checked.size > 0 || collectionId) && (
-            <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2">
-              <button
-                type="button"
-                onClick={() =>
-                  commitMany(
-                    checked.size > 0
-                      ? variants.filter((v) => checked.has(v.shopifyVariantId))
-                      : filteredAll,
-                  )
-                }
-                className="rounded-md bg-brand px-3 py-1 text-xs font-medium text-white hover:bg-brand-hover"
-              >
-                {checked.size > 0 ? `Add ${checked.size}` : `Add all ${filteredAll.length}`}
-              </button>
-              <span className="text-xs text-zinc-500">
-                {checked.size > 0 ? `${checked.size} selected` : "matching products"}
-              </span>
-            </div>
-          )}
+          {onSelectMany &&
+            (checked.size > 0 ||
+              collectionId ||
+              sizes.size > 0 ||
+              colors.size > 0 ||
+              materials.size > 0) && (
+              <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    commitMany(
+                      checked.size > 0
+                        ? variants.filter((v) => checked.has(v.shopifyVariantId))
+                        : filteredAll,
+                    )
+                  }
+                  className="rounded-md bg-brand px-3 py-1 text-xs font-medium text-white hover:bg-brand-hover"
+                >
+                  {checked.size > 0
+                    ? `Select ${checked.size}`
+                    : `Select all ${filteredAll.length}`}
+                </button>
+                <span className="text-xs text-zinc-500">
+                  {checked.size > 0 ? `${checked.size} checked` : "matching products"}
+                </span>
+              </div>
+            )}
 
           <ul className="max-h-64 overflow-auto py-1">
             {results.length === 0 ? (
