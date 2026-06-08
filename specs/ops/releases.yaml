@@ -159,3 +159,29 @@
     - src/app/(admin)/modules/production/po/[id]/sub-po-covers.tsx
     - src/app/(admin)/modules/production/po/[id]/page.tsx
     - src/app/(admin)/modules/production/po/new/po-form.tsx
+
+- date: "2026-06-08"
+  title: "Primary host migrated: admin.fitwellbuckle.co → portal.fitwellbuckle.co"
+  priority: 1
+  layer: 1
+  notes: |
+    portal.fitwellbuckle.co is now the production host. admin. 307-redirects to
+    portal. for legacy bookmarks + existing Shopify webhook subscriptions
+    (Shopify follows the redirect transparently while the per-topic
+    re-registration catches up). AUTH_URL flipped, Google OAuth client
+    authorizes the portal redirect URI, Shopify app deployed via CLI
+    (fitwell-admin-8), all 11 webhook topics re-pointed at the new URL.
+    Resend email keeps working (records sit on send.portal.… and
+    resend._domainkey.portal.… — separate from the bare portal. A record).
+
+    Key discoveries documented in AGENTS.md §12: (1) DNS for fitwellbuckle.co
+    is administered through Shopify Admin → DNS Settings, NOT Google Cloud
+    Console (the googledomains.com nameservers are just Shopify's underlying
+    infra), and (2) the Shopify store handle is fitwell-buckles (with hyphen)
+    not fitwellbuckle — wrong handle returns a generic "There's a problem
+    loading this page" error rather than 404.
+  artifacts:
+    - specs/work-plans/completed/portal-domain-cutover.md
+    - AGENTS.md
+    - shopify.app.toml
+    - scripts/shopify-cli.ts

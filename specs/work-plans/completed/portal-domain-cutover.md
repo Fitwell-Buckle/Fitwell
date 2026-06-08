@@ -1,5 +1,7 @@
 # Migrate primary domain: admin.fitwellbuckle.co → portal.fitwellbuckle.co
 
+> **Status: shipped 2026-06-08.** See completion notes at the bottom.
+
 ## Context
 - The app is currently served at `admin.fitwellbuckle.co` (Vercel production domain). We want the primary URL to be `portal.fitwellbuckle.co`.
 - "Portal" reads better than "admin" now that the app hosts the supplier portal (`/supplier`) and the B2B company portal (`/portal`) alongside the admin dashboard.
@@ -96,3 +98,36 @@ Excluded:
 - **Don't touch `NEXT_PUBLIC_APP_URL`** — it is the storefront root for SEO (sitemap/robots), not the admin host.
 - **Rollback:** keep the old Google OAuth redirect URI and the `admin.` domain live through cutover; if anything breaks, revert `AUTH_URL` to `https://admin.fitwellbuckle.co` and (if already deployed) revert `shopify.app.toml`. The Shopify revert is the slow one (another CLI deploy), so verify Phase 3 thoroughly before Phase 5.
 - Per AGENTS.md, apply no Shopify config deploy or prod DNS/env change without the owning person (Greg for Shopify; whoever holds DNS/Vercel for the rest).
+
+---
+
+## Completion notes (2026-06-08)
+
+What actually shipped, and key discoveries during the cutover:
+
+### Sequence as executed
+1. **Code edits** (toml, hardcoded URLs, docs, tests, AGENTS.md) — committed `2804f58` and surrounding commits, pushed to `main`.
+2. **Shopify subdomain unlinked** — Shopify Admin → Settings → Domains → portal.fitwellbuckle.co → Delete subdomain.
+3. **DNS** — added A record `portal → 76.76.21.21` in **Shopify's** DNS Settings (`Domains → fitwellbuckle.co → DNS Settings → Add custom record`). See discoveries below.
+4. **Vercel** — added `portal.fitwellbuckle.co` to the project (auto-provisioned SSL once DNS pointed at Vercel), set production `AUTH_URL = https://portal.fitwellbuckle.co`, redeployed, set `admin.fitwellbuckle.co` to **307 redirect → portal**.
+5. **Google OAuth client** — Greg added `https://portal.fitwellbuckle.co` JS origin + `https://portal.fitwellbuckle.co/api/auth/callback/google` redirect URI (kept the admin entries for rollback). Verified end-to-end: NextAuth → Google returns the consent challenge with `app_domain=portal.fitwellbuckle.co`, no `redirect_uri_mismatch`.
+6. **Shopify app deploy** — Oliver (not Greg) ran `shopify app deploy --config=shopify.app.toml`; Shopify combined deploy+release into one step and shipped `fitwell-admin-8`.
+7. **Webhook re-register** — `npm run shopify -- register-webhooks` re-pointed 11 topics (orders, customers, refunds, products, collections) at `portal.fitwellbuckle.co/api/webhooks/shopify` — created 11, skipped 0, failed 0.
+
+### Discoveries that changed the plan mid-flight
+
+- **DNS is managed by Shopify, not Google Cloud DNS.** `dig NS` returns `ns-cloud-d*.googledomains.com.` which we initially read as "GCP Cloud DNS." That's actually the underlying infrastructure Shopify uses; the *administrative* surface is `Shopify Admin → Settings → Domains → fitwellbuckle.co → DNS Settings → Add custom record`. There is no GCP Cloud DNS zone for `fitwellbuckle.co` that anyone in our org can administer. Documented this in AGENTS.md §12 → "Where DNS lives" so the next contributor doesn't lose time chasing the GCP path.
+- **Shopify store handle is `fitwell-buckles`** (with hyphen + "s"), not `fitwellbuckle`. Wrong handle in admin URLs returns a generic "There's a problem loading this page" error rather than a clean 404, which burned ~20 minutes. Documented in AGENTS.md §12.
+- **`shopify.app.toml` deploy doesn't require Greg.** This plan's "Dependencies" line marked Shopify CLI deploy as Greg-only, but AGENTS.md §9 actually allows any contributor with Partner-org access. Oliver had access and ran it himself.
+- **`scripts/shopify-cli.ts` had a stale env-var check.** It validated `SHOPIFY_ADMIN_API_TOKEN` (legacy auth) before running, but the underlying client uses OAuth Client Credentials (`SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET` via `/admin/oauth/access_token`). Fixed the check to validate the three vars actually consumed.
+
+### Things deliberately not done
+- Did not flip `admin.fitwellbuckle.co` from 307 to 308 (Vercel's UI didn't expose 308 cleanly via Browser MCP, and 307 vs 308 doesn't matter for an admin app). Trivial future change if SEO ever becomes a concern.
+- Did not retire the `admin.` redirect — kept it indefinitely so existing Shopify-side webhooks, bookmarks, and any stale references keep working transparently.
+
+### Rollback (for future reference, not needed)
+If the cutover had broken anything:
+1. Vercel env → `AUTH_URL` back to `https://admin.fitwellbuckle.co`, redeploy.
+2. Vercel domains → remove the `admin → portal` redirect, set `admin.` back to "Production".
+3. Shopify DNS → delete the `portal` A record. No need to recreate the CNAME — the deleted subdomain doesn't claim DNS automatically.
+4. Shopify CLI → revert `shopify.app.toml` `application_url` and deploy/release again.
