@@ -433,9 +433,15 @@ async function cmdSync(flags: Record<string, string>): Promise<void> {
 // ── Main ────────────────────────────────────────────────────────────
 
 (async () => {
-  if (!process.env.SHOPIFY_ADMIN_API_TOKEN) {
+  // Stale: this script no longer needs SHOPIFY_ADMIN_API_TOKEN. All API calls
+  // go through getShopifyClient() which uses OAuth Client Credentials (see
+  // src/lib/shopify/client.ts → getToken()). Validate the three vars that
+  // flow actually needs so failures are loud + early.
+  const missing = ["SHOPIFY_STORE_DOMAIN", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"]
+    .filter((k) => !process.env[k]);
+  if (missing.length > 0) {
     console.error(
-      "Error: SHOPIFY_ADMIN_API_TOKEN not set. Check .env.local",
+      `Error: missing required env var(s): ${missing.join(", ")}. Check .env.local`,
     );
     process.exit(1);
   }
