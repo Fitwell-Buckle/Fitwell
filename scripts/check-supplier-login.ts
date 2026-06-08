@@ -4,7 +4,7 @@
  * Two paths can silently swallow a sign-in attempt:
  *   1. The address isn't in `supplier_contact` (or `company_contact`) → the
  *      auth `signIn` callback returns false → no link is sent, but the
- *      /supplier/login UI still shows "Check your email" (no visible error).
+ *      /external/login UI still shows "Check your email" (no visible error).
  *   2. The allowlist passes but Resend isn't configured → the magic link is
  *      logged to the Vercel function output instead of emailed.
  *
@@ -161,7 +161,7 @@ if (allowlistOk) {
   console.log("                                       in Resend).");
 } else {
   console.log(
-    "→ Allowlist FAILED. The /supplier/login form would have silently dropped",
+    "→ Allowlist FAILED. The /external/login form would have silently dropped",
   );
   console.log(
     "  the request — the UI shows 'Check your email' regardless. Add this email",

@@ -23,7 +23,9 @@ export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // The portal login pages are public so unauthenticated users can request a
-  // magic link.
+  // magic link. /supplier/login itself is a permanent redirect to
+  // /external/login (next.config.ts) — letting it through here is what lets
+  // the redirect actually fire.
   if (pathname === "/supplier/login" || pathname.startsWith("/supplier/login/")) {
     return NextResponse.next();
   }
@@ -48,7 +50,7 @@ export default async function middleware(req: NextRequest) {
   // Supplier portal: must be signed in AND have the supplier role.
   if (isSupplierRoute) {
     if (!session?.user) {
-      const loginUrl = new URL("/supplier/login", req.url);
+      const loginUrl = new URL("/external/login", req.url);
       loginUrl.searchParams.set("callbackUrl", pathname);
       return NextResponse.redirect(loginUrl);
     }

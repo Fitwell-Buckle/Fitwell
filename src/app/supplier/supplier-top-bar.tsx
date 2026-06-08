@@ -65,7 +65,7 @@ export function SupplierTopBar({
             )}
           </Link>
           <button
-            onClick={() => signOut({ callbackUrl: "/supplier/login" })}
+            onClick={() => signOut({ callbackUrl: "/external/login" })}
             className="flex items-center gap-2 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
           >
             <LogOut className="h-4 w-4" /> Sign out

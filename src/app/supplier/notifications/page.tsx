@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default async function SupplierNotificationsPage() {
   const scope = await getSupplierScope();
-  if (!scope) redirect("/supplier/login");
+  if (!scope) redirect("/external/login");
 
   const items = (await listSupplierNotifications(scope.supplierId, 50)).map(
     (n) => ({

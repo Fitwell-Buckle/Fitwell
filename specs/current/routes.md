@@ -20,7 +20,7 @@ All marketing pages include PostHog tracking and UTM parameter capture.
 | Path | Description | Auth |
 |------|-------------|------|
 | `/auth/login` | Admin login page (Google OAuth) | None |
-| `/supplier/login` | Supplier login (email magic link) | None |
+| `/external/login` | External user login — suppliers + B2B portal (email magic link); `/supplier/login` permanently redirects here | None |
 | `/portal/login` | Company B2B portal login (email magic link) | None |
 
 ## (admin) — Protected Dashboard
@@ -67,7 +67,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 
 ## supplier — Supplier Portal
 
-Magic-link auth; middleware requires an authenticated session with `role='supplier'` (else → `/supplier/login`). Signed-in admins are redirected to `/dashboard`; suppliers who hit admin routes are sent here. Every page is scoped to the signed-in supplier's `supplier_id` and shows production fields only (no company / customer / price-tier).
+Magic-link auth; middleware requires an authenticated session with `role='supplier'` (else → `/external/login`). Signed-in admins are redirected to `/dashboard`; suppliers who hit admin routes are sent here. Every page is scoped to the signed-in supplier's `supplier_id` and shows production fields only (no company / customer / price-tier).
 
 | Path | Description |
 |------|-------------|

@@ -178,7 +178,7 @@ export const guides: Guide[] = [
         shot: "The Additional supplier logins card with an email being added.",
       },
       {
-        text: "That's it — those people can now sign in at /supplier/login with a magic link and see only that supplier's POs.",
+        text: "That's it — those people can now sign in at /external/login with a magic link and see only that supplier's POs.",
       },
     ],
   },
@@ -189,7 +189,7 @@ export const guides: Guide[] = [
     category: "Suppliers",
     steps: [
       {
-        text: "Go to /supplier/login and enter your authorized email — the one your Fitwell contact added for you. You'll get a one-time sign-in link by email; click it to sign in.",
+        text: "Go to /external/login and enter your authorized email — the one your Fitwell contact added for you. You'll get a one-time sign-in link by email; click it to sign in.",
         shot: "Your sign-in screen.",
       },
       {

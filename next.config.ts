@@ -4,6 +4,18 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/docs/*": ["./specs/**/*.md"],
   },
+  // Permanent redirects for renamed routes. Search params (`callbackUrl`,
+  // magic-link `token`s, etc.) carry across automatically.
+  redirects: async () => [
+    {
+      // /supplier/login was the original supplier sign-in URL; renamed to
+      // /external/login (Jun 2026). Keep this around for legacy bookmarks /
+      // emailed links — drop once analytics show no traffic.
+      source: "/supplier/login",
+      destination: "/external/login",
+      permanent: true,
+    },
+  ],
   headers: async () => [
     {
       source: "/(.*)",

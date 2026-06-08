@@ -45,7 +45,7 @@ Excluded:
 - [ ] Verify: `https://portal.fitwellbuckle.co` serves the app (login page renders) AND a test email from Resend still sends/authenticates (SPF/DKIM pass).
 
 #### Tests
-- Manual: load `https://portal.fitwellbuckle.co/supplier/login` → renders, valid cert.
+- Manual: load `https://portal.fitwellbuckle.co/external/login` → renders, valid cert.
 - Manual: send one transactional email (e.g. trigger a magic link to a test address) → delivered, DKIM/SPF still pass (email DNS undisturbed).
 
 ### Phase 2: Auth — point NextAuth + Google OAuth at the new host

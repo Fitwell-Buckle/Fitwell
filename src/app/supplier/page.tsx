@@ -37,7 +37,7 @@ import {
 
 export default async function SupplierHomePage() {
   const scope = await getSupplierScope();
-  if (!scope) redirect("/supplier/login");
+  if (!scope) redirect("/external/login");
   const me = scope.supplierId;
   const [stageLabels, order] = await Promise.all([getStageLabels(), getStageOrder()]);
 

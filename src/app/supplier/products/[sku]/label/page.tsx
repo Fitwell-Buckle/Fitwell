@@ -43,7 +43,7 @@ export default async function SupplierLabelPage({
   params: Promise<{ sku: string }>;
 }) {
   const scope = await getSupplierScope();
-  if (!scope) redirect("/supplier/login");
+  if (!scope) redirect("/external/login");
 
   const { sku: encoded } = await params;
   const sku = decodeURIComponent(encoded);

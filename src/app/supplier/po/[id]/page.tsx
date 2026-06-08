@@ -30,7 +30,7 @@ export default async function SupplierPoDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const scope = await getSupplierScope();
-  if (!scope) redirect("/supplier/login");
+  if (!scope) redirect("/external/login");
 
   const { id } = await params;
   const po = await getPoDetail(id);
