@@ -19,6 +19,7 @@ import {
 // Reuse the admin label's download UI verbatim — same client behaviour, same
 // pixel-for-pixel capture. Route-group dirs in App Router don't affect imports.
 import { DownloadButtons } from "@/app/(admin)/products/[sku]/label/download-buttons";
+import { formatLabelTitle } from "@/app/(admin)/products/[sku]/label/format";
 
 const LABEL_DOM_ID = "fitwell-label";
 
@@ -137,6 +138,7 @@ export default async function SupplierLabelPage({
             sku={variant.sku}
             title={variant.title}
             variantTitle={variant.variantTitle ?? null}
+            color={variant.color}
             barcodeSvg={barcodeSvg}
           />
         </div>
@@ -149,32 +151,39 @@ function Label({
   sku,
   title,
   variantTitle,
+  color,
   barcodeSvg,
 }: {
   sku: string;
   title: string;
   variantTitle: string | null;
+  color: string | null;
   barcodeSvg: string;
 }) {
+  const displayTitle = formatLabelTitle(title, color);
+  const variantLines = variantTitle ? variantTitle.split(/\s*\/\s*/) : [];
   return (
     <div className="flex h-full flex-col items-center text-black">
       <Image
         src="/images/fitwell-logo.png"
         alt="Fitwell"
         width={400}
-        height={96}
+        height={208}
         priority
-        className="mb-6 w-[2.6in] max-w-full"
+        className="mb-3 w-[2.6in] max-w-full"
       />
 
       <div className="text-center text-[18pt] font-semibold leading-tight">
-        {title}
+        {displayTitle}
       </div>
-      {variantTitle && (
-        <div className="mt-1 text-center text-[14pt] leading-tight text-black/85">
-          {variantTitle}
+      {variantLines.map((line) => (
+        <div
+          key={line}
+          className="text-center text-[14pt] leading-tight text-black/85"
+        >
+          {line}
         </div>
-      )}
+      ))}
 
       <div className="mt-8 text-center font-mono text-[22pt] font-bold tracking-tight">
         {sku}

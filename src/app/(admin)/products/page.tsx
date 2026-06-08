@@ -101,8 +101,17 @@ export default async function ProductsPage({
 
   const rows: ProductRow[] = [];
   const seen = new Set<string>();
-  for (const v of catalog) {
+  // SAMPLE variants share SKUs with their customer-facing twin, and sales are
+  // keyed by SKU — so listing both rows would double-count the same revenue.
+  // Visit non-samples first; the duplicate SAMPLE row is then skipped by `seen`.
+  const sortedCatalog = [...catalog].sort((a, b) => {
+    const aSample = /sample/i.test(`${a.title ?? ""} ${a.variantTitle ?? ""}`);
+    const bSample = /sample/i.test(`${b.title ?? ""} ${b.variantTitle ?? ""}`);
+    return Number(aSample) - Number(bSample);
+  });
+  for (const v of sortedCatalog) {
     const sku = v.sku ?? "";
+    if (sku && seen.has(sku)) continue;
     const s = sku ? salesBySku.get(sku) : undefined;
     rows.push({
       key: sku || v.shopifyVariantId,

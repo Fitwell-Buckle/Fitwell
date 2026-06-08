@@ -236,9 +236,11 @@ function SidebarContent({
             // Local brand asset is black on white; invert for this dark
             // sidebar. The Shopify-uploaded logo (when provided) renders
             // as-is — Shopify admins control its colors directly.
+            // Note: getStoreLogoUrl() already bakes the fallback path in, so
+            // logoUrl is never nullish; detect the fallback by its path.
             className={cn(
-              "h-[29px] w-auto",
-              !logoUrl && "invert",
+              "h-[58px] w-auto",
+              (!logoUrl || logoUrl === "/images/fitwell-logo.png") && "invert",
             )}
           />
         </Link>

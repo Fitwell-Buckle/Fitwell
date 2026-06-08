@@ -32,13 +32,11 @@ export function SupplierTopBar({
     <header className="border-b border-zinc-200 bg-white print:hidden">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
         <Link href="/supplier" className="flex items-center gap-3">
-          {/* The bundled wordmark is white (built for the dark admin header);
-           *  brightness-0 renders it black on this light supplier header. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/images/fitwell-logo.png"
             alt="Fitwell"
-            className="h-7 w-auto brightness-0"
+            className="h-7 w-auto"
           />
           <span className="text-sm font-medium text-zinc-400">Supplier portal</span>
         </Link>

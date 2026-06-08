@@ -47,8 +47,7 @@ export default function PortalLoginPage() {
           alt="Fitwell Buckle Co."
           width={180}
           height={43}
-          // White wordmark asset → render black on this light background.
-          className="mx-auto brightness-0"
+          className="mx-auto"
           priority
         />
         <Card className="mt-8 p-6">
