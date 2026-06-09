@@ -200,6 +200,17 @@ export const order = pgTable(
     // Set when Shopify cancelled the order; null otherwise. Used to exclude
     // cancelled orders from "Total sales".
     cancelledAt: timestamp("cancelled_at", { mode: "date" }),
+    // True when this order is a B2B sample shipment (a $0, sample-tagged
+    // Shopify order). Set from the Shopify `sample` order tag during sync —
+    // the tag is authoritative, so re-tagging in Shopify Admin flows back
+    // either way. MUST be excluded from all revenue/attribution queries; see
+    // specs/work-plans/todo/b2b-samples-system.md.
+    isSample: boolean("is_sample").notNull().default(false),
+    // The B2B lead this sample was shipped to (sample orders only; null for
+    // ordinary synced orders). Lets the lead detail show "samples shipped"
+    // and ties a sample to its pipeline record. Written once at sample-
+    // creation time; the Shopify sync upsert must NOT overwrite it.
+    leadId: text("lead_id").references(() => lead.id),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },
@@ -208,6 +219,10 @@ export const order = pgTable(
     index("order_customer_id_idx").on(t.customerId),
     index("order_processed_at_idx").on(t.processedAt),
     index("order_fw_distinct_id_idx").on(t.posthogDistinctId),
+    // Fast filtering of samples out of revenue dashboards, and the samples
+    // list view (which orders by processed_at within is_sample = true).
+    index("order_is_sample_idx").on(t.isSample, t.processedAt),
+    index("order_lead_id_idx").on(t.leadId),
   ],
 );
 
@@ -855,6 +870,12 @@ export const orderRelations = relations(order, ({ one, many }) => ({
   customer: one(customer, {
     fields: [order.customerId],
     references: [customer.id],
+  }),
+  // Sample orders only: the B2B lead the sample shipped to. Null for
+  // ordinary synced orders. See order.leadId / b2b-samples-system.md.
+  lead: one(lead, {
+    fields: [order.leadId],
+    references: [lead.id],
   }),
   lineItems: many(orderLineItem),
 }));

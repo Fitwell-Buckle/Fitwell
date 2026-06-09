@@ -29,6 +29,101 @@ export function toCents(value: string | null | undefined): number {
   return isNaN(n) ? 0 : Math.round(n * 100);
 }
 
+/**
+ * Shipping address for a draft order. Field names match the GraphQL
+ * `MailingAddressInput` (camelCase), NOT the REST `ShopifyAddress` read-shape.
+ * All fields optional — null/empty entries are dropped before sending.
+ */
+export interface DraftShippingAddress {
+  firstName?: string | null;
+  lastName?: string | null;
+  company?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  country?: string | null;
+  zip?: string | null;
+  phone?: string | null;
+}
+
+/** Drop null/undefined/empty fields so MailingAddressInput stays clean. */
+function cleanAddress(a: DraftShippingAddress): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(a)) {
+    if (v != null && v !== "") out[k] = v;
+  }
+  return out;
+}
+
+export interface DraftOrderInvoiceParams {
+  email: string | null;
+  shopifyCustomerId?: string | null;
+  discountPercent: number;
+  /** Label for the order-level discount (defaults to the B2B tier). */
+  discountTitle?: string;
+  note?: string;
+  /** Order tags (e.g. ["sample"]). Used to flag samples on the Shopify side. */
+  tags?: string[];
+  /** Ship-to address. Required for a sample that Shopify will actually ship. */
+  shippingAddress?: DraftShippingAddress;
+  /**
+   * When true, complete the draft into a real order marked paid
+   * (paymentPending: false) so Shopify fulfillment ships it without a human
+   * completing it in Admin. Used by the B2B samples flow.
+   */
+  completeAsPaid?: boolean;
+  lines: {
+    variantId: string | null;
+    title: string;
+    quantity: number;
+    unitPriceCents: number;
+  }[];
+}
+
+/**
+ * Build the `DraftOrderInput` payload for createDraftOrderInvoice. Pure and
+ * exported so the mapping (line items, discount, tags, shipping address,
+ * purchasing entity) is unit-testable without an HTTP round-trip.
+ */
+export function buildDraftOrderInput(
+  params: DraftOrderInvoiceParams,
+): Record<string, unknown> {
+  const lineItems = params.lines.map((l) =>
+    l.variantId
+      ? {
+          variantId: `gid://shopify/ProductVariant/${String(l.variantId).split("/").pop()}`,
+          quantity: l.quantity,
+        }
+      : {
+          title: l.title,
+          originalUnitPrice: (l.unitPriceCents / 100).toFixed(2),
+          quantity: l.quantity,
+        },
+  );
+
+  const input: Record<string, unknown> = { lineItems };
+  if (params.email) input.email = params.email;
+  if (params.note) input.note = params.note;
+  if (params.tags && params.tags.length > 0) input.tags = params.tags;
+  if (params.shippingAddress) {
+    input.shippingAddress = cleanAddress(params.shippingAddress);
+  }
+  if (params.discountPercent > 0) {
+    input.appliedDiscount = {
+      valueType: "PERCENTAGE",
+      value: params.discountPercent,
+      title: params.discountTitle ?? "B2B price tier",
+    };
+  }
+  if (params.shopifyCustomerId) {
+    input.purchasingEntity = {
+      customerId: `gid://shopify/Customer/${String(params.shopifyCustomerId).split("/").pop()}`,
+    };
+  }
+  return input;
+}
+
 class ShopifyClient {
   private domain: string;
   private clientId: string;
@@ -749,56 +844,27 @@ class ShopifyClient {
   // ── B2B invoicing (draft orders) ──────────────────────────────────
 
   /**
-   * Create a Shopify draft order for a B2B invoice and send its invoice email
-   * (which carries a checkout/payment link). Lines with a variant use Shopify's
-   * retail price; lines without fall back to a custom price. The company's tier
-   * is applied as an order-level percentage discount. Requires the
+   * Create a Shopify draft order (B2B invoice or sample) and return the draft
+   * id + invoice (payment) URL. Lines with a variant use Shopify's retail
+   * price; lines without fall back to a custom price. The discount is applied
+   * order-level (a B2B tier %, or 100% for a sample). `tags` flag the order
+   * (e.g. ["sample"]); `shippingAddress` sets ship-to. Requires the
    * write_draft_orders scope — without it Shopify returns "access denied" and
-   * this throws; the send route surfaces that as a skip note. Returns the draft
-   * order id + invoice (payment) URL.
+   * this throws; callers surface that as a skip note.
+   *
+   * When `completeAsPaid` is set, the draft is immediately completed into a
+   * real order with paymentPending: false (also needs write_orders), so
+   * Shopify fulfillment ships it without a human completing it in Admin — this
+   * is how the B2B samples flow ships a $0 order. The returned `orderId` /
+   * `orderName` are the completed order's; they're undefined otherwise.
    */
-  async createDraftOrderInvoice(params: {
-    email: string | null;
-    shopifyCustomerId?: string | null;
-    discountPercent: number;
-    /** Label for the order-level discount (defaults to the B2B tier). */
-    discountTitle?: string;
-    note?: string;
-    lines: {
-      variantId: string | null;
-      title: string;
-      quantity: number;
-      unitPriceCents: number;
-    }[];
-  }): Promise<{ draftOrderId: string; invoiceUrl: string | null }> {
-    const lineItems = params.lines.map((l) =>
-      l.variantId
-        ? {
-            variantId: `gid://shopify/ProductVariant/${String(l.variantId).split("/").pop()}`,
-            quantity: l.quantity,
-          }
-        : {
-            title: l.title,
-            originalUnitPrice: (l.unitPriceCents / 100).toFixed(2),
-            quantity: l.quantity,
-          },
-    );
-
-    const input: Record<string, unknown> = { lineItems };
-    if (params.email) input.email = params.email;
-    if (params.note) input.note = params.note;
-    if (params.discountPercent > 0) {
-      input.appliedDiscount = {
-        valueType: "PERCENTAGE",
-        value: params.discountPercent,
-        title: params.discountTitle ?? "B2B price tier",
-      };
-    }
-    if (params.shopifyCustomerId) {
-      input.purchasingEntity = {
-        customerId: `gid://shopify/Customer/${String(params.shopifyCustomerId).split("/").pop()}`,
-      };
-    }
+  async createDraftOrderInvoice(params: DraftOrderInvoiceParams): Promise<{
+    draftOrderId: string;
+    invoiceUrl: string | null;
+    orderId?: string;
+    orderName?: string;
+  }> {
+    const input = buildDraftOrderInput(params);
 
     const created = await this.graphql<{
       draftOrderCreate: {
@@ -821,6 +887,44 @@ class ShopifyClient {
     }
     const draftOrder = created.draftOrderCreate.draftOrder;
     if (!draftOrder) throw new Error("Draft order was not created");
+
+    // Complete the draft into a real, paid order so fulfillment can ship it.
+    // paymentPending: false marks it paid (correct for a $0 sample — there's
+    // nothing to collect). The `sample` tag is what keeps this $0 paid order
+    // out of our revenue, not its financial status.
+    if (params.completeAsPaid) {
+      const completed = await this.graphql<{
+        draftOrderComplete: {
+          draftOrder: {
+            id: string;
+            order: { id: string; name: string } | null;
+          } | null;
+          userErrors: { field: string[] | null; message: string }[];
+        };
+      }>(
+        `mutation FitwellDraftComplete($id: ID!) {
+          draftOrderComplete(id: $id, paymentPending: false) {
+            draftOrder { id order { id name } }
+            userErrors { field message }
+          }
+        }`,
+        { id: draftOrder.id },
+      );
+
+      const cErrs = completed.draftOrderComplete.userErrors;
+      if (cErrs && cErrs.length > 0) {
+        throw new Error(
+          `Draft order completion failed: ${cErrs.map((e) => e.message).join("; ")}`,
+        );
+      }
+      const completedOrder = completed.draftOrderComplete.draftOrder?.order;
+      return {
+        draftOrderId: draftOrder.id,
+        invoiceUrl: draftOrder.invoiceUrl,
+        orderId: completedOrder?.id,
+        orderName: completedOrder?.name,
+      };
+    }
 
     // We do NOT call draftOrderInvoiceSend here — Shopify would otherwise send
     // its own branded invoice email to the customer, duplicating the one we
