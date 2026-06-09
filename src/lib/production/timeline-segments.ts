@@ -30,6 +30,11 @@ export interface LineForSegments {
     enteredAt: Date;
     exitedAt: Date | null;
   }[];
+  /** Per-line stage list — when set, the projected segment chain walks THIS
+   *  list instead of the global `order` (so a spring-bar line with
+   *  `stages = [supplier_po, stamping, packaging]` only projects 2 future
+   *  segments, not 7). NULL/undefined = inherit `order`. */
+  stages?: readonly string[] | null;
 }
 
 /** Solid segments from a line's stage history (with a 6-hour floor so a
@@ -46,6 +51,8 @@ export function buildLineSegments(
   estimates: Record<ProductionStage, number>,
   stageTargetsMs: Map<ProductionStage, number> = new Map(),
 ): TimelineSegment[] {
+  // Effective walk-order: line's own list when set, else the global pipeline.
+  const walkOrder = li.stages && li.stages.length > 0 ? li.stages : order;
   const segs: TimelineSegment[] = li.stageEvents.map((ev) => {
     const startMs = ev.enteredAt.getTime();
     const endMs = ev.exitedAt ? ev.exitedAt.getTime() : todayMs;
@@ -56,13 +63,13 @@ export function buildLineSegments(
       projected: false,
     };
   });
-  if (isTerminal(order, li.currentStage)) return segs;
+  if (isTerminal(walkOrder, li.currentStage)) return segs;
 
-  const startIdx = order.indexOf(li.currentStage);
+  const startIdx = walkOrder.indexOf(li.currentStage);
   if (startIdx < 0) return segs;
   let cursorMs = todayMs;
-  for (let i = startIdx; i < order.length - 1; i++) {
-    const stage = order[i] as ProductionStage;
+  for (let i = startIdx; i < walkOrder.length - 1; i++) {
+    const stage = walkOrder[i] as ProductionStage;
     const target = stageTargetsMs.get(stage);
     let endMs: number;
     if (target != null && target > cursorMs) {

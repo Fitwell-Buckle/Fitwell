@@ -138,6 +138,7 @@ export default async function InvoiceDetailPage({
       companyId: null,
       shopifyLocationId: null,
       locationName: null,
+      stages: null,
     })),
   };
 

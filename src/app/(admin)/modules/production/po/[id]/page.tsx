@@ -540,6 +540,7 @@ export default async function PoDetailPage({
                       sku: li.sku,
                       title: li.title,
                       currentStage: li.currentStage,
+                      stages: li.stages,
                       stageEvents: li.stageEvents.map((ev) => ({
                         id: ev.id,
                         stage: ev.stage,

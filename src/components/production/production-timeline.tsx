@@ -297,6 +297,10 @@ export interface TimelinePo {
     sku: string;
     title: string;
     currentStage: ProductionStage;
+    /** Per-line stage list — when set, the projected segment chain walks THIS
+     *  list instead of the global `order` (so a line that skips EDM/polishing
+     *  doesn't get phantom segments for them). NULL/undefined = inherit `order`. */
+    stages?: readonly string[] | null;
     // Per-line owning supplier + sub-PO number (the supplier responsible for the
     // line's current stage); falls back to the PO's primary supplier/number.
     supplierName?: string;

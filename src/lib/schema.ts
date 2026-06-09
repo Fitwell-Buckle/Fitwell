@@ -731,6 +731,12 @@ export const productionPoLineItem = pgTable(
     // Dynamic stage key (references production_stage_def.key). Text, not the
     // legacy enum, so stages can be added/removed at runtime.
     currentStage: text("current_stage").notNull().default("supplier_po"),
+    // Per-line stage list — the ordered subset of the global pipeline this
+    // line actually goes through (e.g. spring bars skip EDM/polishing/logo).
+    // NULL means "inherit the global pipeline" (back-compat for lines created
+    // before this column existed). Non-null = explicit subset; the planAdvance
+    // + buildLineSegments logic walks THIS list instead of the global order.
+    stages: text("stages").array(),
     expectedCompletionDate: date("expected_completion_date"),
     actualCompletionDate: date("actual_completion_date"),
     // C2 receiving: set when this line's quantity has been pushed to Shopify as

@@ -8,6 +8,9 @@ import {
   projectRemainingDays,
   projectEta,
   addDaysISO,
+  emptyCycleTimeSamples,
+  pushCycleTimeSample,
+  estimateLineStageDays,
 } from "@/lib/production/cycle-time";
 import { STAGES } from "@/lib/production/stages";
 
@@ -99,5 +102,142 @@ describe("addDaysISO / projectEta", () => {
     expect(projectEta(ORDER, "complete", "2026-05-24", DEFAULT_STAGE_DAYS)).toBe(
       "2026-05-24",
     );
+  });
+});
+
+// ── Tiered estimator (sku → product → global → po_split → default) ──────
+describe("estimateLineStageDays", () => {
+  // Fill a sample bucket with N entries averaging `perUnit` days/unit.
+  const fillSamples = (
+    label: "sku" | "product" | "global",
+    stage: string,
+    perUnit: number,
+    count: number,
+    id = "x",
+  ) => {
+    const s = emptyCycleTimeSamples();
+    for (let i = 0; i < count; i++) {
+      pushCycleTimeSample(s, {
+        sku: label === "sku" ? id : "OTHER",
+        productId: label === "product" ? id : null,
+        stage,
+        durationDays: perUnit,
+        quantity: 1, // per-unit shortcut: 1 unit, so duration == perUnit
+      });
+    }
+    return s;
+  };
+
+  it("Tier 1 (sku+stage): qty-multiplies the per-unit rolling avg", () => {
+    // 10 samples of 0.1 days/unit on (FB-16, polishing). 100 units → 10 days.
+    const samples = fillSamples("sku", "polishing", 0.1, MIN_SAMPLES, "FB-16");
+    const est = estimateLineStageDays({
+      stage: "polishing",
+      sku: "FB-16",
+      productId: "PROD-A",
+      lineQty: 100,
+      lineStageCount: 7,
+      poTotalDays: 30,
+      samples,
+    });
+    expect(est).toEqual({ days: 10, source: "sku" });
+  });
+
+  it("Tier 2 (product+stage): used when SKU samples are too few", () => {
+    // 10 product samples on PROD-A averaging 0.05 days/unit. SKU FB-22 has
+    // no samples of its own — should fall to product tier and multiply by qty.
+    const samples = fillSamples("product", "stamping", 0.05, MIN_SAMPLES, "PROD-A");
+    const est = estimateLineStageDays({
+      stage: "stamping",
+      sku: "FB-22",
+      productId: "PROD-A",
+      lineQty: 200,
+      lineStageCount: 7,
+      poTotalDays: 30,
+      samples,
+    });
+    expect(est).toEqual({ days: 10, source: "product" }); // 0.05 × 200
+  });
+
+  it("Tier 3 (global): used when neither SKU nor product has enough", () => {
+    const samples = fillSamples("global", "qc", 0.02, MIN_SAMPLES);
+    const est = estimateLineStageDays({
+      stage: "qc",
+      sku: "NEW-SKU",
+      productId: "NEW-PROD",
+      lineQty: 50,
+      lineStageCount: 7,
+      poTotalDays: 30,
+      samples,
+    });
+    expect(est).toEqual({ days: 1, source: "global" }); // 0.02 × 50 = 1
+  });
+
+  it("Tier 4 (po_split): no samples → poTotalDays / lineStageCount", () => {
+    const samples = emptyCycleTimeSamples();
+    const est = estimateLineStageDays({
+      stage: "plating",
+      sku: "NEW-SKU",
+      productId: null,
+      lineQty: 100,
+      lineStageCount: 4, // e.g. spring bar with 4 stages
+      poTotalDays: 20,
+      samples,
+    });
+    expect(est).toEqual({ days: 5, source: "po_split" }); // 20 / 4 = 5
+  });
+
+  it("Tier 5 (default): no samples + no PO context → hardcoded defaults", () => {
+    const est = estimateLineStageDays({
+      stage: "plating",
+      sku: "NEW",
+      productId: null,
+      lineQty: 1,
+      lineStageCount: 7,
+      poTotalDays: null,
+      samples: emptyCycleTimeSamples(),
+    });
+    expect(est).toEqual({ days: DEFAULT_STAGE_DAYS.plating, source: "default" });
+  });
+
+  it("clamps negative results to 0 (a malformed sample shouldn't go negative)", () => {
+    // Construct a sample bucket directly with a negative per-unit value (the
+    // pushCycleTimeSample helper rejects negative durationDays at input, so
+    // we bypass it to test the clamp inside estimateLineStageDays).
+    const samples = emptyCycleTimeSamples();
+    samples.byStage.set(
+      "polishing",
+      Array(MIN_SAMPLES).fill(-0.5),
+    );
+    const est = estimateLineStageDays({
+      stage: "polishing",
+      sku: "X",
+      productId: null,
+      lineQty: 10,
+      lineStageCount: 7,
+      poTotalDays: null,
+      samples,
+    });
+    expect(est.days).toBe(0);
+    expect(est.source).toBe("global");
+  });
+
+  it("ignores invalid samples at push time (qty ≤ 0 or negative duration)", () => {
+    const samples = emptyCycleTimeSamples();
+    pushCycleTimeSample(samples, {
+      sku: "X",
+      productId: null,
+      stage: "polishing",
+      durationDays: -1,
+      quantity: 5,
+    });
+    pushCycleTimeSample(samples, {
+      sku: "X",
+      productId: null,
+      stage: "polishing",
+      durationDays: 1,
+      quantity: 0,
+    });
+    expect(samples.byStage.size).toBe(0);
   });
 });

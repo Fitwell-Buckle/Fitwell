@@ -209,3 +209,72 @@ describe("planSetStage", () => {
     ).toThrow(/not found/);
   });
 });
+
+// Per-line stage subset (e.g. spring bars skip EDM/polishing/logo). Each line
+// carries its OWN ordered stages list; null/undefined = inherit the PO's order.
+describe("per-line stages (subset)", () => {
+  // Spring bar pipeline: only bookends + stamping + packaging.
+  const SPRING = ["supplier_po", "stamping", "packaging", "complete"] as const;
+
+  it("planAdvance: each line steps along its own list, not the global pipeline", () => {
+    // Buckle (full pipeline) at stamping → edm; spring bar (subset) at
+    // stamping → packaging directly, skipping edm/polishing/logo/plating/qc.
+    const plan = planAdvance({
+      order: ORDER,
+      lockStagesTogether: true,
+      lineItems: [
+        { id: "buckle", currentStage: "stamping" },
+        { id: "spring", currentStage: "stamping", stages: SPRING },
+      ],
+    });
+    expect(plan).toEqual([
+      { lineItemId: "buckle", from: "stamping", to: "edm" },
+      { lineItemId: "spring", from: "stamping", to: "packaging" },
+    ]);
+  });
+
+  it("planAdvance: a line already at its own terminal produces no transition", () => {
+    const plan = planAdvance({
+      order: ORDER,
+      lockStagesTogether: true,
+      lineItems: [{ id: "spring", currentStage: "complete", stages: SPRING }],
+    });
+    expect(plan).toEqual([]);
+  });
+
+  it("planSetStage: locked PO skips lines whose stage list excludes the target", () => {
+    // Drag everything to "edm". The spring-bar line doesn't visit edm, so it
+    // stays put; the buckle line moves.
+    const plan = planSetStage({
+      lockStagesTogether: true,
+      lineItems: [
+        { id: "buckle", currentStage: "stamping" },
+        { id: "spring", currentStage: "stamping", stages: SPRING },
+      ],
+      lineItemId: "buckle",
+      toStage: "edm",
+    });
+    expect(plan).toEqual([{ lineItemId: "buckle", from: "stamping", to: "edm" }]);
+  });
+
+  it("planSetStage: dragging a subset-line directly to an excluded stage is a no-op", () => {
+    const plan = planSetStage({
+      lockStagesTogether: false,
+      lineItems: [{ id: "spring", currentStage: "stamping", stages: SPRING }],
+      lineItemId: "spring",
+      toStage: "polishing",
+    });
+    expect(plan).toEqual([]);
+  });
+
+  it("empty `stages` array falls back to inheriting global order", () => {
+    // Empty list = "no explicit subset" → inherit the global pipeline.
+    const plan = planAdvance({
+      order: ORDER,
+      lockStagesTogether: false,
+      lineItems: [{ id: "a", currentStage: "stamping", stages: [] }],
+      lineItemId: "a",
+    });
+    expect(plan).toEqual([{ lineItemId: "a", from: "stamping", to: "edm" }]);
+  });
+});

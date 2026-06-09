@@ -185,7 +185,12 @@ export default async function ProductionPage({
         let nearestEta: string | null = null;
         for (const li of incomingLis) {
           byStage[li.currentStage] = (byStage[li.currentStage] ?? 0) + li.quantity;
-          const eta = projectEta(order, li.currentStage, today, estimates);
+          const eta = projectEta(
+            li.stages && li.stages.length > 0 ? li.stages : order,
+            li.currentStage,
+            today,
+            estimates,
+          );
           if (nearestEta === null || eta < nearestEta) nearestEta = eta;
         }
         return {
@@ -232,6 +237,7 @@ export default async function ProductionPage({
         title: li.title,
         quantity: li.quantity,
         currentStage: li.currentStage,
+        stages: li.stages,
       }));
     skuRowsByMasterRow[number] = aggregateIncoming(order, lines, estimates, today);
     if (isMaster) {
@@ -257,6 +263,7 @@ export default async function ProductionPage({
       title: li.title,
       quantity: li.quantity,
       currentStage: li.currentStage,
+      stages: li.stages,
     }));
   const incomingRows = aggregateIncoming(order, incomingLines, estimates, today);
   const totalIncoming = incomingRows.reduce((sum, r) => sum + r.incomingQty, 0);
@@ -332,6 +339,7 @@ export default async function ProductionPage({
         sku: li.sku,
         title: li.title,
         currentStage: li.currentStage,
+        stages: li.stages,
         stageEvents: li.stageEvents,
         supplierName: owner.supplier,
         poNumber: owner.poNumber,
@@ -383,7 +391,12 @@ export default async function ProductionPage({
     for (const li of ownedLines) {
       incomingQty += li.quantity;
       byStage[li.currentStage] = (byStage[li.currentStage] ?? 0) + li.quantity;
-      const eta = projectEta(order, li.currentStage, today, estimates);
+      const eta = projectEta(
+        li.stages && li.stages.length > 0 ? li.stages : order,
+        li.currentStage,
+        today,
+        estimates,
+      );
       if (nearestEta === null || eta < nearestEta) nearestEta = eta;
     }
 
@@ -409,6 +422,7 @@ export default async function ProductionPage({
         title: li.title,
         quantity: li.quantity,
         currentStage: li.currentStage,
+        stages: li.stages,
       })),
       estimates,
       today,
@@ -758,7 +772,7 @@ export default async function ProductionPage({
     const { number } = masterDisplay(po);
     const lines = po.lineItems
       .filter((li) => !li.shopifyReceivedAt && (skuSet.size === 0 || skuSet.has(li.sku)))
-      .map((li) => ({ sku: li.sku, title: li.title, quantity: li.quantity, currentStage: li.currentStage }));
+      .map((li) => ({ sku: li.sku, title: li.title, quantity: li.quantity, currentStage: li.currentStage, stages: li.stages }));
     if (lines.length > 0) {
       skuRowsByMaster[number] = aggregateIncoming(order, lines, estimates, today);
     }

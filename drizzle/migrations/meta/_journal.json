@@ -379,6 +379,13 @@
       "when": 1781016887384,
       "tag": "0053_wealthy_kabuki",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1781040985972,
+      "tag": "0054_curious_pretty_boy",
+      "breakpoints": true
     }
   ]
 }

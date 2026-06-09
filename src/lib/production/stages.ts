@@ -89,16 +89,33 @@ export interface AdvanceTransition {
 interface LineItemStage {
   id: string;
   currentStage: ProductionStage;
+  /** Per-line stage list — the ordered subset of the global pipeline this
+   *  line actually walks. NULL/undefined = inherit the global `order`. */
+  stages?: readonly string[] | null;
+}
+
+/** Resolve the effective stage order for a line item: its own list when set,
+ *  otherwise the PO-level / global order. Used by planAdvance / planSetStage
+ *  so a spring-bar line with `stages = [supplier_po, stamping, packaging]`
+ *  steps directly from stamping → packaging without trying to visit EDM. */
+function lineOrder(
+  li: LineItemStage,
+  order: readonly string[],
+): readonly string[] {
+  return li.stages && li.stages.length > 0 ? li.stages : order;
 }
 
 /**
  * Decide which line items move and to where when a PO is advanced.
  *
- * - Locked PO: every non-terminal line item advances one stage together.
+ * - Locked PO: every non-terminal line item advances one stage together. Each
+ *   line steps along its OWN stage list, so two locked lines with different
+ *   stage subsets may advance to different next-stages on the same click.
  * - Broken PO (lockStagesTogether=false): only the targeted line item advances;
  *   a lineItemId is required.
  *
- * Line items already at the terminal stage produce no transition.
+ * Line items already at the terminal stage (of their own list) produce no
+ * transition.
  */
 export function planAdvance(params: {
   order: readonly string[];
@@ -110,7 +127,7 @@ export function planAdvance(params: {
 
   if (lockStagesTogether) {
     return lineItems.flatMap((li) => {
-      const to = nextStage(order, li.currentStage);
+      const to = nextStage(lineOrder(li, order), li.currentStage);
       return to ? [{ lineItemId: li.id, from: li.currentStage, to }] : [];
     });
   }
@@ -124,7 +141,7 @@ export function planAdvance(params: {
   if (!li) {
     throw new Error(`line item ${lineItemId} not found on this PO`);
   }
-  const to = nextStage(order, li.currentStage);
+  const to = nextStage(lineOrder(li, order), li.currentStage);
   return to ? [{ lineItemId: li.id, from: li.currentStage, to }] : [];
 }
 
@@ -133,8 +150,11 @@ export function planAdvance(params: {
  * (e.g. dragged on the kanban). Unlike planAdvance this allows jumping forward
  * or backward to any stage.
  *
- * - Locked PO: every line item moves to the target stage (kept in lock-step).
- * - Broken PO: only the dragged line item moves.
+ * - Locked PO: every line item moves to the target stage, BUT only lines whose
+ *   own stage list contains `toStage` move (others stay put — they don't visit
+ *   that stage at all).
+ * - Broken PO: only the dragged line item moves, and only if `toStage` is on
+ *   its list.
  *
  * Items already at the target stage produce no transition.
  */
@@ -156,5 +176,9 @@ export function planSetStage(params: {
 
   return moving
     .filter((li) => li.currentStage !== toStage)
+    .filter((li) => {
+      const ord = li.stages && li.stages.length > 0 ? li.stages : null;
+      return ord === null || ord.includes(toStage);
+    })
     .map((li) => ({ lineItemId: li.id, from: li.currentStage, to: toStage }));
 }

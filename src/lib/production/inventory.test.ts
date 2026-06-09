@@ -78,6 +78,29 @@ describe("aggregateIncoming", () => {
     );
     expect(rows[0].nearestEta).toBe(today);
   });
+
+  it("respects a line's per-line stages subset when projecting ETA", () => {
+    // Spring bar skips edm/polishing/logo/plating/qc. A spring-bar line at
+    // stamping is much closer to done than a buckle line at stamping that
+    // walks the full pipeline. Confirm the subset is the one driving ETA.
+    const SPRING = ["supplier_po", "stamping", "packaging", "complete"];
+    const fullPipelineRow = aggregateIncoming(
+      ORDER,
+      [line({ sku: "BUCKLE", currentStage: "stamping" })],
+      DEFAULT_STAGE_DAYS,
+      today,
+    );
+    const subsetRow = aggregateIncoming(
+      ORDER,
+      [line({ sku: "SPRING", currentStage: "stamping", stages: SPRING })],
+      DEFAULT_STAGE_DAYS,
+      today,
+    );
+    // Spring-bar ETA is strictly sooner because it only goes through 2 more
+    // stages (stamping, packaging) instead of 7. ISO `YYYY-MM-DD` strings
+    // compare lexicographically the same as calendar dates.
+    expect(subsetRow[0].nearestEta! < fullPipelineRow[0].nearestEta!).toBe(true);
+  });
 });
 
 describe("aggregateIncomingByPo", () => {

@@ -110,3 +110,144 @@ export function projectEta(
 ): string {
   return addDaysISO(fromDate, projectRemainingDays(order, currentStage, estimates));
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Tiered cycle-time estimator (per-line / per-stage)
+//
+// For the SUB-PO STAGE TARGET SEEDER, we need a richer estimate than the
+// flat per-stage `estimates` map: how long this specific line, at this stage,
+// is likely to take — accounting for SKU/product specifics and the line's
+// quantity. The five tiers fall through in priority order:
+//
+//   1. (sku, stage)         — line-quantity-normalized rolling avg, ≥ MIN_SAMPLES
+//   2. (productId, stage)   — same, keyed by product instead of SKU
+//   3. (stage)              — global rolling avg, ≥ MIN_SAMPLES
+//   4. PO-derived           — (subPoEta − issued) / lineStageCount, no qty
+//   5. Hardcoded defaults   — DEFAULT_STAGE_DAYS, no qty
+//
+// Tiers 1–3 are sampled in days-per-unit (sample = stage_duration / line_qty),
+// so they're multiplied by `lineQty` to get this line's days. Tier 4 is a
+// per-stage slice of total PO time (already batch-level → no qty factor).
+// Tier 5 is the absolute fallback.
+//
+// The data-assembly half (joining stage events with their line items) lives
+// in cycle-time-data.ts; this is the pure / unit-tested half.
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Per-unit-day samples bucketed three ways. Each sample is
+ *  `event.duration_days / event.line.quantity` — so averaging gives
+ *  days-per-unit, and the line's own qty becomes the multiplier. */
+export interface CycleTimeSamples {
+  bySkuStage: Map<string, number[]>; // key: `${sku}::${stage}`
+  byProductStage: Map<string, number[]>; // key: `${productId}::${stage}`
+  byStage: Map<string, number[]>; // key: stage
+}
+
+/** Round half-up to one decimal — same rounding the existing rolling-avg uses. */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/** Compose a tier key without colliding when ids contain colons. */
+function key(a: string, b: string): string {
+  return `${a}::${b}`;
+}
+
+/** Build empty sample buckets — the data layer fills them in. */
+export function emptyCycleTimeSamples(): CycleTimeSamples {
+  return {
+    bySkuStage: new Map(),
+    byProductStage: new Map(),
+    byStage: new Map(),
+  };
+}
+
+/** Push a single duration sample. `productId` may be null for SKUs without
+ *  a product link; that sample then only contributes to SKU + global tiers. */
+export function pushCycleTimeSample(
+  samples: CycleTimeSamples,
+  args: {
+    sku: string;
+    productId: string | null;
+    stage: ProductionStage;
+    durationDays: number;
+    quantity: number;
+  },
+): void {
+  if (args.quantity <= 0 || args.durationDays < 0) return;
+  const perUnit = args.durationDays / args.quantity;
+  const push = (map: Map<string, number[]>, k: string) => {
+    const existing = map.get(k);
+    if (existing) existing.push(perUnit);
+    else map.set(k, [perUnit]);
+  };
+  push(samples.bySkuStage, key(args.sku, args.stage));
+  if (args.productId) push(samples.byProductStage, key(args.productId, args.stage));
+  push(samples.byStage, args.stage);
+}
+
+export interface LineStageEstimateInput {
+  stage: ProductionStage;
+  sku: string;
+  /** Product key (e.g. Shopify product id) for tier-2 grouping. Null disables tier 2. */
+  productId: string | null;
+  /** Line quantity — multiplier for tiers 1–3 (per-unit). */
+  lineQty: number;
+  /** Number of stages on the line's own pipeline (subset, or global count if no subset). */
+  lineStageCount: number;
+  /** Total PO days = subPoEta − issued, for tier 4. Null disables tier 4. */
+  poTotalDays: number | null;
+  samples: CycleTimeSamples;
+  defaults?: Record<string, number>;
+}
+
+export interface LineStageEstimate {
+  days: number;
+  /** Which tier supplied the estimate — useful for ops + tests. */
+  source: "sku" | "product" | "global" | "po_split" | "default";
+}
+
+/** Days for ONE line in ONE stage, walking the 5-tier fallback. */
+export function estimateLineStageDays(
+  args: LineStageEstimateInput,
+): LineStageEstimate {
+  const defaults = args.defaults ?? DEFAULT_STAGE_DAYS;
+
+  // Tier 1: SKU + stage rolling avg (per-unit) × line qty
+  const skuSamples = args.samples.bySkuStage.get(key(args.sku, args.stage)) ?? [];
+  if (skuSamples.length >= MIN_SAMPLES) {
+    const perUnit = averageDays(skuSamples)!;
+    return { days: round1(Math.max(0, perUnit * args.lineQty)), source: "sku" };
+  }
+
+  // Tier 2: product + stage rolling avg (per-unit) × line qty
+  if (args.productId) {
+    const prodSamples =
+      args.samples.byProductStage.get(key(args.productId, args.stage)) ?? [];
+    if (prodSamples.length >= MIN_SAMPLES) {
+      const perUnit = averageDays(prodSamples)!;
+      return { days: round1(Math.max(0, perUnit * args.lineQty)), source: "product" };
+    }
+  }
+
+  // Tier 3: global rolling avg (per-unit) × line qty
+  const globalSamples = args.samples.byStage.get(args.stage) ?? [];
+  if (globalSamples.length >= MIN_SAMPLES) {
+    const perUnit = averageDays(globalSamples)!;
+    return { days: round1(Math.max(0, perUnit * args.lineQty)), source: "global" };
+  }
+
+  // Tier 4: even spread = poTotalDays / lineStageCount (batch-level, no qty)
+  if (args.poTotalDays != null && args.lineStageCount > 0) {
+    return {
+      days: round1(Math.max(0, args.poTotalDays / args.lineStageCount)),
+      source: "po_split",
+    };
+  }
+
+  // Tier 5: hardcoded defaults
+  return {
+    days: defaults[args.stage] ?? FALLBACK_STAGE_DAYS,
+    source: "default",
+  };
+}

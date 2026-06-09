@@ -33,6 +33,8 @@ import { stagesOwnedBySupplier, supplierForStage } from "./stage-owners";
 import { resolveParent } from "./parents";
 import { validateStageEventDate, dateToNoonUtc } from "./stage-dates";
 import { isHandoff } from "./stage-owners";
+import { getCycleTimeSamples } from "./cycle-time-data";
+import { computeStageTargets } from "./stage-eta-seeder";
 import { notifyStageHandoff } from "./notifications";
 
 const dateString = z
@@ -57,6 +59,10 @@ export const lineItemInputSchema = z.object({
   expectedCompletionDate: dateString.nullish(),
   customerId: z.string().max(200).nullish(),
   orderLineItemId: z.string().max(200).nullish(),
+  // Per-line stage subset (ordered list of stage keys this SKU actually
+  // walks). Empty/null → inherit the PO's stage pipeline. UI sends an
+  // explicit subset only for SKUs that skip stages (e.g. spring bars).
+  stages: z.array(z.string().min(1)).nullish(),
   // Optional per-line overrides of the PO-level company / warehouse.
   ...refFields,
 });
@@ -157,6 +163,9 @@ export async function createPo(
         shopifyLocationId: li.shopifyLocationId ?? null,
         locationName: li.locationName ?? null,
         currentStage: opening,
+        // Per-line subset is only persisted when caller explicitly sends a
+        // non-empty list; [] and null both mean "inherit pipeline".
+        stages: li.stages && li.stages.length > 0 ? li.stages : null,
       })),
     )
     .returning({ id: productionPoLineItem.id });
@@ -169,6 +178,12 @@ export async function createPo(
       stage: opening,
     })),
   );
+
+  // Seed initial per-stage target dates from the tiered cycle-time estimator
+  // (sku → product → global → po_split → defaults). Fire-and-forget conceptually
+  // but await it so callers see consistent state — the chart pulls from the
+  // same table on next render.
+  await reseedStageTargets(po.id);
 
   return { poId: po.id, poNumber };
 }
@@ -219,6 +234,10 @@ export async function createMultiSupplierPo(
       .returning({ id: productionPo.id });
     subPos.push({ id: sub.id, suffix: p.suffix, supplierId: p.supplierId });
   }
+  // Each sub-PO carries its own ETA + supplier — seed per-stage targets for
+  // each. The master's targets are unused once split (chart reads sub-PO
+  // targets first), but createPo already seeded the master row above.
+  for (const sub of subPos) await reseedStageTargets(sub.id);
   return { poId: master.poId, poNumber: master.poNumber, subPos };
 }
 
@@ -269,21 +288,30 @@ export async function syncMasterSubPos(
   const plan = planSubPos(order, workStages, master.stageAssignments, master.supplierId);
   if (!isMultiSupplier(plan)) return;
 
+  const created: string[] = [];
   for (const p of plan) {
-    await db.insert(productionPo).values({
-      parentPoId: masterId,
-      poSuffix: p.suffix,
-      supplierId: p.supplierId,
-      shopifyPoNumber: master.shopifyPoNumber,
-      issuedDate: master.issuedDate,
-      expectedDeliveryDate:
-        priorEta.get(p.supplierId) ?? master.expectedDeliveryDate ?? null,
-      companyId: master.companyId ?? null,
-      shopifyLocationId: master.shopifyLocationId ?? null,
-      locationName: master.locationName ?? null,
-      status: "active",
-    });
+    const [sub] = await db
+      .insert(productionPo)
+      .values({
+        parentPoId: masterId,
+        poSuffix: p.suffix,
+        supplierId: p.supplierId,
+        shopifyPoNumber: master.shopifyPoNumber,
+        issuedDate: master.issuedDate,
+        expectedDeliveryDate:
+          priorEta.get(p.supplierId) ?? master.expectedDeliveryDate ?? null,
+        companyId: master.companyId ?? null,
+        shopifyLocationId: master.shopifyLocationId ?? null,
+        locationName: master.locationName ?? null,
+        status: "active",
+      })
+      .returning({ id: productionPo.id });
+    created.push(sub.id);
   }
+  // The old sub-POs were cascade-deleted with their stage_eta rows; reseed
+  // fresh targets per the user's directive ("don't preserve old stage_eta on
+  // reassign — recompute fresh").
+  for (const id of created) await reseedStageTargets(id);
 }
 
 /** Sub-POs of a master, lettered order, with supplier names. */
@@ -319,6 +347,11 @@ export async function setSubPoEta(
     .update(productionPo)
     .set({ expectedDeliveryDate, updatedAt: new Date() })
     .where(eq(productionPo.id, subPoId));
+  // The sub-PO's ETA drives Tier 4 of the cycle-time estimator (PO-split
+  // fallback); a new ETA changes the seeded stage-target spread. Reseed so
+  // the chart picks up the new spread without the supplier having to nudge
+  // every stage by hand.
+  await reseedStageTargets(subPoId);
 }
 
 /** Per-stage target end dates for a (sub-)PO, used by the timeline chart to
@@ -333,6 +366,81 @@ export async function getPoStageEtas(
     })
     .from(productionPoStageEta)
     .where(eq(productionPoStageEta.poId, poId));
+}
+
+/**
+ * Re-seed a (sub-)PO's per-stage target dates from current data. Walks every
+ * line on the master, runs each through the tiered cycle-time estimator
+ * along its own `stages` subset, and writes one row per stage into
+ * `production_po_stage_eta` (max across contributing lines). Deletes any
+ * existing targets for the PO first — the seed is a clean recompute, not a
+ * merge — so suppliers can edit individual stages and the next reseed will
+ * wipe + recompute the lot.
+ *
+ * Lines are read from the OWNING master (sub-POs have no line items of their
+ * own); the seeder uses the sub-PO's own `expectedDeliveryDate` for the Tier
+ * 4 (PO-split) fallback so each supplier gets ETAs scoped to their own
+ * promised delivery, not the master's.
+ */
+export async function reseedStageTargets(
+  poId: string,
+): Promise<{ stage: string; targetEndDate: string }[]> {
+  const po = await db.query.productionPo.findFirst({
+    where: eq(productionPo.id, poId),
+    columns: {
+      id: true,
+      parentPoId: true,
+      issuedDate: true,
+      expectedDeliveryDate: true,
+    },
+  });
+  if (!po) return [];
+
+  // Line items live on the master. For a sub-PO, walk up to the parent; for
+  // a standalone master, walk its own lines.
+  const masterId = po.parentPoId ?? po.id;
+  const lines = await db.query.productionPoLineItem.findMany({
+    where: and(
+      eq(productionPoLineItem.poId, masterId),
+      isNull(productionPoLineItem.shopifyReceivedAt),
+    ),
+    columns: {
+      sku: true,
+      shopifyProductId: true,
+      quantity: true,
+      stages: true,
+    },
+  });
+
+  const [order, samples] = await Promise.all([
+    getStageOrder(),
+    getCycleTimeSamples(),
+  ]);
+
+  const seeds = computeStageTargets({
+    order,
+    issuedDate: po.issuedDate,
+    subPoEta: po.expectedDeliveryDate ?? null,
+    lines: lines.map((l) => ({
+      sku: l.sku,
+      productId: l.shopifyProductId ?? null,
+      quantity: l.quantity,
+      stages: l.stages ?? null,
+    })),
+    samples,
+  });
+
+  // Atomic-ish replacement: clear then re-insert. The unique(poId, stage)
+  // constraint prevents partial double-writes from interleaving runs.
+  await db
+    .delete(productionPoStageEta)
+    .where(eq(productionPoStageEta.poId, poId));
+  if (seeds.length > 0) {
+    await db
+      .insert(productionPoStageEta)
+      .values(seeds.map((s) => ({ poId, ...s })));
+  }
+  return seeds;
 }
 
 /** Upsert (or delete, when `targetEndDate` is null) one stage's target date.
@@ -689,6 +797,8 @@ export async function updatePoFull(
   const opening = firstStage(await getStageOrder());
   const now = new Date();
   for (const li of input.lineItems) {
+    // Treat [] same as null on write — "no explicit subset → inherit pipeline".
+    const stages = li.stages && li.stages.length > 0 ? li.stages : null;
     if (li.id && existingIds.has(li.id)) {
       await db
         .update(productionPoLineItem)
@@ -702,6 +812,7 @@ export async function updatePoFull(
           companyId: li.companyId ?? null,
           shopifyLocationId: li.shopifyLocationId ?? null,
           locationName: li.locationName ?? null,
+          stages,
           updatedAt: now,
         })
         .where(eq(productionPoLineItem.id, li.id));
@@ -720,6 +831,7 @@ export async function updatePoFull(
           shopifyLocationId: li.shopifyLocationId ?? null,
           locationName: li.locationName ?? null,
           currentStage: opening,
+          stages,
         })
         .returning({ id: productionPoLineItem.id });
       await db
@@ -727,6 +839,16 @@ export async function updatePoFull(
         .values({ lineItemId: ins.id, stage: opening });
     }
   }
+
+  // Lines may have changed (added/removed/qty/stages) → reseed targets on
+  // the master and every sub-PO. Per the user's directive, we wipe and
+  // recompute fresh rather than try to preserve old per-stage edits.
+  await reseedStageTargets(poId);
+  const subPos = await db.query.productionPo.findMany({
+    where: eq(productionPo.parentPoId, poId),
+    columns: { id: true },
+  });
+  for (const s of subPos) await reseedStageTargets(s.id);
 
   return { poId };
 }

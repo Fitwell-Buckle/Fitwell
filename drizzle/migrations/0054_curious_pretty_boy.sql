@@ -1,0 +1,1 @@
+ALTER TABLE "production_po_line_item" ADD COLUMN "stages" text[];

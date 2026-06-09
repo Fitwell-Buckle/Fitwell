@@ -11,6 +11,10 @@ export interface IncomingLine {
   title: string;
   quantity: number;
   currentStage: ProductionStage;
+  /** Per-line stage list — `null`/`undefined` inherits the global pipeline.
+   *  When set, `projectEta` walks this list (so a line that skips stages
+   *  isn't projected through them). */
+  stages?: readonly string[] | null;
 }
 
 export interface IncomingRow {
@@ -73,7 +77,12 @@ export function aggregateIncomingByPo(
     row.incomingQty += li.quantity;
     row.byStage[li.currentStage] = (row.byStage[li.currentStage] ?? 0) + li.quantity;
 
-    const eta = projectEta(order, li.currentStage, today, estimates);
+    const eta = projectEta(
+      li.stages && li.stages.length > 0 ? li.stages : order,
+      li.currentStage,
+      today,
+      estimates,
+    );
     if (row.nearestEta === null || eta < row.nearestEta) row.nearestEta = eta;
 
     byPo.set(li.poNumber, row);
@@ -104,7 +113,12 @@ export function aggregateIncoming(
     row.incomingQty += li.quantity;
     row.byStage[li.currentStage] = (row.byStage[li.currentStage] ?? 0) + li.quantity;
 
-    const eta = projectEta(order, li.currentStage, today, estimates);
+    const eta = projectEta(
+      li.stages && li.stages.length > 0 ? li.stages : order,
+      li.currentStage,
+      today,
+      estimates,
+    );
     if (row.nearestEta === null || eta < row.nearestEta) row.nearestEta = eta;
 
     bySku.set(li.sku, row);

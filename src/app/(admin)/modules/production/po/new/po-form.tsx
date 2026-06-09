@@ -10,6 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import type { ShopifyRef, ShopifyRefs } from "@/app/api/production/shopify-refs/route";
 import { fmtMoney } from "@/lib/production/display";
 import { type ProductionStage } from "@/lib/production/stages";
+import {
+  isStageOn,
+  toggleStageChip,
+} from "@/lib/production/stage-eta-seeder";
 import { useStageLabels, useStageOrder } from "@/components/production/stage-labels-provider";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
@@ -62,6 +66,8 @@ export interface EditableLine {
   companyId: string | null;
   shopifyLocationId: string | null;
   locationName: string | null;
+  /** Per-line stage subset (ordered). `null` = inherit the PO pipeline. */
+  stages: string[] | null;
 }
 
 export interface PoFormInitial {
@@ -89,6 +95,11 @@ interface LineItemRow {
   companyId: string; // override of PO-level company ("" = inherit)
   locationId: string; // override of PO-level warehouse ("" = inherit)
   locationName: string;
+  /** Per-line stage subset. `null` = inherit the PO pipeline; an explicit
+   *  list is the ordered subset of stages this line walks. The UI's chip
+   *  picker writes `null` whenever the user has "all stages on", so the DB
+   *  side never has to distinguish [all-checked] from [inherit]. */
+  stages: string[] | null;
 }
 
 function emptyRow(): LineItemRow {
@@ -102,6 +113,7 @@ function emptyRow(): LineItemRow {
     companyId: "",
     locationId: "",
     locationName: "",
+    stages: null,
   };
 }
 
@@ -117,6 +129,7 @@ function toRow(line: EditableLine): LineItemRow {
     companyId: line.companyId ?? "",
     locationId: line.shopifyLocationId ?? "",
     locationName: line.locationName ?? "",
+    stages: line.stages && line.stages.length > 0 ? [...line.stages] : null,
   };
 }
 
@@ -561,6 +574,9 @@ export function PoForm({
         companyId: r.companyId || null,
         shopifyLocationId: r.locationId || null,
         locationName: r.locationName || null,
+        // Only persist `stages` when the user picked an explicit subset; the
+        // service treats null / [] as "inherit pipeline".
+        stages: r.stages && r.stages.length > 0 ? r.stages : null,
       });
     }
 
@@ -1015,6 +1031,18 @@ export function PoForm({
                   </Button>
                 </div>
 
+                {/* Per-line stage subset. Default is "all stages on" (inherit
+                  *  the PO pipeline). Toggling a chip off omits that stage from
+                  *  this line's walk — used for SKUs like spring bars that skip
+                  *  EDM/polishing/logo/plating/qc. The opening + terminal
+                  *  bookends are always implicitly on. */}
+                <LineStagesChips
+                  stages={stageOrder}
+                  stageLabels={stageLabels}
+                  value={r.stages}
+                  onChange={(next) => updateRow(i, { stages: next })}
+                />
+
                 {/* Optional per-line overrides of the PO-level company / warehouse. */}
                 <div className="flex flex-wrap items-center gap-2 pl-0.5">
                   <span className="text-[11px] uppercase tracking-wider text-zinc-400">
@@ -1085,6 +1113,88 @@ export function PoForm({
               : (submitLabel ?? "Create PO")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Per-line stage subset picker. Renders all WORK stages (between the opening
+ * bookend and the terminal `complete` sentinel) as toggleable chips. Default
+ * state = every chip on, which serializes as `null` (inherit the PO pipeline).
+ * Toggling any chip off "opts in" to an explicit subset — the bookends are
+ * always retained, so the persisted list is `[opening, ...checked, terminal]`.
+ *
+ * The opening (`supplier_po`) and terminal (`complete`) stages are shown
+ * read-only so the user understands they're part of every line.
+ */
+function LineStagesChips({
+  stages,
+  stageLabels,
+  value,
+  onChange,
+}: {
+  stages: readonly string[];
+  stageLabels: Record<string, string>;
+  value: string[] | null;
+  onChange: (next: string[] | null) => void;
+}) {
+  if (stages.length < 3) return null; // no work stages to skip
+  const opening = stages[0];
+  const terminal = stages[stages.length - 1];
+  const workStages = stages.slice(1, -1);
+
+  // Pure toggle logic lives in stage-eta-seeder so it's unit-tested without
+  // mounting React.
+  const isOn = (stage: string) => isStageOn(stage, value);
+  const toggle = (stage: string) =>
+    onChange(toggleStageChip(stage, stages, value));
+
+  const inherits = value === null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 pl-0.5">
+      <span className="text-[11px] uppercase tracking-wider text-zinc-400">
+        Stages
+      </span>
+      <span
+        className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-500"
+        title="Every line starts here"
+      >
+        {stageLabels[opening] ?? opening}
+      </span>
+      {workStages.map((s) => {
+        const on = isOn(s);
+        return (
+          <button
+            type="button"
+            key={s}
+            onClick={() => toggle(s)}
+            className={
+              "rounded-md border px-2 py-0.5 text-[11px] transition-colors " +
+              (on
+                ? "border-zinc-800 bg-zinc-900 text-white"
+                : "border-zinc-200 bg-white text-zinc-400 hover:border-zinc-300 line-through")
+            }
+            aria-pressed={on}
+          >
+            {stageLabels[s] ?? s}
+          </button>
+        );
+      })}
+      <span
+        className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-500"
+        title="Every line ends here"
+      >
+        {stageLabels[terminal] ?? terminal}
+      </span>
+      {!inherits && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="ml-1 text-[11px] text-zinc-400 underline-offset-2 hover:text-zinc-600 hover:underline"
+        >
+          reset
+        </button>
+      )}
     </div>
   );
 }

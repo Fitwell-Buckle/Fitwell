@@ -102,6 +102,7 @@ export default async function EditPoPage({
         companyId: li.companyId,
         shopifyLocationId: li.shopifyLocationId,
         locationName: li.locationName,
+        stages: li.stages ?? null,
       })),
     stageAssignments: po.stageAssignments.map((a) => ({
       stage: a.stage,

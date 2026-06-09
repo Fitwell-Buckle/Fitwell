@@ -75,6 +75,7 @@ export default async function B2BOrdersPage({
             title: true,
             quantity: true,
             currentStage: true,
+            stages: true,
             shopifyReceivedAt: true,
           },
         },
@@ -95,6 +96,7 @@ export default async function B2BOrdersPage({
       title: li.title,
       quantity: li.quantity,
       currentStage: li.currentStage,
+      stages: li.stages,
     }));
   const etaBySku = new Map(
     aggregateIncoming(order, incomingLines, estimates, today).map((r) => [r.sku, r.nearestEta]),
