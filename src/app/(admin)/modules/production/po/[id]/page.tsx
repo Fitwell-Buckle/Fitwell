@@ -33,13 +33,14 @@ import {
 import { cn } from "@/lib/utils";
 import { PoControls } from "./po-controls";
 import { PoReceive } from "./po-receive";
-import { PoStageTimeline } from "./po-stage-timeline";
 import { PoCreateInvoice } from "./po-create-invoice";
 import { SubPoCovers, type SubPoCoverRow } from "./sub-po-covers";
 import { PoSentControl } from "./po-sent-control";
 import { PoTimeline } from "@/components/production/po-timeline";
+import { ProductionTimeline } from "@/components/production/production-timeline";
 import { buildPoTimeline } from "@/lib/production/timeline";
 import { DetailTabs } from "@/components/ui/detail-tabs";
+import { getStageEstimates } from "@/lib/production/cycle-time-data";
 import { DeleteButton } from "@/components/ui/delete-button";
 
 export const metadata: Metadata = {
@@ -57,7 +58,11 @@ export default async function PoDetailPage({
   const { id } = await params;
   const po = await getPoDetail(id);
   if (!po) notFound();
-  const [stageLabels, order] = await Promise.all([getStageLabels(), getStageOrder()]);
+  const [stageLabels, order, estimates] = await Promise.all([
+    getStageLabels(),
+    getStageOrder(),
+    getStageEstimates(),
+  ]);
   const workStages = order.slice(0, -1);
 
   // Multi-supplier framing: a PO with sub-POs is a master; a PO with a parent
@@ -384,6 +389,17 @@ export default async function PoDetailPage({
         />
       )}
 
+      {/* Notes & documents on a sub-PO: scoped to this supplier alone (the
+       *  master has its own thread visible to every supplier). Open the master
+       *  via the banner above to broadcast to all of them. */}
+      {isSubPo && (
+        <PoTimeline
+          poId={po.id}
+          viewer="admin"
+          entries={buildPoTimeline(po.comments, po.attachments)}
+        />
+      )}
+
       {!isSubPo && (
         <>
       {/* C2 receiving: show once the PO is complete, or after it's been received. */}
@@ -510,19 +526,33 @@ export default async function PoDetailPage({
             : []),
           {
             value: "progress",
-            label: "Progress",
+            label: "Production timeline",
             content: (
-              <PoStageTimeline
-                lines={sortedLineItems.map((li) => ({
-                  id: li.id,
-                  sku: li.sku,
-                  title: li.title,
-                  events: li.stageEvents.map((ev) => ({
-                    id: ev.id,
-                    stage: ev.stage,
-                    date: ev.enteredAt.toISOString().slice(0, 10),
-                  })),
-                }))}
+              <ProductionTimeline
+                pos={[
+                  {
+                    id: po.id,
+                    shopifyPoNumber: po.shopifyPoNumber,
+                    supplier: po.supplier ? { name: po.supplier.name } : null,
+                    stageTargets: po.stageEtas,
+                    lineItems: sortedLineItems.map((li) => ({
+                      id: li.id,
+                      sku: li.sku,
+                      title: li.title,
+                      currentStage: li.currentStage,
+                      stageEvents: li.stageEvents.map((ev) => ({
+                        id: ev.id,
+                        stage: ev.stage,
+                        enteredAt: ev.enteredAt,
+                        exitedAt: ev.exitedAt,
+                      })),
+                    })),
+                  },
+                ]}
+                estimates={estimates}
+                stageLabels={stageLabels}
+                order={order}
+                etaSaveRouteBase="/api/production/po"
               />
             ),
           },

@@ -372,6 +372,13 @@
       "when": 1780693056824,
       "tag": "0052_tan_amphibian",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1781016887384,
+      "tag": "0053_wealthy_kabuki",
+      "breakpoints": true
     }
   ]
 }

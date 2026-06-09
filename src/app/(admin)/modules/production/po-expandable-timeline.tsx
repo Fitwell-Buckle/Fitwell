@@ -1,18 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { isTerminal, type ProductionStage } from "@/lib/production/stages";
 import { STAGE_BAR, fmtDate } from "@/lib/production/display";
-import { projectEta } from "@/lib/production/cycle-time";
 import { PoSkuBreakdown } from "./po-sku-breakdown";
-import type { TimelinePo } from "./production-timeline";
+import {
+  buildLineSegments,
+  buildTargetsByPoId,
+  makeStageEtaSaver,
+  TimelineAxisRow,
+  TimelineBar,
+  type TimelinePo,
+} from "@/components/production/production-timeline";
 import type { IncomingRow } from "@/lib/production/inventory";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
-const utcMidnight = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
 
 /**
  * By-PO Timeline with inline SKU expansion.
@@ -26,57 +31,46 @@ export function PoExpandableTimeline({
   stageLabels,
   order,
   skuRowsByPo,
+  etaSaveRouteBase,
 }: {
   pos: TimelinePo[];
   estimates: Record<ProductionStage, number>;
   stageLabels: Record<ProductionStage, string>;
   order: readonly string[];
   skuRowsByPo: Record<string, IncomingRow[]>;
+  /** When set, enables the inline stage-target editor — see
+   *  ProductionTimeline.etaSaveRouteBase. */
+  etaSaveRouteBase?: string;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
+  const router = useRouter();
 
   const todayIso = isoDay(new Date());
-  const todayMs = utcMidnight(todayIso);
+  const todayMs = Date.parse(`${todayIso}T00:00:00Z`);
 
-  interface Segment {
-    stage: ProductionStage;
-    startMs: number;
-    endMs: number;
-    projected: boolean;
-  }
+  const targetsByPoId = buildTargetsByPoId(pos);
+  const onSaveEta = etaSaveRouteBase
+    ? makeStageEtaSaver(etaSaveRouteBase, router)
+    : null;
 
   const tracks = pos
     .flatMap((po) =>
       po.lineItems
         .filter((li) => li.stageEvents.length > 0)
         .map((li) => {
-          const segs: Segment[] = li.stageEvents.map((ev) => ({
-            stage: ev.stage,
-            startMs: ev.enteredAt.getTime(),
-            endMs: ev.exitedAt
-              ? ev.exitedAt.getTime()
-              : todayMs,
-            projected: false,
-          }));
-          segs.forEach((s) => {
-            s.endMs = Math.max(s.endMs, s.startMs + MS_PER_DAY / 4);
-          });
-
-          let etaMs: number | null = null;
-          if (!isTerminal(order, li.currentStage)) {
-            etaMs = utcMidnight(
-              projectEta(order, li.currentStage, todayIso, estimates),
-            );
-            if (etaMs > todayMs) {
-              segs.push({
-                stage: li.currentStage,
-                startMs: todayMs,
-                endMs: etaMs,
-                projected: true,
-              });
-            }
-          }
-
+          const segs = buildLineSegments(
+            li,
+            todayMs,
+            todayIso,
+            order,
+            estimates,
+            targetsByPoId.get(po.id),
+          );
+          const subBars = li.subBars && li.subBars.length > 0 ? li.subBars : null;
+          const allSegs = subBars ? subBars.flatMap((b) => b.segs) : segs;
+          const etaMs = subBars
+            ? Math.max(0, ...subBars.flatMap((b) => b.segs.filter((s) => s.projected).map((s) => s.endMs))) || null
+            : segs.findLast((s) => s.projected)?.endMs ?? null;
           return {
             key: li.id,
             poId: po.id,
@@ -86,8 +80,9 @@ export function PoExpandableTimeline({
             title: li.title,
             currentStage: li.currentStage,
             segs,
-            startMs: segs[0].startMs,
-            endMs: Math.max(...segs.map((s) => s.endMs)),
+            subBars,
+            startMs: allSegs.length ? Math.min(...allSegs.map((s) => s.startMs)) : todayMs,
+            endMs: allSegs.length ? Math.max(...allSegs.map((s) => s.endMs)) : todayMs,
             etaMs,
           };
         }),
@@ -100,9 +95,6 @@ export function PoExpandableTimeline({
   const maxMs = tracks.length
     ? Math.max(...tracks.map((t) => t.endMs), todayMs)
     : todayMs;
-  const range = Math.max(maxMs - minMs, MS_PER_DAY);
-  const pct = (ms: number) => ((ms - minMs) / range) * 100;
-  const todayPct = pct(todayMs);
 
   return (
     <div className="mt-8">
@@ -143,7 +135,12 @@ export function PoExpandableTimeline({
                   }}
                 >
                   <div style={{ overflow: "hidden", minHeight: 0 }}>
-                    {/* Track row */}
+                    {/* Track header — PO label + ETA. Stays at the top in
+                        every state (clickable to collapse when expanded).
+                        Renders the bar inline only when this track is NOT
+                        expanded; when expanded the bar drops to its own row
+                        at the bottom of the expansion, flush above the date
+                        axis. */}
                     <div
                       role="button"
                       tabIndex={0}
@@ -169,33 +166,93 @@ export function PoExpandableTimeline({
                         >
                           {t.sku}
                         </div>
-                        <div
-                          className={cn(
-                            "truncate text-[11px]",
-                            isSelected ? "text-zinc-400" : "text-zinc-400",
-                          )}
-                        >
-                          {t.poNumber} · {t.supplier}
-                        </div>
+                        {t.subBars ? (
+                          // Multi-supplier: stack each supplier's name
+                          // aligned to its bar on the right. Each row is
+                          // h-6 (24px) to match the bar row height; the
+                          // mt-1 + gap-1 align with the bar stack which
+                          // has the same vertical rhythm.
+                          <div className="mt-1 flex flex-col gap-1">
+                            {t.subBars.map((b) => (
+                              <div
+                                key={b.poId}
+                                className={cn(
+                                  "flex h-6 items-center truncate text-[11px]",
+                                  isSelected ? "text-zinc-400" : "text-zinc-500",
+                                )}
+                              >
+                                {b.supplierName}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div
+                            className={cn(
+                              "truncate text-[11px]",
+                              isSelected ? "text-zinc-400" : "text-zinc-400",
+                            )}
+                          >
+                            {t.poNumber} · {t.supplier}
+                          </div>
+                        )}
                       </div>
 
-                      <div className="relative h-6 flex-1 rounded bg-zinc-50">
-                        <div
-                          className="absolute top-0 z-10 h-full w-px bg-zinc-300"
-                          style={{ left: `${todayPct}%` }}
+                      {isSelected ? (
+                        // Spacer so the ETA cell stays right-aligned while
+                        // the bar is rendered at the bottom of the expansion.
+                        <div className="flex-1" />
+                      ) : t.subBars ? (
+                        <div className="flex flex-1 flex-col">
+                          {/* Invisible top spacer matches the label cell's
+                              PO# row + mt-1 (~text-xs leading + 4px) so the
+                              bar rows below align horizontally with each
+                              supplier name in the label. */}
+                          <div aria-hidden className="h-4" />
+                          <div className="mt-1 flex flex-col gap-1">
+                            {t.subBars.map((b) => (
+                              <div key={b.poId} className="flex items-center">
+                                <TimelineBar
+                                  segs={b.segs}
+                                  todayMs={todayMs}
+                                  minMs={minMs}
+                                  maxMs={maxMs}
+                                  stageLabels={stageLabels}
+                                  editable={
+                                    onSaveEta
+                                      ? {
+                                          targetsMs:
+                                            targetsByPoId.get(b.poId) ??
+                                            new Map<ProductionStage, number>(),
+                                          onSave: (stage, dateIso) =>
+                                            onSaveEta(b.poId, stage, dateIso),
+                                        }
+                                      : undefined
+                                  }
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <TimelineBar
+                          segs={t.segs}
+                          todayMs={todayMs}
+                          minMs={minMs}
+                          maxMs={maxMs}
+                          stageLabels={stageLabels}
+                          editable={
+                            onSaveEta
+                              ? {
+                                  targetsMs:
+                                    targetsByPoId.get(t.poId) ??
+                                    new Map<ProductionStage, number>(),
+                                  onSave: (stage, dateIso) =>
+                                    onSaveEta(t.poId, stage, dateIso),
+                                }
+                              : undefined
+                          }
                         />
-                        {t.segs.map((s, i) => (
-                          <div
-                            key={i}
-                            className={`absolute top-1 h-4 rounded-sm ${STAGE_BAR[s.stage] ?? "bg-zinc-300"} ${s.projected ? "opacity-30" : ""}`}
-                            style={{
-                              left: `${pct(s.startMs)}%`,
-                              width: `${Math.max(pct(s.endMs) - pct(s.startMs), 0.5)}%`,
-                            }}
-                            title={`${stageLabels[s.stage]}${s.projected ? " (projected)" : ""}`}
-                          />
-                        ))}
-                      </div>
+                      )}
 
                       <div
                         className={cn(
@@ -223,11 +280,69 @@ export function PoExpandableTimeline({
                         onClose={() => setSelected(null)}
                       />
                     )}
+
+                    {/* Bar row (expanded only) — aligned to the same gutters
+                        as the track header above so the segments line up
+                        with the date axis below all tracks. Multi-supplier
+                        masters get a stack, one bar per supplier. */}
+                    {isSelected && (
+                      <div className="flex items-center gap-3 border-t border-zinc-100 px-4 py-2.5">
+                        <div className="w-48 shrink-0" />
+                        {t.subBars ? (
+                          <div className="flex flex-1 flex-col gap-1">
+                            {t.subBars.map((b) => (
+                              <div key={b.poId} className="flex items-center">
+                                <TimelineBar
+                                  segs={b.segs}
+                                  todayMs={todayMs}
+                                  minMs={minMs}
+                                  maxMs={maxMs}
+                                  stageLabels={stageLabels}
+                                  editable={
+                                    onSaveEta
+                                      ? {
+                                          targetsMs:
+                                            targetsByPoId.get(b.poId) ??
+                                            new Map<ProductionStage, number>(),
+                                          onSave: (stage, dateIso) =>
+                                            onSaveEta(b.poId, stage, dateIso),
+                                        }
+                                      : undefined
+                                  }
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                        <TimelineBar
+                          segs={t.segs}
+                          todayMs={todayMs}
+                          minMs={minMs}
+                          maxMs={maxMs}
+                          stageLabels={stageLabels}
+                          editable={
+                            onSaveEta
+                              ? {
+                                  targetsMs:
+                                    targetsByPoId.get(t.poId) ??
+                                    new Map<ProductionStage, number>(),
+                                  onSave: (stage, dateIso) =>
+                                    onSaveEta(t.poId, stage, dateIso),
+                                }
+                              : undefined
+                          }
+                        />
+                        )}
+                        <div className="w-24 shrink-0" />
+                      </div>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
+
+          <TimelineAxisRow minMs={minMs} maxMs={maxMs} />
         </Card>
       )}
     </div>

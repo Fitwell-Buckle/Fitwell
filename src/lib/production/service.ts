@@ -8,6 +8,7 @@ import {
   productionComment,
   productionAttachment,
   productionStageAssignment,
+  productionPoStageEta,
   productionSupplierLineCost,
   supplier,
 } from "@/lib/schema";
@@ -318,6 +319,47 @@ export async function setSubPoEta(
     .update(productionPo)
     .set({ expectedDeliveryDate, updatedAt: new Date() })
     .where(eq(productionPo.id, subPoId));
+}
+
+/** Per-stage target end dates for a (sub-)PO, used by the timeline chart to
+ *  override the cycle-time projection when an explicit date is set. */
+export async function getPoStageEtas(
+  poId: string,
+): Promise<{ stage: string; targetEndDate: string }[]> {
+  return db
+    .select({
+      stage: productionPoStageEta.stage,
+      targetEndDate: productionPoStageEta.targetEndDate,
+    })
+    .from(productionPoStageEta)
+    .where(eq(productionPoStageEta.poId, poId));
+}
+
+/** Upsert (or delete, when `targetEndDate` is null) one stage's target date.
+ *  Single source of truth: both the admin and supplier ETA routes call this. */
+export async function setPoStageEta(
+  poId: string,
+  stage: string,
+  targetEndDate: string | null,
+): Promise<void> {
+  if (targetEndDate === null) {
+    await db
+      .delete(productionPoStageEta)
+      .where(
+        and(
+          eq(productionPoStageEta.poId, poId),
+          eq(productionPoStageEta.stage, stage),
+        ),
+      );
+    return;
+  }
+  await db
+    .insert(productionPoStageEta)
+    .values({ poId, stage, targetEndDate })
+    .onConflictDoUpdate({
+      target: [productionPoStageEta.poId, productionPoStageEta.stage],
+      set: { targetEndDate, updatedAt: new Date() },
+    });
 }
 
 /**
@@ -853,6 +895,9 @@ export async function getPoDetail(poId: string) {
       stageAssignments: {
         columns: { stage: true, supplierId: true },
         with: { supplier: { columns: { name: true } } },
+      },
+      stageEtas: {
+        columns: { stage: true, targetEndDate: true },
       },
     },
   });

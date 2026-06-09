@@ -57,6 +57,7 @@ export async function notifyStageHandoff(params: {
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#18181b">
     <p style="font-size:15px;font-weight:600;margin:0">${title}</p>
     <p style="font-size:13px;color:#52525b;margin:6px 0 0">${body}</p>
+    ${linkButton(adminPoUrl(params.poId))}
   </div>`;
 
   if (!process.env.RESEND_API_KEY) {
@@ -194,10 +195,40 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
 }
 
-function activityHtml(title: string, body: string): string {
+// Portal base URL for the deep link buttons we add to every alert email.
+// Mirrors lib/crm/tracking.ts — NextAuth's own host is correct in every env,
+// with a hardcoded production fallback for cron-style invocations that may
+// not have AUTH_URL/NEXTAUTH_URL set.
+function portalBaseUrl(): string {
+  const raw =
+    process.env.AUTH_URL ||
+    process.env.NEXTAUTH_URL ||
+    "https://portal.fitwellbuckle.co";
+  return raw.replace(/\/+$/, "");
+}
+
+/** Admin-side PO detail link (works for masters, sub-POs, and standalones). */
+function adminPoUrl(poId: string): string {
+  return `${portalBaseUrl()}/modules/production/po/${poId}`;
+}
+
+/** Supplier-portal PO detail link. The supplier portal always works through
+ *  the master id (sub-POs have no own line items), so when the row that
+ *  changed is a sub-PO we link to its parent — the page loads the master and
+ *  scopes the timeline / ETA to the viewing supplier's sub-PO. */
+function supplierPoUrl(po: { id: string; parentPoId: string | null }): string {
+  return `${portalBaseUrl()}/supplier/po/${po.parentPoId ?? po.id}`;
+}
+
+function linkButton(href: string, label = "View PO"): string {
+  return `<p style="margin:14px 0 0"><a href="${escapeHtml(href)}" style="display:inline-block;font-size:13px;font-weight:500;color:#fff;background:#18181b;text-decoration:none;padding:8px 14px;border-radius:6px">${escapeHtml(label)}</a></p>`;
+}
+
+function activityHtml(title: string, body: string, href?: string): string {
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#18181b">
     <p style="font-size:15px;font-weight:600;margin:0">${escapeHtml(title)}</p>
     <p style="font-size:13px;color:#52525b;margin:6px 0 0;white-space:pre-wrap">${escapeHtml(body)}</p>
+    ${href ? linkButton(href) : ""}
   </div>`;
 }
 
@@ -269,7 +300,13 @@ export async function notifyPoUpdate(params: {
   try {
     const po = await db.query.productionPo.findFirst({
       where: eq(productionPo.id, params.poId),
-      columns: { id: true, shopifyPoNumber: true, supplierId: true, poSuffix: true },
+      columns: {
+        id: true,
+        shopifyPoNumber: true,
+        supplierId: true,
+        poSuffix: true,
+        parentPoId: true,
+      },
       with: { supplier: { columns: { name: true } } },
     });
     if (!po) return;
@@ -292,7 +329,7 @@ export async function notifyPoUpdate(params: {
       await deliverEmail({
         to: ADMIN_EMAILS,
         subject,
-        html: activityHtml(title, params.summary),
+        html: activityHtml(title, params.summary, adminPoUrl(po.id)),
         label: "Admin notification",
       });
     } else {
@@ -309,7 +346,7 @@ export async function notifyPoUpdate(params: {
       await deliverEmail({
         to,
         subject,
-        html: activityHtml(title, params.summary),
+        html: activityHtml(title, params.summary, supplierPoUrl(po)),
         label: "Supplier notification",
       });
     }
@@ -338,7 +375,13 @@ export async function notifyPoActivity(params: {
   try {
     const po = await db.query.productionPo.findFirst({
       where: eq(productionPo.id, params.poId),
-      columns: { id: true, shopifyPoNumber: true, supplierId: true, poSuffix: true },
+      columns: {
+        id: true,
+        shopifyPoNumber: true,
+        supplierId: true,
+        poSuffix: true,
+        parentPoId: true,
+      },
       with: { supplier: { columns: { name: true } } },
     });
     if (!po) return;
@@ -367,7 +410,7 @@ export async function notifyPoActivity(params: {
       await deliverEmail({
         to: ADMIN_EMAILS,
         subject,
-        html: activityHtml(title, detail),
+        html: activityHtml(title, detail, adminPoUrl(po.id)),
         label: "Admin notification",
       });
     } else {
@@ -386,7 +429,7 @@ export async function notifyPoActivity(params: {
       await deliverEmail({
         to,
         subject,
-        html: activityHtml(title, detail),
+        html: activityHtml(title, detail, supplierPoUrl(po)),
         label: "Supplier notification",
       });
     }

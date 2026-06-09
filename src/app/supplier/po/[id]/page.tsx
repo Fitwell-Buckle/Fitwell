@@ -30,7 +30,9 @@ import { cn } from "@/lib/utils";
 import { SupplierLineItems } from "./supplier-line-items";
 import { EtaEditor } from "./eta-editor";
 import { PoTimeline } from "@/components/production/po-timeline";
+import { ProductionTimeline } from "@/components/production/production-timeline";
 import { buildPoTimeline } from "@/lib/production/timeline";
+import { getStageEstimates } from "@/lib/production/cycle-time-data";
 
 export default async function SupplierPoDetailPage({
   params,
@@ -42,7 +44,11 @@ export default async function SupplierPoDetailPage({
 
   const { id } = await params;
   const po = await getPoDetail(id);
-  const [stageLabels, order] = await Promise.all([getStageLabels(), getStageOrder()]);
+  const [stageLabels, order, estimates] = await Promise.all([
+    getStageLabels(),
+    getStageOrder(),
+    getStageEstimates(),
+  ]);
   // Scope: a supplier may open a PO only if they're its primary supplier OR own
   // at least one of its stages.
   if (
@@ -77,10 +83,12 @@ export default async function SupplierPoDetailPage({
           eq(productionPo.supplierId, scope.supplierId),
         ),
         columns: { id: true, expectedDeliveryDate: true },
-        // Pull the sub-PO's notes + documents alongside so the timeline below
-        // can be scoped to the supplier's own thread (each sub-PO carries its
-        // own — distinct from the master's and from the other suppliers').
+        // Pull the sub-PO's notes + documents AND its stage ETA targets
+        // alongside so the timeline below can be scoped to the supplier's
+        // own thread + targets (each sub-PO carries its own — distinct from
+        // the master's and from the other suppliers').
         with: {
+          stageEtas: { columns: { stage: true, targetEndDate: true } },
           comments: {
             orderBy: asc(productionComment.createdAt),
             with: {
@@ -197,43 +205,47 @@ export default async function SupplierPoDetailPage({
         }))}
       />
 
-      <Card className="mt-5 p-6">
-        <h2 className="text-sm font-semibold text-zinc-900">Stage timeline</h2>
-        <div className="mt-4 space-y-4">
-          {sortedLineItems.map((li) => (
-            <div key={li.id}>
-              <div className="text-xs font-medium text-zinc-500">
-                {li.sku} — {li.title}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                {li.stageEvents.map((ev) => (
-                  <span
-                    key={ev.id}
-                    className="text-xs text-zinc-500"
-                    title={ev.enteredAt?.toLocaleString("en-US")}
-                  >
-                    {stageLabels[ev.stage]}
-                    <span className="ml-1 text-zinc-400">
-                      {ev.enteredAt?.toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </span>
-                    {" ›"}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+      <ProductionTimeline
+        pos={[
+          {
+            // Edits route to the supplier's own sub-PO when one exists, so
+            // each supplier's targets stay scoped to them (mirrors the ETA +
+            // timeline routing on this page). Falls back to the row in front
+            // of the supplier — standalone, or a master with no own sub-PO.
+            id: mySubPo?.id ?? po.id,
+            shopifyPoNumber: po.shopifyPoNumber,
+            supplier: po.supplier ? { name: po.supplier.name } : null,
+            stageTargets: mySubPo?.stageEtas ?? po.stageEtas,
+            lineItems: sortedLineItems.map((li) => ({
+              id: li.id,
+              sku: li.sku,
+              title: li.title,
+              currentStage: li.currentStage,
+              stageEvents: li.stageEvents.map((ev) => ({
+                id: ev.id,
+                stage: ev.stage,
+                enteredAt: ev.enteredAt,
+                exitedAt: ev.exitedAt,
+              })),
+            })),
+          },
+        ]}
+        estimates={estimates}
+        stageLabels={stageLabels}
+        order={order}
+        etaSaveRouteBase="/api/supplier/po"
+      />
 
       <PoTimeline
         poId={mySubPo?.id ?? po.id}
         viewer="supplier"
+        // When viewing a master, merge its thread (admin's broadcast to every
+        // supplier) with the viewing supplier's own sub-PO thread (their
+        // private back-and-forth). Posting still targets the sub-PO via
+        // `poId` above — supplier replies stay scoped to that supplier.
         entries={buildPoTimeline(
-          mySubPo?.comments ?? po.comments,
-          mySubPo?.attachments ?? po.attachments,
+          mySubPo ? [...po.comments, ...mySubPo.comments] : po.comments,
+          mySubPo ? [...po.attachments, ...mySubPo.attachments] : po.attachments,
         )}
       />
     </div>

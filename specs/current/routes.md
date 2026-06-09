@@ -72,7 +72,7 @@ Magic-link auth; middleware requires an authenticated session with `role='suppli
 | Path | Description |
 |------|-------------|
 | `/supplier` | The supplier's own POs (list) |
-| `/supplier/po/[id]` | PO detail — advance stages, edit the expected delivery date, and a unified notes & documents timeline (post notes, upload documents; no edit/delete of stages); 404 if not their PO. Posting a note/doc emails Fitwell + adds an admin notification. **ETA + timeline target**: on a standalone PO, both target that PO's own row. On a master (multi-supplier split), the page surfaces the *viewing supplier's* sub-PO and targets it — the ETA edits the sub-PO's date and the notes/documents thread is the sub-PO's (separate from the master's and from other suppliers'). A stage-only viewer on a master with no sub-PO of their own stays read-only and sees the master's thread |
+| `/supplier/po/[id]` | PO detail — advance stages, edit the expected delivery date, and a unified notes & documents timeline (post notes, upload documents; no edit/delete of stages); 404 if not their PO. Posting a note/doc emails Fitwell + adds an admin notification. **ETA + timeline target**: on a standalone PO, both target that PO's own row. On a master (multi-supplier split), the page surfaces the *viewing supplier's* sub-PO — the ETA edits the sub-PO's date, and the supplier's posts target the sub-PO too (their private thread). The displayed timeline merges the **master's thread** (admin broadcasts to every supplier) with the supplier's own sub-PO thread, so a single master upload reaches every sub-PO supplier without duplication. A stage-only viewer on a master with no sub-PO of their own stays read-only on ETA and sees the master's thread |
 | `/supplier/notifications` | Supplier notification inbox — notes & documents Fitwell posted on the supplier's POs (mark read; same system as the admin inbox). Unread count shows as a bell badge in the top bar |
 
 ## portal — Company B2B Portal
@@ -150,6 +150,8 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | GET / POST | `/api/notifications` | Admin notification inbox — unread count (GET) + mark read (POST `{id}` or `{all}`); admin-only (suppliers/companies 403). Excludes supplier-bound rows |
 | GET / POST | `/api/supplier/notifications` | Supplier notification inbox — unread count (GET) + mark read (POST `{id}`/`{all}`); scoped to the signed-in supplier |
 | PUT | `/api/supplier/po/[id]/eta` | Update the PO's expected delivery date `{expectedDeliveryDate: "YYYY-MM-DD" \| null}`; allowed for the PO's primary supplier OR any supplier assigned to one of its stages (mirrors the page-level access check; 403 otherwise). Rejects masters with 409 — on a multi-supplier split each sub-PO carries its own date |
+| PUT | `/api/production/po/[id]/stage-eta` | Upsert a target end date for one stage on this (sub-)PO: `{stage, targetEndDate: "YYYY-MM-DD" \| null}` (null clears). Admin-only; the production timeline's inline editor calls this. Overrides the cycle-time projection on the chart when set |
+| PUT | `/api/supplier/po/[id]/stage-eta` | Supplier twin of the stage-eta route: same body, same writes via `setPoStageEta`. Allowed for the PO's primary supplier OR any supplier assigned to one of its stages (mirrors the eta-route access check) |
 
 ### Invoicing API (B2B; each handler checks `auth()`; admin-only — suppliers 403)
 | Method | Path | Description |

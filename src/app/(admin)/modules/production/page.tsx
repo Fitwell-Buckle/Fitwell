@@ -26,6 +26,11 @@ import { parseDateRange } from "@/lib/date-range";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
 import { projectEta } from "@/lib/production/cycle-time";
 import {
+  buildLineSegments,
+  isoDay,
+  utcMidnight,
+} from "@/lib/production/timeline-segments";
+import {
   aggregateIncoming,
   type IncomingLine,
   type IncomingPoRow,
@@ -34,7 +39,7 @@ import { ListFilters } from "@/components/catalog/list-filters";
 import { ProductionViewToggle } from "./view-toggle";
 import { ProductionGroupToggle } from "./group-toggle";
 import { KanbanBoard, type KanbanCard } from "./kanban/kanban-board";
-import { ProductionTimeline } from "./production-timeline";
+import { ProductionTimeline } from "@/components/production/production-timeline";
 import { PoExpandableList } from "./po-expandable-list";
 import { PoExpandableBoard } from "./po-expandable-board";
 import { PoExpandableTimeline } from "./po-expandable-timeline";
@@ -102,6 +107,7 @@ export default async function ProductionPage({
       with: {
         supplier: { columns: { name: true } },
         stageAssignments: { columns: { stage: true, supplierId: true } },
+        stageEtas: { columns: { stage: true, targetEndDate: true } },
         lineItems: {
           with: { stageEvents: { orderBy: asc(productionStageEvent.enteredAt) } },
         },
@@ -293,10 +299,31 @@ export default async function ProductionPage({
       })),
   );
 
+  // Look up tables for routing stage-target edits to the right PO row:
+  //   subPoIdByDisplayNumber: "PO-00104-A" → sub-PO id (so the Sub-PO timeline
+  //     view edits the sub-PO, not the master).
+  //   stageEtasByPoId: poId → its saved stage targets (used to surface targets
+  //     on whichever PO the active view groups by).
+  const subPoIdByDisplayNumber = new Map<string, string>();
+  const stageEtasByPoId = new Map<
+    string,
+    { stage: ProductionStage; targetEndDate: string }[]
+  >();
+  for (const po of allPos) {
+    stageEtasByPoId.set(po.id, po.stageEtas);
+    if (po.parentPoId) {
+      subPoIdByDisplayNumber.set(
+        formatPoNumber(po.shopifyPoNumber, { suffix: po.poSuffix }),
+        po.id,
+      );
+    }
+  }
+
   const timelinePos = filtered.map((po) => ({
     id: po.id,
     shopifyPoNumber: po.shopifyPoNumber,
     supplier: po.supplier,
+    stageTargets: po.stageEtas,
     lineItems: po.lineItems
       .map((li) => ({ li, owner: lineOwner(po, li.currentStage) }))
       .filter(({ owner }) => !supplierId || owner.ownerId === supplierId)
@@ -497,10 +524,16 @@ export default async function ProductionPage({
       poTrackMap.set(key, g);
     }
   }
-  const timelinePosByPo = [...poTrackMap.values()].map((g) => ({
-    id: g.poId,
+  const timelinePosByPo = [...poTrackMap.values()].map((g) => {
+    // Re-key to the actual sub-PO id when this track represents a sub-PO
+    // (multi-supplier split), so target edits hit the supplier's own row
+    // and not the master's.
+    const trackPoId = subPoIdByDisplayNumber.get(g.poNumber) ?? g.poId;
+    return {
+    id: trackPoId,
     shopifyPoNumber: g.poNumber,
     supplier: { name: g.supplier },
+    stageTargets: stageEtasByPoId.get(trackPoId) ?? [],
     lineItems: [
       {
         id: g.poNumber,
@@ -519,7 +552,8 @@ export default async function ProductionPage({
           .sort((a, b) => a.enteredAt.getTime() - b.enteredAt.getTime()),
       },
     ],
-  }));
+  };
+  });
 
   // ── Master grouping for Board / Timeline ──────────────────────────────
   // Line items live on the master PO, so we aggregate per `po.id`. A master's
@@ -603,29 +637,119 @@ export default async function ProductionPage({
       masterTrackMap.set(po.id, g);
     }
   }
-  const timelinePosByMaster = [...masterTrackMap.values()].map((g) => ({
-    id: g.poId,
-    shopifyPoNumber: g.poNumber,
-    supplier: { name: g.supplier },
-    lineItems: [
-      {
-        id: g.poNumber,
-        sku: g.poNumber,
-        title: g.supplier,
-        currentStage: g.currentStage,
-        supplierName: g.supplier,
-        poNumber: g.poNumber,
-        stageEvents: [...g.events.entries()]
-          .map(([stage, e]) => ({
-            id: `${g.poNumber}-${stage}`,
-            stage: stage as ProductionStage,
-            enteredAt: e.enteredAt,
-            exitedAt: e.exitedAt,
-          }))
-          .sort((a, b) => a.enteredAt.getTime() - b.enteredAt.getTime()),
-      },
-    ],
-  }));
+  // Pre-compute per-supplier sub-bars for multi-supplier masters so the
+  // Master view stacks one bar per sub-PO (each filtered to that supplier's
+  // owned stages — bar A might cover supplier_po + stamping while bar B
+  // picks up at polishing and runs to packaging). Standalone masters and
+  // master rows with a single supplier fall through to the single-bar path.
+  const todayIsoForTimeline = isoDay(new Date());
+  const todayMsForTimeline = utcMidnight(todayIsoForTimeline);
+  const subPosByMasterId = new Map<string, typeof allPos>();
+  for (const po of allPos) {
+    if (po.parentPoId) {
+      const list = subPosByMasterId.get(po.parentPoId) ?? [];
+      list.push(po);
+      subPosByMasterId.set(po.parentPoId, list);
+    }
+  }
+
+  const timelinePosByMaster = [...masterTrackMap.values()].map((g) => {
+    const masterPo = allPos.find((p) => p.id === g.poId);
+    const subPos = subPosByMasterId.get(g.poId) ?? [];
+    const stageEvents = [...g.events.entries()]
+      .map(([stage, e]) => ({
+        id: `${g.poNumber}-${stage}`,
+        stage: stage as ProductionStage,
+        enteredAt: e.enteredAt,
+        exitedAt: e.exitedAt,
+      }))
+      .sort((a, b) => a.enteredAt.getTime() - b.enteredAt.getTime());
+
+    // subBars only when the master actually has children; single-supplier
+    // POs render one bar like before.
+    let subBars: {
+      supplierName: string;
+      poId: string;
+      segs: ReturnType<typeof buildLineSegments>;
+    }[] | undefined;
+    if (subPos.length > 0 && masterPo) {
+      // Walk the master's stage list and group stages by their owning
+      // supplier (fall back to master's primary for unassigned stages).
+      const assignmentsByStage = new Map(
+        masterPo.stageAssignments.map((a) => [a.stage, a.supplierId]),
+      );
+      const stagesBySupplier = new Map<string, ProductionStage[]>();
+      const supplierOrder: string[] = [];
+      for (const s of order.slice(0, -1)) {
+        const ownerId =
+          assignmentsByStage.get(s) ?? masterPo.supplierId;
+        if (!stagesBySupplier.has(ownerId)) {
+          stagesBySupplier.set(ownerId, []);
+          supplierOrder.push(ownerId);
+        }
+        stagesBySupplier.get(ownerId)!.push(s as ProductionStage);
+      }
+      // Run buildLineSegments once with the master's combined targets
+      // (use the supplier-of-stage's sub-PO targets when available; else
+      // master's own), then filter per supplier.
+      const combinedTargets = new Map<ProductionStage, number>();
+      for (const stage of order.slice(0, -1)) {
+        const ownerId =
+          assignmentsByStage.get(stage) ?? masterPo.supplierId;
+        const sub = subPos.find((s) => s.supplierId === ownerId);
+        const target =
+          sub?.stageEtas.find((t) => t.stage === stage) ??
+          masterPo.stageEtas.find((t) => t.stage === stage);
+        if (target) {
+          combinedTargets.set(
+            stage as ProductionStage,
+            utcMidnight(target.targetEndDate),
+          );
+        }
+      }
+      const allSegs = buildLineSegments(
+        { currentStage: g.currentStage, stageEvents },
+        todayMsForTimeline,
+        todayIsoForTimeline,
+        order,
+        estimates,
+        combinedTargets,
+      );
+      subBars = supplierOrder
+        .map((supplierId) => {
+          const owned = new Set(stagesBySupplier.get(supplierId) ?? []);
+          const sub = subPos.find((s) => s.supplierId === supplierId);
+          return {
+            supplierName: supplierName.get(supplierId) ?? "—",
+            // No sub-PO row → fall back to the master id so the inline
+            // editor still has somewhere to write (rare edge case).
+            poId: sub?.id ?? g.poId,
+            segs: allSegs.filter((seg) => owned.has(seg.stage)),
+          };
+        })
+        .filter((b) => b.segs.length > 0);
+      if (subBars.length < 2) subBars = undefined; // single supplier → no stack
+    }
+
+    return {
+      id: g.poId,
+      shopifyPoNumber: g.poNumber,
+      supplier: { name: g.supplier },
+      stageTargets: stageEtasByPoId.get(g.poId) ?? [],
+      lineItems: [
+        {
+          id: g.poNumber,
+          sku: g.poNumber,
+          title: g.supplier,
+          currentStage: g.currentStage,
+          supplierName: g.supplier,
+          poNumber: g.poNumber,
+          stageEvents,
+          subBars,
+        },
+      ],
+    };
+  });
 
   // SKU breakdown keyed by master PO label — for the drill-down panel on
   // Board / Timeline when a master card or track is selected.
@@ -808,6 +932,7 @@ export default async function ProductionPage({
               stageLabels={stageLabels}
               order={order}
               skuRowsByPo={skuRowsByMaster}
+              etaSaveRouteBase="/api/production/po"
             />
           ) : renderGroup === "po" ? (
             <PoExpandableTimeline
@@ -816,6 +941,7 @@ export default async function ProductionPage({
               stageLabels={stageLabels}
               order={order}
               skuRowsByPo={skuRowsByPo}
+              etaSaveRouteBase="/api/production/po"
             />
           ) : (
             <ProductionTimeline
@@ -823,6 +949,7 @@ export default async function ProductionPage({
               estimates={estimates}
               stageLabels={stageLabels}
               order={order}
+              etaSaveRouteBase="/api/production/po"
             />
           )}
         </>

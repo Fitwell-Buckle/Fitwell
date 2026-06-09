@@ -914,6 +914,30 @@ export const productionStageAssignment = pgTable(
   ],
 );
 
+// Per-(sub-)PO target end date for an individual stage. Overrides the
+// cycle-time projection on the production timeline when present; absent →
+// fall back to the global stage-cycle estimate. Editable by admins and by the
+// supplier(s) involved on the PO (primary or stage owner). Unique on
+// (po_id, stage) — surrogate id keeps the table swap-friendly if FKs ever
+// land on the row.
+export const productionPoStageEta = pgTable(
+  "production_po_stage_eta",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id")
+      .notNull()
+      .references(() => productionPo.id, { onDelete: "cascade" }),
+    stage: text("stage").notNull(),
+    targetEndDate: date("target_end_date").notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("po_stage_eta_po_stage_idx").on(t.poId, t.stage),
+  ],
+);
+
 // Per-supplier, per-line-item production cost on a multi-supplier PO. Keyed by
 // the MASTER po + the supplier (not the sub-PO id) so it survives sub-PO regen
 // on edit. Each supplier prices the line items they touch (a stamping supplier's
@@ -994,6 +1018,7 @@ export const productionPoRelations = relations(productionPo, ({ one, many }) => 
   comments: many(productionComment),
   attachments: many(productionAttachment),
   stageAssignments: many(productionStageAssignment),
+  stageEtas: many(productionPoStageEta),
 }));
 
 export const productionStageAssignmentRelations = relations(
@@ -1006,6 +1031,16 @@ export const productionStageAssignmentRelations = relations(
     supplier: one(supplier, {
       fields: [productionStageAssignment.supplierId],
       references: [supplier.id],
+    }),
+  }),
+);
+
+export const productionPoStageEtaRelations = relations(
+  productionPoStageEta,
+  ({ one }) => ({
+    po: one(productionPo, {
+      fields: [productionPoStageEta.poId],
+      references: [productionPo.id],
     }),
   }),
 );
