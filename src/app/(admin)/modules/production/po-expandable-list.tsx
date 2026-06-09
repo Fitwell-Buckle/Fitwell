@@ -176,6 +176,10 @@ export function PoExpandableList({
                       rows={subRowsByPoNumber[r.poNumber]}
                       skuRowsByPo={skuRowsByPo}
                       stageLabels={stageLabels}
+                      // Forward subtitles so a master's child sub-POs surface
+                      // the same "Sent ✓ / Not sent" indicator as the top-
+                      // level Sub-PO view.
+                      subtitles={subtitles}
                     />
                   </div>
                 ) : (

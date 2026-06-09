@@ -319,6 +319,10 @@ export default async function ProductionPage({
   // here because they're represented by their children rows. ─────────────────
   const incomingPoRows: IncomingPoRow[] = [];
   const skuRowsByPo: Record<string, ReturnType<typeof aggregateIncoming>> = {};
+  // Per-(sub-)PO send-status subtitle, surfaced under the PO number cell in
+  // both the Sub-PO view's PoExpandableList and the Master view's child
+  // cascade (forwarded by PoExpandableList into its nested render).
+  const subPoSubtitles: Record<string, React.ReactNode> = {};
   for (const po of allPos) {
     const isSubPo = po.parentPoId !== null;
     const hasChildren = (childCountByMaster.get(po.id) ?? 0) > 0;
@@ -365,6 +369,11 @@ export default async function ProductionPage({
       byStage,
       nearestEta,
     });
+    subPoSubtitles[poNumber] = po.sentAt ? (
+      <span className="font-medium text-emerald-700">Sent ✓</span>
+    ) : (
+      <span className="text-zinc-400">Not sent</span>
+    );
 
     skuRowsByPo[poNumber] = aggregateIncoming(
       order,
@@ -674,7 +683,10 @@ export default async function ProductionPage({
                 rows={incomingMasterRows}
                 skuRowsByPo={skuRowsForMasterCascade}
                 stageLabels={stageLabels}
-                subtitles={masterSubtitles}
+                // Master rows show "N/M sent"; children sub-PO rows show
+                // "Sent ✓ / Not sent" via the merged map (PoExpandableList
+                // forwards `subtitles` into its nested cascade).
+                subtitles={{ ...subPoSubtitles, ...masterSubtitles }}
                 subRowsByPoNumber={subRowsByMasterPoNumber}
               />
             </div>
@@ -686,6 +698,7 @@ export default async function ProductionPage({
                     rows={incomingPoRows}
                     skuRowsByPo={skuRowsByPo}
                     stageLabels={stageLabels}
+                    subtitles={subPoSubtitles}
                   />
                 </div>
               ) : (

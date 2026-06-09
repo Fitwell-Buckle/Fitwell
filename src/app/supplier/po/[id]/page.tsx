@@ -1,8 +1,12 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { and, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { productionPo } from "@/lib/schema";
+import {
+  productionAttachment,
+  productionComment,
+  productionPo,
+} from "@/lib/schema";
 import { getPoDetail } from "@/lib/production/service";
 import { getSupplierScope } from "@/lib/production/supplier-session";
 import { PageHeader } from "@/components/ui/page-header";
@@ -73,6 +77,23 @@ export default async function SupplierPoDetailPage({
           eq(productionPo.supplierId, scope.supplierId),
         ),
         columns: { id: true, expectedDeliveryDate: true },
+        // Pull the sub-PO's notes + documents alongside so the timeline below
+        // can be scoped to the supplier's own thread (each sub-PO carries its
+        // own — distinct from the master's and from the other suppliers').
+        with: {
+          comments: {
+            orderBy: asc(productionComment.createdAt),
+            with: {
+              author: { columns: { name: true, email: true, role: true } },
+            },
+          },
+          attachments: {
+            orderBy: desc(productionAttachment.uploadedAt),
+            with: {
+              uploadedBy: { columns: { name: true, email: true, role: true } },
+            },
+          },
+        },
       })
     : null;
   const etaTarget = childPo
@@ -208,9 +229,12 @@ export default async function SupplierPoDetailPage({
       </Card>
 
       <PoTimeline
-        poId={po.id}
+        poId={mySubPo?.id ?? po.id}
         viewer="supplier"
-        entries={buildPoTimeline(po.comments, po.attachments)}
+        entries={buildPoTimeline(
+          mySubPo?.comments ?? po.comments,
+          mySubPo?.attachments ?? po.attachments,
+        )}
       />
     </div>
   );
