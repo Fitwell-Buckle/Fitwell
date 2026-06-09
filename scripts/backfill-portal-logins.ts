@@ -72,9 +72,11 @@ for (const row of supplierGaps) {
   }
   console.log(`  +     ${row.email} → supplier "${row.supplier_name}"`);
   if (apply) {
+    // supplier_contact.id is `text PRIMARY KEY` with the default produced by
+    // Drizzle's $defaultFn at insert time — raw SQL has to supply the id.
     await sql`
-      INSERT INTO supplier_contact (supplier_id, email, name)
-      VALUES (${row.supplier_id}, ${row.email}, ${row.contact_name})
+      INSERT INTO supplier_contact (id, supplier_id, email, name)
+      VALUES (gen_random_uuid()::text, ${row.supplier_id}, ${row.email}, ${row.contact_name})
       ON CONFLICT (email) DO NOTHING
     `;
   }
@@ -120,9 +122,10 @@ for (const row of companyGaps) {
   }
   console.log(`  +     ${row.email} → company "${row.company_name}"`);
   if (apply) {
+    // Same id-default gotcha as supplier_contact above.
     await sql`
-      INSERT INTO company_contact (company_id, email, name)
-      VALUES (${row.company_id}, ${row.email}, ${row.contact_name})
+      INSERT INTO company_contact (id, company_id, email, name)
+      VALUES (gen_random_uuid()::text, ${row.company_id}, ${row.email}, ${row.contact_name})
       ON CONFLICT (email) DO NOTHING
     `;
   }
