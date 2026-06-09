@@ -126,7 +126,7 @@ export function PoControls({
               onChange={(e) => patchPo({ lockStagesTogether: e.target.checked })}
               className="h-4 w-4 rounded border-zinc-300"
             />
-            <span>Move stages together</span>
+            <span>Move all stages together</span>
           </label>
         </div>
       </div>

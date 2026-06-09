@@ -75,15 +75,15 @@ export default async function SupplierHomePage() {
     mySubPos.map((s) => [s.parentPoId, s.poSuffix] as const),
   );
 
-  // Board: only the stages this supplier owns (+ the handoff target after each),
-  // and only the line items currently sitting in their owned stages. Exclude the
-  // terminal stage (the done-state): it has no explicit assignment so it falls
-  // back to the primary supplier, which would otherwise pad the board with a
-  // "Complete" column (and every other unowned-but-defaulted stage).
+  // Board: only the stages this supplier has ACTIVE cards in, plus the
+  // immediate next stage so they can drop a card forward to advance / hand
+  // off. Owned-but-empty stages are hidden — a supplier who is the sole
+  // primary on a standalone PO "owns" the whole pipeline by default, so
+  // without this trim their board would balloon to every stage. Cards only
+  // come from stages the supplier actually owns on that PO.
   const terminal = terminalStage(order);
-  const ownedAll = new Set<ProductionStage>();
-  const handoff = new Set<ProductionStage>();
   const cards: KanbanCard[] = [];
+  const cardStages = new Set<ProductionStage>();
   for (const po of pos) {
     const owned = stagesOwnedBySupplier(
       order,
@@ -92,20 +92,10 @@ export default async function SupplierHomePage() {
       me,
     ).filter((s) => s !== terminal);
     const ownedSet = new Set(owned);
-    // Cards = this PO's line items currently sitting in one of the supplier's
-    // owned stages.
     const poCards = po.lineItems.filter((li) => ownedSet.has(li.currentStage));
-    // Only POs the supplier has ACTIVE work in contribute columns. A PO where
-    // they happen to own stages but have no items there (e.g. an empty draft
-    // where they're the sole supplier, so they "own" the whole pipeline by
-    // default) would otherwise pad the board with every stage.
     if (poCards.length === 0) continue;
-    for (const s of owned) {
-      ownedAll.add(s);
-      const next = order[order.indexOf(s) + 1];
-      if (next && !ownedSet.has(next)) handoff.add(next);
-    }
     for (const li of poCards) {
+      cardStages.add(li.currentStage);
       cards.push({
         id: li.id,
         sku: li.sku,
@@ -119,7 +109,14 @@ export default async function SupplierHomePage() {
       });
     }
   }
-  const boardStages = order.filter((s) => ownedAll.has(s) || handoff.has(s));
+  // Drop-target columns: the stage immediately after each card-bearing one
+  // (skip the terminal "Complete" — it has no explicit assignment).
+  const dropTargets = new Set<ProductionStage>();
+  for (const s of cardStages) {
+    const next = order[order.indexOf(s) + 1];
+    if (next && next !== terminal) dropTargets.add(next);
+  }
+  const boardStages = order.filter((s) => cardStages.has(s) || dropTargets.has(s));
 
   const rows = pos.map((po) => ({
     ...po,

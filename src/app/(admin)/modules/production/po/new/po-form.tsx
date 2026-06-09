@@ -218,7 +218,6 @@ export function PoForm({
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(
     initial?.expectedDeliveryDate ?? "",
   );
-  const [lockStagesTogether, setLockStagesTogether] = useState(true);
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [companyId, setCompanyId] = useState(initial?.companyId ?? "");
   // Local, appendable copy so a newly-added company shows + selects inline.
@@ -582,7 +581,9 @@ export function PoForm({
             companyId: companyId || null,
             shopifyLocationId: locationId || null,
             locationName: locationName || null,
-            ...(isEdit ? {} : { lockStagesTogether }),
+            // `lockStagesTogether` intentionally omitted on create — the
+            // schema default (true) applies. Toggle it from the PO detail page
+            // ("Move all stages together") if a PO needs per-line moves later.
             ...(!isEdit && invoiceId ? { invoiceId } : {}),
             ...(!isEdit && multiSupplier
               ? {
@@ -723,21 +724,6 @@ export function PoForm({
             )}
           </div>
         </div>
-
-        {!isEdit && (
-          <div className="mt-4 flex items-center gap-2">
-            <input
-              id="lock"
-              type="checkbox"
-              checked={lockStagesTogether}
-              onChange={(e) => setLockStagesTogether(e.target.checked)}
-              className="h-4 w-4 rounded border-zinc-300"
-            />
-            <label htmlFor="lock" className="text-sm text-zinc-700">
-              Advance all line items together (uncheck to move items independently)
-            </label>
-          </div>
-        )}
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
