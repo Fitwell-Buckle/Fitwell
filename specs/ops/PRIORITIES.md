@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-06-04
+Last updated: 2026-06-08
 
 ## ⚠️ Action needed — Shopify scope deploy + history import
 
@@ -93,6 +93,7 @@ _None active. See "Recently resolved" below._
 
 ### Recently resolved
 
+- **SKU → Shopify barcode auto-sync shipped (2026-06-08)** — `write_products` granted as `fitwell-admin-9`. Standard re-auth banner didn't surface (custom-distribution apps); resolved by uninstalling Fitwell Admin from `admin/settings/apps` and reinstalling via the Partner Dashboard's custom-distribution link, which re-granted all declared scopes. One-shot backfill (`npm run sync:sku-to-barcode -- --apply`) wrote 104 variants — 32 of which overwrote a legacy UPC. Going forward, `products/create` + `products/update` webhooks call `syncProductBarcodes()` so any SKU edit auto-syncs. Two variants with empty SKU were skipped — flagged as a data-cleanup item. Code shipped in `2691c99`. Side effect: the uninstall + reinstall also re-granted `write_customers` and `read_all_orders` if they were still pending — verify and close the top-of-doc Action Needed section if so.
 - **Shopify `write_draft_orders` granted (2026-05-28)** — Oliver ran `shopify app deploy` + `shopify app release` (version `fitwell-admin-7`), then re-authorized the install from Shopify Admin. Token-exchange now returns all 11 declared scopes. Prod was redeployed to flush the cached 24h Shopify token so warm Vercel instances pick up the new scope immediately. Unblocked: B2B invoice payment links, deposit/balance flow, influencer gifting draft orders.
 
 ---
