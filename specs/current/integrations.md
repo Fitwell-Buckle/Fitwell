@@ -30,6 +30,7 @@ App config — scopes, embed flag, app URL, declared webhooks — lives in `shop
 - `orders/create` — new order notification
 - `orders/updated` — order status changes (fulfillment, refund)
 - `customers/update` — customer profile changes
+- `products/create` + `products/update` — invalidate the catalog cache, then call `syncProductBarcodes()` (`src/lib/shopify/sku-barcode-sync.ts`) to keep each variant's `barcode` field equal to its SKU. The Code 128 we print on packaging labels encodes the SKU; mirroring it into Shopify's `barcode` field means admin/POS/Google Shopping all see the same scannable code. Plan is pure + no-op when every variant is already in sync, so the `products/update` Shopify fires in response to our own barcode write terminates the loop. Requires the `write_products` scope. One-shot backfill: `npm run sync:sku-to-barcode` (dry-run by default; pass `-- --apply` to write)
 
 ### Webhook Verification
 All incoming webhooks verified via HMAC-SHA256:

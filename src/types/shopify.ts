@@ -95,6 +95,7 @@ export interface ShopifyVariant {
   product_id: number;
   title: string;
   sku: string | null;
+  barcode: string | null;
   price: string;
   inventory_quantity: number;
   weight: number;

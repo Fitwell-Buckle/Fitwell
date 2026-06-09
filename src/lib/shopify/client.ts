@@ -703,6 +703,49 @@ class ShopifyClient {
     }
   }
 
+  // ── Variant updates (barcode sync) ────────────────────────────────
+
+  /**
+   * Set the `barcode` field on a batch of variants under a single product, via
+   * the `productVariantsBulkUpdate` GraphQL mutation. Requires write_products —
+   * until the scope is granted (store re-auth after toml change + deploy),
+   * Shopify returns "access denied" and this throws.
+   *
+   * Pass the bare numeric Shopify variant ids; gids are constructed here.
+   */
+  async bulkUpdateVariantBarcodes(params: {
+    productId: string | number;
+    variants: { id: string | number; barcode: string }[];
+  }): Promise<void> {
+    if (params.variants.length === 0) return;
+    const productGid = `gid://shopify/Product/${String(params.productId).split("/").pop()}`;
+    const variantInputs = params.variants.map((v) => ({
+      id: `gid://shopify/ProductVariant/${String(v.id).split("/").pop()}`,
+      barcode: v.barcode,
+    }));
+
+    const data = await this.graphql<{
+      productVariantsBulkUpdate: {
+        userErrors: { field: string[] | null; message: string }[];
+      };
+    }>(
+      `mutation FitwellBarcodeSync($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+        productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+          userErrors { field message }
+          productVariants { id barcode }
+        }
+      }`,
+      { productId: productGid, variants: variantInputs },
+    );
+
+    const errs = data.productVariantsBulkUpdate.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(
+        `Variant barcode update failed: ${errs.map((e) => e.message).join("; ")}`,
+      );
+    }
+  }
+
   // ── B2B invoicing (draft orders) ──────────────────────────────────
 
   /**

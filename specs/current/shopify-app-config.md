@@ -1,6 +1,6 @@
 # Shopify App Configuration
 
-Last updated: 2026-05-28
+Last updated: 2026-06-08
 
 How we change the Shopify app — scopes, embed flag, app URL, declared webhooks. For *runtime* Shopify integration (endpoints, sync, webhook verification), see [integrations.md](integrations.md).
 
@@ -119,6 +119,7 @@ If we ever do automate it, a GitHub Action triggered by `paths: [shopify.app.tom
 
 ## Recently resolved
 
+- **`write_products` grant (2026-06-08).** Added to support the SKU → barcode sync — the Code 128 we print on packaging labels encodes the SKU, and we now copy the SKU into each variant's Shopify `barcode` field so admin/POS/integration tooling sees the same string. Released as `fitwell-admin-9`. Initial release didn't fire a re-auth banner on the merchant side; merchant had to trigger consent by uninstalling Fitwell Admin from `fitwell-buckles.myshopify.com/admin/settings/apps` and reinstalling via the Partner Dashboard's custom-distribution install link — this granted the new scope. One-shot backfill via `npm run sync:sku-to-barcode -- --apply` wrote 104 variants (32 of which overwrote a legacy UPC). Going forward, `products/create` and `products/update` webhooks call `syncProductBarcodes()` so any new SKU or SKU edit auto-syncs without manual intervention; the loop is self-terminating because a no-diff plan is a no-op. Two variants with empty SKU were skipped — surfacing as a data-cleanup item, not a sync bug.
 - **`write_draft_orders` grant (2026-05-28).** The toml had it from 2026-05-26 but version `fitwell-admin-7` is the first released version that includes it. Merchant approved the "update permissions" banner on 2026-05-28; a `client_credentials` token exchange confirms `write_draft_orders` (plus `read_content`, `write_inventory`) is now in the granted scope set. Production was redeployed immediately to flush the 24h cached token on warm Vercel instances. End-to-end verified: a B2B invoice send creates the deposit draft order + payment link and stops hard-failing with 409. The same scope also unblocks the deposit/balance flow and influencer-gifting draft orders.
 
 ## Useful URLs
@@ -138,4 +139,5 @@ If we ever do automate it, a GitHub Action triggered by `paths: [shopify.app.tom
 | `--allow-updates cannot also be provided when using --no-release` | Flags are mutually exclusive | Use one or the other; `--no-release` already skips the prompt |
 | `Nonexistent flag: --force` | Removed in CLI v4 | Use `--allow-updates` for non-interactive runs |
 | New scopes don't work after deploy | Merchant hasn't approved the re-auth | Have merchant load Shopify Admin → Apps → Fitwell Admin → Approve |
+| Scope released but no re-auth banner appears | Custom-distribution apps don't always surface a banner on scope change | Uninstall Fitwell Admin from `admin/settings/apps`, then reinstall via the Partner Dashboard's custom-distribution install link (Apps → Fitwell Admin → Distribution). Did this for `write_products` on 2026-06-08 |
 | Versions accumulate in Dashboard | Shopify doesn't autoclean | Cosmetic only — doesn't affect functionality |
