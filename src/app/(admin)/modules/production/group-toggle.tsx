@@ -12,8 +12,10 @@ const GROUPS = [
 /**
  * Grouping switch for the Production page — controls the data dimension
  * (Master PO / Sub-PO / SKU). Sets the `group` query param (omitted for the
- * default `po` so the bare URL stays clean) and preserves the active view +
- * filters.
+ * default `master` so the bare URL stays clean) and preserves the active
+ * view + filters. Must agree with the default in page.tsx — otherwise
+ * clicking the non-default option that the page treats as default writes
+ * an empty URL and the page falls back, looking like a dead click.
  *
  * Visual: compact segmented button group with a navy active state. Distinct
  * from the lifted-pill view tabs (which use white active state on no
@@ -27,8 +29,9 @@ export function ProductionGroupToggle({ group }: { group: string }) {
 
   function setGroup(g: string) {
     const params = new URLSearchParams(searchParams.toString());
-    // "po" is the default → omit it to keep the URL clean; set group=sku|master only.
-    if (g === "po") params.delete("group");
+    // "master" is the default → omit it to keep the URL clean; set
+    // group=po|sku explicitly.
+    if (g === "master") params.delete("group");
     else params.set("group", g);
     // Leaving a drill-down (selecting a grouping) clears the per-PO scope.
     params.delete("po");
