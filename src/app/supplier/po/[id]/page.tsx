@@ -1,5 +1,8 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { productionPo } from "@/lib/schema";
 import { getPoDetail } from "@/lib/production/service";
 import { getSupplierScope } from "@/lib/production/supplier-session";
 import { PageHeader } from "@/components/ui/page-header";
@@ -21,6 +24,7 @@ import {
 } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 import { SupplierLineItems } from "./supplier-line-items";
+import { EtaEditor } from "./eta-editor";
 import { PoTimeline } from "@/components/production/po-timeline";
 import { buildPoTimeline } from "@/lib/production/timeline";
 
@@ -49,6 +53,19 @@ export default async function SupplierPoDetailPage({
   const sortedLineItems = [...po.lineItems].sort(
     (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
   );
+
+  // The ETA field is editable only when this supplier is the one delivering —
+  // i.e. they're the PO's primary supplier — and the PO carries its own date.
+  // On a master (multi-supplier split) the date lives on each sub-PO, so we
+  // fall back to read-only at the master level.
+  const isPrimary = po.supplierId === scope.supplierId;
+  const childPo = isPrimary
+    ? await db.query.productionPo.findFirst({
+        where: eq(productionPo.parentPoId, po.id),
+        columns: { id: true },
+      })
+    : null;
+  const canEditEta = isPrimary && !childPo;
   const totalCents = po.lineItems.reduce(
     (sum, li) => sum + (li.unitCostCents ?? 0) * li.quantity,
     0,
@@ -114,7 +131,11 @@ export default async function SupplierPoDetailPage({
           </div>
           <div>
             <div className="text-xs text-zinc-400">Expected delivery</div>
-            <div className="mt-1 text-zinc-700">{fmtDate(po.expectedDeliveryDate)}</div>
+            {canEditEta ? (
+              <EtaEditor poId={po.id} initialEta={po.expectedDeliveryDate ?? null} />
+            ) : (
+              <div className="mt-1 text-zinc-700">{fmtDate(po.expectedDeliveryDate)}</div>
+            )}
           </div>
         </div>
         {po.notes && <p className="mt-4 text-sm text-zinc-600">{po.notes}</p>}

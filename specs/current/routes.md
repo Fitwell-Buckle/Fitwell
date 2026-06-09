@@ -72,7 +72,7 @@ Magic-link auth; middleware requires an authenticated session with `role='suppli
 | Path | Description |
 |------|-------------|
 | `/supplier` | The supplier's own POs (list) |
-| `/supplier/po/[id]` | PO detail — advance stages + a unified notes & documents timeline (post notes, upload documents; no edit/delete of stages); 404 if not their PO. Posting a note/doc emails Fitwell + adds an admin notification |
+| `/supplier/po/[id]` | PO detail — advance stages, edit the expected delivery date (primary supplier only; the field reads as plain text on master POs and for stage-only viewers), and a unified notes & documents timeline (post notes, upload documents; no edit/delete of stages); 404 if not their PO. Posting a note/doc emails Fitwell + adds an admin notification |
 | `/supplier/notifications` | Supplier notification inbox — notes & documents Fitwell posted on the supplier's POs (mark read; same system as the admin inbox). Unread count shows as a bell badge in the top bar |
 
 ## portal — Company B2B Portal
@@ -147,6 +147,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | DELETE | `/api/production/supplier-contacts/[id]` | Remove a supplier login email |
 | GET / POST | `/api/notifications` | Admin notification inbox — unread count (GET) + mark read (POST `{id}` or `{all}`); admin-only (suppliers/companies 403). Excludes supplier-bound rows |
 | GET / POST | `/api/supplier/notifications` | Supplier notification inbox — unread count (GET) + mark read (POST `{id}`/`{all}`); scoped to the signed-in supplier |
+| PUT | `/api/supplier/po/[id]/eta` | Update the PO's expected delivery date `{expectedDeliveryDate: "YYYY-MM-DD" \| null}`; scoped to the PO's primary supplier (403 otherwise). Rejects masters with 409 — on a multi-supplier split each sub-PO carries its own date |
 
 ### Invoicing API (B2B; each handler checks `auth()`; admin-only — suppliers 403)
 | Method | Path | Description |
