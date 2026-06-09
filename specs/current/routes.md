@@ -72,7 +72,7 @@ Magic-link auth; middleware requires an authenticated session with `role='suppli
 | Path | Description |
 |------|-------------|
 | `/supplier` | The supplier's own POs (list) |
-| `/supplier/po/[id]` | PO detail — advance stages, edit the expected delivery date (any supplier with a stake in the PO: primary supplier or stage owner; the field stays read-only on master POs where each sub-PO carries its own date), and a unified notes & documents timeline (post notes, upload documents; no edit/delete of stages); 404 if not their PO. Posting a note/doc emails Fitwell + adds an admin notification |
+| `/supplier/po/[id]` | PO detail — advance stages, edit the expected delivery date, and a unified notes & documents timeline (post notes, upload documents; no edit/delete of stages); 404 if not their PO. Posting a note/doc emails Fitwell + adds an admin notification. **ETA target**: on a standalone PO, the field edits that PO's own date. On a master (multi-supplier split), the page surfaces the *viewing supplier's* sub-PO and edits its date (since each sub-PO carries its own). A stage-only viewer on a master with no sub-PO of their own stays read-only |
 | `/supplier/notifications` | Supplier notification inbox — notes & documents Fitwell posted on the supplier's POs (mark read; same system as the admin inbox). Unread count shows as a bell badge in the top bar |
 
 ## portal — Company B2B Portal

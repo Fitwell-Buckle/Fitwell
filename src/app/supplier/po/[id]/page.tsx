@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { productionPo } from "@/lib/schema";
 import { getPoDetail } from "@/lib/production/service";
@@ -54,15 +54,30 @@ export default async function SupplierPoDetailPage({
     (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
   );
 
-  // Anyone who can see the PO is a delivery stakeholder (primary supplier or
-  // routed to one of its stages — see the access check above), so let them
-  // keep the shared ETA current. The exception is a master PO (multi-supplier
-  // split): each sub-PO carries its own date, so the master stays read-only.
+  // ETA target rules:
+  //   - Standalone PO (no children): edit the PO's own ETA.
+  //   - Master PO (has children): each sub-PO carries its own ETA, so target
+  //     the viewing supplier's sub-PO (the one Fitwell sent them, e.g.
+  //     "00104-A"). Suppliers work the master scoped to their stages — see
+  //     /supplier/page.tsx — so this is how a stage-owner's ETA lives.
+  //   - Master without a sub-PO for this supplier (rare stage-only access):
+  //     stay read-only; there's no row that's "theirs" to edit.
   const childPo = await db.query.productionPo.findFirst({
     where: eq(productionPo.parentPoId, po.id),
     columns: { id: true },
   });
-  const canEditEta = !childPo;
+  const mySubPo = childPo
+    ? await db.query.productionPo.findFirst({
+        where: and(
+          eq(productionPo.parentPoId, po.id),
+          eq(productionPo.supplierId, scope.supplierId),
+        ),
+        columns: { id: true, expectedDeliveryDate: true },
+      })
+    : null;
+  const etaTarget = childPo
+    ? mySubPo
+    : { id: po.id, expectedDeliveryDate: po.expectedDeliveryDate ?? null };
   const totalCents = po.lineItems.reduce(
     (sum, li) => sum + (li.unitCostCents ?? 0) * li.quantity,
     0,
@@ -128,8 +143,11 @@ export default async function SupplierPoDetailPage({
           </div>
           <div>
             <div className="text-xs text-zinc-400">Expected delivery</div>
-            {canEditEta ? (
-              <EtaEditor poId={po.id} initialEta={po.expectedDeliveryDate ?? null} />
+            {etaTarget ? (
+              <EtaEditor
+                poId={etaTarget.id}
+                initialEta={etaTarget.expectedDeliveryDate ?? null}
+              />
             ) : (
               <div className="mt-1 text-zinc-700">{fmtDate(po.expectedDeliveryDate)}</div>
             )}
