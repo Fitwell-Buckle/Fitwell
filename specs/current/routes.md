@@ -60,7 +60,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/modules/production/po/new` | Create a PO with line items (inline "Add new" for supplier + B2B customer; the customer contact email searches synced Shopify customers and links the matched customer) |
 | `/modules/production/po/[id]` | PO detail — stage advance, status, stage timeline, and a unified notes & documents timeline (notes + uploads in one feed; posting notifies the supplier by email + supplier-portal notification) |
 | `/modules/production/po/[id]/edit` | Edit PO header + line items (add/update/remove) |
-| `/modules/production/po/[id]/send` | Printable PO preview; email it (HTML) to the customer |
+| `/modules/production/po/[id]/send` | Printable PO preview; email it (HTML) to the supplier. The sending admin is auto-CC'd, and every `supplier_contact` row for the PO's supplier (other than the address in "To") is also auto-CC'd so the whole vendor team gets the PO — the list is surfaced in the form before send |
 | `/modules/production/kanban` | Kanban board — drag line items across stage columns |
 | `/modules/production/suppliers` | Supplier CRUD |
 | `/settings` | Admin settings (nav bottom) — env/DB info **plus** the consolidated config: wire-transfer/billing details (moved from Orders), production-stage editor (moved from POs & Production), and B2B **price tiers** (moved from the B2B Customers page). Brands still pick a tier on the B2B customer form |

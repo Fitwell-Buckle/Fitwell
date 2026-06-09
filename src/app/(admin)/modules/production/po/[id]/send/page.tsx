@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { productionPo } from "@/lib/schema";
+import { productionPo, supplierContact } from "@/lib/schema";
 import { getPoDetail, getSupplierLineCosts } from "@/lib/production/service";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
@@ -112,6 +112,21 @@ export default async function SendPoPage({
 
   // The PO is sent to the vendor (supplier).
   const defaultTo = po.supplier?.contactEmail ?? "";
+  // Every other supplier contact gets auto-CC'd by the send API so the whole
+  // vendor team gets the PO — surface the list in the form so the admin can
+  // see who that is before hitting send.
+  const supplierContacts = await db
+    .select({ email: supplierContact.email })
+    .from(supplierContact)
+    .where(eq(supplierContact.supplierId, po.supplierId));
+  const defaultToLower = defaultTo.toLowerCase();
+  const autoCcEmails = Array.from(
+    new Set(
+      supplierContacts
+        .map((r) => r.email)
+        .filter((e) => e && e.toLowerCase() !== defaultToLower),
+    ),
+  );
   const logoUrl = await getStoreLogoUrl();
 
   // Ship To = warehouse contact info; needs read_locations, falls back to name.
@@ -365,7 +380,12 @@ export default async function SendPoPage({
         </p>
       </div>
 
-      <SendForm poId={po.id} defaultTo={defaultTo} ccEmail={session.user?.email ?? null} />
+      <SendForm
+        poId={po.id}
+        defaultTo={defaultTo}
+        ccEmail={session.user?.email ?? null}
+        autoCcEmails={autoCcEmails}
+      />
     </div>
   );
 }

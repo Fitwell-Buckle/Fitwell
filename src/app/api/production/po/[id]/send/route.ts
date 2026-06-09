@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { supplierContact } from "@/lib/schema";
 import { getPoDetail, getSupplierLineCosts, setPoSent } from "@/lib/production/service";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { fmtMoney, fmtDate, STATUS_LABELS } from "@/lib/production/display";
@@ -239,12 +242,28 @@ export async function POST(
   }
 
   const to = input.to;
-  // CC = the logged-in user + any CCs entered on the form.
+  // Auto-CC every supplier_contact for this supplier so the whole team gets
+  // the PO, not just whoever the admin typed in "To". Stored lowercased; the
+  // dedupe below works case-insensitively against the To.
+  const supplierCcRows = await db
+    .select({ email: supplierContact.email })
+    .from(supplierContact)
+    .where(eq(supplierContact.supplierId, po.supplierId));
+
+  const toLower = to.toLowerCase();
+  // CC = the logged-in user + any CCs entered on the form + every other
+  // supplier contact. Deduped + lowercased, with the To filtered out so it
+  // doesn't show up on both lines.
   const cc = Array.from(
     new Set(
-      [session.user.email, ...(input.cc ?? [])].filter(
-        (x): x is string => Boolean(x),
-      ),
+      [
+        session.user.email,
+        ...(input.cc ?? []),
+        ...supplierCcRows.map((r) => r.email),
+      ]
+        .filter((x): x is string => Boolean(x))
+        .map((x) => x.toLowerCase())
+        .filter((x) => x !== toLower),
     ),
   );
 

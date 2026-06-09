@@ -12,10 +12,15 @@ export function SendForm({
   poId,
   defaultTo,
   ccEmail,
+  autoCcEmails = [],
 }: {
   poId: string;
   defaultTo: string;
   ccEmail: string | null;
+  /** Every other supplier_contact for this PO's supplier; the send API
+   *  CC's them automatically — listed here so the admin sees the
+   *  recipients before hitting send. */
+  autoCcEmails?: string[];
 }) {
   const [to, setTo] = useState(defaultTo);
   const [cc, setCc] = useState("");
@@ -93,7 +98,13 @@ export function SendForm({
         />
       </div>
       <p className="mt-2 text-xs text-zinc-500">
-        {ccEmail ? <>A copy is CC’d to you ({ccEmail}).</> : "You'll be CC'd."}
+        {ccEmail ? <>A copy is CC&rsquo;d to you ({ccEmail}).</> : "You'll be CC'd."}
+        {autoCcEmails.length > 0 && (
+          <>
+            {" "}Other supplier contacts on file are auto-CC&rsquo;d too:{" "}
+            <span className="text-zinc-700">{autoCcEmails.join(", ")}</span>.
+          </>
+        )}
       </p>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
