@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { productionAttachment } from "@/lib/schema";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,11 @@ export async function DELETE(
   const { id } = await params;
 
   const [row] = await db
-    .select({ blobUrl: productionAttachment.blobUrl })
+    .select({
+      blobUrl: productionAttachment.blobUrl,
+      filename: productionAttachment.filename,
+      poId: productionAttachment.poId,
+    })
     .from(productionAttachment)
     .where(eq(productionAttachment.id, id));
   if (!row) {
@@ -40,5 +45,16 @@ export async function DELETE(
   }
   await db.delete(productionAttachment).where(eq(productionAttachment.id, id));
 
+  if (row.poId) {
+    await notifyPoUpdate({
+      poId: row.poId,
+      summary: `Removed document ${row.filename}`,
+      actor: {
+        role: session.user.role,
+        name: session.user.name,
+        supplierId: session.user.supplierId,
+      },
+    });
+  }
   return NextResponse.json({ data: { id } });
 }

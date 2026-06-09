@@ -9,6 +9,7 @@ import {
   updatePoFull,
   updatePoFullSchema,
 } from "@/lib/production/service";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 export async function PATCH(
   req: Request,
@@ -52,6 +53,19 @@ export async function PATCH(
     if (!updated) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+    // Name the fields that changed so the supplier sees what was touched (e.g.
+    // "Updated PO fields: status, expectedDeliveryDate"). All possible keys are
+    // small and harmless to disclose — see updatePoSchema.
+    const changedFields = Object.keys(input).join(", ");
+    await notifyPoUpdate({
+      poId: id,
+      summary: `Updated PO fields: ${changedFields}`,
+      actor: {
+        role: session.user.role,
+        name: session.user.name,
+        supplierId: session.user.supplierId,
+      },
+    });
     return NextResponse.json({ data: { id: updated.id } });
   } catch (err) {
     console.error("Update production PO failed:", err);
@@ -98,6 +112,15 @@ export async function PUT(
     }
 
     const result = await updatePoFull(id, input);
+    await notifyPoUpdate({
+      poId: id,
+      summary: "Edited PO header and line items",
+      actor: {
+        role: session.user.role,
+        name: session.user.name,
+        supplierId: session.user.supplierId,
+      },
+    });
     return NextResponse.json({ data: { id: result.poId } });
   } catch (err) {
     console.error("Full PO edit failed:", err);

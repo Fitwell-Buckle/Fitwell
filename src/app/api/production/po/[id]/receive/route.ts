@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { receivePo } from "@/lib/production/receive";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 // Detect the "scope not granted" failure mode so the UI can show a clear hint
 // rather than a raw Shopify 403 body.
@@ -33,6 +34,17 @@ export async function POST(
   try {
     const result = await receivePo(id);
     const scopeBlocked = result.failed.some((f) => isScopeError(f.error));
+    // Notify the supplier even if some adjustments failed — the receive action
+    // still ran and they should know.
+    await notifyPoUpdate({
+      poId: id,
+      summary: "Marked PO as received",
+      actor: {
+        role: session.user.role,
+        name: session.user.name,
+        supplierId: session.user.supplierId,
+      },
+    });
     return NextResponse.json({
       data: result,
       // Surfaced when adjustments failed because write_inventory isn't granted.

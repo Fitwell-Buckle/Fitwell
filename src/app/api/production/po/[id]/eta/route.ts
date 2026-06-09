@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { productionPo } from "@/lib/schema";
 import { setSubPoEta } from "@/lib/production/service";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 const bodySchema = z.object({
   expectedDeliveryDate: z
@@ -56,5 +57,16 @@ export async function PUT(
   }
 
   await setSubPoEta(id, input.expectedDeliveryDate);
+  await notifyPoUpdate({
+    poId: id,
+    summary: input.expectedDeliveryDate
+      ? `Set expected delivery to ${input.expectedDeliveryDate}`
+      : "Cleared expected delivery date",
+    actor: {
+      role: session.user.role,
+      name: session.user.name,
+      supplierId: session.user.supplierId,
+    },
+  });
   return NextResponse.json({ data: { id } });
 }

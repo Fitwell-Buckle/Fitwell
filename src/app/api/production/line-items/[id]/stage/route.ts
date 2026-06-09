@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { productionPoLineItem } from "@/lib/schema";
 import { setStage, notifySupplierHandoff } from "@/lib/production/service";
 import { type ProductionStage } from "@/lib/production/stages";
 import { getStageOrder } from "@/lib/production/stage-labels";
 import { ensureSupplierMayActOnLineItem } from "@/lib/production/scope";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 const bodySchema = z.object({ stage: z.string() });
 
@@ -56,6 +60,23 @@ export async function POST(
         lineItemId: id,
         supplierId: session.user.supplierId,
         transitions,
+      });
+    }
+    // Generic per-write update to the other party. Lives alongside the more
+    // specific handoff alert so the recipient still sees every stage move.
+    const li = await db.query.productionPoLineItem.findFirst({
+      where: eq(productionPoLineItem.id, id),
+      columns: { poId: true, sku: true },
+    });
+    if (li) {
+      await notifyPoUpdate({
+        poId: li.poId,
+        summary: `Moved line item ${li.sku} to ${input.stage}`,
+        actor: {
+          role: session.user.role,
+          name: session.user.name,
+          supplierId: session.user.supplierId,
+        },
       });
     }
     return NextResponse.json({ data: { transitions } });

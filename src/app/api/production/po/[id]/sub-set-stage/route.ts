@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { setSubPoStage } from "@/lib/production/service";
 import { ensureSupplierMayActOnPo } from "@/lib/production/scope";
 import { type ProductionStage } from "@/lib/production/stages";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 const bodySchema = z.object({ toStage: z.string() });
 
@@ -45,6 +46,15 @@ export async function POST(
       subPoId: id,
       toStage: input.toStage as ProductionStage,
       userId: session.user.id,
+    });
+    await notifyPoUpdate({
+      poId: id,
+      summary: `Set sub-PO stage to ${input.toStage}`,
+      actor: {
+        role: session.user.role,
+        name: session.user.name,
+        supplierId: session.user.supplierId,
+      },
     });
     return NextResponse.json({ data: { transitions } });
   } catch (err) {

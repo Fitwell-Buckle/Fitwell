@@ -72,7 +72,7 @@ Magic-link auth; middleware requires an authenticated session with `role='suppli
 | Path | Description |
 |------|-------------|
 | `/supplier` | The supplier's own POs (list) |
-| `/supplier/po/[id]` | PO detail — advance stages, edit the expected delivery date (primary supplier only; the field reads as plain text on master POs and for stage-only viewers), and a unified notes & documents timeline (post notes, upload documents; no edit/delete of stages); 404 if not their PO. Posting a note/doc emails Fitwell + adds an admin notification |
+| `/supplier/po/[id]` | PO detail — advance stages, edit the expected delivery date (any supplier with a stake in the PO: primary supplier or stage owner; the field stays read-only on master POs where each sub-PO carries its own date), and a unified notes & documents timeline (post notes, upload documents; no edit/delete of stages); 404 if not their PO. Posting a note/doc emails Fitwell + adds an admin notification |
 | `/supplier/notifications` | Supplier notification inbox — notes & documents Fitwell posted on the supplier's POs (mark read; same system as the admin inbox). Unread count shows as a bell badge in the top bar |
 
 ## portal — Company B2B Portal
@@ -111,6 +111,8 @@ Magic-link auth; middleware requires `role='company'` (else → `/portal/login`)
 ### Production API (each handler checks `auth()`)
 
 Supplier scoping: when the session `role='supplier'`, write endpoints are restricted to the supplier's own POs — `advance`, `comments`, `attachments` (upload), and `line-items/[id]/stage` are owner-checked (403 otherwise); PO edit (`PATCH`/`PUT po/[id]`), receive, stage-event date edits, attachment delete, and supplier-contact management are admin-only (403 for suppliers). Admins are unaffected.
+
+Cross-party notifications: **every PO write** fires an in-app notification + email to the other side via `notifyPoUpdate` (the supplier-bound type is `update_for_supplier`; admin-bound is `update_for_admin`). Notes and document uploads keep their existing `notifyPoActivity` alerts; the `send` flow already emails the supplier directly so it isn't double-notified. Stage advances also keep their existing `stage_handoff` milestone alert for the supplier-completes case — the generic update lives alongside it so the recipient still sees every move.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/production/shopify-refs` | Warehouses (Shopify locations) for the PO picker; needs `read_locations` |
@@ -147,7 +149,7 @@ Supplier scoping: when the session `role='supplier'`, write endpoints are restri
 | DELETE | `/api/production/supplier-contacts/[id]` | Remove a supplier login email |
 | GET / POST | `/api/notifications` | Admin notification inbox — unread count (GET) + mark read (POST `{id}` or `{all}`); admin-only (suppliers/companies 403). Excludes supplier-bound rows |
 | GET / POST | `/api/supplier/notifications` | Supplier notification inbox — unread count (GET) + mark read (POST `{id}`/`{all}`); scoped to the signed-in supplier |
-| PUT | `/api/supplier/po/[id]/eta` | Update the PO's expected delivery date `{expectedDeliveryDate: "YYYY-MM-DD" \| null}`; scoped to the PO's primary supplier (403 otherwise). Rejects masters with 409 — on a multi-supplier split each sub-PO carries its own date |
+| PUT | `/api/supplier/po/[id]/eta` | Update the PO's expected delivery date `{expectedDeliveryDate: "YYYY-MM-DD" \| null}`; allowed for the PO's primary supplier OR any supplier assigned to one of its stages (mirrors the page-level access check; 403 otherwise). Rejects masters with 409 — on a multi-supplier split each sub-PO carries its own date |
 
 ### Invoicing API (B2B; each handler checks `auth()`; admin-only — suppliers 403)
 | Method | Path | Description |

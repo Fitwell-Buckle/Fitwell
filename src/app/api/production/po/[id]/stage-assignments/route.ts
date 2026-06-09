@@ -8,6 +8,7 @@ import {
 } from "@/lib/production/service";
 import { type ProductionStage } from "@/lib/production/stages";
 import { getStageOrder } from "@/lib/production/stage-labels";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 const bodySchema = z.object({
   assignments: z
@@ -56,5 +57,17 @@ export async function PUT(
     .map((a) => ({ stage: a.stage as ProductionStage, supplierId: a.supplierId }));
   await setStageAssignments(id, valid);
   await syncMasterSubPos(id, input.multiSupplier ?? false);
+  await notifyPoUpdate({
+    poId: id,
+    summary:
+      valid.length === 0
+        ? "Cleared stage assignments"
+        : `Updated stage assignments (${valid.length} stage${valid.length === 1 ? "" : "s"})`,
+    actor: {
+      role: session.user.role,
+      name: session.user.name,
+      supplierId: session.user.supplierId,
+    },
+  });
   return NextResponse.json({ data: { count: valid.length } });
 }

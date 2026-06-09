@@ -249,6 +249,76 @@ async function supplierContactEmails(supplierId: string): Promise<string[]> {
 }
 
 /**
+ * A PO field was edited (ETA, stage, status, line costs, etc.) — notify the
+ * other party in-app and by email. Mirrors notifyPoActivity: a supplier
+ * writing notifies the admins, an internal user writing notifies the PO's
+ * supplier. Best-effort: a failure here never throws back into the request.
+ */
+export async function notifyPoUpdate(params: {
+  poId: string;
+  /** Short, present-tense description of the change. Goes in the title and
+   *  the email body (so keep it human-readable: "Advanced PO to Shipping",
+   *  "Updated expected delivery to 2026-07-15", "Cleared line costs"). */
+  summary: string;
+  actor: {
+    role?: string | null;
+    name?: string | null;
+    supplierId?: string | null;
+  };
+}): Promise<void> {
+  try {
+    const po = await db.query.productionPo.findFirst({
+      where: eq(productionPo.id, params.poId),
+      columns: { id: true, shopifyPoNumber: true, supplierId: true, poSuffix: true },
+      with: { supplier: { columns: { name: true } } },
+    });
+    if (!po) return;
+
+    const poDisplay = formatPoNumber(po.shopifyPoNumber, {
+      suffix: po.poSuffix ?? undefined,
+    });
+    const subject = `PO ${poDisplay} updated — ${truncate(params.summary, 80)}`;
+
+    if (params.actor.role === "supplier") {
+      const supplierName = po.supplier?.name ?? "A supplier";
+      const title = `${supplierName} updated PO ${poDisplay}`;
+      await recordNotification({
+        type: "update_for_admin",
+        title,
+        body: params.summary,
+        poId: po.id,
+        supplierId: params.actor.supplierId ?? po.supplierId,
+      });
+      await deliverEmail({
+        to: ADMIN_EMAILS,
+        subject,
+        html: activityHtml(title, params.summary),
+        label: "Admin notification",
+      });
+    } else {
+      const author = params.actor.name ?? "Fitwell";
+      const title = `${author} (Fitwell) updated PO ${poDisplay}`;
+      await recordNotification({
+        type: "update_for_supplier",
+        title,
+        body: params.summary,
+        poId: po.id,
+        supplierId: po.supplierId,
+      });
+      const to = po.supplierId ? await supplierContactEmails(po.supplierId) : [];
+      await deliverEmail({
+        to,
+        subject,
+        html: activityHtml(title, params.summary),
+        label: "Supplier notification",
+      });
+    }
+  } catch (err) {
+    console.error("notifyPoUpdate failed:", err);
+  }
+}
+
+/**
  * A note or document was posted on a PO — notify the other party in-app and by
  * email. A supplier posting notifies the admins (admin inbox + ADMIN_EMAILS); an
  * internal user posting notifies the PO's supplier (supplier inbox + the

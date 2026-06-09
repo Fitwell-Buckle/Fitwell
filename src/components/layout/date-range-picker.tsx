@@ -62,6 +62,7 @@ const PICKER_PREFIXES = [
   "/orders",
   "/invoices",
   "/influencer-tracking",
+  "/products",
 ];
 // Pages that show the picker only on that exact path (not subpaths) — e.g. the
 // POs & Production page itself, but not /po/new, /po/[id], or /suppliers.
@@ -74,6 +75,9 @@ function showsPicker(pathname: string): boolean {
   if (PICKER_EXCLUDE.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return false;
   }
+  // The printable packaging label has no historical reporting — hide the
+  // picker so it doesn't sit above the artwork.
+  if (/^\/products\/[^/]+\/label$/.test(pathname)) return false;
   if (PICKER_EXACT.includes(pathname)) return true;
   return PICKER_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }

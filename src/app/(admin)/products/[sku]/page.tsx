@@ -4,15 +4,17 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  order,
   orderLineItem,
   productionPoLineItem,
   productionPo,
 } from "@/lib/schema";
-import { sql, sum, count, and, eq, isNull, ne } from "drizzle-orm";
+import { sql, sum, count, and, eq, gte, isNull, lte, ne } from "drizzle-orm";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getCatalogCached } from "@/lib/catalog/load";
+import { parseDateRange } from "@/lib/date-range";
 
 export const metadata: Metadata = {
   title: "Product | Fitwell Admin",
@@ -27,14 +29,19 @@ function fmtMoney(cents: number) {
 
 export default async function ProductDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ sku: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
   const { sku: encoded } = await params;
   const sku = decodeURIComponent(encoded);
+  // Sales totals bound by the shared header date picker; Incoming + catalog
+  // are "now" state and stay un-filtered.
+  const { from, to } = parseDateRange(await searchParams);
 
   // Find the variant in the cached Shopify catalog. If it isn't in the catalog
   // (e.g. archived), fall back to whatever the sales rows tell us so historic
@@ -42,7 +49,7 @@ export default async function ProductDetailPage({
   const catalog = await getCatalogCached();
   const variant = catalog.find((v) => v.sku === sku);
 
-  // Sales aggregate for just this SKU.
+  // Sales aggregate for just this SKU, bounded by date range.
   const [salesRow] = await db
     .select({
       title: orderLineItem.title,
@@ -51,7 +58,14 @@ export default async function ProductDetailPage({
       revenue: sql<number>`coalesce(sum(${orderLineItem.price} * ${orderLineItem.quantity}), 0)::int`,
     })
     .from(orderLineItem)
-    .where(eq(orderLineItem.sku, sku))
+    .innerJoin(order, eq(order.id, orderLineItem.orderId))
+    .where(
+      and(
+        eq(orderLineItem.sku, sku),
+        gte(order.processedAt, from),
+        lte(order.processedAt, to),
+      ),
+    )
     .groupBy(orderLineItem.title)
     .orderBy(sql`sum(${orderLineItem.quantity}) desc`)
     .limit(1);

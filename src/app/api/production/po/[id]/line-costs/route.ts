@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { productionPo, productionPoLineItem } from "@/lib/schema";
 import { setSupplierLineCosts } from "@/lib/production/service";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 const bodySchema = z.object({
   costs: z
@@ -69,5 +70,14 @@ export async function PUT(
   const costs = input.costs.filter((c) => valid.has(c.lineItemId));
 
   await setSupplierLineCosts(sub.parentPoId, sub.supplierId, costs);
+  await notifyPoUpdate({
+    poId: id,
+    summary: `Updated supplier prices on ${costs.length} line item(s)`,
+    actor: {
+      role: session.user.role,
+      name: session.user.name,
+      supplierId: session.user.supplierId,
+    },
+  });
   return NextResponse.json({ data: { count: costs.length } });
 }

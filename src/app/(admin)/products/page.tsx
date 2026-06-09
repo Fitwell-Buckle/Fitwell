@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { orderLineItem, productionPoLineItem, productionPo } from "@/lib/schema";
-import { sql, sum, count, and, eq, isNull, ne } from "drizzle-orm";
+import { order, orderLineItem, productionPoLineItem, productionPo } from "@/lib/schema";
+import { sql, sum, count, and, eq, gte, isNull, lte, ne } from "drizzle-orm";
+import { parseDateRange } from "@/lib/date-range";
 import {
   Table,
   TableHeader,
@@ -18,6 +18,8 @@ import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 import { ListFilters } from "@/components/catalog/list-filters";
 import { RefreshCatalogButton } from "@/components/catalog/refresh-catalog-button";
 import { getCatalogCached } from "@/lib/catalog/load";
+import { ProductRow } from "./product-row";
+import { StopPropagationLink } from "./stop-propagation-link";
 
 export const metadata: Metadata = {
   title: "Products | Fitwell Admin",
@@ -50,7 +52,12 @@ export default async function ProductsPage({
       .filter(Boolean),
   );
 
-  // Sales performance per SKU (from order line items).
+  // Sales reporting is bounded by the shared header date picker (from/to in the
+  // URL); default range is the rolling 30 days (parseDateRange's fallback). The
+  // Incoming + Shopify catalog columns stay un-filtered — they're "now" state.
+  const { from, to } = parseDateRange(params);
+
+  // Sales performance per SKU (from order line items), bounded by date range.
   const salesRows = await db
     .select({
       sku: orderLineItem.sku,
@@ -60,6 +67,8 @@ export default async function ProductsPage({
       revenue: sql<number>`coalesce(sum(${orderLineItem.price} * ${orderLineItem.quantity}), 0)::int`,
     })
     .from(orderLineItem)
+    .innerJoin(order, eq(order.id, orderLineItem.orderId))
+    .where(and(gte(order.processedAt, from), lte(order.processedAt, to)))
     .groupBy(orderLineItem.sku, orderLineItem.title)
     .orderBy(sql`sum(${orderLineItem.quantity}) desc`);
   const salesBySku = new Map(salesRows.map((r) => [r.sku ?? "", r]));
@@ -176,45 +185,57 @@ export default async function ProductsPage({
                 </TableCell>
               </TableRow>
             ) : (
-              visibleProducts.map((p) => (
-                <TableRow key={p.key}>
-                  <TableCell className="whitespace-nowrap font-mono text-xs text-zinc-600">
-                    {p.sku ?? "—"}
-                  </TableCell>
-                  <TableCell className="font-medium text-zinc-900">
-                    {p.title ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {incomingBySku.get(p.sku ?? "") ? (
-                      <Mono>{incomingBySku.get(p.sku ?? "")}</Mono>
-                    ) : (
-                      <Muted>—</Muted>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{p.unitsSold ?? 0}</Mono>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{p.orderCount}</Mono>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{fmt(Number(p.revenue) || 0)}</Mono>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap pr-2 text-right">
-                    {p.sku ? (
-                      <Link
-                        href={`/products/${encodeURIComponent(p.sku)}/label`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800 hover:decoration-zinc-600"
-                        title="Open the printable packaging label for this SKU"
-                      >
-                        Label
-                      </Link>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))
+              visibleProducts.map((p) => {
+                const cells = (
+                  <>
+                    <TableCell className="whitespace-nowrap font-mono text-xs text-zinc-600">
+                      {p.sku || "—"}
+                    </TableCell>
+                    <TableCell className="font-medium text-zinc-900">
+                      {p.title ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {incomingBySku.get(p.sku ?? "") ? (
+                        <Mono>{incomingBySku.get(p.sku ?? "")}</Mono>
+                      ) : (
+                        <Muted>—</Muted>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{p.unitsSold ?? 0}</Mono>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{p.orderCount}</Mono>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{fmt(Number(p.revenue) || 0)}</Mono>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap pr-2 text-right">
+                      {p.sku ? (
+                        <StopPropagationLink
+                          href={`/products/${encodeURIComponent(p.sku)}/label`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800 hover:decoration-zinc-600"
+                          title="Open the printable packaging label for this SKU"
+                        >
+                          Label
+                        </StopPropagationLink>
+                      ) : null}
+                    </TableCell>
+                  </>
+                );
+                return p.sku ? (
+                  <ProductRow
+                    key={p.key}
+                    href={`/products/${encodeURIComponent(p.sku)}`}
+                  >
+                    {cells}
+                  </ProductRow>
+                ) : (
+                  <TableRow key={p.key}>{cells}</TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { advance, advanceSchema } from "@/lib/production/service";
 import { ensureSupplierMayActOnPo } from "@/lib/production/scope";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 export async function POST(
   req: Request,
@@ -48,6 +49,22 @@ export async function POST(
         { status: 409 },
       );
     }
+    // Summarise the move for the cross-party notification. Most transitions
+    // share a single `to` stage; if they don't, fall back to a count.
+    const toStages = [...new Set(transitions.map((t) => t.to))];
+    const summary =
+      toStages.length === 1
+        ? `Advanced ${transitions.length} line item(s) to ${toStages[0]}`
+        : `Advanced ${transitions.length} line item(s)`;
+    await notifyPoUpdate({
+      poId: id,
+      summary,
+      actor: {
+        role: session.user.role,
+        name: session.user.name,
+        supplierId: session.user.supplierId,
+      },
+    });
     return NextResponse.json({ data: { transitions } });
   } catch (err) {
     // planAdvance throws for caller errors (missing/unknown target on a broken PO).

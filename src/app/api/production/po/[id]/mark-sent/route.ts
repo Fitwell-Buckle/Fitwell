@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { productionPo } from "@/lib/schema";
 import { setPoSent } from "@/lib/production/service";
+import { notifyPoUpdate } from "@/lib/production/notifications";
 
 const bodySchema = z.object({ sent: z.boolean() });
 
@@ -44,5 +45,14 @@ export async function POST(
   if (!po) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await setPoSent(id, input.sent, "manual");
+  await notifyPoUpdate({
+    poId: id,
+    summary: input.sent ? "Marked PO as sent" : "Marked PO as not sent",
+    actor: {
+      role: session.user.role,
+      name: session.user.name,
+      supplierId: session.user.supplierId,
+    },
+  });
   return NextResponse.json({ data: { id, sent: input.sent } });
 }

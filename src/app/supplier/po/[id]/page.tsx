@@ -54,18 +54,15 @@ export default async function SupplierPoDetailPage({
     (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
   );
 
-  // The ETA field is editable only when this supplier is the one delivering —
-  // i.e. they're the PO's primary supplier — and the PO carries its own date.
-  // On a master (multi-supplier split) the date lives on each sub-PO, so we
-  // fall back to read-only at the master level.
-  const isPrimary = po.supplierId === scope.supplierId;
-  const childPo = isPrimary
-    ? await db.query.productionPo.findFirst({
-        where: eq(productionPo.parentPoId, po.id),
-        columns: { id: true },
-      })
-    : null;
-  const canEditEta = isPrimary && !childPo;
+  // Anyone who can see the PO is a delivery stakeholder (primary supplier or
+  // routed to one of its stages — see the access check above), so let them
+  // keep the shared ETA current. The exception is a master PO (multi-supplier
+  // split): each sub-PO carries its own date, so the master stays read-only.
+  const childPo = await db.query.productionPo.findFirst({
+    where: eq(productionPo.parentPoId, po.id),
+    columns: { id: true },
+  });
+  const canEditEta = !childPo;
   const totalCents = po.lineItems.reduce(
     (sum, li) => sum + (li.unitCostCents ?? 0) * li.quantity,
     0,

@@ -71,7 +71,7 @@ export default async function ProductionPage({
   const groupParam = typeof params.group === "string" ? params.group : "";
   const group: Group = (GROUPS as readonly string[]).includes(groupParam)
     ? (groupParam as Group)
-    : "po";
+    : "master";
 
   const supplierId = typeof params.supplier === "string" ? params.supplier : "";
   const stage = typeof params.stage === "string" ? params.stage : "";
