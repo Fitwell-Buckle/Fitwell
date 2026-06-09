@@ -82,7 +82,7 @@ export default async function SupplierPoDetailPage({
           eq(productionPo.parentPoId, po.id),
           eq(productionPo.supplierId, scope.supplierId),
         ),
-        columns: { id: true, expectedDeliveryDate: true },
+        columns: { id: true, expectedDeliveryDate: true, poSuffix: true },
         // Pull the sub-PO's notes + documents AND its stage ETA targets
         // alongside so the timeline below can be scoped to the supplier's
         // own thread + targets (each sub-PO carries its own — distinct from
@@ -137,7 +137,15 @@ export default async function SupplierPoDetailPage({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title={formatPoNumber(po.shopifyPoNumber, { suffix: po.poSuffix })} />
+        {/* Show the supplier's OWN sub-PO suffix (e.g. "PO-00105-A") rather than
+          *  the bare master number — the supplier dashboard links here with
+          *  the master id (suppliers work the master scoped to their stages)
+          *  but the supplier always saw their sub-PO number on the dashboard. */}
+        <PageHeader
+          title={formatPoNumber(po.shopifyPoNumber, {
+            suffix: mySubPo?.poSuffix ?? po.poSuffix,
+          })}
+        />
         <Button variant="ghost" size="sm" asChild>
           <Link href="/supplier">Back</Link>
         </Button>
@@ -205,6 +213,13 @@ export default async function SupplierPoDetailPage({
         }))}
       />
 
+      {/* Supplier-scoped timeline: only the stages THIS supplier owns are
+        *  visible. We pass a filtered `order` (their owned stages + the
+        *  terminal sentinel) and override each line's `stages` to the same
+        *  set so `buildLineSegments` projects only the owned segments.
+        *  Historical events for stages the supplier doesn't own (e.g. a
+        *  prior supplier's stamping events when THIS supplier owns plating)
+        *  are filtered out so the chart shows nothing they shouldn't see. */}
       <ProductionTimeline
         pos={[
           {
@@ -221,19 +236,30 @@ export default async function SupplierPoDetailPage({
               sku: li.sku,
               title: li.title,
               currentStage: li.currentStage,
-              stages: li.stages,
-              stageEvents: li.stageEvents.map((ev) => ({
-                id: ev.id,
-                stage: ev.stage,
-                enteredAt: ev.enteredAt,
-                exitedAt: ev.exitedAt,
-              })),
+              // Walk only the supplier's owned stages (+ terminal so the
+              // projector knows when to stop). Intersect with the line's
+              // own subset so a spring-bar line that skips the supplier's
+              // assigned stage stays empty rather than projecting through it.
+              stages: [
+                ...ownedStages.filter(
+                  (s) => !li.stages || li.stages.length === 0 || li.stages.includes(s),
+                ),
+                terminal,
+              ],
+              stageEvents: li.stageEvents
+                .filter((ev) => ownedStages.includes(ev.stage))
+                .map((ev) => ({
+                  id: ev.id,
+                  stage: ev.stage,
+                  enteredAt: ev.enteredAt,
+                  exitedAt: ev.exitedAt,
+                })),
             })),
           },
         ]}
         estimates={estimates}
         stageLabels={stageLabels}
-        order={order}
+        order={[...ownedStages, terminal]}
         etaSaveRouteBase="/api/supplier/po"
       />
 
