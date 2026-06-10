@@ -4,10 +4,14 @@
 #
 # 09:00 UTC = 5am ET (4am during DST — accepted; Geneva opens 10am CEST).
 # Spec: specs/current/newsletter-engine.md
+#
+# SCHEDULE DISABLED until secrets are configured + a few drafts approved.
+# Re-enable by uncommenting the `schedule:` block below. Until then the
+# workflow only runs on manual dispatch (Actions tab → Run workflow).
 name: Newsletter Daily
 on:
-  schedule:
-    - cron: "0 9 * * 1-5"
+  # schedule:
+  #   - cron: "0 9 * * 1-5"
   workflow_dispatch:
     inputs:
       mode:
@@ -36,6 +40,13 @@ jobs:
           NEWSLETTER_KLAVIYO_LIST_ID: ${{ secrets.NEWSLETTER_KLAVIYO_LIST_ID }}
           # Production Neon branch — newsletter tables live in the shared schema
           DATABASE_URL: ${{ secrets.NEWSLETTER_DATABASE_URL }}
+          # BrightData residential proxy — WatchPro + WatchTime fetch through
+          # it (Cloudflare). Without these they fail soft (drop from the brief).
+          BRIGHTDATA_USERNAME: ${{ secrets.BRIGHTDATA_USERNAME }}
+          BRIGHTDATA_PASSWORD: ${{ secrets.BRIGHTDATA_PASSWORD }}
+          # Vercel Blob — re-hosts story images to our CDN (no hotlinking).
+          # Without it images hotlink from source sites (fail-soft).
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
       - name: Upload dry-run HTML
         if: inputs.mode == 'dry-run'
         uses: actions/upload-artifact@v4
