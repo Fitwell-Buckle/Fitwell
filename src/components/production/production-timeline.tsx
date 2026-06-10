@@ -422,16 +422,31 @@ export function ProductionTimeline({
   const minMs = tracks.length ? Math.min(...tracks.map((t) => t.startMs), todayMs) : todayMs;
   const maxMs = tracks.length ? Math.max(...tracks.map((t) => t.endMs), todayMs) : todayMs;
 
+  // Legend: only the stages this PO actually walks. If any line inherits the
+  // global pipeline (stages == null/[]) we fall back to the full order so the
+  // legend isn't surprised by future lines; when every line opts into an
+  // explicit subset, the legend collapses to the union of those subsets.
+  const visibleStagesSet = new Set<ProductionStage>();
+  let anyInherits = false;
+  for (const po of pos) {
+    for (const li of po.lineItems) {
+      if (!li.stages || li.stages.length === 0) {
+        anyInherits = true;
+      } else {
+        for (const s of li.stages) visibleStagesSet.add(s);
+      }
+    }
+  }
+  const legendStages = anyInherits
+    ? order
+    : order.filter((s) => visibleStagesSet.has(s));
+
   return (
     <div className="mt-8">
       <h2 className="text-sm font-semibold text-zinc-900">Production timeline</h2>
-      <p className="mt-1 text-xs text-zinc-500">
-        Each row is a line item across its stages. The vertical line marks
-        today — segments to the left are completed, to the right are projected.
-      </p>
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-        {order.map((s) => (
+        {legendStages.map((s) => (
           <span key={s} className="flex items-center gap-1.5 text-xs text-zinc-500">
             <span className={`inline-block h-3 w-3 rounded-sm ${STAGE_BAR[s] ?? "bg-zinc-300"}`} />
             {stageLabels[s]}

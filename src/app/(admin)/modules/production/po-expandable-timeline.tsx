@@ -96,15 +96,31 @@ export function PoExpandableTimeline({
     ? Math.max(...tracks.map((t) => t.endMs), todayMs)
     : todayMs;
 
+  // Legend stages = union of each line's effective walk-order; falls back to
+  // the full pipeline if any line inherits (stages == null/[]). Same rule as
+  // the main ProductionTimeline so the by-PO view collapses to the same
+  // legend when every line opts into the same explicit subset.
+  const visibleStagesSet = new Set<ProductionStage>();
+  let anyInherits = false;
+  for (const po of pos) {
+    for (const li of po.lineItems) {
+      if (!li.stages || li.stages.length === 0) {
+        anyInherits = true;
+      } else {
+        for (const s of li.stages) visibleStagesSet.add(s);
+      }
+    }
+  }
+  const legendStages = anyInherits
+    ? order
+    : order.filter((s) => visibleStagesSet.has(s));
+
   return (
     <div className="mt-8">
       <h2 className="text-sm font-semibold text-zinc-900">Production timeline</h2>
-      <p className="mt-1 text-xs text-zinc-500">
-        Click a track to expand its SKU breakdown.
-      </p>
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-        {order.map((s) => (
+        {legendStages.map((s) => (
           <span key={s} className="flex items-center gap-1.5 text-xs text-zinc-500">
             <span className={`inline-block h-3 w-3 rounded-sm ${STAGE_BAR[s] ?? "bg-zinc-300"}`} />
             {stageLabels[s]}
