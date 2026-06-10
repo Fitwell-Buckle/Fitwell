@@ -126,8 +126,8 @@ export function SupplierLineItems({
               <TableHead>Title</TableHead>
               <TableHead>Qty</TableHead>
               <TableHead>Unit cost</TableHead>
-              <TableHead className="text-right">Stage</TableHead>
-              <TableHead className="text-right">ETA</TableHead>
+              <TableHead className="text-right">Current Stage</TableHead>
+              <TableHead className="text-right">Final ETA</TableHead>
               {canDownloadLabels && <TableHead className="w-0" aria-label="Label" />}
             </TableRow>
           </TableHeader>
