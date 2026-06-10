@@ -20,6 +20,11 @@ export interface TimelineSegment {
   stage: ProductionStage;
   startMs: number;
   endMs: number;
+  /** `false` when this segment is strictly in the past (a completed
+   *  stage with a known exitedAt); `true` for the line's current stage
+   *  (in-progress) and every future stage. Used to gate the inline ETA
+   *  editor — only `projected` segments are click-to-edit. The visual
+   *  style does NOT differ between projected and not. */
   projected: boolean;
 }
 
@@ -37,12 +42,34 @@ export interface LineForSegments {
   stages?: readonly string[] | null;
 }
 
-/** Solid segments from a line's stage history (with a 6-hour floor so a
- *  same-day move still renders as a visible block) plus a faded projected
- *  segment for each remaining stage on the way to terminal. A projected
- *  segment's end date is the supplied per-stage target (`stageTargetsMs`)
- *  when set; otherwise today's cursor + the stage's cycle-time estimate.
- *  Pure — safe to call from server-render aggregation OR client components. */
+/**
+ * Continuous-chain segments for a line's timeline bar.
+ *
+ * One segment per stage in the line's `walkOrder` (excluding the terminal
+ * `complete` sentinel). Each segment starts exactly where the previous one
+ * ended — the bar is a single uninterrupted strip from the line's first
+ * stage_event (or today, if the line has no events yet) to its projected
+ * completion. There are no gaps and no overlaps; the caller paints a
+ * single "today" vertical line across the chart to indicate what's past
+ * vs. future.
+ *
+ * Past stages (those strictly before `currentStage` in `walkOrder`) use
+ * their consolidated stage_event range — `min(enteredAt)` to
+ * `max(exitedAt)` if there were multiple advance-then-move-back cycles.
+ * If a past stage has no events at all (e.g. it was skipped silently),
+ * we cursor-walk it forward using the cycle-time estimate so the chain
+ * stays unbroken.
+ *
+ * The current stage starts at its earliest enteredAt (or the cursor if no
+ * event) and ends at its projected target — `stageTargetsMs.get(stage)`
+ * when set and in the future, otherwise `max(today, enteredAt) + estimate`.
+ *
+ * Future stages chain from the previous segment's end, using
+ * `stageTargetsMs` when present (and not behind the cursor) or the
+ * cycle-time estimate.
+ *
+ * Pure — safe to call from server-render aggregation OR client components.
+ */
 export function buildLineSegments(
   li: LineForSegments,
   todayMs: number,
@@ -53,33 +80,104 @@ export function buildLineSegments(
 ): TimelineSegment[] {
   // Effective walk-order: line's own list when set, else the global pipeline.
   const walkOrder = li.stages && li.stages.length > 0 ? li.stages : order;
-  const segs: TimelineSegment[] = li.stageEvents.map((ev) => {
-    const startMs = ev.enteredAt.getTime();
-    const endMs = ev.exitedAt ? ev.exitedAt.getTime() : todayMs;
-    return {
-      stage: ev.stage,
-      startMs,
-      endMs: Math.max(endMs, startMs + MS_PER_DAY / 4),
-      projected: false,
-    };
-  });
-  if (isTerminal(walkOrder, li.currentStage)) return segs;
+  if (walkOrder.length === 0) return [];
 
-  const startIdx = walkOrder.indexOf(li.currentStage);
-  if (startIdx < 0) return segs;
-  let cursorMs = todayMs;
-  for (let i = startIdx; i < walkOrder.length - 1; i++) {
-    const stage = walkOrder[i] as ProductionStage;
-    const target = stageTargetsMs.get(stage);
-    let endMs: number;
-    if (target != null && target > cursorMs) {
-      endMs = target;
-    } else {
-      const days = estimates[stage] ?? FALLBACK_STAGE_DAYS;
-      endMs = cursorMs + days * MS_PER_DAY;
+  // Already at terminal — emit the historical chain only (one consolidated
+  // segment per visited stage, capped at the line's exit). The line is done;
+  // there's nothing to project.
+  const terminal = isTerminal(walkOrder, li.currentStage);
+
+  // Consolidate stage_events: a stage may have multiple events if the line
+  // was advanced then moved back. Collapse to one range: the earliest
+  // enteredAt and the latest exitedAt (with null meaning "still ongoing").
+  const ranges = new Map<
+    ProductionStage,
+    { start: number; end: number | null }
+  >();
+  for (const ev of li.stageEvents) {
+    const startMs = ev.enteredAt.getTime();
+    const endMs = ev.exitedAt?.getTime() ?? null;
+    const existing = ranges.get(ev.stage);
+    if (!existing) {
+      ranges.set(ev.stage, { start: startMs, end: endMs });
+      continue;
     }
-    endMs = Math.max(endMs, cursorMs + MS_PER_DAY / 4);
-    segs.push({ stage, startMs: cursorMs, endMs, projected: true });
+    if (startMs < existing.start) existing.start = startMs;
+    // null wins (ongoing); otherwise take the latest exitedAt.
+    if (endMs === null) existing.end = null;
+    else if (existing.end !== null && endMs > existing.end) existing.end = endMs;
+  }
+
+  const currentIdx = walkOrder.indexOf(li.currentStage);
+  if (currentIdx < 0 && !terminal) return [];
+
+  // Effective "current" index for chain logic: terminal lines treat every
+  // walked stage as past.
+  const effectiveCurrentIdx = terminal ? walkOrder.length : currentIdx;
+
+  // Cursor starts at the earliest stage_event we have (the line's
+  // birthday) — or today if the line is brand new and has no events yet.
+  const firstStageRange = ranges.get(walkOrder[0] as ProductionStage);
+  let cursorMs = firstStageRange?.start ?? todayMs;
+
+  const segs: TimelineSegment[] = [];
+
+  // Walk every stage except the terminal sentinel — `complete` is a marker,
+  // not a stage with duration.
+  for (let i = 0; i < walkOrder.length - 1; i++) {
+    const stage = walkOrder[i] as ProductionStage;
+    const range = ranges.get(stage);
+    const target = stageTargetsMs.get(stage);
+    const isPast = i < effectiveCurrentIdx;
+    const isCurrent = i === currentIdx && !terminal;
+
+    let startMs = cursorMs;
+    let endMs: number;
+
+    if (isPast) {
+      // Use the consolidated exitedAt if known; otherwise estimate.
+      if (range?.end != null) {
+        endMs = Math.max(range.end, startMs);
+      } else if (range?.start != null) {
+        // Past with no exitedAt (data anomaly): use today as a reasonable cap
+        endMs = Math.max(startMs, todayMs);
+      } else {
+        // No events at all for this past stage: cursor-walk
+        const days = estimates[stage] ?? FALLBACK_STAGE_DAYS;
+        endMs = startMs + days * MS_PER_DAY;
+      }
+    } else if (isCurrent) {
+      // Project from today (or from the cursor if it's already in the
+      // future — should never happen but guard against it). Target wins
+      // when set and ahead of the projection floor.
+      const projFloor = Math.max(todayMs, startMs);
+      if (target != null && target > projFloor) {
+        endMs = target;
+      } else {
+        const days = estimates[stage] ?? FALLBACK_STAGE_DAYS;
+        endMs = projFloor + days * MS_PER_DAY;
+      }
+    } else {
+      // Future stage: cursor + estimate (or explicit target ahead of cursor).
+      if (target != null && target > startMs) {
+        endMs = target;
+      } else {
+        const days = estimates[stage] ?? FALLBACK_STAGE_DAYS;
+        endMs = startMs + days * MS_PER_DAY;
+      }
+    }
+
+    // Visible minimum so a same-day move still renders as a block.
+    endMs = Math.max(endMs, startMs + MS_PER_DAY / 4);
+    segs.push({
+      stage,
+      startMs,
+      endMs,
+      // "projected" = current stage in-progress OR a future stage. Past
+      // stages are NOT projected (their dates are real history) and not
+      // editable in the inline target editor.
+      projected: !isPast,
+    });
     cursorMs = endMs;
   }
   return segs;

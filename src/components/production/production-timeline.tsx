@@ -195,9 +195,14 @@ export function TimelineBar({
 
   return (
     <div className="relative h-6 flex-1 rounded bg-zinc-50">
+      {/* Today indicator: a single bold vertical line through the whole
+        *  row. With segments rendered at full opacity + full height (no
+        *  fade or half-height for projected), this is the only past-vs-
+        *  future visual cue. */}
       <div
-        className="absolute top-0 z-10 h-full w-px bg-zinc-300"
+        className="pointer-events-none absolute top-0 z-20 h-full w-0.5 bg-zinc-900/70"
         style={{ left: `${pct(todayMs)}%` }}
+        title={`Today · ${fmtDate(isoDay(new Date(todayMs)))}`}
       />
       {segs.map((s, i) => {
         const startLabel = fmtDate(isoDay(new Date(s.startMs)));
@@ -206,23 +211,16 @@ export function TimelineBar({
           startLabel === endLabel ? startLabel : `${startLabel} → ${endLabel}`;
         const hasOverride = !!editable?.targetsMs.has(s.stage);
         const editableSeg = !!editable && s.projected;
-        const tip = `${stageLabels[s.stage]}${
-          s.projected ? " (projected)" : ""
-        } · ${span}${hasOverride ? " · target set" : ""}${
-          editableSeg ? " · click to edit" : ""
-        }`;
+        const tip = `${stageLabels[s.stage]} · ${span}${
+          hasOverride ? " · target set" : ""
+        }${editableSeg ? " · click to edit" : ""}`;
         const style = {
           left: `${pct(s.startMs)}%`,
           width: `${Math.max(pct(s.endMs) - pct(s.startMs), 0.5)}%`,
         };
-        // Projected segments render half-height (and centred vertically in
-        // the row) so the eye reads them as distinct from completed work —
-        // faded colour alone wasn't enough to tell EDM-projected from
-        // Polishing-projected at a glance.
-        const sizeClass = s.projected ? "top-2 h-2" : "top-1 h-4";
-        const colorClass = `${STAGE_BAR[s.stage] ?? "bg-zinc-300"} ${
-          s.projected ? "opacity-30" : ""
-        }`;
+        // Every segment renders full-height + full-color. The today line
+        // does the past/future job; bars no longer fade or shrink.
+        const colorClass = STAGE_BAR[s.stage] ?? "bg-zinc-300";
         return editableSeg ? (
           <button
             key={i}
@@ -231,14 +229,14 @@ export function TimelineBar({
               e.stopPropagation();
               openEditor(s.stage, s.endMs);
             }}
-            className={`absolute ${sizeClass} rounded-sm border-0 p-0 ${colorClass} cursor-pointer hover:ring-2 hover:ring-zinc-900/40`}
+            className={`absolute top-1 h-4 rounded-sm border-0 p-0 ${colorClass} cursor-pointer hover:ring-2 hover:ring-zinc-900/40`}
             style={style}
             title={tip}
           />
         ) : (
           <div
             key={i}
-            className={`absolute ${sizeClass} rounded-sm ${colorClass}`}
+            className={`absolute top-1 h-4 rounded-sm ${colorClass}`}
             style={style}
             title={tip}
           />

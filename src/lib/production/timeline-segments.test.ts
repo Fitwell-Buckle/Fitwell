@@ -95,6 +95,103 @@ describe("buildLineSegments — per-line stages", () => {
     expect(segs.filter((s) => s.projected)).toEqual([]);
   });
 
+  it("segments chain end-to-end with no gaps", () => {
+    // Continuous-bar invariant: each segment's start equals the previous
+    // segment's end. This is what makes the timeline render as one
+    // uninterrupted strip with the today line as the only past/future cue.
+    const segs = buildLineSegments(
+      {
+        currentStage: "polishing",
+        stageEvents: [
+          // Past stages with real history.
+          {
+            stage: "supplier_po",
+            enteredAt: new Date(today - 6 * MS_PER_DAY),
+            exitedAt: new Date(today - 4 * MS_PER_DAY),
+          },
+          {
+            stage: "stamping",
+            enteredAt: new Date(today - 4 * MS_PER_DAY),
+            exitedAt: new Date(today - 2 * MS_PER_DAY),
+          },
+          {
+            stage: "edm",
+            enteredAt: new Date(today - 2 * MS_PER_DAY),
+            exitedAt: new Date(today - 1 * MS_PER_DAY),
+          },
+          // Current stage — in progress.
+          {
+            stage: "polishing",
+            enteredAt: new Date(today - 1 * MS_PER_DAY),
+            exitedAt: null,
+          },
+        ],
+      },
+      today,
+      "2026-06-09",
+      ORDER,
+      ESTIMATES,
+    );
+    // Walk through pairwise — every segment starts where the previous ended.
+    for (let i = 1; i < segs.length; i++) {
+      expect(segs[i].startMs).toBe(segs[i - 1].endMs);
+    }
+  });
+
+  it("consolidates multiple events for the same stage (advance-then-move-back)", () => {
+    // A line that was advanced from supplier_po → stamping and then moved
+    // back to supplier_po should produce ONE supplier_po segment spanning
+    // min(enteredAt) → still-here-now, not two separate bars with a gap.
+    const segs = buildLineSegments(
+      {
+        currentStage: "supplier_po",
+        stageEvents: [
+          {
+            stage: "supplier_po",
+            enteredAt: new Date(today - 3 * MS_PER_DAY),
+            exitedAt: new Date(today - 2 * MS_PER_DAY),
+          },
+          // Filtered out by supplier-portal scoping in practice; included
+          // here just to confirm we don't get a stamping segment back.
+          {
+            stage: "supplier_po",
+            enteredAt: new Date(today - 1 * MS_PER_DAY),
+            exitedAt: null,
+          },
+        ],
+      },
+      today,
+      "2026-06-09",
+      ORDER,
+      ESTIMATES,
+    );
+    const supplierPo = segs.filter((s) => s.stage === "supplier_po");
+    expect(supplierPo).toHaveLength(1);
+    // Earliest enteredAt as start; projected end (today + estimate).
+    expect(supplierPo[0].startMs).toBe(today - 3 * MS_PER_DAY);
+    expect(supplierPo[0].projected).toBe(true); // current = projected
+  });
+
+  it("past stages without events cursor-walk forward (no broken chain)", () => {
+    // No stage_events at all — every stage is "past or current" cursor-walked
+    // from today. Still emits a continuous chain.
+    const segs = buildLineSegments(
+      {
+        currentStage: "supplier_po",
+        stageEvents: [],
+      },
+      today,
+      "2026-06-09",
+      ORDER,
+      ESTIMATES,
+    );
+    // 8 stages (everything except terminal `complete`).
+    expect(segs).toHaveLength(8);
+    for (let i = 1; i < segs.length; i++) {
+      expect(segs[i].startMs).toBe(segs[i - 1].endMs);
+    }
+  });
+
   it("empty stages array falls back to the global pipeline", () => {
     const segs = buildLineSegments(
       {
