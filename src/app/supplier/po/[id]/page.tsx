@@ -246,14 +246,25 @@ export default async function SupplierPoDetailPage({
                 ),
                 terminal,
               ],
-              stageEvents: li.stageEvents
-                .filter((ev) => ownedStages.includes(ev.stage))
-                .map((ev) => ({
-                  id: ev.id,
-                  stage: ev.stage,
-                  enteredAt: ev.enteredAt,
-                  exitedAt: ev.exitedAt,
-                })),
+              // Filter to the supplier's owned stages AND drop events for
+              // stages later than the line's current stage. The second
+              // filter hides orphan history from prior advance-then-move-
+              // back testing (a stale stamping event with enteredAt before
+              // today's supplier_po event creates a confusing leftward
+              // bar). Past events for stages at-or-before currentStage
+              // remain — those are real history.
+              stageEvents: (() => {
+                const currentIdx = order.indexOf(li.currentStage);
+                return li.stageEvents
+                  .filter((ev) => ownedStages.includes(ev.stage))
+                  .filter((ev) => order.indexOf(ev.stage) <= currentIdx)
+                  .map((ev) => ({
+                    id: ev.id,
+                    stage: ev.stage,
+                    enteredAt: ev.enteredAt,
+                    exitedAt: ev.exitedAt,
+                  }));
+              })(),
             })),
           },
         ]}
