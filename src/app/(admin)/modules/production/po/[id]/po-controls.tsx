@@ -98,6 +98,31 @@ export function PoControls({
     }
   }
 
+  // Set a line item's per-line ETA. Drives the timeline's per-line bar end
+  // and the seeder anchor (each line's last owned stage gets pinned to
+  // this date instead of the sub-PO ETA).
+  async function setLineEta(lineItemId: string, dateIso: string | null) {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/production/line-items/${lineItemId}/eta`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedCompletionDate: dateIso }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Couldn't update the ETA.");
+      } else {
+        router.refresh();
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card className="mt-5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -144,6 +169,7 @@ export function PoControls({
               <TableHead>Customer</TableHead>
               <TableHead>Warehouse</TableHead>
               <TableHead className="text-right">Stage</TableHead>
+              <TableHead className="text-right">ETA</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -179,6 +205,13 @@ export function PoControls({
                     ))}
                   </select>
                 </TableCell>
+                <TableCell className="text-right">
+                  <LineEtaInput
+                    initial={li.expectedCompletionDate}
+                    disabled={busy}
+                    onSave={(d) => setLineEta(li.id, d)}
+                  />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -192,5 +225,60 @@ export function PoControls({
         </span>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Inline per-line ETA editor. Commits on blur (or Enter) so a long
+ * date-picker drag doesn't fire a save per step; small × clears the date.
+ * Mirrors the supplier-portal LineEtaInput so admins and suppliers see the
+ * same interaction.
+ */
+function LineEtaInput({
+  initial,
+  disabled,
+  onSave,
+}: {
+  initial: string | null;
+  disabled: boolean;
+  onSave: (dateIso: string | null) => void;
+}) {
+  const [value, setValue] = useState(initial ?? "");
+
+  function commit() {
+    const trimmed = value.trim();
+    const next = trimmed === "" ? null : trimmed;
+    if (next === (initial ?? null)) return;
+    onSave(next);
+  }
+
+  return (
+    <div className="inline-flex items-center justify-end gap-1">
+      <input
+        type="date"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300 disabled:opacity-50"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => {
+            setValue("");
+            onSave(null);
+          }}
+          disabled={disabled}
+          className="text-xs text-zinc-400 hover:text-zinc-700 disabled:opacity-50"
+          title="Clear ETA"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { nextStage, derivePoStage, isTerminal, type ProductionStage } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
-import { formatPoNumber, planSubPos, rollupEta, subPoStageState } from "@/lib/production/sub-po";
+import { formatPoNumber, planSubPos, subPoStageState } from "@/lib/production/sub-po";
 import { stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { getCatalogCached, makeLineAttrs } from "@/lib/catalog/load";
 import { usesRawBlankSummary, summarizeRawBlanks } from "@/lib/production/raw-blank";
@@ -73,10 +73,6 @@ export default async function PoDetailPage({
   const isSubPo = !!po.parentPoId;
 
   // Master's ETA is locked/derived = the latest across its sub-POs (each
-  // supplier sets their own). Standalone / sub-PO shows its own row value.
-  const displayEta = isMaster
-    ? rollupEta(subPos.map((s) => s.expectedDeliveryDate))
-    : po.expectedDeliveryDate;
   // One invoice per PO — if it's already been invoiced, link to it instead.
   const existingInvoice = isSubPo ? null : await invoiceForPo(po.id);
   const plan = isMaster ? planSubPos(order, workStages, po.stageAssignments, po.supplierId) : [];
@@ -297,12 +293,9 @@ export default async function PoDetailPage({
               </Badge>
             </div>
           </div>
-          <div>
-            <div className="text-xs text-zinc-400">
-              Expected delivery{isMaster ? " (latest sub-PO)" : ""}
-            </div>
-            <div className="mt-1 text-zinc-700">{fmtDate(displayEta)}</div>
-          </div>
+          {/* Expected delivery is set per LINE in the Line items table below
+            *  — lines often have independent dates. Master rollup ETA still
+            *  flows through to the sub-PO list section if you need it. */}
           <div>
             <div className="text-xs text-zinc-400">Issued</div>
             <div className="mt-1 text-zinc-700">{fmtDate(po.issuedDate)}</div>
@@ -535,25 +528,45 @@ export default async function PoDetailPage({
                     shopifyPoNumber: po.shopifyPoNumber,
                     supplier: po.supplier ? { name: po.supplier.name } : null,
                     stageTargets: po.stageEtas,
-                    lineItems: sortedLineItems.map((li) => ({
-                      id: li.id,
-                      sku: li.sku,
-                      title: li.title,
-                      currentStage: li.currentStage,
-                      stages: li.stages,
-                      stageEvents: li.stageEvents.map((ev) => ({
-                        id: ev.id,
-                        stage: ev.stage,
-                        enteredAt: ev.enteredAt,
-                        exitedAt: ev.exitedAt,
-                      })),
-                    })),
+                    lineItems: sortedLineItems.map((li) => {
+                      // Last walked stage before terminal — used to anchor the
+                      // line's bar to its expectedCompletionDate when set.
+                      const walkOrder =
+                        li.stages && li.stages.length > 0 ? li.stages : order;
+                      const terminal = walkOrder[walkOrder.length - 1];
+                      const lastWorkStage = walkOrder
+                        .filter((s) => s !== terminal)
+                        .at(-1);
+                      return {
+                        id: li.id,
+                        sku: li.sku,
+                        title: li.title,
+                        currentStage: li.currentStage,
+                        stages: li.stages,
+                        // Per-line ETA → anchor the last walked work stage so
+                        // the line's bar ends on its own promise date.
+                        stageTargets:
+                          lastWorkStage && li.expectedCompletionDate
+                            ? [
+                                {
+                                  stage: lastWorkStage,
+                                  targetEndDate: li.expectedCompletionDate,
+                                },
+                              ]
+                            : undefined,
+                        stageEvents: li.stageEvents.map((ev) => ({
+                          id: ev.id,
+                          stage: ev.stage,
+                          enteredAt: ev.enteredAt,
+                          exitedAt: ev.exitedAt,
+                        })),
+                      };
+                    }),
                   },
                 ]}
                 estimates={estimates}
                 stageLabels={stageLabels}
                 order={order}
-                etaSaveRouteBase="/api/production/po"
               />
             ),
           },
