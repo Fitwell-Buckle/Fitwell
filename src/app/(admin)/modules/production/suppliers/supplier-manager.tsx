@@ -221,7 +221,7 @@ export function SupplierManager({ suppliers }: { suppliers: Supplier[] }) {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or email..."
+          placeholder="Filter suppliers by name or email..."
           className="flex h-9 w-full max-w-xs rounded-lg border border-zinc-200 bg-white px-3 text-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
         />
         {editing !== "new" && <Button onClick={() => open("new")}>Add supplier</Button>}
