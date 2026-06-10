@@ -101,7 +101,7 @@ export function PoTimeline({
   return (
     <Card className="mt-5 p-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-900">Notes &amp; documents</h2>
+        <h2 className="text-sm font-semibold text-zinc-900">Activity</h2>
         <div>
           <input
             ref={fileRef}
@@ -127,7 +127,7 @@ export function PoTimeline({
 
       <div className="mt-4 space-y-4">
         {entries.length === 0 ? (
-          <p className="text-sm text-zinc-400">No notes or documents yet.</p>
+          <p className="text-sm text-zinc-400">No activity yet.</p>
         ) : (
           entries.map((e) => (
             <div key={`${e.kind}-${e.id}`} className="text-sm">
@@ -154,7 +154,7 @@ export function PoTimeline({
               </div>
               {e.kind === "note" ? (
                 <p className="mt-0.5 whitespace-pre-wrap text-zinc-700">{e.body}</p>
-              ) : (
+              ) : e.kind === "document" ? (
                 <div className="mt-1 flex items-center justify-between rounded-md border border-zinc-100 px-3 py-2">
                   <a
                     href={e.url}
@@ -178,6 +178,11 @@ export function PoTimeline({
                     </Button>
                   )}
                 </div>
+              ) : (
+                /* Edit-history event — italicized + lighter so it visually
+                 * separates from notes (which are deliberate written content)
+                 * and documents (which are clickable). */
+                <p className="mt-0.5 italic text-zinc-500">{e.body}</p>
               )}
             </div>
           ))

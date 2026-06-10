@@ -4,6 +4,7 @@ import {
   fmtBytes,
   type TimelineComment,
   type TimelineAttachment,
+  type TimelineEvent,
 } from "./timeline";
 
 const comment = (over: Partial<TimelineComment> = {}): TimelineComment => ({
@@ -74,6 +75,77 @@ describe("buildPoTimeline", () => {
     expect(doc.size).toBe("2 KB");
     expect(doc.url).toBe("https://blob/spec.pdf");
     expect(doc.filename).toBe("spec.pdf");
+  });
+
+  it("merges edit-history events with notes + documents in chronological order", () => {
+    const events: TimelineEvent[] = [
+      {
+        id: "e1",
+        title: "EPower updated PO 00104-A",
+        body: "Set expected completion to 2026-05-15",
+        type: "update_for_admin",
+        createdAt: new Date("2026-05-01T11:30:00Z"),
+      },
+      {
+        id: "e2",
+        title: "Greg Hartwell (Fitwell) updated PO 00104-A",
+        body: "Advanced PO to Polishing",
+        type: "update_for_supplier",
+        createdAt: new Date("2026-05-02T09:00:00Z"),
+      },
+    ];
+    const entries = buildPoTimeline(
+      [comment({ id: "c1", createdAt: new Date("2026-05-01T10:00:00Z") })],
+      [attachment({ id: "a1", uploadedAt: new Date("2026-05-01T11:00:00Z") })],
+      events,
+    );
+    expect(entries.map((e) => e.id)).toEqual(["c1", "a1", "e1", "e2"]);
+    expect(entries.map((e) => e.kind)).toEqual([
+      "note",
+      "document",
+      "event",
+      "event",
+    ]);
+  });
+
+  it("derives the actor name from the event title and the side from type", () => {
+    const events: TimelineEvent[] = [
+      {
+        id: "s1",
+        title: "EPower updated PO 00104-A",
+        body: "Set expected completion to 2026-05-15",
+        type: "update_for_admin", // supplier-side action
+        createdAt: new Date("2026-05-01T11:00:00Z"),
+      },
+      {
+        id: "a1",
+        title: "Greg Hartwell (Fitwell) updated PO 00104-A",
+        body: "Advanced PO to Polishing",
+        type: "update_for_supplier", // admin-side action
+        createdAt: new Date("2026-05-02T11:00:00Z"),
+      },
+    ];
+    const [supplierEvt, adminEvt] = buildPoTimeline([], [], events);
+    expect(supplierEvt.kind).toBe("event");
+    expect(supplierEvt.fromSupplier).toBe(true);
+    expect(supplierEvt.authorName).toBe("EPower");
+    expect(adminEvt.fromSupplier).toBe(false);
+    // "(Fitwell)" stripped from the actor name.
+    expect(adminEvt.authorName).toBe("Greg Hartwell");
+  });
+
+  it("falls back to a side label when the event title doesn't parse", () => {
+    const events: TimelineEvent[] = [
+      {
+        id: "x",
+        title: "Notification with no parsable actor",
+        body: "Something changed",
+        type: "update_for_supplier",
+        createdAt: new Date("2026-05-01T11:00:00Z"),
+      },
+    ];
+    const [evt] = buildPoTimeline([], [], events);
+    expect(evt.authorName).toBe("Fitwell");
   });
 });
 

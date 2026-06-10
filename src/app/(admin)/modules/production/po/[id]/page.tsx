@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { adminNotification } from "@/lib/schema";
 import { getPoDetail, getSubPos, getSupplierLineCosts } from "@/lib/production/service";
 import { invoiceForPo } from "@/lib/invoicing/service";
 import { PageHeader } from "@/components/ui/page-header";
@@ -71,6 +74,37 @@ export default async function PoDetailPage({
   const subPos = await getSubPos(po.id);
   const isMaster = subPos.length > 0;
   const isSubPo = !!po.parentPoId;
+
+  // Edit-history events for the activity feed. On a master, include the
+  // master's events PLUS each sub-PO's (so the admin sees the full picture);
+  // on a sub-PO or standalone, just its own.
+  const activityPoIds = isMaster
+    ? [po.id, ...subPos.map((s) => s.id)]
+    : [po.id];
+  const events = await db
+    .select({
+      id: adminNotification.id,
+      title: adminNotification.title,
+      body: adminNotification.body,
+      type: adminNotification.type,
+      createdAt: adminNotification.createdAt,
+    })
+    .from(adminNotification)
+    .where(inArray(adminNotification.poId, activityPoIds))
+    .then((rows) =>
+      rows
+        .filter(
+          (r) =>
+            r.type === "update_for_admin" || r.type === "update_for_supplier",
+        )
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          body: r.body ?? "",
+          type: r.type,
+          createdAt: r.createdAt,
+        })),
+    );
 
   // Master's ETA is locked/derived = the latest across its sub-POs (each
   // One invoice per PO — if it's already been invoiced, link to it instead.
@@ -389,7 +423,7 @@ export default async function PoDetailPage({
         <PoTimeline
           poId={po.id}
           viewer="admin"
-          entries={buildPoTimeline(po.comments, po.attachments)}
+          entries={buildPoTimeline(po.comments, po.attachments, events)}
         />
       )}
 
@@ -577,7 +611,7 @@ export default async function PoDetailPage({
               <PoTimeline
                 poId={po.id}
                 viewer="admin"
-                entries={buildPoTimeline(po.comments, po.attachments)}
+                entries={buildPoTimeline(po.comments, po.attachments, events)}
               />
             ),
           },

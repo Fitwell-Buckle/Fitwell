@@ -1,8 +1,9 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
+  adminNotification,
   productionAttachment,
   productionComment,
   productionPo,
@@ -281,9 +282,40 @@ export default async function SupplierPoDetailPage({
         // supplier) with the viewing supplier's own sub-PO thread (their
         // private back-and-forth). Posting still targets the sub-PO via
         // `poId` above — supplier replies stay scoped to that supplier.
+        // Edit-history events are pulled from admin_notification (every
+        // notifyPoUpdate writes a row) so the feed shows what changed,
+        // who, and when — alongside the notes and documents.
         entries={buildPoTimeline(
           mySubPo ? [...po.comments, ...mySubPo.comments] : po.comments,
           mySubPo ? [...po.attachments, ...mySubPo.attachments] : po.attachments,
+          await db
+            .select({
+              id: adminNotification.id,
+              title: adminNotification.title,
+              body: adminNotification.body,
+              type: adminNotification.type,
+              createdAt: adminNotification.createdAt,
+            })
+            .from(adminNotification)
+            .where(
+              inArray(
+                adminNotification.poId,
+                mySubPo ? [po.id, mySubPo.id] : [po.id],
+              ),
+            )
+            .then((rows) =>
+              rows
+                .filter((r) =>
+                  r.type === "update_for_admin" || r.type === "update_for_supplier",
+                )
+                .map((r) => ({
+                  id: r.id,
+                  title: r.title,
+                  body: r.body ?? "",
+                  type: r.type,
+                  createdAt: r.createdAt,
+                })),
+            ),
         )}
       />
     </div>
