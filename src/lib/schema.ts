@@ -965,6 +965,30 @@ export const productionPoStageEta = pgTable(
   ],
 );
 
+// Per-PO override of the cycle-time estimate for a single stage. When a row
+// exists for (po_id, stage), the production timeline uses `days` instead of
+// the global rolling-average estimate for that stage on this PO's bars. Set
+// from the timeline legend's click-to-edit affordance; an empty value
+// (delete row) reverts to the global estimate. Independent of `stage_eta`
+// (which is a hard end DATE override) — these are two different concepts.
+export const productionPoStageEstimate = pgTable(
+  "production_po_stage_estimate",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id")
+      .notNull()
+      .references(() => productionPo.id, { onDelete: "cascade" }),
+    stage: text("stage").notNull(),
+    days: integer("days").notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("po_stage_estimate_po_stage_idx").on(t.poId, t.stage),
+  ],
+);
+
 // Per-supplier, per-line-item production cost on a multi-supplier PO. Keyed by
 // the MASTER po + the supplier (not the sub-PO id) so it survives sub-PO regen
 // on edit. Each supplier prices the line items they touch (a stamping supplier's

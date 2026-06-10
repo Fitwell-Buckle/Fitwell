@@ -8,7 +8,7 @@ import {
   productionComment,
   productionPo,
 } from "@/lib/schema";
-import { getPoDetail } from "@/lib/production/service";
+import { getPoDetail, getPoStageEstimates } from "@/lib/production/service";
 import { getSupplierScope } from "@/lib/production/supplier-session";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -109,6 +109,11 @@ export default async function SupplierPoDetailPage({
     0,
   );
 
+  // Per-PO stage day overrides for THIS supplier's view: scoped to the
+  // sub-PO when one exists, else the master / standalone. Saved via the
+  // legend's click-to-edit on the timeline below.
+  const perPoStageEstimates = await getPoStageEstimates(mySubPo?.id ?? po.id);
+
   // The stages this supplier owns + the handoff target, for the stage dropdown.
   // Exclude the terminal stage (e.g. "Complete"): it's the done-state, not a
   // workable stage, and it has no explicit assignment so it would otherwise
@@ -143,9 +148,14 @@ export default async function SupplierPoDetailPage({
             suffix: mySubPo?.poSuffix ?? po.poSuffix,
           })}
         />
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/supplier">Back</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/supplier/po/${po.id}/print`}>Print / Save PDF</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/supplier">Back</Link>
+          </Button>
+        </div>
       </div>
 
       {/* Production-relevant fields only — no company / customer / price-tier.
@@ -219,6 +229,7 @@ export default async function SupplierPoDetailPage({
             // PO-level seeded targets are the baseline; per-line overrides
             // (below in lineItems[].stageTargets) win per row.
             stageTargets: mySubPo?.stageEtas ?? po.stageEtas,
+            stageEstimates: perPoStageEstimates,
             lineItems: sortedLineItems.map((li) => {
               const scopedStages = [
                 ...ownedStages.filter(
@@ -273,6 +284,7 @@ export default async function SupplierPoDetailPage({
         estimates={estimates}
         stageLabels={stageLabels}
         order={[...ownedStages, terminal]}
+        estimateSaveRouteBase="/api/supplier/po"
       />
 
       <PoTimeline

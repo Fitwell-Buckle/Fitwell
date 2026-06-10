@@ -5,7 +5,12 @@ import { inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { adminNotification } from "@/lib/schema";
-import { getPoDetail, getSubPos, getSupplierLineCosts } from "@/lib/production/service";
+import {
+  getPoDetail,
+  getPoStageEstimates,
+  getSubPos,
+  getSupplierLineCosts,
+} from "@/lib/production/service";
 import { invoiceForPo } from "@/lib/invoicing/service";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -61,10 +66,11 @@ export default async function PoDetailPage({
   const { id } = await params;
   const po = await getPoDetail(id);
   if (!po) notFound();
-  const [stageLabels, order, estimates] = await Promise.all([
+  const [stageLabels, order, estimates, perPoStageEstimates] = await Promise.all([
     getStageLabels(),
     getStageOrder(),
     getStageEstimates(),
+    getPoStageEstimates(id),
   ]);
   const workStages = order.slice(0, -1);
 
@@ -562,6 +568,7 @@ export default async function PoDetailPage({
                     shopifyPoNumber: po.shopifyPoNumber,
                     supplier: po.supplier ? { name: po.supplier.name } : null,
                     stageTargets: po.stageEtas,
+                    stageEstimates: perPoStageEstimates,
                     lineItems: sortedLineItems.map((li) => {
                       // Last walked stage before terminal — used to anchor the
                       // line's bar to its expectedCompletionDate when set.
@@ -601,6 +608,7 @@ export default async function PoDetailPage({
                 estimates={estimates}
                 stageLabels={stageLabels}
                 order={order}
+                estimateSaveRouteBase="/api/production/po"
               />
             ),
           },

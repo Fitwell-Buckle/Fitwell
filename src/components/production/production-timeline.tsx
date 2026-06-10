@@ -290,6 +290,10 @@ export interface TimelinePo {
   /** Per-stage editable target dates for this (sub-)PO. Overrides the
    *  cycle-time projection on the chart when present; absent → cycle-time. */
   stageTargets?: { stage: ProductionStage; targetEndDate: string }[];
+  /** Per-PO per-stage day estimates. When set, the legend's click-to-edit
+   *  shows this value pre-filled instead of the global rolling average.
+   *  Persistence is handled by the caller via `estimateSaveRouteBase`. */
+  stageEstimates?: { stage: ProductionStage; days: number }[];
   lineItems: {
     id: string;
     sku: string;
@@ -345,6 +349,7 @@ export function ProductionTimeline({
   order,
   poDrillHrefBase,
   etaSaveRouteBase,
+  estimateSaveRouteBase,
 }: {
   pos: TimelinePo[];
   estimates: Record<ProductionStage, number>;
@@ -358,6 +363,10 @@ export function ProductionTimeline({
    *  "/api/supplier/po" for the supplier portal); the component PUTs to
    *  `${base}/${poId}/stage-eta` and refreshes the page on success. */
   etaSaveRouteBase?: string;
+  /** Enables click-to-edit on each legend chip. PUT to
+   *  `${base}/${pos[0].id}/stage-estimate` with `{ stage, days }`. Reuses
+   *  the same admin / supplier split as `etaSaveRouteBase`. */
+  estimateSaveRouteBase?: string;
 }) {
   const router = useRouter();
   const todayIso = isoDay(new Date());
@@ -367,6 +376,17 @@ export function ProductionTimeline({
   const onSaveEta = etaSaveRouteBase
     ? makeStageEtaSaver(etaSaveRouteBase, router)
     : null;
+  // Per-PO stage estimates merged in for the legend pre-fill. We assume one
+  // PO at a time on pages that pass estimateSaveRouteBase (admin sub-PO,
+  // supplier portal) — the by-PO admin view uses the same prop on each
+  // expanded row but we only show the FIRST PO's overrides; fine since the
+  // legend collapses to global stages anyway when multiple POs share it.
+  const stageEstimatesByPo = new Map<string, Map<ProductionStage, number>>();
+  for (const po of pos) {
+    const m = new Map<ProductionStage, number>();
+    for (const e of po.stageEstimates ?? []) m.set(e.stage, e.days);
+    stageEstimatesByPo.set(po.id, m);
+  }
 
   const tracks = pos
     .flatMap((po) =>
@@ -385,12 +405,20 @@ export function ProductionTimeline({
                   ),
                 )
               : targetsByPoId.get(po.id);
+          // Merge per-PO estimate overrides on top of the global estimates.
+          // Each PO can carry its own "stamping = 30 days" override via the
+          // legend's click-to-edit; that only affects this PO's projections.
+          const poEstimateMap = stageEstimatesByPo.get(po.id);
+          const effectiveEstimates: Record<ProductionStage, number> =
+            poEstimateMap && poEstimateMap.size > 0
+              ? { ...estimates, ...Object.fromEntries(poEstimateMap) }
+              : estimates;
           const segs = buildLineSegments(
             li,
             todayMs,
             todayIso,
             order,
-            estimates,
+            effectiveEstimates,
             lineTargets,
           );
           // When the caller has pre-computed per-supplier sub-bars (multi-
@@ -441,17 +469,55 @@ export function ProductionTimeline({
     ? order
     : order.filter((s) => visibleStagesSet.has(s));
 
+  // Legend click-to-edit: when `estimateSaveRouteBase` is set AND we're on a
+  // single-PO view (admin sub-PO detail, supplier portal), each chip becomes
+  // a button that opens a number input. Override persists per (po, stage).
+  const singlePo = pos.length === 1 ? pos[0] : null;
+  const onSaveEstimate =
+    estimateSaveRouteBase && singlePo
+      ? async (stage: ProductionStage, days: number | null) => {
+          const res = await fetch(
+            `${estimateSaveRouteBase}/${encodeURIComponent(singlePo.id)}/stage-estimate`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ stage, days }),
+            },
+          );
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Couldn't update the estimate.");
+          }
+          router.refresh();
+        }
+      : null;
+  const poEstimateMapForLegend = singlePo
+    ? stageEstimatesByPo.get(singlePo.id) ?? new Map<ProductionStage, number>()
+    : null;
+
   return (
     <div className="mt-8">
       <h2 className="text-sm font-semibold text-zinc-900">Production timeline</h2>
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-        {legendStages.map((s) => (
-          <span key={s} className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <span className={`inline-block h-3 w-3 rounded-sm ${STAGE_BAR[s] ?? "bg-zinc-300"}`} />
-            {stageLabels[s]}
-          </span>
-        ))}
+        {legendStages.map((s) =>
+          onSaveEstimate && poEstimateMapForLegend ? (
+            <LegendChip
+              key={s}
+              stage={s}
+              label={stageLabels[s]}
+              colorClass={STAGE_BAR[s] ?? "bg-zinc-300"}
+              currentDays={poEstimateMapForLegend.get(s) ?? estimates[s] ?? 0}
+              isOverride={poEstimateMapForLegend.has(s)}
+              onSave={(days) => onSaveEstimate(s, days)}
+            />
+          ) : (
+            <span key={s} className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <span className={`inline-block h-3 w-3 rounded-sm ${STAGE_BAR[s] ?? "bg-zinc-300"}`} />
+              {stageLabels[s]}
+            </span>
+          ),
+        )}
       </div>
 
       {tracks.length === 0 ? (
@@ -577,5 +643,123 @@ export function ProductionTimeline({
         </Card>
       )}
     </div>
+  );
+}
+
+/**
+ * Legend chip that becomes an inline number editor on click. Shows the
+ * stage's current per-PO day estimate (or the global rolling-avg when no
+ * override exists) and lets the caller upsert a new value. A small dot
+ * appears next to the label when an override is in effect, so it's
+ * obvious which stages this PO has customized.
+ */
+function LegendChip({
+  stage,
+  label,
+  colorClass,
+  currentDays,
+  isOverride,
+  onSave,
+}: {
+  stage: ProductionStage;
+  label: string;
+  colorClass: string;
+  currentDays: number;
+  isOverride: boolean;
+  onSave: (days: number | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(currentDays));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function commit(action: "save" | "clear") {
+    setBusy(true);
+    setError(null);
+    try {
+      if (action === "clear") {
+        await onSave(null);
+      } else {
+        const n = Number(draft);
+        if (!Number.isInteger(n) || n < 0 || n > 3650) {
+          throw new Error("Days must be a whole number between 0 and 3650.");
+        }
+        await onSave(n);
+      }
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs">
+        <span className={`inline-block h-3 w-3 rounded-sm ${colorClass}`} />
+        <span className="text-zinc-700">{label}</span>
+        <input
+          type="number"
+          min={0}
+          max={3650}
+          value={draft}
+          disabled={busy}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit("save");
+            if (e.key === "Escape") setEditing(false);
+          }}
+          autoFocus
+          className="h-5 w-14 rounded border border-zinc-200 bg-white px-1 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
+        />
+        <span className="text-zinc-500">days</span>
+        <button
+          type="button"
+          onClick={() => commit("save")}
+          disabled={busy}
+          className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-medium text-white disabled:opacity-50"
+        >
+          {busy ? "…" : "Save"}
+        </button>
+        {isOverride && (
+          <button
+            type="button"
+            onClick={() => commit("clear")}
+            disabled={busy}
+            className="text-[10px] text-zinc-500 underline underline-offset-2 hover:text-zinc-900 disabled:opacity-50"
+            title="Revert to global average"
+          >
+            Clear
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          disabled={busy}
+          className="text-[10px] text-zinc-400 hover:text-zinc-900 disabled:opacity-50"
+        >
+          ×
+        </button>
+        {error && <span className="text-[10px] text-red-600">{error}</span>}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(String(currentDays));
+        setError(null);
+        setEditing(true);
+      }}
+      className="flex items-center gap-1.5 rounded-md border border-transparent px-1 py-0.5 text-xs text-zinc-500 hover:border-zinc-200 hover:bg-white"
+      title={`${label} — ${currentDays} days${isOverride ? " (per-PO override)" : ""}. Click to edit.`}
+    >
+      <span className={`inline-block h-3 w-3 rounded-sm ${colorClass}`} />
+      <span>{label}</span>
+      {isOverride && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}
+    </button>
   );
 }

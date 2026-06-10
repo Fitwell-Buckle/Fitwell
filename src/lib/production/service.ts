@@ -9,6 +9,7 @@ import {
   productionAttachment,
   productionStageAssignment,
   productionPoStageEta,
+  productionPoStageEstimate,
   productionSupplierLineCost,
   supplier,
 } from "@/lib/schema";
@@ -503,6 +504,52 @@ export async function reseedStageTargets(
       .values(seeds.map((s) => ({ poId, ...s })));
   }
   return seeds;
+}
+
+/** Per-PO per-stage cycle-time overrides. Empty = none → caller falls back to
+ *  the global rolling-average estimates from `getStageEstimates()`. */
+export async function getPoStageEstimates(
+  poId: string,
+): Promise<{ stage: string; days: number }[]> {
+  return db
+    .select({
+      stage: productionPoStageEstimate.stage,
+      days: productionPoStageEstimate.days,
+    })
+    .from(productionPoStageEstimate)
+    .where(eq(productionPoStageEstimate.poId, poId));
+}
+
+/** Upsert (or delete, when `days` is null) one stage's per-PO day estimate.
+ *  Editing the global rolling-average is dangerous; this lets each PO carry
+ *  its own override without touching shared history. Validation: positive
+ *  integer up to a sane ceiling. */
+export async function setPoStageEstimate(
+  poId: string,
+  stage: string,
+  days: number | null,
+): Promise<void> {
+  if (days === null) {
+    await db
+      .delete(productionPoStageEstimate)
+      .where(
+        and(
+          eq(productionPoStageEstimate.poId, poId),
+          eq(productionPoStageEstimate.stage, stage),
+        ),
+      );
+    return;
+  }
+  if (!Number.isInteger(days) || days < 0 || days > 3650) {
+    throw new Error("days must be an integer between 0 and 3650");
+  }
+  await db
+    .insert(productionPoStageEstimate)
+    .values({ poId, stage, days })
+    .onConflictDoUpdate({
+      target: [productionPoStageEstimate.poId, productionPoStageEstimate.stage],
+      set: { days, updatedAt: new Date() },
+    });
 }
 
 /** Upsert (or delete, when `targetEndDate` is null) one stage's target date.
