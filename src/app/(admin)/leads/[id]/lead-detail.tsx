@@ -11,6 +11,7 @@ import { DetailTabs } from "@/components/ui/detail-tabs";
 import { Input } from "@/components/ui/input";
 import { MessagesList, type MessageView } from "@/app/(admin)/messages/messages-list";
 import { CompanyPicker } from "@/components/crm/company-picker";
+import { GmailEmailInput } from "@/components/crm/gmail-email-input";
 import { LeadMessagesTab } from "./messages-tab";
 import { formatAddress } from "@/lib/crm/address";
 import { buildLeadTimeline } from "@/lib/crm/timeline";
@@ -22,6 +23,7 @@ import {
 import {
   personaLabel,
   sourceChannelLabel,
+  splitFullName,
   stageBadgeClass,
   stageLabel,
   statusBadgeClass,
@@ -449,6 +451,22 @@ export function LeadDetail({
     <Card>
       <CardContent>
         <div className="grid gap-4 sm:grid-cols-2">
+          {/* Email leads the contact fields: picking a Gmail match fills the
+              name (and saves typing), so it goes first. */}
+          <div className="sm:col-span-2">
+            <label className={LBL}>Email</label>
+            <GmailEmailInput
+              value={draft.email ?? ""}
+              onChange={(v) => set("email", v || null)}
+              onPickContact={(m) => {
+                // Fill name from the Gmail contact, but only blanks — never
+                // clobber a name already on the lead.
+                const { firstName: fn, lastName: ln } = splitFullName(m.name);
+                if (fn && !(draft.firstName ?? "").trim()) set("firstName", fn);
+                if (ln && !(draft.lastName ?? "").trim()) set("lastName", ln);
+              }}
+            />
+          </div>
           <div>
             <label className={LBL}>First name</label>
             <Input
@@ -461,14 +479,6 @@ export function LeadDetail({
             <Input
               value={draft.lastName ?? ""}
               onChange={(e) => set("lastName", e.target.value || null)}
-            />
-          </div>
-          <div>
-            <label className={LBL}>Email</label>
-            <Input
-              type="email"
-              value={draft.email ?? ""}
-              onChange={(e) => set("email", e.target.value || null)}
             />
           </div>
           <div>

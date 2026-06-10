@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { GmailContactSearch } from "./gmail-contact-search";
+import { GmailEmailInput } from "@/components/crm/gmail-email-input";
 
 export interface SupplierDraft {
   name: string;
@@ -56,21 +56,6 @@ export function SupplierForm({
     <Card className="p-6">
       <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
 
-      <GmailContactSearch
-        className="mt-4 rounded-md border border-zinc-100 bg-zinc-50/50 p-3"
-        label="Find this supplier in your Gmail"
-        placeholder="Supplier name, domain, or contact name"
-        onPick={(m) =>
-          setDraft({
-            ...draft,
-            contactEmail: m.email,
-            // Only fill the contact name if it's currently empty — never
-            // overwrite something the user already typed.
-            contactName: draft.contactName.trim() || m.name || "",
-          })
-        }
-      />
-
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className={fieldLabel}>Name</label>
@@ -88,10 +73,19 @@ export function SupplierForm({
         </div>
         <div>
           <label className={fieldLabel}>Contact email</label>
-          <Input
-            type="email"
+          {/* Type to search your Gmail inline; picking a match fills the
+              contact name too (only when it's still blank). */}
+          <GmailEmailInput
+            placeholder="Search your Gmail or type an email"
             value={draft.contactEmail}
-            onChange={(e) => setDraft({ ...draft, contactEmail: e.target.value })}
+            onChange={(v) => setDraft({ ...draft, contactEmail: v })}
+            onPickContact={(m) =>
+              setDraft({
+                ...draft,
+                contactEmail: m.email,
+                contactName: draft.contactName.trim() || m.name || "",
+              })
+            }
           />
         </div>
         <div>

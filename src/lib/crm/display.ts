@@ -80,3 +80,31 @@ export function leadDisplayName(lead: {
   if (lead.email) return lead.email;
   return "Unknown";
 }
+
+/**
+ * Split a display name into first + last. First whitespace token is the first
+ * name, the remainder is the last name ("Mary Jane Watson" → first "Mary",
+ * last "Jane Watson"). Handles the "Last, First" form some address books use
+ * ("Smith, John" → first "John", last "Smith"). Single-token names fill only
+ * first. Returns empty strings when there's nothing to split.
+ */
+export function splitFullName(full: string | null | undefined): {
+  firstName: string;
+  lastName: string;
+} {
+  const name = (full ?? "").trim().replace(/\s+/g, " ");
+  if (!name) return { firstName: "", lastName: "" };
+  const comma = name.indexOf(",");
+  if (comma !== -1) {
+    const last = name.slice(0, comma).trim();
+    const first = name.slice(comma + 1).trim();
+    // Only treat as "Last, First" when both sides are present.
+    if (last && first) return { firstName: first, lastName: last };
+  }
+  const space = name.indexOf(" ");
+  if (space === -1) return { firstName: name, lastName: "" };
+  return {
+    firstName: name.slice(0, space),
+    lastName: name.slice(space + 1).trim(),
+  };
+}

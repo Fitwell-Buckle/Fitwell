@@ -3,6 +3,7 @@ import {
   leadDisplayName,
   personaLabel,
   sourceChannelLabel,
+  splitFullName,
   stageBadgeClass,
   stageLabel,
   statusBadgeClass,
@@ -108,5 +109,47 @@ describe("leadDisplayName", () => {
 
   it("returns 'Unknown' when no identity fields are present", () => {
     expect(leadDisplayName({})).toBe("Unknown");
+  });
+});
+
+describe("splitFullName", () => {
+  it("splits first + last", () => {
+    expect(splitFullName("Ada Lovelace")).toEqual({
+      firstName: "Ada",
+      lastName: "Lovelace",
+    });
+  });
+
+  it("keeps multi-word surnames on the last name", () => {
+    expect(splitFullName("Mary Jane Watson")).toEqual({
+      firstName: "Mary",
+      lastName: "Jane Watson",
+    });
+  });
+
+  it("fills only first name for a single token", () => {
+    expect(splitFullName("Madonna")).toEqual({
+      firstName: "Madonna",
+      lastName: "",
+    });
+  });
+
+  it("handles the 'Last, First' address-book form", () => {
+    expect(splitFullName("Smith, John")).toEqual({
+      firstName: "John",
+      lastName: "Smith",
+    });
+  });
+
+  it("collapses extra whitespace", () => {
+    expect(splitFullName("  Ada   Lovelace  ")).toEqual({
+      firstName: "Ada",
+      lastName: "Lovelace",
+    });
+  });
+
+  it("returns empty strings for null/blank", () => {
+    expect(splitFullName(null)).toEqual({ firstName: "", lastName: "" });
+    expect(splitFullName("   ")).toEqual({ firstName: "", lastName: "" });
   });
 });

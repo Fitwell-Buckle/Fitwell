@@ -7,6 +7,7 @@ import { Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { GmailEmailInput } from "@/components/crm/gmail-email-input";
 import { useDictation } from "@/components/ui/use-dictation";
 import {
   CompanyPicker,
@@ -20,6 +21,7 @@ import {
 import {
   personaLabel,
   sourceChannelLabel,
+  splitFullName,
   stageLabel,
 } from "@/lib/crm/display";
 
@@ -435,6 +437,25 @@ export function LeadForm({
           {notesField}
 
           <div className="grid gap-4 sm:grid-cols-2">
+            {/* Email leads the contact fields: picking a Gmail match fills the
+                name (and saves typing), so it goes first. */}
+            <div className="sm:col-span-2">
+              <FieldLabel htmlFor="email" confidence={confidence?.email}>
+                Email
+              </FieldLabel>
+              <GmailEmailInput
+                id="email"
+                value={email}
+                onChange={setEmail}
+                onPickContact={(m) => {
+                  // Fill name from the Gmail contact, but only blanks — never
+                  // clobber a name the user already typed.
+                  const { firstName: fn, lastName: ln } = splitFullName(m.name);
+                  if (fn && !firstName.trim()) setFirstName(fn);
+                  if (ln && !lastName.trim()) setLastName(ln);
+                }}
+              />
+            </div>
             <div>
               <FieldLabel htmlFor="firstName" confidence={confidence?.firstName}>
                 First name
@@ -453,17 +474,6 @@ export function LeadForm({
                 id="lastName"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-              />
-            </div>
-            <div>
-              <FieldLabel htmlFor="email" confidence={confidence?.email}>
-                Email
-              </FieldLabel>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div>
