@@ -1,0 +1,43 @@
+# Daily newsletter engine — drafts the brief in Klaviyo each weekday
+# morning. SENDING IS MANUAL in Klaviyo's UI while the voice settles
+# (specs/strategy/newsletter.md); flip to a send-job step later.
+#
+# 09:00 UTC = 5am ET (4am during DST — accepted; Geneva opens 10am CEST).
+# Spec: specs/current/newsletter-engine.md
+name: Newsletter Daily
+on:
+  schedule:
+    - cron: "0 9 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run (HTML artifact only) or draft (DB + Klaviyo draft)"
+        type: choice
+        default: draft
+        options: [dry-run, draft]
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsx newsletter/main.ts --${{ inputs.mode || 'draft' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          KLAVIYO_API_KEY: ${{ secrets.KLAVIYO_API_KEY }}
+          NEWSLETTER_KLAVIYO_LIST_ID: ${{ secrets.NEWSLETTER_KLAVIYO_LIST_ID }}
+          # Production Neon branch — newsletter tables live in the shared schema
+          DATABASE_URL: ${{ secrets.NEWSLETTER_DATABASE_URL }}
+      - name: Upload dry-run HTML
+        if: inputs.mode == 'dry-run'
+        uses: actions/upload-artifact@v4
+        with:
+          name: newsletter-html
+          path: /tmp/micro-adjust-*.html
+          if-no-files-found: warn

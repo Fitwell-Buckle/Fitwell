@@ -2,9 +2,10 @@
 
 Last updated: 2026-06-10
 
-> **Status: in-flight.** Strategy decided. Engine build is Session 2 work.
-> See [newsletter-engine.md](../current/newsletter-engine.md) for the
-> technical implementation plan.
+> **Status: in-flight.** Strategy decided. Engine phase 1 (RSS → triage →
+> summarize → Klaviyo draft) built 2026-06-10. See
+> [newsletter-engine.md](../current/newsletter-engine.md) for the
+> technical implementation and what remains.
 
 ## Positioning
 
@@ -67,16 +68,31 @@ AND a waitlist story.
 - Supply chain (movement makers, dial suppliers, hairspring makers — anything that affects multiple brands)
 - Executive moves and brand strategy shifts
 
-**Cover lightly or skip:**
-- New release walkthroughs without business angle (every enthusiast site does these)
-- Pure product reviews
+**New Releases — complete and neutral (decided 2026-06-10):**
+Every genuine new release makes the brief, with equal treatment (full
+card, image, factual-generous summary). We do NOT arbitrate which
+brand's release is interesting — **Fitwell courts the brands this
+newsletter covers**, so the brief can't be seen ranking or snubbing
+them. Release write-ups are never a verdict on the watch: specs, price,
+run size, availability. The opinionated voice is reserved for business
+and market analysis. Multi-outlet coverage of one release collapses to
+a single entry (best business framing) with "Also at" links to the
+other outlets.
+
+**Drop entirely:**
+- Reviews of watches that aren't newly released
 - "Top 10 watches under $X" listicles
 - Lifestyle / wrist-shot / collector-of-the-day content
+- Outlets' own promos (magazine issues, podcast banter episodes)
 
 ## Classification axis
 
-Each story gets one Segment tag and one Type tag. Email organizes
-primarily by Segment with Type subheaders.
+Each story gets one Segment tag and one Type tag. **The email organizes
+by Type** (Business & Industry → Auction & Market → Community &
+Analysis → New Releases last); Segment is the eyebrow tag on each story
+and the analytics dimension in the DB. (Flipped from segment-led on
+2026-06-10: news doesn't sort by brand price tier — a Swatch Group
+story is industry news, not "mid-tier news".)
 
 **Segment** (one of):
 - Luxury / Swiss majors (Rolex, Patek, AP, Vacheron, Lange, Breguet, Blancpain, Cartier high-end)
@@ -108,10 +124,14 @@ brief, refinements feed back into the prompt set.
 ### Editorial
 Hodinkee, A Blog to Watch, Worn & Wound, Fratello, Monochrome Watches,
 Revolution Watch, Time + Tide, Quill & Pad, SJX Watches, Watches of
-Espionage, Hairspring, Wind Vintage
+Espionage, WatchTime (live via BrightData proxy — Cloudflare-walled but
+its /feed/atom is fresh), Hairspring, Wind Vintage
 
 ### Industry / B2B
-WatchPro, Europa Star, Watchonista (when business angle)
+WatchPro (live via BrightData proxy — its RSS is stale, so the /news/
+listing is scraped), Watchonista (when business angle). Europa Star
+evaluated and dropped 2026-06-10 (infrequent, month-granularity dates,
+content gated behind a PDF mag viewer).
 
 ### Community / market signal
 WatchCrunch, Reddit r/watches, Reddit r/Watchexchange
@@ -162,22 +182,34 @@ tagged for measurement:
   who bought a buckle" cleanly because both lists share an email key in
   Klaviyo.
 
-## Open decisions (blocking Session 2 build)
+## Decisions (resolved 2026-06-10, Session 2)
 
-- **Brand name and domain.** Working title is `Fitwell Newsletter`.
-  Candidates that surfaced in strategy: "Caliber Daily", "The Crown
-  Brief", "Movement", "Manufacture", "The Watch Industry Briefing".
-  Final pick is Tom's. Lean boring-and-credible — positioning is
-  serious people who want intel, not entertainment.
-- **Confirm 5am ET send time** (recommended above).
+- **Brand name: a riff on micro-adjust** — that's Fitwell's thing.
+  Working title is **"The Micro-Adjust"**, wired through
+  `newsletter/config.ts` so the final rename is a one-file change.
+  Other riffs on the table: "The Daily Adjustment", "Fine Adjustment",
+  "Half a Click". Final pick is Tom's; explicitly not a launch blocker.
+- **Send time confirmed: 09:00 UTC Mon–Fri** (5am ET standard, 4am ET
+  during DST — accepted; Geneva opens 10am CEST either way).
+- **Klaviyo scheme: new standalone list, opt-in for everyone.** Not a
+  segment tag on the main list — separate unsubscribe so dropping the
+  brief doesn't kill order/marketing email, and a clean consent trail
+  for the EU-heavy industry audience. The existing B2B list gets a
+  one-time "we built this for you" campaign containing the first issue
+  with a one-click subscribe CTA — leverage the warm list without
+  auto-enrolling it (auto-enroll + watching unsubs risks sender
+  reputation and GDPR consent). Engine reads the list id from
+  `NEWSLETTER_KLAVIYO_LIST_ID`.
+
+## Open items
+
+- **Tom: create the Klaviyo list** and set `NEWSLETTER_KLAVIYO_LIST_ID`
+  (local + GitHub Actions secret).
 - **Soft-launch contact list.** Tom compiles 20–30 watch-industry
   contacts (his current network — Fitwell-adjacent buyers,
-  distributors, brand contacts). CSV import to Klaviyo as initial
-  segment.
-- **Klaviyo list + tag scheme.** New list `newsletter-subscribers` or
-  add as a segment tag on the existing Klaviyo list? Decides whether
-  the newsletter inherits Fitwell's transactional sender reputation or
-  builds its own.
+  distributors, brand contacts). These he knows well enough to add to
+  the list directly. CSV import to Klaviyo.
+- **Final name pick** (see above — riff session pending).
 
 ## What this is not
 

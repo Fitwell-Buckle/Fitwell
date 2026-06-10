@@ -5,263 +5,230 @@ Last updated: 2026-06-10
 Technical implementation for the daily watch-industry newsletter.
 Strategy lives in [../strategy/newsletter.md](../strategy/newsletter.md).
 
-> **Status: scoped, not built.** Architecture decided. Schema additions
-> drafted but not migrated. Session 2 work.
+> **Status: phase 1 built (2026-06-10).** RSS fetch → dedup → Claude
+> triage/summarize → MJML render → Klaviyo **draft**. Schema migrated
+> (`0057`). Not yet live: Klaviyo list (Tom), GitHub Actions secrets,
+> Playwright scrape sources, image pipeline, automated send.
 
-## Architecture
+## Architecture (as built)
 
 ```
-GitHub Actions cron (5am ET)
+GitHub Actions cron (09:00 UTC Mon–Fri)
         │
         ▼
-newsletter/main.ts (TypeScript, tsx)
+newsletter/main.ts (tsx, deps hoisted to root package.json)
         │
-        ├── newsletter/feeds/        RSS + Playwright scrape per source
-        ├── newsletter/scrape/       Cloudflare bypass via Playwright + stealth
-        ├── newsletter/images/       download + upload to Vercel Blob → CDN URL
-        ├── newsletter/classify/     OpenAI: Segment × Type per article
-        ├── newsletter/summarize/    OpenAI: 2-3 sentence summary per article
-        ├── newsletter/dedup/        URL hash + title similarity check vs `newsletter_article`
-        ├── newsletter/generate/     HTML assembly (React Email or Mustache)
-        └── newsletter/send/         Klaviyo: template → campaign → send-job
+        ├── sources.ts      registry of feeds, synced to newsletter_source (upsert on slug)
+        ├── fetch.ts        RSS/Atom via rss-parser; per-source fail-soft
+        ├── dedup.ts        normalized-URL + content-hash + title-similarity vs newsletter_article (14-day window)
+        ├── editorial.ts    Claude (claude-opus-4-8): one triage call per batch
+        │                   (include/drop + Segment × Type), then per-story
+        │                   summaries (fail-soft to feed excerpt)
+        ├── generate.ts     MJML brief → compileMjml + injectUtms
+        │                   (reuses src/lib/klaviyo/templates)
+        └── main.ts         orchestration; --dry-run | --draft
         │
         ▼
-Klaviyo campaign → subscribers
-Drizzle/Neon: writes `newsletter_article`, `newsletter_campaign` rows
-PostHog: `newsletter_sent` event with persona/segment breakdown
+Klaviyo DRAFT campaign (via src/lib/klaviyo/draft-campaign — never sends)
+Drizzle/Neon: newsletter_source, newsletter_article, newsletter_campaign
 ```
 
-## Why GitHub Actions, not Vercel Cron
+### Corrections vs the original plan
 
-Vercel Cron's structural ceilings break this workload:
+- **Anthropic, not OpenAI.** The repo has no OpenAI integration; the
+  existing LLM stack is `@anthropic-ai/sdk` + `ANTHROPIC_API_KEY`
+  (`src/lib/ai/anthropic.ts`). The engine mirrors that file's
+  forced-tool + zod-validate pattern on `claude-opus-4-8`.
+- **MJML, not React Email.** The Klaviyo Phase 1 work already built an
+  MJML → HTML → UTM-injection pipeline (`src/lib/klaviyo/templates.ts`);
+  the brief reuses it, so every Fitwell link carries
+  `utm_campaign=micro-adjust-<date>` for /funnel/strategy attribution.
+- **Draft, not send (v1).** `draftCampaign()`'s hard contract is that it
+  never sends — sending stays a manual click in Klaviyo while the voice
+  settles (first ~3 sends per strategy doc). An automated
+  campaign-send-job step is a deliberate later change.
+- **Same Neon DB** (Critical Rule 6 — one shared schema). No separate
+  branch; tables shipped in migration `0057_faithful_the_spike.sql`.
+- **Deps hoisted to root.** Only new dependency: `rss-parser`.
 
-- **Function timeout**: Pro tier 60s default / 800s with Fluid Compute.
-  Realistic runtime is 4–7 min (25+ feeds × scrape + image downloads +
-  OpenAI calls). Inside the ceiling but tight — any OpenAI rate-limit
-  hiccup, any Cloudflare challenge that takes 30s instead of 5s, breaks
-  the budget.
-- **Headless Chrome in serverless**: Vercel supports `@sparticuz/chromium`
-  but it's a specialized setup with version-pin gotchas. Worse than
-  `npm install playwright` on a normal runner.
-- **Memory ceiling**: Pro 3008MB. Heavy image work (50 images
-  decoded/resized in parallel) can OOM.
-- **Failure cascades**: a bad newsletter run could spike error rates on
-  the Fitwell Vercel project.
+## Commands
 
-GitHub Actions gives 6-hour runtime, full Ubuntu runner, native
-Playwright, and zero impact on the Vercel deploy when it fails.
+```bash
+npm run newsletter:dry-run   # fetch → triage → summarize → HTML to /tmp; no DB writes, no Klaviyo
+npm run newsletter:draft     # full run: DB writes + Klaviyo draft campaign
+```
 
-**Trade-offs we accept:**
-- Cron scheduling drifts ±5–15 min. Acceptable for a 5am send window.
-- No native retries — we add explicit retry logic in code.
-- Cold start 30–60s per run.
+Local env needed: `ANTHROPIC_API_KEY` (note: marked *sensitive* in
+Vercel, so `vercel env pull` returns it empty — paste it into
+`.env.local` from the Anthropic console), `KLAVIYO_API_KEY`,
+`NEWSLETTER_KLAVIYO_LIST_ID` (draft mode only), `DATABASE_URL`.
 
 ## Workflow file
 
-`.github/workflows/newsletter-daily.yml`
+`.github/workflows/newsletter-daily.yml` — cron `0 9 * * 1-5` +
+`workflow_dispatch` with a dry-run/draft mode picker (dry-run uploads
+the HTML as an artifact). Repo secrets required before first scheduled
+run: `ANTHROPIC_API_KEY`, `KLAVIYO_API_KEY`,
+`NEWSLETTER_KLAVIYO_LIST_ID`, `NEWSLETTER_DATABASE_URL` (production
+Neon pooled URL).
 
-```yaml
-name: Newsletter Daily
-on:
-  schedule:
-    - cron: "0 9 * * 1-5"   # 5am ET, Mon-Fri (UTC=ET+5 standard, +4 DST)
-  workflow_dispatch:        # manual trigger for testing
+DST handling: cron pinned at 09:00 UTC year-round (4am ET during DST —
+accepted; Geneva opens 10am CEST).
 
-jobs:
-  send:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npx tsx newsletter/main.ts
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          KLAVIYO_API_KEY: ${{ secrets.KLAVIYO_API_KEY }}
-          VERCEL_BLOB_TOKEN: ${{ secrets.VERCEL_BLOB_TOKEN }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL_NEON_NEWSLETTER }}
-          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
-```
+## Schema (shipped, migration 0057)
 
-DST handling: cron runs at 09:00 UTC year-round, accepting that during
-DST the send actually goes at 4am ET (still serves the audience window
-since Geneva opens at 10am CEST). Can adjust to a second workflow with
-date-gated cron if needed.
+Three tables in `src/lib/schema.ts`, following repo conventions (text
+ids via `crypto.randomUUID()`):
 
-## Schema additions
+- **`newsletter_source`** — feed registry, unique on `slug` (the join
+  key to the code-side registry in `newsletter/sources.ts`; renames
+  don't orphan articles). `is_active=false` retires a source without
+  losing history; `requires_playwright` flags the scrape-phase set.
+- **`newsletter_article`** — every story considered, included *or*
+  dropped (`dropped_reason` audit trail: dedup reasons + triage
+  verdicts). Unique on normalized `url`; `content_hash` +
+  title-similarity catch syndicated re-posts.
+- **`newsletter_campaign`** — one row per send. `status`
+  (`draft`/`sent`), `klaviyo_campaign_id`, html hash, and stat columns
+  (recipients/opens/clicks/unsubs) to be backfilled by the
+  extract-klaviyo cron (**not wired yet**).
 
-New tables in `src/lib/schema.ts`. Surfaced per
-[contributing.md](contributing.md) — new DB tables are sticky and
-should be discussed before merging.
+Subscriber list stays in Klaviyo as source of truth — no subscriber
+table.
 
-```typescript
-// newsletter_source — the curated list of feeds we pull from
-export const newsletterSource = pgTable('newsletter_source', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),              // "Hodinkee"
-  category: text('category').notNull(),      // "editorial" | "b2b" | "auction" | "ir" | "microbrand"
-  feedUrl: text('feed_url'),                 // null if scrape-only
-  scrapeUrl: text('scrape_url'),             // landing page for scrape fallback
-  requiresPlaywright: boolean('requires_playwright').default(false),
-  isActive: boolean('is_active').default(true),
-  createdAt: timestamp('created_at').defaultNow(),
-});
+## Source registry state (phase 1)
 
-// newsletter_article — every story considered (included or dropped)
-export const newsletterArticle = pgTable('newsletter_article', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  sourceId: uuid('source_id').notNull().references(() => newsletterSource.id),
-  url: text('url').notNull().unique(),
-  title: text('title').notNull(),
-  publishedAt: timestamp('published_at'),
-  contentHash: text('content_hash').notNull(), // for dedup
-  summary: text('summary'),
-  segment: text('segment'),                    // 'luxury' | 'mid' | 'microbrand' | 'vintage-auction'
-  type: text('type'),                          // 'release' | 'business' | 'auction' | 'community'
-  imageUrl: text('image_url'),                 // Vercel Blob URL
-  includedInCampaignId: uuid('included_in_campaign_id').references(() => newsletterCampaign.id),
-  droppedReason: text('dropped_reason'),       // null if included
-  createdAt: timestamp('created_at').defaultNow(),
-});
+Each source declares a `fetchMode` (in `newsletter/sources.ts`):
 
-// newsletter_campaign — every send
-export const newsletterCampaign = pgTable('newsletter_campaign', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  klaviyoCampaignId: text('klaviyo_campaign_id').notNull().unique(),
-  sentAt: timestamp('sent_at'),
-  subject: text('subject').notNull(),
-  articleCount: integer('article_count').notNull(),
-  htmlHash: text('html_hash').notNull(),
-  // stats backfilled by extract-klaviyo cron
-  recipientCount: integer('recipient_count'),
-  openCount: integer('open_count'),
-  clickCount: integer('click_count'),
-  unsubscribeCount: integer('unsubscribe_count'),
-  createdAt: timestamp('created_at').defaultNow(),
-});
-```
+- **`rss` (11, direct):** Hodinkee, aBlogtoWatch, Worn & Wound, Fratello,
+  Monochrome, Time + Tide, Quill & Pad, SJX, Watches of Espionage
+  (`/blogs/woe-dispatch.atom`), Revolution, Watchonista.
+- **`rss-proxied` (1): WatchTime** — Cloudflare-walled (403s direct), but
+  its Atom feed is fresh, so it's fetched through BrightData. The working
+  feed is `/feed/atom` (`/feed/` and `/feed/rss` both fail). The feed
+  carries no images; enrichment resolves them via og:image scrape through
+  the proxy. Verified live 2026-06-10.
+- **`scrape-watchpro` (1): WatchPro** — Cloudflare-walled *and* its RSS
+  feed is unusable (CDN serves a stale cached copy, `lastBuildDate`
+  frozen days behind the live site — a WordPress full-page-cache bug).
+  So we scrape the live `/news/` HTML listing through the BrightData
+  proxy (`newsletter/scrape/watchpro.ts`); dates come from each
+  article's `<time datetime>` (the `/cloud/YYYY/MM/DD/` image path is a
+  fallback). Needs `BRIGHTDATA_USERNAME`/`PASSWORD`; fails soft (returns
+  []) without them. Verified live 2026-06-10 — contributed 8 stories
+  (the brief's biggest source that run: Rolex price hike, Swiss export
+  data, retailer financials).
+_(Europa Star was evaluated and dropped 2026-06-10 — publishes too
+infrequently, month-granularity dates, real content gated behind a
+PDF-style mag viewer.)_
 
-Subscriber list itself stays in Klaviyo as source of truth — no
-`newsletter_subscriber` table. The existing `extract-klaviyo` cron
-([scheduled-jobs.md](scheduled-jobs.md)) backfills campaign stats
-into `newsletter_campaign`.
+> **Lesson: don't trust an RSS feed's freshness — verify against the
+> live site.** WatchPro's feed returned HTTP 200 with 200 items but its
+> newest was 7 days old while the homepage had same-day articles. Any
+> feed-based source can silently freeze this way; the scrape path reads
+> what readers actually see.
 
-## External dependencies
+**Freshness applies to every mode.** `fetchOneSource` runs the
+`lookbackHours` (36h) filter on *all* sources — RSS, proxied, and
+scraped — at the dispatch boundary, so a listing page's week-deep
+backlog can't leak in. The scraped source (WatchPro) carries real
+per-article dates from `<time datetime>`. A scraper that returned
+dateless items would silently include stale stories — covered by
+`fetch.test.ts`.
 
-- **OpenAI** — summarization + classification. Reuse existing
-  `OPENAI_API_KEY` env.
-- **Klaviyo** — sender. Reuse existing wrapper. Newsletter list is a
-  new tagged segment (decision pending in
-  [newsletter.md](../strategy/newsletter.md) → Open decisions).
-- **Vercel Blob** — image hosting. Pricing: ~$0.15/GB-month. Estimated
-  storage: <2GB after 12 months at daily cadence with hash-based
-  dedup.
-- **Playwright + stealth plugin** — Cloudflare bypass. Sufficient for
-  Hodinkee, ABTW, Worn & Wound, auction houses. Falls back to
-  ScraperAPI for sites that defeat Playwright stealth.
-- **ScraperAPI** — proxy fallback. Used selectively, not as primary
-  scrape path. Cost ~$50/mo if used heavily; likely <$15/mo at our
-  request volume.
+**Repeats across daily sends.** The 36h window deliberately overlaps the
+24h cadence (catches edge-of-window / delayed-run stories). Repeats are
+prevented by dedup: every fetched story is persisted to
+`newsletter_article`, and each run filters out anything seen in the last
+14 days *before* triage (`loadSeen` → `filterNew`). So window > cadence
++ dedup = no misses, no repeats. **Dry-run skips the seen-table** (no DB
+reads/writes), so consecutive dry-runs show the same pool — that's
+preview behavior, not what production does.
+- **`playwright` (5, inactive):** Phillips, Christie's, Sotheby's,
+  Swatch Group IR, Richemont IR — auction houses + IR pages, deferred to
+  the headless-scrape phase.
 
-## Code location
+**Cloudflare bypass:** there is no free, reliable way past Cloudflare's
+residential bot challenge from a datacenter IP (GitHub Actions). Both a
+plain fetch and a real headless Chrome (Playwright) get 403'd by
+WatchPro. The cannabis engine solves the same problem with BrightData
+residential proxies (its `ResidentialProxyScraper`); we reuse that
+approach and Tom's existing BrightData account (`newsletter/scrape/proxy.ts`,
+undici `ProxyAgent`). Still-blocked sources without a proxy route are
+left inactive rather than half-working.
 
-```
-newsletter/                  # peer to src/, not under it
-├── feeds/                   # one file per source: hodinkee.ts, mjbiz.ts removed, etc
-│   ├── shared/              # common feed parsing helpers
-│   └── index.ts             # registry of active feeds
-├── scrape/
-│   ├── browser.ts           # Playwright session manager
-│   ├── stealth.ts           # CF bypass helpers
-│   └── extract.ts           # html → article shape
-├── images/
-│   ├── download.ts
-│   └── upload.ts            # Vercel Blob client wrapper
-├── classify.ts              # OpenAI segment + type
-├── summarize.ts             # OpenAI summary
-├── dedup.ts
-├── generate.ts              # HTML template
-├── send.ts                  # Klaviyo send flow
-├── main.ts                  # orchestration entry
-├── README.md                # local run instructions
-└── package.json             # newsletter-specific deps (or hoist to root)
-```
+Two gotchas the proxy code handles: (1) pair undici's `fetch` with its
+`ProxyAgent` — Node's global fetch uses a different bundled undici and
+throws `invalid onRequestStart method`. (2) Residential zones throttle
+concurrent sessions, so when several proxied sources (WatchPro +
+WatchTime) fetch at once, some requests transiently fail; `proxiedFetch`
+retries 4× with linear backoff and a broad `Accept` (RSS + Atom).
+Without the backoff, WatchTime intermittently dropped from the brief.
 
-Decision pending: hoist newsletter deps to root `package.json` (simpler
-CI, single lockfile, slight bloat for Vercel deploy) vs separate
-`newsletter/package.json` (cleaner isolation, more CI ceremony).
-**Recommend hoist to root** unless deploy size becomes an issue.
+Not yet attempted: Reddit / WatchCrunch (403 bot fetches — community
+signal, lower priority; Reddit has an authed API option), Hairspring,
+Wind Vintage, Bonhams, Antiquorum, direct microbrand-site tracking.
 
-## Local development
+Registered but inactive (Playwright/scrape phase): WatchPro (feed
+exists but Cloudflare 403s non-browser fetches), Phillips,
+Christie's, Sotheby's, Swatch Group IR, Richemont IR.
 
-```bash
-npm run newsletter:dry-run     # NEW: runs main.ts without sending, writes HTML to /tmp
-npm run newsletter:test-send   # NEW: sends to a test Klaviyo list of [tom@] only
-```
+## Editorial pipeline
 
-Will be added to root `package.json` during Session 2 build.
+- **Triage**: one Claude call over the whole fresh batch. Editorial cut
+  prompt encodes the cover-heavy rules, the Segment × Type taxonomy,
+  per-story priority (1 = lead; **never a podcast/interview/release**,
+  enforced again in code), and duplicate collapsing (`duplicateOfUrl` →
+  "Also at" links). Verdicts matched by URL; missing/incomplete
+  verdicts degrade to "dropped", never fail the run.
+- **Caps**: `maxStories` (12) applies to hard news only — **releases
+  are never capped**. The New Releases section is the complete, neutral
+  record of what's new; we don't arbitrate between brands we court
+  (decision 2026-06-10, see strategy doc → New Releases).
+- **Layout**: sections by Type (Business & Industry → Auction & Market
+  → Community & Analysis → New Releases last); segment is the eyebrow
+  tag on each story.
+- **Enrichment (post-triage)**: ONE page fetch per selected story yields
+  both the image (feed image → og:image) and the **full article text**
+  (`extractArticleText`: `<article>`-scoped paragraphs, 12K-char cap).
+  Two UA profiles (some WAFs 403 a bare Chrome UA); 1.5MB read cap
+  (Worn & Wound inlines ~750KB before content).
+- **Summarize**: per story, 2–3 sentences, concurrency 4, **grounded in
+  the fetched article text** — the prompt forbids stating any
+  price/run-size/date/spec not present in the source (vague beats
+  invented; misstating a brand's price in front of retailers is a
+  credibility wound). Fail-soft to the feed excerpt with a
+  be-careful-with-specifics note. Releases additionally get the
+  brand-neutrality instruction (factual/generous, no verdicts); the
+  opinionated Puck-for-watches voice applies to business/market
+  analysis only.
+- Voice iteration happens by editing the `EDITORIAL_CUT` / `VOICE`
+  prompts in `newsletter/editorial.ts` after Tom reviews test briefs.
 
-## Failure modes and recovery
+## Failure modes (as implemented)
 
 | Failure | Handling |
 |---------|----------|
-| GitHub Actions runner unavailable | Cron drift handles most; manual `workflow_dispatch` for genuine outages |
-| OpenAI rate limit | Exponential backoff, max 3 retries per call, fail-soft to "story without summary" rather than abort |
-| Cloudflare blocks Playwright | Fall back to ScraperAPI for that source; flag the source for review in next run |
-| Klaviyo send-job fails | Don't retry blindly (avoid double-send). Notify Tom via TBD channel, manual investigation |
-| Image download fails | Story keeps placeholder image, dropped from `hero_image` slot but kept in body |
-| Drizzle write fails | Send still proceeds; log to GH Actions, replay write next run |
+| One feed down / 403 / 404 | Logged, run continues with remaining feeds |
+| Triage returns invalid tool input | One retry, then run fails (no brief beats a garbage brief) |
+| Single summary call fails | Story keeps its feed excerpt |
+| Zero fresh stories / triage drops all | Run exits cleanly, "no brief today" |
+| Klaviyo draft fails | Articles + campaign row already written; `klaviyo_campaign_id` stays null; re-run is safe (article upserts are `onConflictDoNothing`, `draftCampaign` is idempotent by slug) |
+| Campaign already sent for slug | `CampaignAlreadySentError` — refuses to overwrite |
+
+## Remaining phases
+
+| Phase | Scope |
+|-------|-------|
+| Go-live checklist | Tom: Klaviyo list + `NEWSLETTER_KLAVIYO_LIST_ID`; set the 4 GH Actions secrets; local `ANTHROPIC_API_KEY`; first dry-run review of voice |
+| Playwright scrape | `newsletter/scrape/` for the inactive sources (auction houses, IR pages); ScraperAPI fallback |
+| Images | Download + Vercel Blob upload, hero-image slot in template (`image_url` column already exists) |
+| Stats backfill | Extend extract-klaviyo cron to stamp `newsletter_campaign` stats + flip `status` to `sent` |
+| Send automation | Klaviyo campaign-send-job after the voice settles; needs an explicit guard (e.g. only campaigns matching `micro-adjust-*`) |
+| Microbrand release tracking | Curated drop-watch set from the strategy doc — likely scrape-phase |
 
 ## Migration from cannabis engine
 
-We're **not** porting the Python cannabis engine. It's the wrong
-language for this repo. We're reimplementing in TypeScript using:
-- The cannabis engine's prompt designs (Segment × Type classifier
-  prompts adapt directly from the jurisdiction classifier patterns)
-- The cannabis engine's editorial filter rules (sponsored content
-  detection, signal/noise thresholds)
-- The cannabis engine's deduplication algorithm
-
-These are all algorithmic patterns, not code. The Python codebase
-itself doesn't transfer.
-
-## Open technical questions
-
-- **Hoist deps vs separate package.json** — see Code location above.
-- **HTML rendering library** — React Email (matches Next.js patterns,
-  more complex), Mustache/Handlebars (simpler, faster), or hand-written
-  template literals (simplest, hardest to maintain).
-- **Database branch isolation** — should the newsletter writes go to
-  the same Neon database as Fitwell's main data, or a separate Neon
-  branch? Same DB is simpler. Separate branch isolates failure modes
-  but doubles DB infra.
-- **Image rights / hotlinking policy** — re-hosting source images in
-  Vercel Blob is standard for aggregator newsletters and falls under
-  US fair use in a news-summary context. Should document the policy
-  before launch in case a source publication complains.
-
-## What the build looks like (Session 2 scope)
-
-Per [../strategy/newsletter.md](../strategy/newsletter.md), Session 2
-is the engine build. Roughly:
-
-| Step | Effort |
-|------|--------|
-| Schema migration + seed `newsletter_source` rows | 1h |
-| Feed parser registry + 5–10 RSS source modules | 3h |
-| Playwright scrape + stealth for 5–10 non-RSS sources | 4h |
-| Image download + Vercel Blob upload | 2h |
-| OpenAI summarize + classify | 2h |
-| HTML template + brand styling | 3h |
-| Klaviyo send flow (template + campaign + send-job) | 3h |
-| Dedup + orchestration in main.ts | 2h |
-| GitHub Actions workflow | 1h |
-| End-to-end test brief to Tom | 2h |
-| Iteration on test brief | 3h |
-
-Total: ~26h, realistically 3–5 working sessions of ~6h each.
+Unchanged from the original plan: prompts, editorial filter rules, and
+dedup algorithm adapt from Elevated Insights as *patterns*; no Python
+code transfers.

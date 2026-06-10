@@ -347,6 +347,62 @@ Product reviews from external sources (Judge.me today; the `source` column leave
 
 Unique index on `(source, external_id)` for upserts; indexes on `reviewer_email`, `rating`, `review_date`.
 
+## Newsletter
+
+Daily watch-industry brief ("The Micro-Adjust", working title). Written by the `newsletter/` engine (GitHub Actions, not Vercel cron). Migration `0057_faithful_the_spike.sql`. Subscriber list stays in Klaviyo — no subscriber table. Full engine doc: `specs/current/newsletter-engine.md`.
+
+### `newsletter_source`
+
+Feed registry, synced from the code-side registry (`newsletter/sources.ts`) by an idempotent upsert on `slug`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK (UUID) |
+| `slug` | text | Stable registry key (e.g. `hodinkee`); unique — join point to code so renames don't orphan articles |
+| `name` | text | Display name |
+| `category` | text | `editorial` / `b2b` / `community` / `auction` / `ir` / `microbrand` |
+| `feed_url` | text | RSS/Atom URL; null if scrape-only |
+| `scrape_url` | text | Landing page for the Playwright phase |
+| `requires_playwright` | boolean | Cloudflare-guarded sources |
+| `is_active` | boolean | `false` retires a source without losing history |
+| `created_at` | timestamp | |
+
+### `newsletter_article`
+
+Every story considered — included **or** dropped (`dropped_reason` is the audit trail for dedup + triage decisions).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK (UUID) |
+| `source_id` | text | FK → `newsletter_source` |
+| `url` | text | Normalized (tracking params stripped); unique — the cross-run dedup key |
+| `title` | text | |
+| `published_at` | timestamp | From the feed; nullable |
+| `content_hash` | text | sha256(title + normalized url); catches re-emitted items |
+| `summary` | text | Claude 2–3 sentence brief (included stories only) |
+| `segment` | text | `luxury` / `mid` / `microbrand` / `vintage-auction` |
+| `type` | text | `release` / `business` / `auction` / `community` |
+| `image_url` | text | Vercel Blob URL once the image phase lands |
+| `included_in_campaign_id` | text | FK → `newsletter_campaign`; null for dropped stories |
+| `dropped_reason` | text | Null for included stories |
+| `created_at` | timestamp | |
+
+### `newsletter_campaign`
+
+One row per send (the engine creates Klaviyo **drafts**; sending is manual while the voice settles).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK (UUID) |
+| `klaviyo_campaign_id` | text | Unique; null only if the draft step failed after articles were written |
+| `status` | text | `draft` / `sent` — to be flipped by the extract-klaviyo cron (not wired yet) |
+| `sent_at` | timestamp | |
+| `subject` | text | |
+| `article_count` | integer | |
+| `html_hash` | text | sha256 of the rendered HTML |
+| `recipient_count` / `open_count` / `click_count` / `unsubscribe_count` | integer | Backfilled by extract-klaviyo (not wired yet) |
+| `created_at` | timestamp | |
+
 ## Lifecycle
 
 ### `customer_event`

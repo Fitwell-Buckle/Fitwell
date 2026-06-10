@@ -12,7 +12,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "newsletter/**/*.test.ts"],
     exclude: ["**/node_modules/**", "src/**/*.integration.test.ts"],
     // Don't fail the suite (or CI) just because a directory has no tests yet.
     passWithNoTests: true,

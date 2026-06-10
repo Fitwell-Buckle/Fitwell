@@ -2009,3 +2009,99 @@ export const review = pgTable(
     index("review_review_date_idx").on(t.reviewDate),
   ],
 );
+
+// ─── Newsletter (daily watch-industry brief) ────────────────────────
+// Engine lives in newsletter/ (peer to src/), runs from GitHub Actions.
+// Subscriber list stays in Klaviyo — no subscriber table here.
+// Spec: specs/current/newsletter-engine.md + specs/strategy/newsletter.md.
+
+// The curated registry of feeds we pull from. Seeded from
+// newsletter/sources.ts (idempotent upsert on slug); is_active=false
+// retires a source without losing its article history.
+export const newsletterSource = pgTable(
+  "newsletter_source",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Stable registry key, e.g. "hodinkee" — join point for the code-side
+    // source modules so renames don't orphan articles.
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    // 'editorial' | 'b2b' | 'community' | 'auction' | 'ir' | 'microbrand'
+    category: text("category").notNull(),
+    feedUrl: text("feed_url"), // null if scrape-only
+    scrapeUrl: text("scrape_url"), // landing page for scrape fallback
+    requiresPlaywright: boolean("requires_playwright").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("newsletter_source_slug_uniq").on(t.slug)],
+);
+
+// One row per send (or attempted send). The Klaviyo campaign is created
+// as a draft by the engine; klaviyo_campaign_id is null only if the
+// draft step failed after articles were already written.
+export const newsletterCampaign = pgTable(
+  "newsletter_campaign",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    klaviyoCampaignId: text("klaviyo_campaign_id"),
+    // 'draft' | 'sent' — flipped by the extract-klaviyo cron once send
+    // stats start arriving.
+    status: text("status").notNull().default("draft"),
+    sentAt: timestamp("sent_at", { mode: "date" }),
+    subject: text("subject").notNull(),
+    articleCount: integer("article_count").notNull(),
+    htmlHash: text("html_hash").notNull(),
+    // Stats backfilled by the extract-klaviyo cron
+    recipientCount: integer("recipient_count"),
+    openCount: integer("open_count"),
+    clickCount: integer("click_count"),
+    unsubscribeCount: integer("unsubscribe_count"),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("newsletter_campaign_klaviyo_id_uniq").on(t.klaviyoCampaignId),
+    index("newsletter_campaign_created_at_idx").on(t.createdAt),
+  ],
+);
+
+// Every story considered, whether it made the brief or not. url is the
+// dedup key across runs; dropped_reason is null for included stories so
+// we can audit what the filter is rejecting.
+export const newsletterArticle = pgTable(
+  "newsletter_article",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => newsletterSource.id),
+    url: text("url").notNull(),
+    title: text("title").notNull(),
+    publishedAt: timestamp("published_at", { mode: "date" }),
+    contentHash: text("content_hash").notNull(),
+    summary: text("summary"),
+    // 'luxury' | 'mid' | 'microbrand' | 'vintage-auction'
+    segment: text("segment"),
+    // 'release' | 'business' | 'auction' | 'community'
+    type: text("type"),
+    imageUrl: text("image_url"), // Vercel Blob URL once image pipeline lands
+    includedInCampaignId: text("included_in_campaign_id").references(
+      () => newsletterCampaign.id,
+    ),
+    droppedReason: text("dropped_reason"),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("newsletter_article_url_uniq").on(t.url),
+    index("newsletter_article_source_id_idx").on(t.sourceId),
+    index("newsletter_article_content_hash_idx").on(t.contentHash),
+    index("newsletter_article_campaign_idx").on(t.includedInCampaignId),
+    index("newsletter_article_created_at_idx").on(t.createdAt),
+  ],
+);
