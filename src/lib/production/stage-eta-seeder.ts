@@ -84,10 +84,13 @@ export function computeStageTargets(
   if (lines.length === 0 || order.length === 0) return [];
 
   const terminalIdx = order.length - 1;
-  const poTotalDays =
-    subPoEta != null ? daysBetween(issuedDate, subPoEta) : null;
   const ownedSet = ownedStages ? new Set(ownedStages) : null;
-  const anchorActive = !!(ownedSet && subPoEta);
+  // The anchor is per-line: only kicks in when a given line has its own
+  // expectedCompletionDate. We no longer fall back to subPoEta — that's a
+  // legacy field we don't expose in the UI anymore, and inheriting it
+  // silently was producing chart bars anchored to dates the user couldn't
+  // see (e.g. "ETA Dec 11" with no Dec 11 anywhere on the page).
+  const anchorActive = !!ownedSet;
 
   // For each global stage, collect the candidate end dates from contributing
   // lines (ISO YYYY-MM-DD strings sort correctly with `>` so we can max via
@@ -98,19 +101,19 @@ export function computeStageTargets(
     const walkOrder = lineStages(line, order);
     const lineStageCount = walkOrder.length > 0 ? walkOrder.length : order.length;
 
-    // Per-line anchor target: the line's own ETA wins over the seeder-level
-    // sub-PO ETA. Lines on the same sub-PO often have independent
-    // deadlines; the chart's right edge per line should match that line's
-    // own promise, not the sub-PO rollup.
+    // Per-line anchor: ONLY the line's own ETA. No fallback to subPoEta —
+    // when a line has no ETA, we don't seed a target for it and the chart
+    // falls back to cycle-time projection. This keeps the chart's right
+    // edge consistent with what the user can see in the Line items table.
     const lineAnchor =
       line.expectedCompletionDate && line.expectedCompletionDate.length > 0
         ? line.expectedCompletionDate
-        : subPoEta;
+        : null;
 
-    // Tier 4 (PO-split) days per line — use the line's own ETA when set,
-    // else fall back to the seeder-level subPoEta.
+    // Tier 4 (PO-split) days per line: use the line's own ETA when set,
+    // else null (Tier 4 disabled → estimator falls to global / defaults).
     const lineTotalDays =
-      lineAnchor != null ? daysBetween(issuedDate, lineAnchor) : poTotalDays;
+      lineAnchor != null ? daysBetween(issuedDate, lineAnchor) : null;
 
     // Find this line's LAST owned stage (last walked stage that's in
     // ownedSet). If `anchorActive` and the line has an anchor, that
