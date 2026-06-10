@@ -246,6 +246,35 @@ export const orderLineItem = pgTable(
   (t) => [index("line_item_order_id_idx").on(t.orderId)],
 );
 
+// Per-order discount-code redemptions from Shopify's discount_codes array.
+// Powers the first-order discount split (welcome vs creator vs review —
+// 360 W5 §6 C1 measurement) and per-creator revenue rollups. Family
+// classification is computed at query time (src/lib/discount-codes.ts),
+// never stored — see specs/work-plans/todo/discount-code-visibility.md.
+// The creator program's future generated-codes table joins on `code`.
+export const orderDiscountCode = pgTable(
+  "order_discount_code",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => order.id, { onDelete: "cascade" }),
+    // Normalized lowercase for grouping/joins; Shopify treats codes
+    // case-insensitively but echoes whatever casing the buyer typed.
+    code: text("code").notNull(),
+    codeRaw: text("code_raw").notNull(),
+    amountCents: integer("amount_cents").notNull().default(0),
+    // Shopify discount type: 'fixed_amount' | 'percentage' | 'shipping'
+    type: text("type"),
+  },
+  (t) => [
+    uniqueIndex("order_discount_code_order_code_idx").on(t.orderId, t.code),
+    index("order_discount_code_code_idx").on(t.code),
+  ],
+);
+
 export const utmAttribution = pgTable(
   "utm_attribution",
   {

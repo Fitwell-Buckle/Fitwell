@@ -35,6 +35,10 @@ import {
   or,
 } from "drizzle-orm";
 import {
+  aggregateFirstOrderDiscountSplit,
+  type FirstOrderDiscountSplit,
+} from "@/lib/discount-codes";
+import {
   CHANNEL_LABELS,
   RETENTION_STAGE_META,
   type Channel,
@@ -378,6 +382,92 @@ export async function getRetentionLoop(): Promise<RetentionLoop> {
   });
 
   return { totalCustomers, stages };
+}
+
+// ─── First-order discount split (360 W5 §6 — C1 measurement) ────────
+
+export interface DiscountSplitResult {
+  range: { from: Date; to: Date };
+  split: FirstOrderDiscountSplit;
+  /** Oldest order with a captured code — orders before this predate
+   *  capture (codes ship with the 60-day backfill; full history lands
+   *  with the Feb-2024 import). Null when no codes captured yet. */
+  earliestCodeAt: Date | null;
+}
+
+/**
+ * First D2C orders (sequence = 1 via ROW_NUMBER, same convention as
+ * getChannelBreakdown) in the window, joined to their discount-code
+ * redemptions. Family aggregation is pure
+ * (aggregateFirstOrderDiscountSplit in @/lib/discount-codes); this is
+ * just the DB-fetch wrapper. Samples and cancelled orders excluded.
+ */
+export async function getFirstOrderDiscountSplit(
+  from: Date,
+  to: Date,
+): Promise<DiscountSplitResult> {
+  const [codeRowsRes, earliestRes] = await Promise.all([
+    db.execute<{
+      order_id: string;
+      code: string | null;
+      amount_cents: number | null;
+    }>(sql`
+      WITH ranked AS (
+        SELECT
+          id,
+          processed_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY customer_id
+            ORDER BY processed_at, id
+          ) AS seq
+        FROM "order"
+        WHERE
+          customer_id IS NOT NULL
+          AND (source_name IS NULL OR source_name != 'shopify_draft_order')
+          AND is_sample = false
+          AND cancelled_at IS NULL
+      )
+      SELECT r.id AS order_id, dc.code, dc.amount_cents
+      FROM ranked r
+      LEFT JOIN order_discount_code dc ON dc.order_id = r.id
+      WHERE r.seq = 1
+        AND r.processed_at >= ${from.toISOString()}
+        AND r.processed_at <= ${to.toISOString()}
+    `),
+    db.execute<{ earliest: string | null }>(sql`
+      SELECT min(o.processed_at) AS earliest
+      FROM order_discount_code dc
+      JOIN "order" o ON o.id = dc.order_id
+    `),
+  ]);
+
+  const codeRows = (
+    (codeRowsRes as unknown as { rows?: unknown[] }).rows ??
+    (codeRowsRes as unknown as unknown[])
+  ) as Array<{
+    order_id: string;
+    code: string | null;
+    amount_cents: number | null;
+  }>;
+  const earliestRows = (
+    (earliestRes as unknown as { rows?: unknown[] }).rows ??
+    (earliestRes as unknown as unknown[])
+  ) as Array<{ earliest: string | null }>;
+
+  const split = aggregateFirstOrderDiscountSplit(
+    codeRows.map((r) => ({
+      orderId: r.order_id,
+      code: r.code,
+      amountCents: r.amount_cents === null ? null : Number(r.amount_cents),
+    })),
+  );
+
+  const earliest = earliestRows[0]?.earliest;
+  return {
+    range: { from, to },
+    split,
+    earliestCodeAt: earliest ? new Date(earliest) : null,
+  };
 }
 
 // ─── Channel breakdown ──────────────────────────────────────────────

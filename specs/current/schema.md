@@ -123,6 +123,28 @@ Synced from Shopify. One row per Shopify order.
 | `price` | numeric(10,2) | Per-unit price |
 | `total_discount` | numeric(10,2) | Line-level discount |
 
+### `order_discount_code`
+
+Per-order discount-code redemptions from Shopify's `discount_codes` array
+(captured by `upsertOrder()`, delete-and-reinsert on re-sync like line
+items). Powers the first-order discount split (welcome vs creator vs
+review — 360 W5 §6 C1 measurement) and per-creator revenue rollups.
+Family classification is computed at query time via
+`src/lib/discount-codes.ts` (`jm-` prefix → review bucket; creator
+prefixes → per-creator; shared welcome code pinned post-backfill), never
+stored. See `specs/work-plans/todo/discount-code-visibility.md`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid | PK |
+| `order_id` | text | FK → order, cascade delete |
+| `code` | text | Normalized lowercase — grouping/join key (creator program's generated-codes table joins here) |
+| `code_raw` | text | Casing as the buyer typed it |
+| `amount_cents` | integer | Discount amount in cents |
+| `type` | text | Shopify type: `fixed_amount` / `percentage` / `shipping` |
+
+Unique on `(order_id, code)`; indexed on `code` for rollups.
+
 ## Attribution
 
 ### `utm_attribution`

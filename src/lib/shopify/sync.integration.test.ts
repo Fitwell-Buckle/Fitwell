@@ -169,4 +169,61 @@ describe.skipIf(noDb)("shopify sync dedupe (real DB)", () => {
       .where(eq(schema.orderLineItem.orderId, oid1));
     expect(items).toHaveLength(1); // replaced, not 3
   });
+
+  it("replaces (not duplicates) discount-code rows on re-sync and normalizes casing", async () => {
+    const baseOrder: ShopifyOrder = {
+      id: orderShopifyId as unknown as number,
+      order_number: 1001,
+      email: "itest@example.com",
+      total_price: "94.00",
+      subtotal_price: "100.00",
+      total_discounts: "6.00",
+      total_tax: "0.00",
+      currency: "USD",
+      financial_status: "paid",
+      fulfillment_status: null,
+      discount_codes: [
+        { code: "WatchBros15", amount: "6.00", type: "percentage" },
+        { code: "JM-AB12CD3", amount: "0.00", type: "percentage" },
+      ],
+      refunds: [],
+      processed_at: "2026-03-01T00:00:00.000Z",
+      created_at: "2026-03-01T00:00:00.000Z",
+      updated_at: "2026-03-01T00:00:00.000Z",
+      customer: makeCustomer(),
+      source_name: "web",
+      landing_site: null,
+      referring_site: null,
+      note: null,
+      note_attributes: [],
+      tags: "",
+      line_items: [],
+    };
+    baseOrder.customer.id = custShopifyId as unknown as number;
+
+    const oid1 = await upsertOrder(baseOrder);
+    const rows1 = await db
+      .select()
+      .from(schema.orderDiscountCode)
+      .where(eq(schema.orderDiscountCode.orderId, oid1));
+    expect(rows1).toHaveLength(2);
+    const watchbros = rows1.find((r) => r.code === "watchbros15");
+    expect(watchbros).toBeDefined();
+    expect(watchbros?.codeRaw).toBe("WatchBros15"); // raw casing preserved
+    expect(watchbros?.amountCents).toBe(600);
+    expect(watchbros?.type).toBe("percentage");
+
+    // Re-sync with one code → replaced, not appended
+    const oid2 = await upsertOrder({
+      ...baseOrder,
+      discount_codes: [{ code: "jm-ab12cd3", amount: "0.00", type: "percentage" }],
+    });
+    expect(oid2).toBe(oid1);
+    const rows2 = await db
+      .select()
+      .from(schema.orderDiscountCode)
+      .where(eq(schema.orderDiscountCode.orderId, oid1));
+    expect(rows2).toHaveLength(1);
+    expect(rows2[0].code).toBe("jm-ab12cd3");
+  });
 });

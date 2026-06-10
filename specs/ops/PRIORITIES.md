@@ -326,7 +326,7 @@ everyone). Single discount touchpoint; product-experience-led posture.
 - [ ] Tom: create the post-purchase flow skeleton in Klaviyo UI (~15–20 min) — **blocks everything below**
 - [ ] Claude: pull flow as YAML + write D1 / D14 / D21 / D30 email content (~2–3 hrs)
 - [ ] Generate D30 outfit code in Shopify (25% off any 5+, 30-day expiry; decide shared vs single-use)
-- [ ] Scope discount-code-name visibility work plan (Shopify GraphQL pull, ~½ day; Greg sign-off). Bucketing: Judge.me review codes → one "review-leaver" bucket; creator codes per-creator with a "creator" family tag
+- [x] Discount-code-name visibility — **code-complete 2026-06-10** (Greg signed off; `specs/work-plans/todo/discount-code-visibility.md`). New `order_discount_code` table (migration `0058`), sync captures codes, classifier families (welcome/creator/review/service/event/other), first-order discount split card on `/funnel/strategy`. First dev-DB C1 read: **71.8% of first orders no-code**, event 10.1% (Windup SF), welcome 8.8%, creator 7.6% (all watchbros), review 0.5%. **Remaining: deploy** — apply `0058` to prod before push, re-run 60-day backfill on prod (work plan Phase 4); full history rides on the Feb-2024 import. NOTE: was a capture gap, not a GraphQL gap — payloads already carry `discount_codes`
 - [x] Add signup-lift workstream to `360-campaign.md` W5 §6 — done 2026-06-10
 - [x] Update PRIORITIES.md with the retention-led sequence — done 2026-06-10
 - [ ] Signup-lift experiments: design now, launch once PostHog client-side data accumulates (see W5 §6 for the four candidates)

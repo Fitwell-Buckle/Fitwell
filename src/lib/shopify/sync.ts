@@ -3,6 +3,7 @@ import {
   customer,
   customerAddress,
   order,
+  orderDiscountCode,
   orderLineItem,
   utmAttribution,
 } from "@/lib/schema";
@@ -281,6 +282,24 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
         sku: item.sku,
         quantity: item.quantity,
         price: toCents(item.price),
+      })),
+    );
+  }
+
+  // Replace discount-code redemptions: delete existing, then bulk insert
+  await db
+    .delete(orderDiscountCode)
+    .where(eq(orderDiscountCode.orderId, orderId));
+
+  const discountCodes = shopifyOrder.discount_codes ?? [];
+  if (discountCodes.length > 0) {
+    await db.insert(orderDiscountCode).values(
+      discountCodes.map((dc) => ({
+        orderId,
+        code: dc.code.trim().toLowerCase(),
+        codeRaw: dc.code,
+        amountCents: toCents(dc.amount),
+        type: dc.type ?? null,
       })),
     );
   }

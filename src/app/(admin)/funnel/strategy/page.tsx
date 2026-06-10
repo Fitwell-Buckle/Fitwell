@@ -7,16 +7,19 @@ import {
   getAcquisitionFunnel,
   getRetentionLoop,
   getChannelBreakdown,
+  getFirstOrderDiscountSplit,
   formatCents,
   formatCount,
   confidenceLabel,
   type Confidence,
+  type DiscountSplitResult,
   type FunnelStageRow,
   type RetentionStageRow,
   type ChannelRow,
   type OrderPosition,
   type RetentionStage,
 } from "@/lib/funnel/strategy";
+import { FAMILY_LABELS } from "@/lib/discount-codes";
 import { RETENTION_STAGE_META } from "@/lib/funnel/classify";
 import { getKlaviyoOverview, type KlaviyoOverview } from "@/lib/klaviyo/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -613,6 +616,93 @@ function PositionFilterPills({
   );
 }
 
+function DiscountSplitSection({ d }: { d: DiscountSplitResult }) {
+  const { split, earliestCodeAt } = d;
+  const noCodePct =
+    split.totalFirstOrders > 0
+      ? (100 * split.noCode) / split.totalFirstOrders
+      : 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>First-order discount split — signup lift (360 W5 §6)</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-3 text-xs text-zinc-500">
+          Each customer&apos;s first D2C order in the window, split by
+          redeemed discount-code family (classification in{" "}
+          <Mono>src/lib/discount-codes.ts</Mono>; a multi-code order counts
+          once under its most marketing-specific family). The{" "}
+          <strong>no-code share</strong> is the C1 leakage headline — first
+          buyers mostly not on the email list.
+        </p>
+        {split.withCode === 0 ? (
+          <p className="text-sm text-zinc-500">
+            No discount-code rows captured yet — codes land with the
+            order sync once the <Mono>order_discount_code</Mono> migration
+            is deployed and the backfill has run. See{" "}
+            <Mono>specs/work-plans/todo/discount-code-visibility.md</Mono>.
+          </p>
+        ) : (
+          <>
+            <div className="border-b border-zinc-100 py-3">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-sm font-medium text-zinc-900">
+                  No code
+                </span>
+                <span className="font-mono text-sm font-medium text-zinc-900">
+                  {formatCount(split.noCode)}{" "}
+                  <span className="text-xs text-zinc-400">
+                    ({noCodePct.toFixed(1)}% of{" "}
+                    {formatCount(split.totalFirstOrders)} first orders)
+                  </span>
+                </span>
+              </div>
+            </div>
+            {split.families.map((f) => (
+              <div
+                key={f.family}
+                className="border-b border-zinc-100 py-3 last:border-b-0"
+              >
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-sm font-medium text-zinc-900">
+                    {FAMILY_LABELS[f.family]}
+                  </span>
+                  <span className="font-mono text-sm font-medium text-zinc-900">
+                    {formatCount(f.orders)}{" "}
+                    <span className="text-xs text-zinc-400">
+                      ({f.pctOfFirstOrders.toFixed(1)}% ·{" "}
+                      {formatCents(f.discountCents)} discounted)
+                    </span>
+                  </span>
+                </div>
+                {f.creators && (
+                  <p className="mt-1 text-[11px] text-zinc-400">
+                    {f.creators
+                      .map((c) => `${c.slug}: ${c.orders}`)
+                      .join(" · ")}
+                  </p>
+                )}
+              </div>
+            ))}
+            {earliestCodeAt && (
+              <p className="mt-3 text-[11px] italic text-zinc-400">
+                Codes captured for orders from{" "}
+                <Mono>{earliestCodeAt.toISOString().slice(0, 10)}</Mono>{" "}
+                onward (Shopify 60-day API cap) — older first orders show
+                as &ldquo;no code&rdquo; until the Feb-2024 history import
+                runs with <Mono>read_all_orders</Mono>. Narrow the date
+                range to the captured window for an honest split.
+              </p>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default async function FunnelStrategyPage({
   searchParams,
 }: {
@@ -626,17 +716,19 @@ export default async function FunnelStrategyPage({
   const segmentFilter = parseSegment(params);
   const positionFilter = parsePosition(params);
 
-  const [acq, retention, channels, klaviyo] = await Promise.all([
-    getAcquisitionFunnel(from, to),
-    // Retention loop + channel breakdown are full-customer-base views
-    // (LTV makes no sense windowed); they ignore the date range.
-    getRetentionLoop(),
-    getChannelBreakdown(
-      segmentFilter ?? undefined,
-      positionFilter ?? undefined,
-    ),
-    getKlaviyoOverview(),
-  ]);
+  const [acq, retention, channels, klaviyo, discountSplit] =
+    await Promise.all([
+      getAcquisitionFunnel(from, to),
+      // Retention loop + channel breakdown are full-customer-base views
+      // (LTV makes no sense windowed); they ignore the date range.
+      getRetentionLoop(),
+      getChannelBreakdown(
+        segmentFilter ?? undefined,
+        positionFilter ?? undefined,
+      ),
+      getKlaviyoOverview(),
+      getFirstOrderDiscountSplit(from, to),
+    ]);
 
   return (
     <div className="space-y-10 pb-12">
@@ -753,6 +845,10 @@ export default async function FunnelStrategyPage({
             <ChannelTable rows={channels} />
           </CardContent>
         </Card>
+      </section>
+
+      <section>
+        <DiscountSplitSection d={discountSplit} />
       </section>
 
       <section>
