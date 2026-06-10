@@ -51,6 +51,8 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 | UI components | `specs/current/components.md` + `specs/current/contributing.md` (UI Components) |
 | Adding marketing pages | `specs/current/routes.md` + `(marketing)` route group |
 | Cron job changes | `specs/current/scheduled-jobs.md` + `vercel.json` |
+| Newsletter strategy, audience, sources, voice | `specs/strategy/newsletter.md` |
+| Newsletter engine, cron, scraping, Klaviyo send flow, schema | `specs/current/newsletter-engine.md` |
 | Deciding what to work on | `specs/ops/PRIORITIES.md` |
 | Strategic context | `specs/ops/MISSION.md` + `specs/ops/SCORECARD.md` |
 | Setting up a new machine, installing CLIs, or troubleshooting service permissions | `specs/ops/contributor-setup.md` |

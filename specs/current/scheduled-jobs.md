@@ -1,8 +1,13 @@
 # Scheduled Jobs
 
-Last updated: 2026-05-31
+Last updated: 2026-06-10
 
-All cron jobs run as Vercel Cron serverless functions. Schedules defined in `vercel.json`.
+All currently-running cron jobs are Vercel Cron serverless functions
+with schedules defined in `vercel.json`. One planned exception (the
+daily newsletter, see [newsletter-engine.md](newsletter-engine.md))
+will run on GitHub Actions instead — serverless timeout ceilings
+break a workload that needs Playwright scraping, image processing, and
+~50 OpenAI calls in a single run.
 
 ## Job Inventory
 
