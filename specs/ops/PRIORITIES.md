@@ -1,10 +1,16 @@
 # Priorities
 
-Last updated: 2026-06-08
+Last updated: 2026-06-10
 
 ## ⚠️ Action needed — Shopify scope deploy + history import
 
 **Owner**: Greg (Shopify Partner-org deploy + production import)
+**Priority note (2026-06-09):** now **#3 in Greg's queue** — behind the
+UTM linking gap and the PostHog theme redeploy (see Current Strategic
+Focus below). Nice-to-have for the LTV-back-to-launch view; not on the
+retention critical path. Also: the 2026-06-08 uninstall/reinstall for
+`write_products` may have already re-granted these scopes — verify
+before doing any work here, and close this section if so.
 
 `shopify.app.toml` requests two scopes that aren't live yet. Both ship in a
 single deploy + re-auth. See `specs/current/shopify-app-config.md`.
@@ -36,18 +42,56 @@ Why each scope:
 (Oliver or Tom can run the deploy too — all three have Partner-org access — but
 it's assigned to Greg as engineering owner.)
 
-## Current Strategic Focus (2026-05-25)
+## Current Strategic Focus (2026-06-09) — retention-led
 
-**The thesis:** Instrument the existing Shopify funnel end-to-end before scaling ad spend. Current state is ~300–400 daily visitors producing ~7 daily sales (~1.5% conversion). Doubling conversion has more leverage than doubling traffic — pouring more spend into a leaky funnel wastes money. See where people actually bail before deciding what to fix.
+**The thesis:** the 2026-05-25 "instrument-first" phase did its job — the
+instrumentation (Grapevine self-report attribution, persona segmentation,
+bundle/Klaviyo analyses) now identifies the leak, and it's **retention,
+not first-touch conversion**. 65.9% of D2C customers are Single Buyers at
+$47 LTV vs 5.7% Outfitters at $242 — a 5× delta — while the post-purchase
+email motion is effectively unbuilt ($551 across 5 orders in 7 months).
+So we ship the fix: the post-purchase Klaviyo retention motion leads;
+paid channels wait until it lands (~6–8 weeks, mid-to-late July 2026).
+Full reasoning: `specs/strategy/sessions/2026-06-09-retention-led-recal.md`.
 
-**The strategic question:** top-of-funnel-first across all channels, isolate-and-perfect one channel, or instrument-first? We're choosing **instrument-first**. Working strategy until evidence suggests otherwise.
+**What the data resolved (2026-06-06 → 06-09):**
+- **Grapevine 30-day baseline (33% response):** Meta-family ≈ 58% of
+  self-reported intros; Google only ~7.55% as introducer — Google is the
+  *closer*, not the introducer. WatchChris ≈ 7.55% of intros.
+- **Klaviyo welcome flow: +27.6% LTV lift** ($92 vs $72), driven by order
+  size — but only 32.5% of first orders use it. 67.5% are mostly not on
+  the list → the signup-lift workstream (360 W5 §6).
+- **Repeat rate ≈ 7–8% flat across first-order size**; 88.4% of orders
+  are 1–2 units. Outfit-the-collection is a multi-order email motion,
+  not a bundle SKU. Public bundle + in-box card both formally declined
+  (`bundle-strategy.md`, `in-box-card-strategy.md`).
+- **COGS confirmed:** $3.65/unit (M1 SS, M4), $4.50 (M1 Ti) → ~91%
+  blended gross margin at $40 retail.
+- **Organic works:** Tom's 2026-06-03 M4 post → 6 next-day M4 orders.
+  Workstream 4.5 continues compass-not-contract.
 
 **Sequence:**
-1. PostHog instrumentation across the existing storefront funnel (in flight — see workstream 6 below)
-2. Establish baseline conversion at each funnel stage
-3. Identify the largest leak point
-4. Test fixes against the leak (landing variants, content, copy, checkout friction)
-5. Once the funnel converts at target, scale top-of-funnel spend
+1. **Post-purchase Klaviyo flow (Klaviyo Phase 4)** — Tom creates the flow
+   skeleton in the Klaviyo UI (~15–20 min), Claude pulls YAML + writes
+   D1 / D14 / D21 / D30 content, D30 outfit code generated in Shopify
+   (25% off 5+, 30-day expiry; shared vs single-use TBD). Greg signed off
+   on the Phase 4 architecture 2026-06-09.
+2. **Greg's queue (in order):** ① UTM linking gap — only 5.4% of orders
+   get `link_method` stamped (40/734 vs 1,249 converted UTM rows); root-
+   cause + backfill (`specs/work-plans/todo/utm-linking-gap.md`). Without
+   it the retention motion's channel attribution is unmeasurable.
+   ② PostHog theme redeploy — two paste actions in Shopify Admin (see
+   workstream 6). ③ Shopify scope deploy + Feb-2024 history import (top
+   of doc).
+3. **Signup-lift workstream (360 W5 §6)** — design experiments now;
+   measurement gated on PostHog data accumulating. Discount-code-name
+   visibility (Shopify GraphQL, ~½ day) being scoped as its own work plan.
+4. **Creator program engineering compress** (Phases 1+2+4+5 of
+   `creator-program.md`) starts **~2026-06-21** when Tom is back from
+   Geneva; manual/spreadsheet cadence until then.
+5. **Paid channels (360 W6) launch only after the retention motion is
+   live and measurable** — ~6–8 weeks out, not week 3 as originally
+   planned in the 360 v3.1 calendar.
 
 ### Current Numbers (Baseline as of 2026-05-25)
 
@@ -79,9 +123,10 @@ Captured for systematic attack rather than ambient anxiety. Living index in `spe
 - **Content type effect:** which formats (installation videos, comparisons, lifestyle) move buyers from `solution_aware` to `considering`?
 - **Creator attribution:** what's the correlation between creator post metrics (engagement, follower count, niche fit) and resulting sales lift?
 - **Creator × ad overlap:** what % of creator-driven sales were already ad-exposed beforehand? Is the creator a closer or an introducer?
-- **Google mechanism:** how is Google traffic actually finding us — branded search post-ad, organic, referral, post-creator?
-- **Funnel bail point:** where exactly does the 1.5% break — top, middle, checkout?
+- ~~**Google mechanism**~~ **— largely resolved (Grapevine, 2026-06-09):** Google is the *closer*, not the introducer (~7.55% of self-reported intros vs Meta-family ≈ 58%). "Post-creator branded search" compound path validated directionally.
+- ~~**Funnel bail point**~~ **— resolved at the macro level (2026-06-09):** the structural leak is retention (Single Buyer → Outfitter), not first-touch CVR. Stage-level client-side detail still lands once PostHog accumulates.
 - **The 6–9 floor:** why is daily sales so tightly bounded? What's the algorithmic mechanism producing this?
+- **Signup leakage shape (new):** of the 67.5% of first orders with no discount, how does the miss split across creator-code redemption (C1), pre-purchase intent (C2), gifting (C3), and popup distrust (C4)? Discount-code-name visibility unlocks the C1 split.
 
 Every unknown above is an opportunity. The goal of instrumentation is to convert as many as possible into hypotheses we can test, then into validated answers.
 
@@ -264,6 +309,27 @@ V1 of `/funnel/strategy` shipped 2026-05-26 (commits `81e4079`, `fd5f5bd`). Iter
 **Iteration plan complete.** Pending follow-ups: vocabulary-map drift script (deferred, cheap), per-order Klaviyo flow attribution grain (Phase 0.5 of `klaviyo-integration.md`), upper-funnel persona × stage cross-cut (needs PostHog client-side).
 
 PostHog client-side instrumentation (workstream 6) is the largest unblock for upper-funnel measurement but is independent of this plan.
+
+---
+
+### 10. 🔨 Post-Purchase Retention Motion (Klaviyo Phase 4 + signup lift) — **current lead workstream**
+**Last worked**: 2026-06-10 (W5 §6 added to 360-campaign; PRIORITIES recalibrated)
+**Source of truth**: `specs/strategy/360-campaign.md` (W5), `specs/strategy/sessions/2026-06-09-retention-led-recal.md`, `specs/work-plans/todo/klaviyo-integration.md`
+**Owner**: Tom (flow + content approval), Greg (Phase 4 deploy infra — architecture signed off 2026-06-09)
+
+The retention-led strategic focus above, as a trackable workstream. Flow
+shape locked 2026-06-09: **D1** install guide → **D14** "how many
+watches?" (intel only, gates nothing) → **D21** Judge.me review ask →
+**D30** outfit-the-collection code (25% off 5+, 30-day expiry, goes to
+everyone). Single discount touchpoint; product-experience-led posture.
+
+- [ ] Tom: create the post-purchase flow skeleton in Klaviyo UI (~15–20 min) — **blocks everything below**
+- [ ] Claude: pull flow as YAML + write D1 / D14 / D21 / D30 email content (~2–3 hrs)
+- [ ] Generate D30 outfit code in Shopify (25% off any 5+, 30-day expiry; decide shared vs single-use)
+- [ ] Scope discount-code-name visibility work plan (Shopify GraphQL pull, ~½ day; Greg sign-off). Bucketing: Judge.me review codes → one "review-leaver" bucket; creator codes per-creator with a "creator" family tag
+- [x] Add signup-lift workstream to `360-campaign.md` W5 §6 — done 2026-06-10
+- [x] Update PRIORITIES.md with the retention-led sequence — done 2026-06-10
+- [ ] Signup-lift experiments: design now, launch once PostHog client-side data accumulates (see W5 §6 for the four candidates)
 
 ## Completed Workstreams
 

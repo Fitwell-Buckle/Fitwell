@@ -244,8 +244,9 @@ incentive.
 **(b) Lift acquisition-side email signup rate** — the prerequisite
 to every downstream Klaviyo retention play. 67.5% of first orders
 use no discount and are mostly not on the email list; every one is
-a missed downstream retention opportunity. New workstream (W5 §6 or
-as referenced in [`bundle-strategy.md`](./bundle-strategy.md)):
+a missed downstream retention opportunity. Now formalized as W5 §6
+(*Acquisition-Side Email Signup Lift*; full case in
+[`bundle-strategy.md`](./bundle-strategy.md)):
 measure signup rate at first purchase, identify the C1–C4 leakage
 shape (creator-code redemption vs welcome-flow vs no-discount), run
 interventions (trust-frame popup, post-add-to-cart capture, gift-
@@ -254,9 +255,10 @@ friendly checkout, creator-code attribution).
 **(c) Ship the W5 post-purchase Klaviyo retention motion in full.**
 This is the highest-leverage gap in the 360 plan ($551 across 5
 orders in 7 months currently — essentially unbuilt). The
-"outfit-the-collection" offer lives here as the D30 send segmented
-off the D14 reply ladder — buyers who said "3+ watches" get an
-outfit code (5+ units, ~25% off).
+"outfit-the-collection" offer lives here as the D30 send — the
+outfit code (5+ units, ~25% off, 30-day expiry) goes to everyone in
+the flow; D14 replies are intel only and gate nothing (changed
+2026-06-06, see W5 post-purchase series).
 
 Execution change vs v3.1: drop "bundle products in Shopify" from
 the W1 calendar entirely. The bundle work returns to zero in this
@@ -727,6 +729,47 @@ pre-build empty slots.
 
 ### New — M4 Cross-Sell (for M1 buyers, day 45)
 - "You fixed one strap. What about the one with a deployment clasp?"
+
+### New — Acquisition-Side Email Signup Lift (§6, added 2026-06-10)
+
+Treat email signup at first purchase as a first-class metric. Full case in
+[`bundle-strategy.md`](./bundle-strategy.md) §"Add a new workstream"; this
+section is the campaign-side home for the work.
+
+**Why:** 67.5% of first orders pay no welcome-flow discount → mostly not on
+the email list (~450 of 670 D2C window orders). Every one is a missed
+downstream retention opportunity worth multiples of the at-cart discount.
+The welcome flow's +27.6% LTV lift is concentrated in the 32.5% who use it;
+lifting signup rate compounds directly with the post-purchase series above.
+
+**Measure (prerequisite):**
+- % of first-time visitors who sign up for the welcome flow, and % of
+  first-time buyers on the list at purchase time. Both derivable once
+  PostHog client-side instrumentation is live (PRIORITIES workstream 6).
+  Surface on the `/funnel` and `/attribution` admin views.
+- Split the 32.5% of discounted first orders into welcome-flow vs
+  creator-code vs review-code redemptions — quantifies the C1 leakage
+  channel directly. Depends on discount-code-name visibility (Shopify
+  GraphQL pull, ~½ day — being scoped as its own small work plan).
+  Bucketing convention: all Judge.me review codes roll up into one
+  "review-leaver" bucket; creator codes stay per-creator, tagged with a
+  "creator" family for rollups (decided 2026-06-09).
+
+**Intervene (candidate experiments — none bundle-shaped):**
+- Replace the email-for-discount popup with a trust frame (guarantee badge
+  + "first to know about new finishes" over "15% off"). Tests C4.
+- Post-add-to-cart capture — ask after commitment, framed as "receipt +
+  care guide," not a discount trade. Tests C2.
+- Gift-friendly checkout — code goes to recipient or buyer's
+  email-of-choice. Tests C3; depends on a gift SKU per [`personas.md`](./personas.md).
+- Creator-code attribution sub-flow — a buyer redeeming `watchbros15`
+  enters a Watch Bros-themed nurture instead of being lost from the list.
+  Tests C1.
+
+**Engineering scope:** sits at the PostHog/Klaviyo intersection, no new
+schema. Discount-code-name visibility is the one discrete pull.
+**Sequencing:** measurement gates the experiments — design in parallel,
+launch after PostHog data accumulates.
 
 ---
 
