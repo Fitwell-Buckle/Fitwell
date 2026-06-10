@@ -28,7 +28,6 @@ import {
 } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 import { SupplierLineItems } from "./supplier-line-items";
-import { EtaEditor } from "./eta-editor";
 import { PoTimeline } from "@/components/production/po-timeline";
 import { ProductionTimeline } from "@/components/production/production-timeline";
 import { buildPoTimeline } from "@/lib/production/timeline";
@@ -104,9 +103,6 @@ export default async function SupplierPoDetailPage({
         },
       })
     : null;
-  const etaTarget = childPo
-    ? mySubPo
-    : { id: po.id, expectedDeliveryDate: po.expectedDeliveryDate ?? null };
   const totalCents = po.lineItems.reduce(
     (sum, li) => sum + (li.unitCostCents ?? 0) * li.quantity,
     0,
@@ -151,9 +147,12 @@ export default async function SupplierPoDetailPage({
         </Button>
       </div>
 
-      {/* Production-relevant fields only — no company / customer / price-tier. */}
+      {/* Production-relevant fields only — no company / customer / price-tier.
+        *  Expected delivery moved to the Line items table so the supplier can
+        *  set independent ETAs per line (a 16mm rose-gold buckle may finish
+        *  before a 22mm steel one of the same PO). */}
       <Card className="mt-6 p-6">
-        <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-4 text-sm sm:grid-cols-3">
           <div>
             <div className="text-xs text-zinc-400">Stage</div>
             <div className="mt-1">
@@ -178,17 +177,6 @@ export default async function SupplierPoDetailPage({
             <div className="text-xs text-zinc-400">Issued</div>
             <div className="mt-1 text-zinc-700">{fmtDate(po.issuedDate)}</div>
           </div>
-          <div>
-            <div className="text-xs text-zinc-400">Expected delivery</div>
-            {etaTarget ? (
-              <EtaEditor
-                poId={etaTarget.id}
-                initialEta={etaTarget.expectedDeliveryDate ?? null}
-              />
-            ) : (
-              <div className="mt-1 text-zinc-700">{fmtDate(po.expectedDeliveryDate)}</div>
-            )}
-          </div>
         </div>
         {po.notes && <p className="mt-4 text-sm text-zinc-600">{po.notes}</p>}
       </Card>
@@ -210,89 +198,80 @@ export default async function SupplierPoDetailPage({
           quantity: li.quantity,
           unitCost: fmtMoney(li.unitCostCents),
           currentStage: li.currentStage,
+          expectedCompletionDate: li.expectedCompletionDate,
         }))}
       />
 
-      {/* Supplier-scoped timeline: only the stages THIS supplier owns are
-        *  visible. We pass a filtered `order` (their owned stages + the
-        *  terminal sentinel) and override each line's `stages` to the same
-        *  set so `buildLineSegments` projects only the owned segments.
-        *  Historical events for stages the supplier doesn't own (e.g. a
-        *  prior supplier's stamping events when THIS supplier owns plating)
-        *  are filtered out so the chart shows nothing they shouldn't see. */}
+      {/* Supplier-scoped, read-only timeline: only the stages THIS supplier
+        *  owns are visible. Each line's bar ends at ITS OWN
+        *  expectedCompletionDate (the per-line ETA edited in the Line items
+        *  table above) — different SKUs often have independent deadlines.
+        *  The click-to-edit interaction on segments is removed; ETAs live in
+        *  the Line items table where they're more discoverable. */}
       <ProductionTimeline
         pos={[
           {
-            // Edits route to the supplier's own sub-PO when one exists, so
-            // each supplier's targets stay scoped to them (mirrors the ETA +
-            // timeline routing on this page). Falls back to the row in front
-            // of the supplier — standalone, or a master with no own sub-PO.
+            // Read-only id: the timeline doesn't write targets back any more.
             id: mySubPo?.id ?? po.id,
             shopifyPoNumber: po.shopifyPoNumber,
             supplier: po.supplier ? { name: po.supplier.name } : null,
-            // Anchor the supplier's LAST owned stage to their sub-PO ETA.
-            // The supplier's "expected delivery" date (e.g. 06/29) is the
-            // promise "I'll be done with my work by then" — which lands at
-            // the end of their last owned stage. Without this synthetic
-            // target, the bar's right edge is whatever the cycle-time
-            // estimate spits out, which often lands way before the
-            // promised date. Saved overrides win — if the supplier set an
-            // explicit target for that stage we don't fight it.
-            stageTargets: (() => {
-              const saved = mySubPo?.stageEtas ?? po.stageEtas;
-              const lastOwned = ownedStages[ownedStages.length - 1];
-              const eta =
-                mySubPo?.expectedDeliveryDate ?? po.expectedDeliveryDate ?? null;
-              if (
-                !lastOwned ||
-                !eta ||
-                saved.some((t) => t.stage === lastOwned)
-              ) {
-                return saved;
-              }
-              return [...saved, { stage: lastOwned, targetEndDate: eta }];
-            })(),
-            lineItems: sortedLineItems.map((li) => ({
-              id: li.id,
-              sku: li.sku,
-              title: li.title,
-              currentStage: li.currentStage,
-              // Walk only the supplier's owned stages (+ terminal so the
-              // projector knows when to stop). Intersect with the line's
-              // own subset so a spring-bar line that skips the supplier's
-              // assigned stage stays empty rather than projecting through it.
-              stages: [
+            // PO-level seeded targets are the baseline; per-line overrides
+            // (below in lineItems[].stageTargets) win per row.
+            stageTargets: mySubPo?.stageEtas ?? po.stageEtas,
+            lineItems: sortedLineItems.map((li) => {
+              const scopedStages = [
                 ...ownedStages.filter(
                   (s) => !li.stages || li.stages.length === 0 || li.stages.includes(s),
                 ),
                 terminal,
-              ],
-              // Filter to the supplier's owned stages AND drop events for
-              // stages later than the line's current stage. The second
-              // filter hides orphan history from prior advance-then-move-
-              // back testing (a stale stamping event with enteredAt before
-              // today's supplier_po event creates a confusing leftward
-              // bar). Past events for stages at-or-before currentStage
-              // remain — those are real history.
-              stageEvents: (() => {
-                const currentIdx = order.indexOf(li.currentStage);
-                return li.stageEvents
-                  .filter((ev) => ownedStages.includes(ev.stage))
-                  .filter((ev) => order.indexOf(ev.stage) <= currentIdx)
-                  .map((ev) => ({
-                    id: ev.id,
-                    stage: ev.stage,
-                    enteredAt: ev.enteredAt,
-                    exitedAt: ev.exitedAt,
-                  }));
-              })(),
-            })),
+              ];
+              const lastOwned = scopedStages[scopedStages.length - 2]; // skip terminal
+              return {
+                id: li.id,
+                sku: li.sku,
+                title: li.title,
+                currentStage: li.currentStage,
+                // Walk only the supplier's owned stages (+ terminal so the
+                // projector knows when to stop). Intersect with the line's
+                // own subset so a spring-bar line that skips the supplier's
+                // assigned stage stays empty rather than projecting through it.
+                stages: scopedStages,
+                // Per-line target override: if this line has an ETA, anchor
+                // its LAST owned stage to that date. Other lines on the same
+                // PO with different ETAs get their own anchors via the same
+                // mechanism on their own row.
+                stageTargets:
+                  lastOwned && li.expectedCompletionDate
+                    ? [
+                        {
+                          stage: lastOwned,
+                          targetEndDate: li.expectedCompletionDate,
+                        },
+                      ]
+                    : undefined,
+                // Filter to the supplier's owned stages AND drop events for
+                // stages later than the line's current stage. The second
+                // filter hides orphan history from prior advance-then-move-
+                // back testing.
+                stageEvents: (() => {
+                  const currentIdx = order.indexOf(li.currentStage);
+                  return li.stageEvents
+                    .filter((ev) => ownedStages.includes(ev.stage))
+                    .filter((ev) => order.indexOf(ev.stage) <= currentIdx)
+                    .map((ev) => ({
+                      id: ev.id,
+                      stage: ev.stage,
+                      enteredAt: ev.enteredAt,
+                      exitedAt: ev.exitedAt,
+                    }));
+                })(),
+              };
+            }),
           },
         ]}
         estimates={estimates}
         stageLabels={stageLabels}
         order={[...ownedStages, terminal]}
-        etaSaveRouteBase="/api/supplier/po"
       />
 
       <PoTimeline

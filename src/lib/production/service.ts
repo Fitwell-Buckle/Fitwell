@@ -354,6 +354,42 @@ export async function setSubPoEta(
   await reseedStageTargets(subPoId);
 }
 
+/**
+ * Set ONE line item's expected_completion_date. Per-line ETAs are the
+ * primary mechanism on the supplier portal — lines often have independent
+ * completion dates (FWB001-BL-16 may finish before FWB001-RG-16 of the
+ * same PO), so we let suppliers set each one independently. After the
+ * update, reseed the OWNING master and every sub-PO under it — line ETA
+ * drives the supplier-anchor in the seeder, so a change here ripples
+ * through every chart that references this line.
+ */
+export async function setLineExpectedCompletionDate(
+  lineItemId: string,
+  expectedCompletionDate: string | null,
+): Promise<{ masterId: string } | null> {
+  const line = await db.query.productionPoLineItem.findFirst({
+    where: eq(productionPoLineItem.id, lineItemId),
+    columns: { poId: true },
+  });
+  if (!line) return null;
+
+  await db
+    .update(productionPoLineItem)
+    .set({ expectedCompletionDate, updatedAt: new Date() })
+    .where(eq(productionPoLineItem.id, lineItemId));
+
+  // Reseed the master + every sub-PO; per-line ETA flows into each one's
+  // computed stage targets via the seeder's anchor.
+  await reseedStageTargets(line.poId);
+  const subPos = await db.query.productionPo.findMany({
+    where: eq(productionPo.parentPoId, line.poId),
+    columns: { id: true },
+  });
+  for (const s of subPos) await reseedStageTargets(s.id);
+
+  return { masterId: line.poId };
+}
+
 /** Per-stage target end dates for a (sub-)PO, used by the timeline chart to
  *  override the cycle-time projection when an explicit date is set. */
 export async function getPoStageEtas(
@@ -420,6 +456,7 @@ export async function reseedStageTargets(
         shopifyProductId: true,
         quantity: true,
         stages: true,
+        expectedCompletionDate: true,
       },
     }),
     getStageOrder(),
@@ -450,6 +487,7 @@ export async function reseedStageTargets(
       productId: l.shopifyProductId ?? null,
       quantity: l.quantity,
       stages: l.stages ?? null,
+      expectedCompletionDate: l.expectedCompletionDate ?? null,
     })),
     samples,
   });

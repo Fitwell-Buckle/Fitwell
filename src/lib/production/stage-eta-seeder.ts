@@ -17,6 +17,11 @@ export interface SeederLine {
   sku: string;
   productId: string | null;
   quantity: number;
+  /** Per-line ETA (YYYY-MM-DD). When set + `ownedStages` is supplied, this
+   *  line's last owned stage is anchored to THIS date instead of the
+   *  seeder-level `subPoEta`. Lines on the same sub-PO often have
+   *  independent deadlines; per-line ETAs let the chart show that. */
+  expectedCompletionDate?: string | null;
 }
 
 export interface ComputeStageTargetsInput {
@@ -93,10 +98,24 @@ export function computeStageTargets(
     const walkOrder = lineStages(line, order);
     const lineStageCount = walkOrder.length > 0 ? walkOrder.length : order.length;
 
+    // Per-line anchor target: the line's own ETA wins over the seeder-level
+    // sub-PO ETA. Lines on the same sub-PO often have independent
+    // deadlines; the chart's right edge per line should match that line's
+    // own promise, not the sub-PO rollup.
+    const lineAnchor =
+      line.expectedCompletionDate && line.expectedCompletionDate.length > 0
+        ? line.expectedCompletionDate
+        : subPoEta;
+
+    // Tier 4 (PO-split) days per line — use the line's own ETA when set,
+    // else fall back to the seeder-level subPoEta.
+    const lineTotalDays =
+      lineAnchor != null ? daysBetween(issuedDate, lineAnchor) : poTotalDays;
+
     // Find this line's LAST owned stage (last walked stage that's in
-    // ownedSet). If `anchorActive`, that stage's target gets replaced
-    // with subPoEta — pinning the supplier's promised delivery to where
-    // their work actually ends.
+    // ownedSet). If `anchorActive` and the line has an anchor, that
+    // stage's target gets replaced with the anchor date — pinning the
+    // supplier's promised delivery (per line) to where their work ends.
     let lastOwnedIdxOnLine = -1;
     if (anchorActive) {
       for (let i = walkOrder.length - 1; i >= 0; i--) {
@@ -125,18 +144,23 @@ export function computeStageTargets(
         productId: line.productId,
         lineQty: line.quantity,
         lineStageCount,
-        poTotalDays,
+        poTotalDays: lineTotalDays,
         samples,
         defaults,
       });
 
       let endDate = addDaysISO(cursor, days);
-      // Supplier anchor: the line's last owned stage lands exactly on the
-      // sub-PO ETA — but only if the cursor-walked end is BEFORE the ETA
-      // (otherwise the supplier's work is naturally projected to overrun
-      // their promise; that's a real signal, don't paper over it).
-      if (anchorActive && i === lastOwnedIdxOnLine && subPoEta && endDate < subPoEta) {
-        endDate = subPoEta;
+      // Anchor: the line's last owned stage lands exactly on lineAnchor
+      // (per-line ETA when set, otherwise sub-PO ETA). Only when the
+      // cursor-walked end is BEFORE the anchor — natural overruns stay
+      // visible as real signal.
+      if (
+        anchorActive &&
+        i === lastOwnedIdxOnLine &&
+        lineAnchor &&
+        endDate < lineAnchor
+      ) {
+        endDate = lineAnchor;
       }
       const bucket = candidates.get(stage) ?? [];
       bucket.push(endDate);

@@ -299,6 +299,11 @@ export interface TimelinePo {
      *  list instead of the global `order` (so a line that skips EDM/polishing
      *  doesn't get phantom segments for them). NULL/undefined = inherit `order`. */
     stages?: readonly string[] | null;
+    /** Per-line stage target overrides. When set, these override the PO-level
+     *  `stageTargets` for THIS line's segment projection — so a line whose
+     *  ETA is 06/29 ends at 06/29 even if another line on the same PO has a
+     *  later ETA. Used by the supplier portal's per-line ETA anchoring. */
+    stageTargets?: { stage: ProductionStage; targetEndDate: string }[];
     // Per-line owning supplier + sub-PO number (the supplier responsible for the
     // line's current stage); falls back to the PO's primary supplier/number.
     supplierName?: string;
@@ -368,13 +373,25 @@ export function ProductionTimeline({
       po.lineItems
         .filter((li) => li.stageEvents.length > 0)
         .map((li) => {
+          // Per-line overrides win: a line with its own ETA gets a target
+          // map built from its `stageTargets`, ignoring the PO-level map.
+          // Otherwise we fall back to the PO-level targets so the by-PO
+          // and admin master views keep their existing behavior.
+          const lineTargets =
+            li.stageTargets && li.stageTargets.length > 0
+              ? new Map(
+                  li.stageTargets.map(
+                    (t) => [t.stage, utcMidnight(t.targetEndDate)] as const,
+                  ),
+                )
+              : targetsByPoId.get(po.id);
           const segs = buildLineSegments(
             li,
             todayMs,
             todayIso,
             order,
             estimates,
-            targetsByPoId.get(po.id),
+            lineTargets,
           );
           // When the caller has pre-computed per-supplier sub-bars (multi-
           // supplier master view), use those directly and derive the row's
@@ -409,8 +426,8 @@ export function ProductionTimeline({
     <div className="mt-8">
       <h2 className="text-sm font-semibold text-zinc-900">Production timeline</h2>
       <p className="mt-1 text-xs text-zinc-500">
-        Each row is a line item across its stages. Solid = actual (from stage
-        history); faded = projected to ETA using cycle-time estimates.
+        Each row is a line item across its stages. The vertical line marks
+        today — segments to the left are completed, to the right are projected.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
