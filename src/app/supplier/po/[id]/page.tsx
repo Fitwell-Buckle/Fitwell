@@ -230,7 +230,28 @@ export default async function SupplierPoDetailPage({
             id: mySubPo?.id ?? po.id,
             shopifyPoNumber: po.shopifyPoNumber,
             supplier: po.supplier ? { name: po.supplier.name } : null,
-            stageTargets: mySubPo?.stageEtas ?? po.stageEtas,
+            // Anchor the supplier's LAST owned stage to their sub-PO ETA.
+            // The supplier's "expected delivery" date (e.g. 06/29) is the
+            // promise "I'll be done with my work by then" — which lands at
+            // the end of their last owned stage. Without this synthetic
+            // target, the bar's right edge is whatever the cycle-time
+            // estimate spits out, which often lands way before the
+            // promised date. Saved overrides win — if the supplier set an
+            // explicit target for that stage we don't fight it.
+            stageTargets: (() => {
+              const saved = mySubPo?.stageEtas ?? po.stageEtas;
+              const lastOwned = ownedStages[ownedStages.length - 1];
+              const eta =
+                mySubPo?.expectedDeliveryDate ?? po.expectedDeliveryDate ?? null;
+              if (
+                !lastOwned ||
+                !eta ||
+                saved.some((t) => t.stage === lastOwned)
+              ) {
+                return saved;
+              }
+              return [...saved, { stage: lastOwned, targetEndDate: eta }];
+            })(),
             lineItems: sortedLineItems.map((li) => ({
               id: li.id,
               sku: li.sku,

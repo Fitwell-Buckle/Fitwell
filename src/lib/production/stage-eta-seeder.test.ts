@@ -155,6 +155,58 @@ describe("computeStageTargets — Tier 4 (po_split) walk", () => {
     }
   });
 
+  it("supplier anchor: line's last owned stage lands on subPoEta", () => {
+    // Supplier owns [supplier_po, stamping] — stamping is their last
+    // owned stage. Expect stamping_target = ETA (06/15), and earlier
+    // stages (supplier_po) still cursor-walk via Tier 4.
+    const out = computeStageTargets({
+      order: ORDER,
+      issuedDate: ISSUED,
+      subPoEta: ETA,
+      lines: [{ sku: "X", productId: null, quantity: 1, stages: null }],
+      samples: emptyCycleTimeSamples(),
+      ownedStages: ["supplier_po", "stamping"],
+    });
+    const stamping = out.find((s) => s.stage === "stamping")!;
+    expect(stamping.targetEndDate).toBe(ETA);
+    // supplier_po still cursor-walks; doesn't get pinned.
+    const supplierPo = out.find((s) => s.stage === "supplier_po")!;
+    expect(supplierPo.targetEndDate).not.toBe(ETA);
+  });
+
+  it("supplier anchor: doesn't override when cursor-walked end already exceeds subPoEta", () => {
+    // Massive line that would naturally overrun the promise — the anchor
+    // should NOT pull stamping BACK to subPoEta; the overrun is a real
+    // signal we want to preserve.
+    const SHORT_ETA = "2026-06-03"; // 2 days from ISSUED
+    const out = computeStageTargets({
+      order: ORDER,
+      issuedDate: ISSUED,
+      subPoEta: SHORT_ETA,
+      lines: [{ sku: "X", productId: null, quantity: 1, stages: null }],
+      samples: emptyCycleTimeSamples(),
+      ownedStages: ["supplier_po", "stamping"],
+    });
+    const stamping = out.find((s) => s.stage === "stamping")!;
+    // With 2-day window and 9 stages, each stage gets ~0.2 day → first 2
+    // stages end at ~06/01.something → 06/02 (rounded). So the anchor
+    // (SHORT_ETA = 06/03) IS later — anchor kicks in, target = 06/03.
+    expect(stamping.targetEndDate).toBe(SHORT_ETA);
+  });
+
+  it("supplier anchor: no-op when ownedStages is absent", () => {
+    // Without ownedStages, no anchoring — stamping = cursor-walked.
+    const noAnchor = computeStageTargets({
+      order: ORDER,
+      issuedDate: ISSUED,
+      subPoEta: ETA,
+      lines: [{ sku: "X", productId: null, quantity: 1, stages: null }],
+      samples: emptyCycleTimeSamples(),
+    });
+    const stamping = noAnchor.find((s) => s.stage === "stamping")!;
+    expect(stamping.targetEndDate).not.toBe(ETA);
+  });
+
   it("excludes the terminal stage from output", () => {
     const out = computeStageTargets({
       order: ORDER,

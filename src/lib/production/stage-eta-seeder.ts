@@ -24,12 +24,20 @@ export interface ComputeStageTargetsInput {
   order: readonly string[];
   /** Sub-PO issued date (YYYY-MM-DD). The cursor starts here for every line. */
   issuedDate: string;
-  /** Sub-PO ETA (YYYY-MM-DD), or null. Drives Tier 4 of the estimator. */
+  /** Sub-PO ETA (YYYY-MM-DD), or null. Drives Tier 4 of the estimator AND
+   *  (when `ownedStages` is set) anchors the last owned stage to this date. */
   subPoEta: string | null;
   /** Lines on the master that this sub-PO seeds for. */
   lines: SeederLine[];
   samples: CycleTimeSamples;
   defaults?: Record<string, number>;
+  /** Stages this sub-PO's supplier owns on the master (in pipeline order).
+   *  When set + `subPoEta` is set, the per-line cursor-walked target for
+   *  the line's LAST owned stage is replaced with `subPoEta` — so the
+   *  supplier's promised delivery aligns with the end of their work.
+   *  Other (non-owned) stages still cursor-walk normally; their targets
+   *  reflect cycle-time projection, not the sub-PO ETA. */
+  ownedStages?: readonly string[];
 }
 
 export interface StageTargetSeed {
@@ -66,12 +74,15 @@ function lineStages(
 export function computeStageTargets(
   input: ComputeStageTargetsInput,
 ): StageTargetSeed[] {
-  const { order, issuedDate, subPoEta, lines, samples, defaults } = input;
+  const { order, issuedDate, subPoEta, lines, samples, defaults, ownedStages } =
+    input;
   if (lines.length === 0 || order.length === 0) return [];
 
   const terminalIdx = order.length - 1;
   const poTotalDays =
     subPoEta != null ? daysBetween(issuedDate, subPoEta) : null;
+  const ownedSet = ownedStages ? new Set(ownedStages) : null;
+  const anchorActive = !!(ownedSet && subPoEta);
 
   // For each global stage, collect the candidate end dates from contributing
   // lines (ISO YYYY-MM-DD strings sort correctly with `>` so we can max via
@@ -81,6 +92,22 @@ export function computeStageTargets(
   for (const line of lines) {
     const walkOrder = lineStages(line, order);
     const lineStageCount = walkOrder.length > 0 ? walkOrder.length : order.length;
+
+    // Find this line's LAST owned stage (last walked stage that's in
+    // ownedSet). If `anchorActive`, that stage's target gets replaced
+    // with subPoEta — pinning the supplier's promised delivery to where
+    // their work actually ends.
+    let lastOwnedIdxOnLine = -1;
+    if (anchorActive) {
+      for (let i = walkOrder.length - 1; i >= 0; i--) {
+        const stage = walkOrder[i] as ProductionStage;
+        if (order.indexOf(stage) === terminalIdx) continue;
+        if (ownedSet!.has(stage)) {
+          lastOwnedIdxOnLine = i;
+          break;
+        }
+      }
+    }
 
     let cursor = issuedDate;
     for (let i = 0; i < walkOrder.length; i++) {
@@ -103,7 +130,14 @@ export function computeStageTargets(
         defaults,
       });
 
-      const endDate = addDaysISO(cursor, days);
+      let endDate = addDaysISO(cursor, days);
+      // Supplier anchor: the line's last owned stage lands exactly on the
+      // sub-PO ETA — but only if the cursor-walked end is BEFORE the ETA
+      // (otherwise the supplier's work is naturally projected to overrun
+      // their promise; that's a real signal, don't paper over it).
+      if (anchorActive && i === lastOwnedIdxOnLine && subPoEta && endDate < subPoEta) {
+        endDate = subPoEta;
+      }
       const bucket = candidates.get(stage) ?? [];
       bucket.push(endDate);
       candidates.set(stage, bucket);

@@ -390,6 +390,7 @@ export async function reseedStageTargets(
     columns: {
       id: true,
       parentPoId: true,
+      supplierId: true,
       issuedDate: true,
       expectedDeliveryDate: true,
     },
@@ -397,30 +398,53 @@ export async function reseedStageTargets(
   if (!po) return [];
 
   // Line items live on the master. For a sub-PO, walk up to the parent; for
-  // a standalone master, walk its own lines.
+  // a standalone master, walk its own lines. We also need the master's
+  // stage→supplier assignments to anchor THIS sub-PO's last owned stage to
+  // its own ETA (the supplier's promised delivery).
   const masterId = po.parentPoId ?? po.id;
-  const lines = await db.query.productionPoLineItem.findMany({
-    where: and(
-      eq(productionPoLineItem.poId, masterId),
-      isNull(productionPoLineItem.shopifyReceivedAt),
-    ),
-    columns: {
-      sku: true,
-      shopifyProductId: true,
-      quantity: true,
-      stages: true,
-    },
-  });
-
-  const [order, samples] = await Promise.all([
+  const [master, lines, order, samples] = await Promise.all([
+    db.query.productionPo.findFirst({
+      where: eq(productionPo.id, masterId),
+      columns: { supplierId: true },
+      with: {
+        stageAssignments: { columns: { stage: true, supplierId: true } },
+      },
+    }),
+    db.query.productionPoLineItem.findMany({
+      where: and(
+        eq(productionPoLineItem.poId, masterId),
+        isNull(productionPoLineItem.shopifyReceivedAt),
+      ),
+      columns: {
+        sku: true,
+        shopifyProductId: true,
+        quantity: true,
+        stages: true,
+      },
+    }),
     getStageOrder(),
     getCycleTimeSamples(),
   ]);
+  if (!master) return [];
+
+  // Stages this PO's supplier owns on the master. For a standalone PO
+  // (parentPoId == null, po.supplierId == master.supplierId) this is the
+  // whole pipeline; for a sub-PO, it's the supplier's assigned stages
+  // plus any unassigned stages that fall back to the master's primary IF
+  // this sub-PO happens to be that primary supplier (rare). Used to
+  // anchor the LAST owned stage to po.expectedDeliveryDate.
+  const ownedStages = stagesOwnedBySupplier(
+    order,
+    master.stageAssignments,
+    master.supplierId,
+    po.supplierId,
+  );
 
   const seeds = computeStageTargets({
     order,
     issuedDate: po.issuedDate,
     subPoEta: po.expectedDeliveryDate ?? null,
+    ownedStages,
     lines: lines.map((l) => ({
       sku: l.sku,
       productId: l.shopifyProductId ?? null,
