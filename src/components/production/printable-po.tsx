@@ -146,7 +146,7 @@ export async function PrintablePo({ poId }: { poId: string }) {
         <img
           src={logoUrl}
           alt="Fitwell"
-          className="h-8 w-auto shrink-0 [filter:brightness(0)]"
+          className="h-16 w-auto shrink-0 [filter:brightness(0)]"
         />
       </div>
 

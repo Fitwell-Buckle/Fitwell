@@ -54,7 +54,7 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           <div className="mt-1 font-mono text-sm text-zinc-500">{inv.invoiceNumber}</div>
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logoUrl} alt="Fitwell" className="h-8 w-auto shrink-0 [filter:brightness(0)]" />
+        <img src={logoUrl} alt="Fitwell" className="h-16 w-auto shrink-0 [filter:brightness(0)]" />
       </div>
 
       <div className="mt-8 grid grid-cols-3 gap-4 text-sm">
