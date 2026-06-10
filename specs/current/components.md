@@ -105,6 +105,7 @@ unit-tested); display helpers in `lib/production/display.ts`.
 | `components/production/supplier-form` | Shared create/edit supplier form; includes `<GmailContactSearch>` above the contact email field — pick fills email and, if blank, contact name |
 | `components/production/supplier-logins` | Authorized-logins (magic-link allowlist) card on the supplier detail page; uses the same `<GmailContactSearch>` |
 | `components/production/po-timeline` | Unified notes + documents feed (admin + supplier sides) |
+| `components/production/printable-po` | The shared printable PO document. Async server component — given a PO id it fetches its own data and renders the full master document, or (handed a sub-PO id) the supplier-scoped version (that supplier's stages, per-line costs, raw-blank summary). Used by the admin send page (`/modules/production/po/[id]/send`) and the supplier print page (`/supplier/po/[id]/print`); both wrap it with the shared `PrintButton` → `window.print()`. Callers own auth/scope. **2026-06-09** |
 | `components/production/gmail-contact-search` | Reusable Gmail-search affordance — `<GmailContactSearch onPick={…} />`. Hits `GET /api/gmail/search?q=…`. Renders an input + button + results list (email, parsed name, snippet). Self-clears after a pick. Surfaces friendly errors inline. **New 2026-05-28** |
 
 ## Invoicing Module (`app/(admin)/invoices/`, `components/invoicing/`)
