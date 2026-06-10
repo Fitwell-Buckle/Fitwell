@@ -336,7 +336,8 @@ everyone). Single discount touchpoint; product-experience-led posture.
 **Source of truth**: `specs/strategy/newsletter.md` + `specs/current/newsletter-engine.md`
 **Owner**: Tom
 
-Engine phase 1 shipped: RSS fetch (9 sources) → dedup → Claude
+Engine phase 1 shipped: RSS/proxied fetch (source registry in
+`newsletter/sources.ts`, incl. live WatchPro scrape) → dedup → Claude
 triage/summarize (`claude-opus-4-8`, mirrors the CRM's forced-tool
 pattern) → MJML brief (reuses the Klaviyo template pipeline + UTM
 injection) → Klaviyo **draft** (never auto-sends; manual send while the
@@ -354,10 +355,12 @@ announcement instead of auto-enroll; name riff pending, one-file rename).
 - [ ] Tom: create the Klaviyo newsletter list → `NEWSLETTER_KLAVIYO_LIST_ID`
 - [ ] Set GH Actions secrets: `ANTHROPIC_API_KEY`, `KLAVIYO_API_KEY`,
       `NEWSLETTER_KLAVIYO_LIST_ID`, `NEWSLETTER_DATABASE_URL`
-- [ ] Apply migration 0057 to prod before pushing (`npm run db:migrate:prod`)
+- [x] Apply migration 0057 to prod before pushing — done 2026-06-10
+      (`db:migrate:prod` applied 0057 + 0058 together; prod at 59/59)
 
-**Next phases**: Playwright scrape sources (WatchPro, Europa Star,
-auction houses, IR pages), image pipeline (Vercel Blob),
+**Next phases**: Playwright scrape sources (auction houses, IR pages —
+WatchPro shipped via proxy; Europa Star evaluated and dropped
+2026-06-10), image pipeline (Vercel Blob),
 extract-klaviyo stats backfill into `newsletter_campaign`, send
 automation after the voice settles.
 
