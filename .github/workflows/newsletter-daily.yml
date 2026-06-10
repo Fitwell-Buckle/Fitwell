@@ -24,7 +24,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # node 24 to match local dev + CI — see ci.yml note on npm 10
+          # rejecting npm 11 lockfiles.
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npx tsx newsletter/main.ts --${{ inputs.mode || 'draft' }}
