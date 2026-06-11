@@ -72,9 +72,19 @@ describe("buildMjml", () => {
     expect(mjml).toContain("The Micro-Adjust");
     expect(mjml).toContain("https://hodinkee.com/articles/rolex-ceo");
     expect(mjml).toContain("Rolex has a new CEO. It matters.");
-    expect(mjml).toContain("Luxury &amp; Swiss Majors");
-    expect(mjml).toContain("Microbrand &amp; Indie");
+    expect(mjml).toContain("Hodinkee"); // source eyebrow (no brand-tier tag)
+    expect(mjml).toContain("Business &amp; Industry"); // type-led section header
     expect(mjml).toContain("New Releases");
+  });
+
+  it("does not render brand-tier (segment) labels", () => {
+    const mjml = buildMjml(
+      [brief({}), brief({ segment: "microbrand", type: "release", url: "https://a.com/b" })],
+      date,
+    );
+    expect(mjml).not.toContain("Swiss Majors");
+    expect(mjml).not.toContain("Microbrand");
+    expect(mjml).not.toContain("Mid-Tier");
   });
 
   it("escapes HTML in story fields", () => {
@@ -95,16 +105,16 @@ describe("buildMjml", () => {
   it("renders New Releases as the LAST section", () => {
     const mjml = buildMjml(
       [
-        brief({ segment: "microbrand", type: "release", url: "https://a.com/r" }),
+        brief({ type: "release", url: "https://a.com/r", title: "Baltic Drops Diver" }),
         brief({}),
       ],
       date,
     );
     const releasesAt = mjml.indexOf("New Releases");
     expect(releasesAt).toBeGreaterThan(-1);
-    expect(releasesAt).toBeGreaterThan(mjml.indexOf("Luxury &amp; Swiss Majors"));
-    // releases get a segment eyebrow instead of a type eyebrow
-    expect(mjml.slice(releasesAt)).toContain("Microbrand &amp; Indie");
+    expect(releasesAt).toBeGreaterThan(mjml.indexOf("Business &amp; Industry"));
+    // the release story sits inside the (last) New Releases section
+    expect(mjml.slice(releasesAt)).toContain("Baltic Drops Diver");
   });
 
   it("renders Also at links for collapsed multi-outlet coverage", () => {

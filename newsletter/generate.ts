@@ -14,7 +14,6 @@ import { compileMjml, injectUtms } from "../src/lib/klaviyo/templates";
 import { NEWSLETTER } from "./config";
 import {
   NEWS_SECTION_ORDER,
-  SEGMENT_LABELS,
   TYPE_LABELS,
   type BriefStory,
   type StoryType,
@@ -67,11 +66,15 @@ function storyImage(story: BriefStory): string {
         <mj-image src="${escapeHtml(story.imageUrl)}" alt="${escapeHtml(story.title)}" href="${escapeHtml(story.url)}" padding="12px 0 0 0" border-radius="4px" />`;
 }
 
-function storyBlock(story: BriefStory, eyebrow: string): string {
+// Eyebrow is the source only. Brand-tier (segment) is intentionally NOT
+// shown — the headline already names the brand, and a visible tier reads
+// as a ranking of brands we court. segment stays in the data model for
+// analytics; it's just never displayed.
+function storyBlock(story: BriefStory): string {
   const bottomPad = story.alsoCovered?.length ? "4px" : "12px";
   return `${storyImage(story)}
         <mj-text padding="12px 0 0 0" font-size="11px" letter-spacing="1px" text-transform="uppercase" color="#8a8a8a">
-          ${escapeHtml(eyebrow)} · ${escapeHtml(story.sourceName)}
+          ${escapeHtml(story.sourceName)}
         </mj-text>
         <mj-text padding="4px 0 0 0" font-size="17px" font-weight="600" line-height="1.3">
           <a href="${escapeHtml(story.url)}" style="color:#1a1a1a;text-decoration:none;">${escapeHtml(story.title)}</a>
@@ -107,19 +110,13 @@ export function buildMjml(stories: BriefStory[], date: Date): string {
 
   const newsSections = [...news.entries()]
     .map(([type, group]) =>
-      sectionShell(
-        TYPE_LABELS[type],
-        group.map((s) => storyBlock(s, SEGMENT_LABELS[s.segment])).join("\n"),
-      ),
+      sectionShell(TYPE_LABELS[type], group.map(storyBlock).join("\n")),
     )
     .join("\n");
 
   const releaseSection =
     releases.length > 0
-      ? sectionShell(
-          TYPE_LABELS.release,
-          releases.map((s) => storyBlock(s, SEGMENT_LABELS[s.segment])).join("\n"),
-        )
+      ? sectionShell(TYPE_LABELS.release, releases.map(storyBlock).join("\n"))
       : "";
 
   return `<mjml>
