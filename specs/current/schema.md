@@ -625,7 +625,7 @@ parent.
 
 | Table | Key columns |
 |-------|-------------|
-| `production_comment` | `po_id?`, `line_item_id?`, `author_user_id` (FK user), `body`, `created_at` |
+| `production_comment` | `po_id?`, `line_item_id?`, `author_user_id` (FK user), `body`, `created_at`, `updated_at?` (null until the author edits the note — drives the "(edited)" marker; notes are author-editable only) |
 | `production_attachment` | `po_id?`, `line_item_id?`, `blob_url`, `filename`, `content_type`, `size_bytes`, `uploaded_by_user_id` (FK user), `uploaded_at` |
 
 Attachments are stored in **Vercel Blob** (`BLOB_READ_WRITE_TOKEN`); the DB row

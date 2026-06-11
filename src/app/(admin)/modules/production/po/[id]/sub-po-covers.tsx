@@ -294,18 +294,18 @@ export function SubPoCovers({
         </Table>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-3">
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" disabled={savingPrices} onClick={savePrices}>
-            {savingPrices ? "Saving…" : "Save prices"}
-          </Button>
-          {savedPrices && <span className="text-xs text-emerald-600">Saved</span>}
-        </div>
+      <div className="mt-4 flex flex-col items-end gap-2 border-t border-zinc-100 pt-3">
         <div className="flex items-baseline">
           <span className="text-sm text-zinc-500">Supplier total</span>
           <span className="ml-3 text-base font-semibold text-zinc-900">
             {fmtMoney(supplierTotalCents)}
           </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {savedPrices && <span className="text-xs text-emerald-600">Saved</span>}
+          <Button size="sm" variant="outline" disabled={savingPrices} onClick={savePrices}>
+            {savingPrices ? "Saving…" : "Save prices"}
+          </Button>
         </div>
       </div>
 

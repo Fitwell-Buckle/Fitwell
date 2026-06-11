@@ -290,6 +290,7 @@ export default async function SupplierPoDetailPage({
       <PoTimeline
         poId={mySubPo?.id ?? po.id}
         viewer="supplier"
+        currentUserId={scope.userId}
         // When viewing a master, merge its thread (admin's broadcast to every
         // supplier) with the viewing supplier's own sub-PO thread (their
         // private back-and-forth). Posting still targets the sub-PO via

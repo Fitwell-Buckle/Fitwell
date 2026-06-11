@@ -18,16 +18,23 @@ export function PoTimeline({
   poId,
   viewer,
   entries,
+  currentUserId,
 }: {
   poId: string;
   viewer: "admin" | "supplier";
   entries: PoTimelineEntry[];
+  /** The signed-in user's id — a note shows an Edit affordance only to its
+   *  own author (admins in the dashboard, suppliers in the portal). */
+  currentUserId?: string | null;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Inline note editing: the id being edited + its working text.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
 
   async function postNote() {
     const text = body.trim();
@@ -45,6 +52,43 @@ export function PoTimeline({
         setError(data.error || "Failed to post note.");
       } else {
         setBody("");
+        router.refresh();
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startEdit(id: string, current: string) {
+    setError(null);
+    setEditingId(id);
+    setEditBody(current);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditBody("");
+  }
+
+  async function saveEdit(id: string) {
+    const text = editBody.trim();
+    if (!text) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/production/po/${poId}/comments/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: text }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Failed to save note.");
+      } else {
+        setEditingId(null);
+        setEditBody("");
         router.refresh();
       }
     } catch {
@@ -153,7 +197,51 @@ export function PoTimeline({
                 </span>
               </div>
               {e.kind === "note" ? (
-                <p className="mt-0.5 whitespace-pre-wrap text-zinc-700">{e.body}</p>
+                editingId === e.id ? (
+                  <div className="mt-1">
+                    <textarea
+                      value={editBody}
+                      onChange={(ev) => setEditBody(ev.target.value)}
+                      rows={2}
+                      className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
+                    />
+                    <div className="mt-2 flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={cancelEdit}
+                        disabled={busy}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => saveEdit(e.id)}
+                        disabled={busy || !editBody.trim()}
+                      >
+                        {busy ? "Saving…" : "Save"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-0.5">
+                    <p className="whitespace-pre-wrap text-zinc-700">
+                      {e.body}
+                      {e.editedAt && (
+                        <span className="ml-1 text-xs text-zinc-400">(edited)</span>
+                      )}
+                    </p>
+                    {currentUserId && e.authorUserId === currentUserId && (
+                      <button
+                        type="button"
+                        onClick={() => startEdit(e.id, e.body)}
+                        className="mt-0.5 text-xs text-zinc-400 hover:text-zinc-700"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                )
               ) : e.kind === "document" ? (
                 <div className="mt-1 flex items-center justify-between rounded-md border border-zinc-100 px-3 py-2">
                   <a

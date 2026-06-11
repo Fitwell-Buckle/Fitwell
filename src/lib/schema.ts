@@ -876,6 +876,9 @@ export const productionComment = pgTable(
       .references(() => user.id),
     body: text("body").notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    // Null until the author edits the note; set on each edit so the UI can
+    // mark it "(edited)". Notes are author-editable only.
+    updatedAt: timestamp("updated_at", { mode: "date" }),
   },
   (t) => [
     index("production_comment_po_id_idx").on(t.poId),

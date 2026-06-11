@@ -106,7 +106,7 @@ unit-tested); display helpers in `lib/production/display.ts`.
 | `components/production/supplier-form` | Shared create/edit supplier form; the contact-email field is a `<GmailEmailInput>` (inline Gmail typeahead) — picking a match fills email and, if blank, contact name |
 | `components/production/supplier-logins` | Authorized-logins (magic-link allowlist) card on the supplier detail page; the add field is a `<GmailEmailInput>` (inline Gmail typeahead) + Add button |
 | `components/production/company-logins` | B2B-portal authorized-logins allowlist (brands manager + customer detail, `embedded` variant); the add field is a `<GmailEmailInput>` (inline Gmail typeahead) + Add button |
-| `components/production/po-timeline` | Unified notes + documents feed (admin + supplier sides) |
+| `components/production/po-timeline` | Unified notes + documents feed (admin + supplier sides). Takes `currentUserId`; each note shows an inline **Edit** affordance only to its own author (admins in the dashboard, suppliers in the portal) — PATCH `…/comments/[commentId]`, then an "(edited)" marker. Admins can delete documents; suppliers can't |
 | `components/production/printable-po` | The shared printable PO document. Async server component — given a PO id it fetches its own data and renders the full master document, or (handed a sub-PO id) the supplier-scoped version (that supplier's stages, per-line costs, raw-blank summary). Used by the admin send page (`/modules/production/po/[id]/send`) and the supplier print page (`/supplier/po/[id]/print`); both wrap it with the shared `PrintButton` → `window.print()`. Callers own auth/scope. **2026-06-09** |
 
 ## Invoicing Module (`app/(admin)/invoices/`, `components/invoicing/`)

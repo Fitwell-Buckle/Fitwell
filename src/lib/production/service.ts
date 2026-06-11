@@ -1340,3 +1340,28 @@ export async function addComment(params: {
     .returning({ id: productionComment.id });
   return row;
 }
+
+/**
+ * Edit a note's body, scoped to its author, and stamp `updatedAt` so the UI
+ * can mark it "(edited)". Author-only is enforced in the WHERE clause (not a
+ * separate read-then-check), so a forged/stale id or someone else's note
+ * simply matches no row. Returns the row, or null when nothing matched —
+ * callers map null to 403.
+ */
+export async function updateComment(params: {
+  commentId: string;
+  authorUserId: string;
+  body: string;
+}): Promise<{ id: string } | null> {
+  const [row] = await db
+    .update(productionComment)
+    .set({ body: params.body, updatedAt: new Date() })
+    .where(
+      and(
+        eq(productionComment.id, params.commentId),
+        eq(productionComment.authorUserId, params.authorUserId),
+      ),
+    )
+    .returning({ id: productionComment.id });
+  return row ?? null;
+}

@@ -429,6 +429,7 @@ export default async function PoDetailPage({
         <PoTimeline
           poId={po.id}
           viewer="admin"
+          currentUserId={session.user?.id}
           entries={buildPoTimeline(po.comments, po.attachments, events)}
         />
       )}
@@ -619,6 +620,7 @@ export default async function PoDetailPage({
               <PoTimeline
                 poId={po.id}
                 viewer="admin"
+                currentUserId={session.user?.id}
                 entries={buildPoTimeline(po.comments, po.attachments, events)}
               />
             ),

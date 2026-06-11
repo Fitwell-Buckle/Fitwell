@@ -16,6 +16,10 @@ export interface TimelineComment {
   id: string;
   body: string;
   createdAt: Date;
+  /** Set when the note has been edited; surfaces an "(edited)" marker. */
+  updatedAt?: Date | null;
+  /** The note author's user id — drives the author-only edit affordance. */
+  authorUserId?: string | null;
   author: TimelinePerson | null;
 }
 
@@ -52,6 +56,10 @@ export type PoTimelineEntry =
       authorName: string;
       fromSupplier: boolean;
       body: string;
+      /** Author's user id, for the author-only edit affordance (null if unknown). */
+      authorUserId: string | null;
+      /** ISO timestamp of the last edit, or null if never edited. */
+      editedAt: string | null;
     }
   | {
       id: string;
@@ -111,6 +119,8 @@ export function buildPoTimeline(
       authorName: personName(c.author, fromSupplier),
       fromSupplier,
       body: c.body,
+      authorUserId: c.authorUserId ?? null,
+      editedAt: c.updatedAt ? c.updatedAt.toISOString() : null,
     };
   });
 

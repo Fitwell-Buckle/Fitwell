@@ -69,6 +69,35 @@ describe("buildPoTimeline", () => {
     expect(note.fromSupplier).toBe(false);
   });
 
+  it("carries authorUserId and an editedAt on notes (for author-only editing)", () => {
+    const [fresh] = buildPoTimeline(
+      [comment({ authorUserId: "u1", updatedAt: null })],
+      [],
+    );
+    if (fresh.kind !== "note") throw new Error("expected a note");
+    expect(fresh.authorUserId).toBe("u1");
+    expect(fresh.editedAt).toBeNull();
+
+    const [edited] = buildPoTimeline(
+      [
+        comment({
+          authorUserId: "u1",
+          updatedAt: new Date("2026-05-02T08:00:00Z"),
+        }),
+      ],
+      [],
+    );
+    if (edited.kind !== "note") throw new Error("expected a note");
+    expect(edited.editedAt).toBe("2026-05-02T08:00:00.000Z");
+  });
+
+  it("defaults note authorUserId to null when the column is absent", () => {
+    const [note] = buildPoTimeline([comment()], []);
+    if (note.kind !== "note") throw new Error("expected a note");
+    expect(note.authorUserId).toBeNull();
+    expect(note.editedAt).toBeNull();
+  });
+
   it("formats document size and carries the url/filename", () => {
     const [doc] = buildPoTimeline([], [attachment({ sizeBytes: 2048 })]);
     if (doc.kind !== "document") throw new Error("expected a document");
