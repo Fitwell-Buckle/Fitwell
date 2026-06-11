@@ -1,6 +1,6 @@
 # B2B Sales Pipeline
 
-Last updated: 2026-05-26
+Last updated: 2026-06-10
 
 > **Status: starter draft.** Created 2026-05-26 to give the B2B
 > motion its own framework, separate from the D2C [[funnel]]. The
@@ -347,6 +347,39 @@ follow-up email is drafted from the lead's notes and queued in
 | Is there a measurable lift in B2B inbound from D2C activity? | If yes, more D2C visibility is a B2B growth lever | Tom | Open |
 | Should we instrument a B2B-specific landing experience (e.g., `/wholesale`) and route inbound through it? | Concentrates inbound, simplifies attribution | Tom | Open |
 | How do we know when a `recurring_order` partner is at risk of churning? | Retention signal — declining order cadence is currently un-monitored | Tom | Open |
+
+## Tooling
+
+### `fitwell-followup` — post-show outreach triage
+
+Repo: `github.com/fitwell-tom/fitwell-followup` (private), local at
+`~/code/fitwell-followup/`. Shipped 2026-06-10.
+
+Standalone Python CLI that scans Gmail for every thread matching a
+configured trade-show subject keyword, classifies each thread
+(AWAITING_THEM, COLD, DROPPED_BALL, ACTIVE, WON, DECLINED,
+SKIP_PRE_SHOW_UNANSWERED, BOUNCED), and emits a CSV tracker plus
+optional in-thread Gmail draft replies.
+
+**Critical implementation rule:** uses the Gmail Python SDK
+directly (`users.threads.get(format="full")`), NOT MCP Gmail
+connectors. MCP connectors return cached snapshots that can be
+months stale — that bug produced "you went silent" drafts for
+deals like Haim that had actually moved into production. Any
+future Gmail-driven tooling for B2B outreach must follow the same
+rule: read full current threads from the SDK, never trust a
+connector cache.
+
+Configured shows: Minutes + Hours (LA), WatchTime NY, Windup SF,
+Windup NYC, Time to Watches, Watches and Wonders. Show keywords
+in `config.yaml` are ORDER-SENSITIVE: list specific keywords
+(`WatchTime`, `Windup SF`) before generic ones (`Windup`) so the
+right show wins on subject match.
+
+WON / DECLINED detection is heuristic (substring match on phrases
+like "wire the funds", "started production", "decided to hold
+off"). Flagged in the CSV, never silently hidden — Tom audits and
+overrides as needed.
 
 ## Related
 

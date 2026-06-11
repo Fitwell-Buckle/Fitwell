@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-06-10
+Last updated: 2026-06-11
 
 ## ⚠️ Action needed — Shopify scope deploy + history import
 
@@ -331,8 +331,8 @@ everyone). Single discount touchpoint; product-experience-led posture.
 - [x] Update PRIORITIES.md with the retention-led sequence — done 2026-06-10
 - [ ] Signup-lift experiments: design now, launch once PostHog client-side data accumulates (see W5 §6 for the four candidates)
 
-### 11. 🔨 Newsletter — daily watch-industry brief ("The Micro-Adjust", working title)
-**Last worked**: 2026-06-10 (phase 1 engine built)
+### 11. 🔨 Newsletter — daily watch-industry brief ("The Daily Micro-Adjust")
+**Last worked**: 2026-06-11 (Fitwell branding + monetization layer shipped)
 **Source of truth**: `specs/strategy/newsletter.md` + `specs/current/newsletter-engine.md`
 **Owner**: Tom
 
@@ -357,6 +357,19 @@ announcement instead of auto-enroll; name riff pending, one-file rename).
       `NEWSLETTER_KLAVIYO_LIST_ID`, `NEWSLETTER_DATABASE_URL`
 - [x] Apply migration 0057 to prod before pushing — done 2026-06-10
       (`db:migrate:prod` applied 0057 + 0058 together; prod at 59/59)
+
+**Branding & monetization (2026-06-11, commit `579316b`)**: the brief is
+now a Fitwell-branded content asset. Title finalized to **"The Daily
+Micro-Adjust"** (gold `#c08a4d` accent, matching section headers); 2026
+Fitwell™ wordmarks in the masthead (white) and sponsor module (gold).
+Added a rotating **"From Fitwell" sponsor module** right after Business &
+Industry — two-column (logo + copy + CTA left, the micro-adjust buckle
+GIF right; GIF cropped/optimized 7.5MB → 0.56MB so it renders instantly).
+**10 modules** rotating one-per-issue on a weekday-count index (no weekend
+skips), split 7 D2C (shop) / 3 OEM (`/pages/oe-services`), each with
+per-module UTM (`utm_content=module-<id>`). Branded footer with a
+"Discover the perfect fit →" CTA (`utm_content=footer`). Logic in
+`newsletter/sponsor.ts`; copy grounded in `personas.md` + `b2b-pipeline.md`.
 
 **Next phases**: Playwright scrape sources (auction houses, IR pages —
 WatchPro shipped via proxy; Europa Star evaluated and dropped
