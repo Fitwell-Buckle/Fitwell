@@ -101,8 +101,12 @@ function sectionShell(header: string, body: string): string {
 
 /**
  * The day's rotating Fitwell sponsor module — the monetization block.
- * Two columns: logo + copy + CTA on the left, the micro-adjust buckle GIF
- * on the right (stacks below the copy on mobile). The GIF is the cropped,
+ * Two columns: the micro-adjust buckle GIF on the left, logo + copy + CTA
+ * on the right. The GIF column is FIRST in source on purpose — on desktop
+ * it's the left column; on mobile (where clients stack columns in source
+ * order) it becomes a full-width visual hook at the top, with the pitch and
+ * CTA below it. The GIF is fluid (fills its column) so it reads right at
+ * both the ~230px desktop width and full-bleed on mobile. Uses the cropped,
  * lightweight SPONSOR_GIF unless a module overrides it.
  */
 function sponsorSection(date: Date, slug: string): string {
@@ -111,7 +115,10 @@ function sponsorSection(date: Date, slug: string): string {
   const mediaUrl = m.imageUrl ?? SPONSOR_GIF;
   return `
     <mj-section background-color="#f0ead8" padding="18px 24px" border="1px solid #e0d8c4">
-      <mj-column width="58%" vertical-align="middle">
+      <mj-column width="40%" vertical-align="middle">
+        <mj-image src="${escapeHtml(mediaUrl)}" alt="Fitwell micro-adjust buckle" href="${escapeHtml(href)}" border-radius="6px" padding="0 0 18px 0" />
+      </mj-column>
+      <mj-column width="60%" vertical-align="middle" padding="0 0 0 16px">
         <mj-image src="${escapeHtml(NEWSLETTER.logoGoldUrl)}" alt="Fitwell" width="82px" align="left" padding="0 0 10px 0" />
         <mj-text padding="0" font-size="18px" font-weight="700" line-height="1.25" color="#1a1a1a">
           ${escapeHtml(m.headline)}
@@ -122,9 +129,6 @@ function sponsorSection(date: Date, slug: string): string {
         <mj-button href="${escapeHtml(href)}" background-color="#1a1a1a" color="#f4f1ea" font-size="13px" font-weight="600" border-radius="2px" padding="12px 0 0 0" inner-padding="10px 20px" align="left">
           ${escapeHtml(m.ctaLabel)} →
         </mj-button>
-      </mj-column>
-      <mj-column width="42%" vertical-align="middle">
-        <mj-image src="${escapeHtml(mediaUrl)}" alt="Fitwell micro-adjust buckle" href="${escapeHtml(href)}" width="210px" border-radius="6px" padding="0" />
       </mj-column>
     </mj-section>`;
 }
