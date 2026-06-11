@@ -529,6 +529,8 @@ export default async function ProductionPage({
       if (row) childRows.push(row);
     }
     if (childRows.length > 0) {
+      // Show sub-POs in suffix order (…-A, …-B, …-C) rather than creation order.
+      childRows.sort((a, b) => a.poNumber.localeCompare(b.poNumber));
       subRowsByMasterPoNumber[masterPoNumber] = childRows;
     }
   }
