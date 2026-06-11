@@ -33,6 +33,10 @@ export interface IncomingPoLine extends IncomingLine {
   /** id of the PO whose detail page this row links to. */
   poId: string;
   supplier: string;
+  /** Comma-joined Shopify collection titles (lines sharing a poNumber share it). */
+  collections: string;
+  /** Downstream B2B customer / company name (shared per poNumber). */
+  customer: string;
   /** Owning master-PO status (open/fulfilled/cancelled/…) — surfaced so the
    * by-PO table can show a status badge alongside the in-flight inventory.
    * Lines that share a poNumber are assumed to share a status. */
@@ -41,8 +45,16 @@ export interface IncomingPoLine extends IncomingLine {
 
 export interface IncomingPoRow {
   poNumber: string;
+  /** The id this row links to ("Open PO") — a sub-PO row uses its OWN id. */
   poId: string;
+  /** For a sub-PO row, the master PO id (drives the "Open Master PO" link). */
+  masterPoId?: string;
+  /** Supplier name(s) — a master lists every supplier involved, comma-joined. */
   supplier: string;
+  /** Comma-joined Shopify collection titles the PO's items belong to, or "—". */
+  collections: string;
+  /** Downstream B2B customer (the linked company name), or "—". */
+  customer: string;
   status: string;
   incomingQty: number;
   byStage: Partial<Record<ProductionStage, number>>;
@@ -68,6 +80,8 @@ export function aggregateIncomingByPo(
         poNumber: li.poNumber,
         poId: li.poId,
         supplier: li.supplier,
+        collections: li.collections,
+        customer: li.customer,
         status: li.status,
         incomingQty: 0,
         byStage: {},

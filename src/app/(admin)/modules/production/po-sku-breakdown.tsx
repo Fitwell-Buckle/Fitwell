@@ -16,6 +16,8 @@ import type { IncomingRow } from "@/lib/production/inventory";
 interface Props {
   poNumber: string;
   poId: string;
+  /** When set (sub-PO rows), renders an extra "Open Master PO" link. */
+  masterPoId?: string;
   supplier: string;
   rows: IncomingRow[];
   stageLabels: Record<string, string>;
@@ -30,6 +32,7 @@ interface Props {
 export function PoSkuBreakdown({
   poNumber,
   poId,
+  masterPoId,
   supplier,
   rows,
   stageLabels,
@@ -76,6 +79,15 @@ export function PoSkuBreakdown({
           >
             Open PO →
           </a>
+          {masterPoId && (
+            <a
+              href={`/modules/production/po/${masterPoId}`}
+              className="text-xs text-zinc-400 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-600"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Open Master PO →
+            </a>
+          )}
         </div>
         <button
           type="button"
@@ -102,7 +114,8 @@ export function PoSkuBreakdown({
             {rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="py-6 text-center text-zinc-400">
-                  Nothing incoming for this PO.
+                  No units are in production at these stages yet — open the PO
+                  to see all its line items.
                 </TableCell>
               </TableRow>
             ) : (

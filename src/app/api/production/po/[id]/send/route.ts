@@ -39,7 +39,7 @@ function buildPoEmailHtml(
   rawBlanks: RawBlankGroup[],
   supplierUnit: Map<string, number | null>,
   stageLabels: StageLabels,
-  order: readonly string[],
+  footerStageKeys: readonly string[],
   message: string | null,
 ): string {
   const cell = "padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;";
@@ -158,7 +158,7 @@ function buildPoEmailHtml(
     </table>
     ${tableHtml}
     ${po.notes ? `<p style="margin-top:16px;font-size:13px;color:#444;">${esc(po.notes)}</p>` : ""}
-    <p style="margin-top:20px;font-size:11px;color:#aaa;">Stages: ${order.slice(0, -1).map((s) => stageLabels[s]).join(" → ")}</p>
+    ${footerStageKeys.length > 0 ? `<p style="margin-top:20px;font-size:11px;color:#aaa;">Stages: ${footerStageKeys.map((s) => stageLabels[s]).join(" → ")}</p>` : ""}
   </div>`;
 }
 
@@ -212,6 +212,22 @@ export async function POST(
     .filter((s) => s !== order[0])
     .map((s) => stageLabels[s])
     .join(", ");
+
+  // Stages footer: only the stages relevant to THIS PO — a sub-PO shows the
+  // supplier's owned stages; a standalone PO shows the stages its items
+  // actually pass through (line items can carry a reduced `stages` subset).
+  // The terminal "complete" sentinel is excluded either way.
+  const terminal = order[order.length - 1];
+  const footerStageKeys: ProductionStage[] = master
+    ? stageKeys
+    : (() => {
+        const used = new Set<ProductionStage>();
+        for (const li of items) {
+          const ls = li.stages && li.stages.length > 0 ? li.stages : order;
+          for (const s of ls) used.add(s as ProductionStage);
+        }
+        return order.filter((s) => used.has(s) && s !== terminal);
+      })();
 
   // Pre-polishing supplier → summarize the email as raw blanks (size + material).
   let rawBlanks: RawBlankGroup[] = [];
@@ -272,7 +288,7 @@ export async function POST(
       to,
       cc: cc.length ? cc : undefined,
       subject: `Purchase Order ${numberDisplay} — Fitwell Buckle Co.`,
-      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit, stageLabels, order, input.message ?? null),
+      html: buildPoEmailHtml(po, items, numberDisplay, stagePrefix, rawBlanks, supplierUnit, stageLabels, footerStageKeys, input.message ?? null),
     });
     await setPoSent(id, true, "email");
     return NextResponse.json({ data: { sentTo: [to], cc } });

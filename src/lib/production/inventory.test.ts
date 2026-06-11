@@ -110,6 +110,8 @@ describe("aggregateIncomingByPo", () => {
       poNumber: "PO-00100-A",
       poId: "m1",
       supplier: "EPower",
+      collections: "—",
+      customer: "—",
       status: "open",
       ...overrides,
     };

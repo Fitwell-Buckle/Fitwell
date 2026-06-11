@@ -35,6 +35,10 @@ import {
   type IncomingLine,
   type IncomingPoRow,
 } from "@/lib/production/inventory";
+import {
+  getCatalogGroupsCached,
+  type CatalogCollectionGroup,
+} from "@/lib/catalog/load";
 import { ListFilters } from "@/components/catalog/list-filters";
 import { ProductionViewToggle } from "./view-toggle";
 import { ProductionGroupToggle } from "./group-toggle";
@@ -100,12 +104,14 @@ export default async function ProductionPage({
   const toStr = to.toISOString().slice(0, 10);
   const dateFiltered = (issued: string) => issued >= fromStr && issued <= toStr;
 
-  const [allPos, suppliers, estimates, stageLabels, order] = await Promise.all([
+  const [allPos, suppliers, estimates, stageLabels, order, collectionGroups] =
+    await Promise.all([
     db.query.productionPo.findMany({
       where: ne(productionPo.status, "cancelled"),
       orderBy: desc(productionPo.createdAt),
       with: {
         supplier: { columns: { name: true } },
+        company: { columns: { name: true } },
         stageAssignments: { columns: { stage: true, supplierId: true } },
         stageEtas: { columns: { stage: true, targetEndDate: true } },
         lineItems: {
@@ -117,6 +123,9 @@ export default async function ProductionPage({
     getStageEstimates(),
     getStageLabels(),
     getStageOrder(),
+    // Best-effort: drives the Collections column. If Shopify is unavailable the
+    // column just shows "—"; the rest of the page is unaffected.
+    getCatalogGroupsCached().catch(() => [] as CatalogCollectionGroup[]),
   ]);
 
   // Owning-supplier resolution: a stage can belong to a different supplier than
@@ -145,6 +154,46 @@ export default async function ProductionPage({
 
   const allLines = allPos.flatMap((po) => po.lineItems);
   const today = new Date().toISOString().slice(0, 10);
+
+  // Collections (Shopify) a PO's items belong to, keyed by variant id.
+  const collectionTitlesByVariant = new Map<string, Set<string>>();
+  for (const g of collectionGroups) {
+    for (const vid of g.variantIds) {
+      let set = collectionTitlesByVariant.get(vid);
+      if (!set) collectionTitlesByVariant.set(vid, (set = new Set()));
+      set.add(g.title);
+    }
+  }
+  const collectionsFor = (
+    lines: { shopifyVariantId: string | null }[],
+  ): string => {
+    const titles = new Set<string>();
+    for (const li of lines) {
+      const s = li.shopifyVariantId
+        ? collectionTitlesByVariant.get(li.shopifyVariantId)
+        : null;
+      if (s) for (const t of s) titles.add(t);
+    }
+    return titles.size ? [...titles].sort().join(", ") : "—";
+  };
+
+  // Every supplier involved in a master PO: the primary (owns un-assigned
+  // stages) plus any stage-assigned supplier — the same set that gets a
+  // sub-PO. Comma-joined; replaces the old flat "Multiple suppliers" label.
+  const suppliersForMaster = (po: {
+    supplierId: string;
+    supplier: { name: string } | null;
+    stageAssignments: { supplierId: string }[];
+  }): string => {
+    const ids = new Set<string>([
+      po.supplierId,
+      ...po.stageAssignments.map((a) => a.supplierId),
+    ]);
+    const names = [...ids]
+      .map((id) => supplierName.get(id))
+      .filter((n): n is string => !!n);
+    return names.length ? names.join(", ") : po.supplier?.name ?? "—";
+  };
 
   // Master→child-count lookup used by both Sub-PO grouping (to skip masters
   // that are represented by their children) and Master grouping (to render
@@ -219,7 +268,9 @@ export default async function ProductionPage({
     ({ po, isMaster, incomingQty, byStage, nearestEta }) => ({
       poNumber: formatPoNumber(po.shopifyPoNumber, { isMaster }),
       poId: po.id,
-      supplier: isMaster ? "Multiple suppliers" : po.supplier?.name ?? "—",
+      supplier: isMaster ? suppliersForMaster(po) : po.supplier?.name ?? "—",
+      collections: collectionsFor(po.lineItems),
+      customer: po.company?.name ?? "—",
       status: po.status,
       incomingQty,
       byStage,
@@ -402,8 +453,13 @@ export default async function ProductionPage({
 
     incomingPoRows.push({
       poNumber,
-      poId: master.id,
+      // "Open PO" targets THIS row's own PO — the sub-PO when it's a sub-PO,
+      // not the master (which gets its own "Open Master PO" link).
+      poId: po.id,
+      masterPoId: isSubPo ? master.id : undefined,
       supplier: supplierLabel,
+      collections: collectionsFor(ownedLines),
+      customer: master.company?.name ?? "—",
       status: master.status,
       incomingQty,
       byStage,

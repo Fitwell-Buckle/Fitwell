@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { fmtDate, STATUS_LABELS, statusBadgeClass } from "@/lib/production/display";
+import { fmtDate } from "@/lib/production/display";
 import { PoSkuBreakdown } from "./po-sku-breakdown";
 import type { IncomingPoRow, IncomingRow } from "@/lib/production/inventory";
 
@@ -58,11 +57,12 @@ export function PoExpandableList({
       {/* Column header — column widths must mirror the data row below. */}
       <div className="flex items-center gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
         <div className="w-36 shrink-0">PO #</div>
-        <div className="w-36 shrink-0">Supplier</div>
-        <div className="w-24 shrink-0 text-right">Incoming</div>
-        <div className="min-w-0 flex-1">By stage</div>
-        <div className="w-24 shrink-0 text-right">Nearest ETA</div>
-        <div className="w-24 shrink-0">Status</div>
+        <div className="w-32 shrink-0">Supplier</div>
+        <div className="w-36 shrink-0">Collections</div>
+        <div className="w-32 shrink-0">Customer</div>
+        <div className="w-16 shrink-0 text-right">Items</div>
+        <div className="min-w-0 flex-1">Stage</div>
+        <div className="w-24 shrink-0 text-right">Final ETA</div>
         {/* Placeholder matching the row's chevron (h-4 w-4 + ml-1) */}
         <div className="ml-1 h-4 w-4 shrink-0" aria-hidden />
       </div>
@@ -118,13 +118,21 @@ export function PoExpandableList({
                     </div>
                   )}
                 </div>
-                {/* Supplier */}
-                <div className={cn("w-36 shrink-0 text-sm", isSelected ? "text-zinc-300" : "text-zinc-700")}>
+                {/* Supplier(s) — a master lists every involved supplier */}
+                <div className={cn("w-32 shrink-0 text-sm", isSelected ? "text-zinc-300" : "text-zinc-700")}>
                   {r.supplier}
                 </div>
-                {/* Qty */}
-                <div className={cn("w-24 shrink-0 text-right text-sm font-medium", isSelected ? "text-white" : "text-zinc-900")}>
-                  {r.incomingQty}
+                {/* Collections */}
+                <div className={cn("w-36 shrink-0 text-sm", isSelected ? "text-zinc-300" : "text-zinc-700")}>
+                  {r.collections}
+                </div>
+                {/* Customer */}
+                <div className={cn("w-32 shrink-0 text-sm", isSelected ? "text-zinc-300" : "text-zinc-700")}>
+                  {r.customer}
+                </div>
+                {/* Items (incoming qty, thousands-separated) */}
+                <div className={cn("w-16 shrink-0 text-right text-sm font-medium", isSelected ? "text-white" : "text-zinc-900")}>
+                  {r.incomingQty.toLocaleString("en-US")}
                 </div>
                 {/* Stage pills */}
                 <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
@@ -138,19 +146,13 @@ export function PoExpandableList({
                           : "bg-zinc-100 text-zinc-600",
                       )}
                     >
-                      {stageLabels[stg] ?? stg}: {qty}
+                      {stageLabels[stg] ?? stg}: {(qty ?? 0).toLocaleString("en-US")}
                     </span>
                   ))}
                 </div>
-                {/* ETA */}
+                {/* Final ETA */}
                 <div className={cn("w-24 shrink-0 text-right text-sm", isSelected ? "text-zinc-300" : "text-zinc-500")}>
                   {fmtDate(r.nearestEta)}
-                </div>
-                {/* Status */}
-                <div className="w-24 shrink-0">
-                  <Badge className={cn(statusBadgeClass(r.status))}>
-                    {STATUS_LABELS[r.status as keyof typeof STATUS_LABELS] ?? r.status}
-                  </Badge>
                 </div>
                 {/* Expand chevron */}
                 <div className="ml-1 shrink-0">
@@ -186,6 +188,7 @@ export function PoExpandableList({
                   <PoSkuBreakdown
                     poNumber={r.poNumber}
                     poId={r.poId}
+                    masterPoId={r.masterPoId}
                     supplier={r.supplier}
                     rows={skuRowsByPo[r.poNumber] ?? []}
                     stageLabels={stageLabels}
