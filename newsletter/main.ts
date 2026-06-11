@@ -2,7 +2,14 @@
  * Newsletter engine entry point.
  *
  *   npm run newsletter:dry-run   # fetch → triage → summarize → HTML to /tmp; no DB writes, no Klaviyo
+ *   npm run newsletter:render    # re-render the LAST brief from cache — zero Claude calls (layout iteration)
  *   npm run newsletter:draft     # full run: DB writes + Klaviyo DRAFT campaign (never sends)
+ *   npm run newsletter:send      # draft THEN send to NEWSLETTER_KLAVIYO_LIST_ID
+ *
+ * --cached (used by :render, and combinable with --draft/--send) reuses the
+ * brief assembled by the previous real run instead of re-running the ~13-call
+ * editorial pipeline. A real run always writes the cache, so iterating on
+ * branding/layout — or pushing a Klaviyo test draft — costs nothing extra.
  *
  * Sending stays a manual action in Klaviyo's UI while the voice settles
  * (first ~3 sends, per specs/strategy/newsletter.md). The GitHub Actions
@@ -28,6 +35,7 @@ import { triageStories, summarizeAll } from "./editorial";
 import { enrichStories } from "./images";
 import { renderBrief } from "./generate";
 import { cleanHeadline } from "./text";
+import { saveBriefCache, loadBriefCache } from "./cache";
 import type { BriefStory, RawStory, Segment, StoryType } from "./types";
 
 const SEEN_WINDOW_DAYS = 14;
@@ -130,17 +138,69 @@ async function run(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
   const send = process.argv.includes("--send");
   const draft = process.argv.includes("--draft") || send; // --send implies a draft first
+  // --cached reuses the last assembled brief (zero Claude calls) and skips
+  // straight to render — for iterating on layout/branding without paying
+  // for the editorial pipeline again. Modifier, not a mode.
+  const cached = process.argv.includes("--cached");
   const modeCount = [dryRun, draft].filter(Boolean).length;
   if (modeCount !== 1) {
-    console.error("Usage: tsx newsletter/main.ts (--dry-run | --draft | --send)");
+    console.error(
+      "Usage: tsx newsletter/main.ts (--dry-run | --draft | --send) [--cached]",
+    );
     process.exit(1);
   }
 
   const now = new Date();
   const slug = campaignSlug(now);
   const mode = dryRun ? "dry-run" : send ? "send" : "draft";
-  console.log(`[${slug}] mode=${mode}`);
+  console.log(`[${slug}] mode=${mode}${cached ? " (cached — no API calls)" : ""}`);
 
+  // Dropped-article rows to persist (draft/send only). Empty in cached mode:
+  // we don't re-run dedup/triage, so there's no fresh drop list to record.
+  let droppedForPersist: Array<{ story: RawStory; reason: string }> = [];
+  let brief: BriefStory[];
+
+  if (cached) {
+    brief = loadBriefCache(slug);
+    console.log(`reusing cached brief: ${brief.length} stories`);
+  } else {
+    brief = await buildBrief(now, dryRun, (d) => (droppedForPersist = d));
+    if (brief.length === 0) return; // nothing new / triage dropped everything
+    const path = saveBriefCache(slug, now, brief);
+    console.log(
+      `\ncached brief → ${path}\niterate on layout for free: npm run newsletter:render`,
+    );
+  }
+
+  // 5. Render
+  const subject = buildSubject(now, cleanHeadline(brief[0].title));
+  const { html, warnings } = await renderBrief(brief, now, slug);
+  for (const w of warnings) console.warn(`mjml: ${w}`);
+
+  if (dryRun) {
+    const outPath = `/tmp/${slug}.html`;
+    writeFileSync(outPath, html);
+    console.log(`\nsubject: ${subject}`);
+    console.log(
+      `stories: ${brief.map((s) => `\n  [${s.segment}/${s.type}] ${s.title}`).join("")}`,
+    );
+    console.log(`\nwrote ${outPath} — open it in a browser to review`);
+    return;
+  }
+
+  await publishToKlaviyo({ now, slug, brief, html, subject, droppedForPersist, send });
+}
+
+/**
+ * The expensive editorial pipeline: fetch → dedup → triage → enrich →
+ * summarize. Returns the assembled brief (empty array = no brief today).
+ * `reportDropped` hands back the dedup+triage drop list for DB persistence.
+ */
+async function buildBrief(
+  now: Date,
+  dryRun: boolean,
+  reportDropped: (dropped: Array<{ story: RawStory; reason: string }>) => void,
+): Promise<BriefStory[]> {
   // 1. Fetch (RSS direct + proxied + scraped, dispatched by fetchMode)
   const sources = activeSources();
   const { stories, failures } = await fetchAllSources(sources, now);
@@ -161,7 +221,7 @@ async function run(): Promise<void> {
   console.log(`${fresh.length} fresh after dedup (${duplicates.length} duplicates)`);
   if (fresh.length === 0) {
     console.log("nothing new — no brief today");
-    return;
+    return [];
   }
 
   // 3. Triage
@@ -231,7 +291,7 @@ async function run(): Promise<void> {
   }
   if (selected.length === 0) {
     console.log("triage dropped everything — no brief today");
-    return;
+    return [];
   }
 
   // 4. Enrich every selected story (one page fetch → image + article
@@ -244,23 +304,29 @@ async function run(): Promise<void> {
   );
   const brief: BriefStory[] = await summarizeAll(enriched);
 
-  // 5. Render
-  const subject = buildSubject(now, cleanHeadline(brief[0].title));
-  const { html, warnings } = await renderBrief(brief, now, slug);
-  for (const w of warnings) console.warn(`mjml: ${w}`);
+  reportDropped([...duplicates, ...triagedOut]);
+  return brief;
+}
 
-  if (dryRun) {
-    const outPath = `/tmp/${slug}.html`;
-    writeFileSync(outPath, html);
-    console.log(`\nsubject: ${subject}`);
-    console.log(
-      `stories: ${brief.map((s) => `\n  [${s.segment}/${s.type}] ${s.title}`).join("")}`,
-    );
-    console.log(`\nwrote ${outPath} — open it in a browser to review`);
-    return;
-  }
+interface PublishArgs {
+  now: Date;
+  slug: string;
+  brief: BriefStory[];
+  html: string;
+  subject: string;
+  droppedForPersist: Array<{ story: RawStory; reason: string }>;
+  send: boolean;
+}
 
-  // 6. Persist + Klaviyo draft (never sends — draftCampaign's hard contract)
+/** Persist the brief + create the Klaviyo draft (and send, if --send). */
+async function publishToKlaviyo({
+  slug,
+  brief,
+  html,
+  subject,
+  droppedForPersist,
+  send,
+}: PublishArgs): Promise<void> {
   if (!NEWSLETTER.klaviyoListId) {
     throw new Error(
       "NEWSLETTER_KLAVIYO_LIST_ID not set — create the newsletter list in Klaviyo first",
@@ -273,7 +339,7 @@ async function run(): Promise<void> {
     .returning({ id: newsletterCampaign.id });
 
   const sourceIds = await seedSources();
-  await persistArticles(sourceIds, brief, [...duplicates, ...triagedOut], campaign.id);
+  await persistArticles(sourceIds, brief, droppedForPersist, campaign.id);
 
   const config: CampaignConfig = {
     subject,
