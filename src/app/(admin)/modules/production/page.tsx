@@ -179,6 +179,15 @@ export default async function ProductionPage({
     }
     return titles.size ? [...titles].sort().join(", ") : "—";
   };
+  // Per-SKU collections, so the expanded SKU breakdown can show the same
+  // Collections column as the master/sub-PO rows.
+  const collectionsBySku = new Map<string, string>();
+  for (const li of allLines) {
+    if (collectionsBySku.has(li.sku)) continue;
+    collectionsBySku.set(li.sku, collectionsFor([li]));
+  }
+  const withCollections = (rows: ReturnType<typeof aggregateIncoming>) =>
+    rows.map((r) => ({ ...r, collections: collectionsBySku.get(r.sku) ?? "—" }));
 
   // Every supplier involved in a master PO: the primary (owns un-assigned
   // stages) plus any stage-assigned supplier — the same set that gets a
@@ -296,7 +305,9 @@ export default async function ProductionPage({
         currentStage: li.currentStage,
         stages: li.stages,
       }));
-    skuRowsByMasterRow[number] = aggregateIncoming(order, lines, estimates, today);
+    skuRowsByMasterRow[number] = withCollections(
+      aggregateIncoming(order, lines, estimates, today),
+    );
     if (isMaster) {
       const allSent = sentTotal > 0 && sentCount === sentTotal;
       masterSubtitles[number] = (
@@ -479,17 +490,19 @@ export default async function ProductionPage({
       <span className="text-zinc-400">Not sent</span>
     );
 
-    skuRowsByPo[poNumber] = aggregateIncoming(
-      order,
-      ownedLines.map((li) => ({
-        sku: li.sku,
-        title: li.title,
-        quantity: li.quantity,
-        currentStage: li.currentStage,
-        stages: li.stages,
-      })),
-      estimates,
-      today,
+    skuRowsByPo[poNumber] = withCollections(
+      aggregateIncoming(
+        order,
+        ownedLines.map((li) => ({
+          sku: li.sku,
+          title: li.title,
+          quantity: li.quantity,
+          currentStage: li.currentStage,
+          stages: li.stages,
+        })),
+        estimates,
+        today,
+      ),
     );
   }
   incomingPoRows.sort((a, b) => a.poNumber.localeCompare(b.poNumber));

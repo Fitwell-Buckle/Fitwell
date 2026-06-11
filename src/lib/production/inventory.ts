@@ -20,6 +20,10 @@ export interface IncomingLine {
 export interface IncomingRow {
   sku: string;
   title: string;
+  /** Comma-joined Shopify collection titles for this SKU (excludes the
+   *  catch-all "All Products"). Set when the by-PO list enriches its breakdown
+   *  rows; absent for the board/timeline breakdowns. */
+  collections?: string;
   incomingQty: number;
   byStage: Partial<Record<ProductionStage, number>>;
   /** Soonest projected completion across this SKU's lines (YYYY-MM-DD), or null. */

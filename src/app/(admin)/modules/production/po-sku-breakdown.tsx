@@ -23,6 +23,9 @@ interface Props {
    *  on each row instead, so the breakdown shouldn't repeat them. The board /
    *  timeline views (no per-row link) leave this off and keep the link. */
   hideOpenLinks?: boolean;
+  /** Show a per-SKU Collections column (the by-PO list enriches its rows with
+   *  it, to mirror the master/sub-PO columns). Board/timeline leave it off. */
+  showCollections?: boolean;
   /** Called when the user dismisses the breakdown (clicks "← Back"). */
   onClose: () => void;
 }
@@ -38,6 +41,7 @@ export function PoSkuBreakdown({
   rows,
   stageLabels,
   hideOpenLinks,
+  showCollections,
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -100,15 +104,19 @@ export function PoSkuBreakdown({
             <TableRow>
               <TableHead className="whitespace-nowrap">SKU</TableHead>
               <TableHead>Product</TableHead>
-              <TableHead className="text-right">Incoming</TableHead>
-              <TableHead>By stage</TableHead>
-              <TableHead>Nearest ETA</TableHead>
+              {showCollections && <TableHead>Collections</TableHead>}
+              <TableHead className="text-right">Items</TableHead>
+              <TableHead>Stage</TableHead>
+              <TableHead>Final ETA</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-zinc-400">
+                <TableCell
+                  colSpan={showCollections ? 6 : 5}
+                  className="py-6 text-center text-zinc-400"
+                >
                   No units are in production at these stages yet — open the PO
                   to see all its line items.
                 </TableCell>
@@ -120,8 +128,13 @@ export function PoSkuBreakdown({
                     <Mono>{r.sku}</Mono>
                   </TableCell>
                   <TableCell className="text-zinc-700">{r.title}</TableCell>
+                  {showCollections && (
+                    <TableCell className="text-zinc-500">
+                      {r.collections ?? "—"}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right font-medium text-zinc-900">
-                    {r.incomingQty}
+                    {r.incomingQty.toLocaleString("en-US")}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1.5">
@@ -130,7 +143,7 @@ export function PoSkuBreakdown({
                           key={stg}
                           className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600"
                         >
-                          {stageLabels[stg] ?? stg}: {qty}
+                          {stageLabels[stg] ?? stg}: {(qty ?? 0).toLocaleString("en-US")}
                         </span>
                       ))}
                     </div>

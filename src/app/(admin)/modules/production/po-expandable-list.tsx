@@ -216,6 +216,8 @@ export function PoExpandableList({
                     poId={r.poId}
                     // The row above already carries the Open-PO link.
                     hideOpenLinks
+                    // Mirror the master/sub-PO Collections column per SKU.
+                    showCollections
                     supplier={r.supplier}
                     rows={skuRowsByPo[r.poNumber] ?? []}
                     stageLabels={stageLabels}
