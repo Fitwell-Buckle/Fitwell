@@ -477,7 +477,8 @@ export class KlaviyoClient {
         id: opts.id,
         attributes: {
           name: opts.name,
-          editor_type: "CODE",
+          // NB: editor_type is only valid on CREATE — Klaviyo 400s if it's
+          // sent on a PATCH. A template's editor_type can't change anyway.
           html: opts.html,
         },
       },
@@ -501,8 +502,10 @@ export class KlaviyoClient {
     name: string,
   ): Promise<{ id: string; status: string; messageId: string | null } | null> {
     const safe = name.replace(/'/g, "\\'");
-    // Klaviyo requires a messages.channel filter on this endpoint
-    const path = `/campaigns?filter=and(equals(messages.channel,'email'),equals(name,'${encodeURIComponent(safe)}'))&fields[campaign]=name,status&include=campaign-messages`;
+    // Klaviyo requires a messages.channel filter on this endpoint, and the
+    // `name` field only supports `contains` (not `equals`) — so we filter
+    // broadly, then exact-match client-side.
+    const path = `/campaigns?filter=and(equals(messages.channel,'email'),contains(name,'${encodeURIComponent(safe)}'))&fields[campaign]=name,status&include=campaign-messages`;
     const page = (await this.request("GET", path)) as JsonApiResponse<
       "campaign",
       { name: string; status: string }
@@ -510,10 +513,20 @@ export class KlaviyoClient {
       included?: Array<{ type: string; id: string }>;
     };
     const rows = Array.isArray(page.data) ? page.data : page.data ? [page.data] : [];
-    const row = rows[0];
+    // `contains` can return partial matches (e.g. an older dated slug) —
+    // pick the exact name.
+    const row = rows.find((r) => r.attributes?.name === name);
     if (!row?.id) return null;
+    // Prefer the matched campaign's own message relationship (robust if
+    // `contains` returned several campaigns); fall back to the first
+    // included message.
+    const relMessageId = (
+      row as { relationships?: { "campaign-messages"?: { data?: Array<{ id: string }> } } }
+    ).relationships?.["campaign-messages"]?.data?.[0]?.id;
     const messageId =
-      page.included?.find((r) => r.type === "campaign-message")?.id ?? null;
+      relMessageId ??
+      page.included?.find((r) => r.type === "campaign-message")?.id ??
+      null;
     return {
       id: row.id,
       status: row.attributes.status,
@@ -655,5 +668,19 @@ export class KlaviyoClient {
       },
     };
     await this.request("POST", "/campaign-message-assign-template", body);
+  }
+
+  /**
+   * POST /api/campaign-send-jobs — triggers an immediate send of a draft
+   * campaign to its audience. This is the ONLY path that actually sends
+   * email; everything else stops at draft. Callers must gate it behind an
+   * explicit opt-in (the newsletter's --send flag). The send-job id is the
+   * campaign id.
+   */
+  async sendCampaign(campaignId: string): Promise<void> {
+    const body = {
+      data: { type: "campaign-send-job", id: campaignId },
+    };
+    await this.request("POST", "/campaign-send-jobs", body);
   }
 }

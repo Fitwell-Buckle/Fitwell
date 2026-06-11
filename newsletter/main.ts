@@ -123,16 +123,22 @@ async function persistArticles(
 }
 
 async function run(): Promise<void> {
+  // Modes (exactly one): --dry-run (HTML to /tmp, no DB/Klaviyo) |
+  // --draft (DB + Klaviyo draft, never sends) | --send (draft THEN
+  // triggers the Klaviyo send job — the only mode that emails anyone).
   const dryRun = process.argv.includes("--dry-run");
-  const draft = process.argv.includes("--draft");
-  if (dryRun === draft) {
-    console.error("Usage: tsx newsletter/main.ts (--dry-run | --draft)");
+  const send = process.argv.includes("--send");
+  const draft = process.argv.includes("--draft") || send; // --send implies a draft first
+  const modeCount = [dryRun, draft].filter(Boolean).length;
+  if (modeCount !== 1) {
+    console.error("Usage: tsx newsletter/main.ts (--dry-run | --draft | --send)");
     process.exit(1);
   }
 
   const now = new Date();
   const slug = campaignSlug(now);
-  console.log(`[${slug}] mode=${dryRun ? "dry-run" : "draft"}`);
+  const mode = dryRun ? "dry-run" : send ? "send" : "draft";
+  console.log(`[${slug}] mode=${mode}`);
 
   // 1. Fetch (RSS direct + proxied + scraped, dispatched by fetchMode)
   const sources = activeSources();
@@ -275,13 +281,29 @@ async function run(): Promise<void> {
     from_label: NEWSLETTER.fromLabel,
     audiences: { included: [NEWSLETTER.klaviyoListId] },
   };
-  const result = await draftCampaign({ slug, config, html, client: new KlaviyoClient() });
+  // Newsletter uses its own write-scoped Klaviyo key (campaigns + templates
+  // write) so the analytics KLAVIYO_API_KEY can stay read-only. Falls back
+  // to KLAVIYO_API_KEY if the dedicated key isn't set.
+  const klaviyoClient = new KlaviyoClient({
+    apiKey: process.env.NEWSLETTER_KLAVIYO_API_KEY ?? process.env.KLAVIYO_API_KEY,
+  });
+  const result = await draftCampaign({ slug, config, html, client: klaviyoClient });
   await db
     .update(newsletterCampaign)
     .set({ klaviyoCampaignId: result.campaignId })
     .where(eq(newsletterCampaign.id, campaign.id));
-
   console.log(`\nKlaviyo draft ${result.mode}: ${result.klaviyoUrl}`);
+
+  if (send) {
+    // The only line in the whole engine that emails anyone. Sends to the
+    // campaign's audience (NEWSLETTER_KLAVIYO_LIST_ID).
+    await klaviyoClient.sendCampaign(result.campaignId);
+    await db
+      .update(newsletterCampaign)
+      .set({ status: "sent", sentAt: new Date() })
+      .where(eq(newsletterCampaign.id, campaign.id));
+    console.log(`SENT to list ${NEWSLETTER.klaviyoListId}`);
+  }
   console.log(`subject: ${subject} · ${brief.length} stories`);
 }
 

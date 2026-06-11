@@ -31,7 +31,8 @@
     "klaviyo:campaign:draft": "node --env-file=.env.local --import tsx/esm scripts/klaviyo-draft-campaign.ts",
     "klaviyo:flow:spike": "node --env-file=.env.local --import tsx/esm scripts/klaviyo-flow-spike.ts",
     "newsletter:dry-run": "node --env-file=.env.local --import tsx/esm newsletter/main.ts --dry-run",
-    "newsletter:draft": "node --env-file=.env.local --import tsx/esm newsletter/main.ts --draft"
+    "newsletter:draft": "node --env-file=.env.local --import tsx/esm newsletter/main.ts --draft",
+    "newsletter:send": "node --env-file=.env.local --import tsx/esm newsletter/main.ts --send"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",

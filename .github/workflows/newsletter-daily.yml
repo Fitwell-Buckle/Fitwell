@@ -1,24 +1,24 @@
-# Daily newsletter engine — drafts the brief in Klaviyo each weekday
-# morning. SENDING IS MANUAL in Klaviyo's UI while the voice settles
-# (specs/strategy/newsletter.md); flip to a send-job step later.
+# Daily newsletter engine — builds the brief and SENDS it via Klaviyo
+# each weekday morning at 09:00 UTC.
 #
 # 09:00 UTC = 5am ET (4am during DST — accepted; Geneva opens 10am CEST).
 # Spec: specs/current/newsletter-engine.md
 #
-# SCHEDULE DISABLED until secrets are configured + a few drafts approved.
-# Re-enable by uncommenting the `schedule:` block below. Until then the
-# workflow only runs on manual dispatch (Actions tab → Run workflow).
+# TEST PHASE: the scheduled run uses --send, and the audience is whatever
+# NEWSLETTER_KLAVIYO_LIST_ID points to. Keep that a YOU-ONLY test list
+# until the voice/design are signed off — only then point it at the real
+# opt-in subscriber list.
 name: Newsletter Daily
 on:
-  # schedule:
-  #   - cron: "0 9 * * 1-5"
+  schedule:
+    - cron: "0 9 * * 1-5"
   workflow_dispatch:
     inputs:
       mode:
-        description: "dry-run (HTML artifact only) or draft (DB + Klaviyo draft)"
+        description: "dry-run (HTML only) | draft (Klaviyo draft, no send) | send"
         type: choice
         default: draft
-        options: [dry-run, draft]
+        options: [dry-run, draft, send]
 
 jobs:
   brief:
@@ -33,9 +33,13 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx tsx newsletter/main.ts --${{ inputs.mode || 'draft' }}
+      # Scheduled runs (no inputs.mode) SEND; manual dispatch picks the mode.
+      - run: npx tsx newsletter/main.ts --${{ inputs.mode || 'send' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Write-scoped key (Campaigns + Templates) for draft/send; falls
+          # back to KLAVIYO_API_KEY (read-only analytics key) if unset.
+          NEWSLETTER_KLAVIYO_API_KEY: ${{ secrets.NEWSLETTER_KLAVIYO_API_KEY }}
           KLAVIYO_API_KEY: ${{ secrets.KLAVIYO_API_KEY }}
           NEWSLETTER_KLAVIYO_LIST_ID: ${{ secrets.NEWSLETTER_KLAVIYO_LIST_ID }}
           # Production Neon branch — newsletter tables live in the shared schema
