@@ -41,6 +41,10 @@
       "schedule": "0 13 * * *"
     },
     {
+      "path": "/api/cron/supplier-eta-reminders",
+      "schedule": "0 15 * * *"
+    },
+    {
       "path": "/api/cron/sent-followups",
       "schedule": "0 14 * * *"
     },

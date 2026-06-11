@@ -463,6 +463,21 @@ Two follow-up rules, edited in **Settings → Lead follow-ups**. One row,
 > general, multi-rule + AI-assisted engine is planned — see
 > `specs/work-plans/todo/lead-followup-rule-engine.md`.
 
+### `production_settings` (single-row config)
+
+Production-module settings, edited in **Settings → Supplier ETA reminders**.
+One row, `id="default"`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK, default `"default"` (single row) |
+| `eta_reminder_enabled` | boolean | Gates the `supplier-eta-reminders` cron; `false` = no-op. Default true |
+| `eta_reminder_interval_days` | int | Min days between reminder emails to a supplier (default 2 = "every other day", 1–90) |
+| `updated_at` | timestamp | |
+
+The cron uses `supplier.eta_reminder_last_sent_at` to enforce the per-supplier
+cadence (reset to null once a supplier has no missing ETAs).
+
 ### `production_stage_def` (dynamic stages)
 
 The pipeline's stages are now **data-driven** — admins add / rename / delete /
@@ -495,6 +510,7 @@ surviving stage. (Superseded the short-lived `production_stage_label` table.)
 | `contact_name` | text | Nullable |
 | `contact_email` | text | Nullable |
 | `notes` | text | Nullable |
+| `eta_reminder_last_sent_at` | timestamp | Nullable. Last time the `supplier-eta-reminders` cron emailed this supplier; drives the every-N-days cadence, reset to null when they have no missing ETAs |
 | `created_at` / `updated_at` | timestamp | |
 
 ### `production_po`

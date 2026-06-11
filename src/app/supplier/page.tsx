@@ -29,6 +29,7 @@ import {
   fmtDate,
 } from "@/lib/production/display";
 import { stagesOwnedBySupplier } from "@/lib/production/stage-owners";
+import { listSupplierMissingEtas } from "@/lib/production/missing-etas";
 import { cn } from "@/lib/utils";
 import {
   KanbanBoard,
@@ -60,15 +61,7 @@ export default async function SupplierHomePage() {
     with: {
       supplier: { columns: { name: true } },
       lineItems: {
-        columns: {
-          id: true,
-          sku: true,
-          title: true,
-          quantity: true,
-          currentStage: true,
-          expectedCompletionDate: true,
-          shopifyReceivedAt: true,
-        },
+        columns: { id: true, sku: true, title: true, quantity: true, currentStage: true },
       },
       stageAssignments: { columns: { stage: true, supplierId: true } },
     },
@@ -94,9 +87,8 @@ export default async function SupplierHomePage() {
   const cards: KanbanCard[] = [];
   const cardStages = new Set<ProductionStage>();
   // POs with line items this supplier owns that still lack a Final ETA — drives
-  // the login nudge.
-  const missingEtaPos: { poId: string; poNumber: string; missingCount: number }[] =
-    [];
+  // the login nudge (shared with the reminder cron).
+  const missingEtaPos = await listSupplierMissingEtas(me);
   for (const po of pos) {
     const owned = stagesOwnedBySupplier(
       order,
@@ -105,21 +97,6 @@ export default async function SupplierHomePage() {
       me,
     ).filter((s) => s !== terminal);
     const ownedSet = new Set(owned);
-    const missingEta = po.lineItems.filter(
-      (li) =>
-        ownedSet.has(li.currentStage) &&
-        !li.shopifyReceivedAt &&
-        !li.expectedCompletionDate,
-    );
-    if (missingEta.length > 0) {
-      missingEtaPos.push({
-        poId: po.id,
-        poNumber: formatPoNumber(po.shopifyPoNumber, {
-          suffix: suffixByMaster.get(po.id) ?? undefined,
-        }),
-        missingCount: missingEta.length,
-      });
-    }
     const poCards = po.lineItems.filter((li) => ownedSet.has(li.currentStage));
     if (poCards.length === 0) continue;
     for (const li of poCards) {

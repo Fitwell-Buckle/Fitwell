@@ -677,6 +677,9 @@ export const supplier = pgTable("supplier", {
   // Free-text address we ship to this supplier (raw materials / handoffs).
   shippingAddress: text("shipping_address"),
   notes: text("notes"),
+  // Last time the ETA-reminder cron emailed this supplier. Drives the "every
+  // N days" cadence; reset to null once they have no missing ETAs.
+  etaReminderLastSentAt: timestamp("eta_reminder_last_sent_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
@@ -1525,6 +1528,18 @@ export const leadFollowupSettings = pgTable("lead_followup_settings", {
   nudgeAfterDays: integer("nudge_after_days").notNull().default(14),
   // Rule 1 — auto-draft an initial follow-up email on new-lead capture.
   initialDraftEnabled: boolean("initial_draft_enabled").notNull().default(true),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Production module settings (single row, id="default"). The ETA-reminder cron
+// emails suppliers with un-set line-item ETAs every `etaReminderIntervalDays`
+// days until they're filled — toggle + interval are editable in Settings.
+export const productionSettings = pgTable("production_settings", {
+  id: text("id").primaryKey().default("default"),
+  etaReminderEnabled: boolean("eta_reminder_enabled").notNull().default(true),
+  etaReminderIntervalDays: integer("eta_reminder_interval_days")
+    .notNull()
+    .default(2),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
