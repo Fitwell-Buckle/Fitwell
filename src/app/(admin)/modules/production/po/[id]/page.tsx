@@ -17,7 +17,7 @@ import { SetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { nextStage, derivePoStage, isTerminal, type ProductionStage } from "@/lib/production/stages";
+import { nextStage, derivePoStage, isTerminal, terminalStage, type ProductionStage } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { formatPoNumber, planSubPos, subPoStageState } from "@/lib/production/sub-po";
 import { stagesOwnedBySupplier } from "@/lib/production/stage-owners";
@@ -137,6 +137,7 @@ export default async function PoDetailPage({
         (a, b) => skuSize(a.sku) - skuSize(b.sku) || a.sku.localeCompare(b.sku),
       )
     : [];
+  const subTerminal = terminalStage(order);
   let subRawBlanks: ReturnType<typeof summarizeRawBlanks> = [];
   if (subMaster && usesRawBlankSummary(subStageKeys)) {
     try {
@@ -425,28 +426,107 @@ export default async function PoDetailPage({
         </Card>
       )}
 
-      {isSubPo && subState && (
-        <SubPoCovers
-          poId={po.id}
-          isRawBlank={subRawBlanks.length > 0}
-          stagePrefix={subStages.join(", ")}
-          rows={subCoverRows}
-          status={subState.status}
-          currentStage={subCurrentStageValue}
-          stageOptions={subStageOptions}
-          eta={po.expectedDeliveryDate}
-        />
-      )}
-
-      {/* Notes & documents on a sub-PO: scoped to this supplier alone (the
-       *  master has its own thread visible to every supplier). Open the master
-       *  via the banner above to broadcast to all of them. */}
+      {/* Sub-PO: same tabbed layout as the master — Items (this supplier's
+       *  covered lines + costs/ETA), a supplier-scoped Production timeline, and
+       *  Activity (this supplier's own notes/documents thread). */}
       {isSubPo && (
-        <PoTimeline
-          poId={po.id}
-          viewer="admin"
-          currentUserId={session.user?.id}
-          entries={buildPoTimeline(po.comments, po.attachments, events)}
+        <DetailTabs
+          tabs={[
+            ...(subState
+              ? [
+                  {
+                    value: "items",
+                    label: "Items",
+                    content: (
+                      <SubPoCovers
+                        poId={po.id}
+                        isRawBlank={subRawBlanks.length > 0}
+                        stagePrefix={subStages.join(", ")}
+                        rows={subCoverRows}
+                        status={subState.status}
+                        currentStage={subCurrentStageValue}
+                        stageOptions={subStageOptions}
+                        eta={po.expectedDeliveryDate}
+                      />
+                    ),
+                  },
+                ]
+              : []),
+            {
+              value: "progress",
+              label: "Production timeline",
+              content: (
+                <ProductionTimeline
+                  pos={[
+                    {
+                      id: po.id,
+                      shopifyPoNumber: po.shopifyPoNumber,
+                      supplier: po.supplier ? { name: po.supplier.name } : null,
+                      stageTargets: po.stageEtas,
+                      stageEstimates: perPoStageEstimates,
+                      // Scope each line to this supplier's owned stages, anchoring
+                      // its last owned stage to the per-line ETA — the same shape
+                      // the supplier portal renders.
+                      lineItems: subItems.map((li) => {
+                        const scopedStages = [
+                          ...subStageKeys.filter(
+                            (s) =>
+                              !li.stages ||
+                              li.stages.length === 0 ||
+                              li.stages.includes(s),
+                          ),
+                          subTerminal,
+                        ];
+                        const lastOwned = scopedStages[scopedStages.length - 2];
+                        const currentIdx = order.indexOf(li.currentStage);
+                        return {
+                          id: li.id,
+                          sku: li.sku,
+                          title: li.title,
+                          currentStage: li.currentStage,
+                          stages: scopedStages,
+                          stageTargets:
+                            lastOwned && li.expectedCompletionDate
+                              ? [
+                                  {
+                                    stage: lastOwned,
+                                    targetEndDate: li.expectedCompletionDate,
+                                  },
+                                ]
+                              : undefined,
+                          stageEvents: li.stageEvents
+                            .filter((ev) => subStageKeys.includes(ev.stage))
+                            .filter((ev) => order.indexOf(ev.stage) <= currentIdx)
+                            .map((ev) => ({
+                              id: ev.id,
+                              stage: ev.stage,
+                              enteredAt: ev.enteredAt,
+                              exitedAt: ev.exitedAt,
+                            })),
+                        };
+                      }),
+                    },
+                  ]}
+                  estimates={estimates}
+                  stageLabels={stageLabels}
+                  order={[...subStageKeys, subTerminal]}
+                  estimateSaveRouteBase="/api/production/po"
+                />
+              ),
+            },
+            {
+              value: "activity",
+              label: "Activity",
+              content: (
+                <PoTimeline
+                  poId={po.id}
+                  viewer="admin"
+                  currentUserId={session.user?.id}
+                  entries={buildPoTimeline(po.comments, po.attachments, events)}
+                />
+              ),
+            },
+          ]}
         />
       )}
 
