@@ -32,7 +32,11 @@ jobs:
           # rejecting npm 11 lockfiles.
           node-version: 24
           cache: npm
-      - run: npm ci
+      # npm install (not npm ci): the lock, generated on macOS arm64, omits
+      # some Linux-only optional deps (Tailwind oxide's @emnapi WASM
+      # fallback), which makes `npm ci` fail its strict lock check on the
+      # Linux runner. `npm install` reconciles per-platform and proceeds.
+      - run: npm install --no-audit --no-fund
       # Scheduled runs (no inputs.mode) SEND; manual dispatch picks the mode.
       - run: npx tsx newsletter/main.ts --${{ inputs.mode || 'send' }}
         env:
