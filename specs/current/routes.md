@@ -154,6 +154,8 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | PUT | `/api/supplier/po/[id]/eta` | Update the PO's expected delivery date `{expectedDeliveryDate: "YYYY-MM-DD" \| null}`; allowed for the PO's primary supplier OR any supplier assigned to one of its stages (mirrors the page-level access check; 403 otherwise). Rejects masters with 409 — on a multi-supplier split each sub-PO carries its own date |
 | PUT | `/api/production/po/[id]/stage-eta` | Upsert a target end date for one stage on this (sub-)PO: `{stage, targetEndDate: "YYYY-MM-DD" \| null}` (null clears). Admin-only; the production timeline's inline editor calls this. Overrides the cycle-time projection on the chart when set |
 | PUT | `/api/supplier/po/[id]/stage-eta` | Supplier twin of the stage-eta route: same body, same writes via `setPoStageEta`. Allowed for the PO's primary supplier OR any supplier assigned to one of its stages (mirrors the eta-route access check) |
+| POST | `/api/supplier/stage-checkin/[id]` | Answer a positive-control stage check-in `{status: "on_track" \| "at_risk", note?}`. Resolves every still-pending threshold row for that stage instance at once. Scoped to the signed-in supplier's own check-ins (404 otherwise). Surfaced on the supplier PO page via the `stage-checkin-prompts` card |
+| PATCH | `/api/settings/production` | Update production settings — supplier ETA-reminder toggle/interval + stage-check-in toggle/thresholds (`production_settings`). Admin-only |
 
 ### Invoicing API (B2B; each handler checks `auth()`; admin-only — suppliers 403)
 | Method | Path | Description |

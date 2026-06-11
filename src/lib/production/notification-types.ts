@@ -6,6 +6,7 @@ export const SUPPLIER_NOTIFICATION_TYPES: string[] = [
   "note_for_supplier",
   "document_for_supplier",
   "update_for_supplier",
+  "stage_checkin_for_supplier",
 ];
 
 export function isSupplierNotificationType(type: string): boolean {

@@ -473,10 +473,35 @@ One row, `id="default"`.
 | `id` | text | PK, default `"default"` (single row) |
 | `eta_reminder_enabled` | boolean | Gates the `supplier-eta-reminders` cron; `false` = no-op. Default true |
 | `eta_reminder_interval_days` | int | Min days between reminder emails to a supplier (default 2 = "every other day", 1–90) |
+| `stage_checkin_enabled` | boolean | Gates the `stage-checkins` cron; `false` = no-op. Default true |
+| `stage_checkin_thresholds` | jsonb (int[]) | % of a stage's estimated duration at which to prompt the supplier (default `[50,75,95]`, 1–3 ascending values 1–99) |
 | `updated_at` | timestamp | |
 
-The cron uses `supplier.eta_reminder_last_sent_at` to enforce the per-supplier
+The ETA cron uses `supplier.eta_reminder_last_sent_at` to enforce the per-supplier
 cadence (reset to null once a supplier has no missing ETAs).
+
+### `production_stage_checkin`
+
+One row per (stage instance × threshold) positive-control prompt sent to a
+supplier. The supplier must affirmatively confirm on-track; silence or a
+flagged delay (or an overrun with no confirmation) escalates to admins.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK |
+| `po_id` | text | FK → `production_po` (master), cascade |
+| `supplier_id` | text | FK → `supplier` (the stage owner), cascade |
+| `stage` | text | Stage `key` |
+| `stage_entered_at` | timestamp | Earliest entry of the supplier's lines at this stage — the instance anchor (re-entering = a new instance) |
+| `threshold_pct` | int | 50 / 75 / 95 — which checkpoint this row is |
+| `prompted_at` | timestamp | |
+| `responded_at` | timestamp? | Set when the supplier answers |
+| `status` | text | `pending` \| `on_track` \| `at_risk` |
+| `note` | text? | Supplier's optional delay note |
+| `escalated_at` | timestamp? | When admins were notified for this instance |
+
+Unique on `(po_id, supplier_id, stage, stage_entered_at, threshold_pct)` — each
+threshold fires once per stage instance.
 
 ### `production_stage_def` (dynamic stages)
 

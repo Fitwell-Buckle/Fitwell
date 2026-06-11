@@ -428,6 +428,13 @@
       "when": 1781213339136,
       "tag": "0060_redundant_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1781214685969,
+      "tag": "0061_steep_champions",
+      "breakpoints": true
     }
   ]
 }

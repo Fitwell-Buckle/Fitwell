@@ -21,6 +21,7 @@ import { StageSetup } from "@/app/(admin)/modules/production/stage-setup";
 import { PriceTiersManager } from "@/components/production/price-tiers-manager";
 import { LeadFollowupSettings } from "./lead-followup-settings";
 import { EtaReminderSettings } from "./eta-reminder-settings";
+import { StageCheckinSettings } from "./stage-checkin-settings";
 
 export const metadata: Metadata = {
   title: "Settings | Fitwell Admin",
@@ -115,6 +116,19 @@ export default async function SettingsPage() {
               item they own.
             </p>
             <EtaReminderSettings initial={productionSettings} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Stage check-ins</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-zinc-500">
+              Positive control — prompt suppliers to confirm each stage is on
+              track at set points through its estimated time.
+            </p>
+            <StageCheckinSettings initial={productionSettings} />
           </CardContent>
         </Card>
 

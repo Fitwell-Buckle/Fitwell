@@ -9,6 +9,7 @@ describe("isSupplierNotificationType", () => {
     expect(isSupplierNotificationType("note_for_supplier")).toBe(true);
     expect(isSupplierNotificationType("document_for_supplier")).toBe(true);
     expect(isSupplierNotificationType("update_for_supplier")).toBe(true);
+    expect(isSupplierNotificationType("stage_checkin_for_supplier")).toBe(true);
   });
 
   it("treats admin-bound types as not supplier-bound", () => {
@@ -22,6 +23,7 @@ describe("isSupplierNotificationType", () => {
     expect([...SUPPLIER_NOTIFICATION_TYPES].sort()).toEqual([
       "document_for_supplier",
       "note_for_supplier",
+      "stage_checkin_for_supplier",
       "update_for_supplier",
     ]);
   });

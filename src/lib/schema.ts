@@ -1540,8 +1540,58 @@ export const productionSettings = pgTable("production_settings", {
   etaReminderIntervalDays: integer("eta_reminder_interval_days")
     .notNull()
     .default(2),
+  // Positive-control stage check-ins: prompt the supplier at each % of a
+  // stage's estimated duration to confirm they're on track. Percentages
+  // editable (default 50 / 75 / 95 = "halfway, 25%-to-go, 5%-to-go").
+  stageCheckinEnabled: boolean("stage_checkin_enabled").notNull().default(true),
+  stageCheckinThresholds: jsonb("stage_checkin_thresholds")
+    .$type<number[]>()
+    .notNull()
+    .default([50, 75, 95]),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
+
+// One row per (stage instance × threshold) prompt sent to a supplier. The
+// supplier must affirmatively confirm on-track (positive control); silence or
+// a flagged delay escalates to admins. The unique index makes each threshold
+// fire once per stage instance (the stage_entered_at anchor distinguishes a
+// re-entered stage as a new instance).
+export const productionStageCheckin = pgTable(
+  "production_stage_checkin",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    poId: text("po_id")
+      .notNull()
+      .references(() => productionPo.id, { onDelete: "cascade" }),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => supplier.id, { onDelete: "cascade" }),
+    stage: text("stage").notNull(),
+    // Earliest enteredAt of the supplier's lines at this stage — the instance key.
+    stageEnteredAt: timestamp("stage_entered_at", { mode: "date" }).notNull(),
+    thresholdPct: integer("threshold_pct").notNull(), // 50 / 75 / 95
+    promptedAt: timestamp("prompted_at", { mode: "date" }).notNull().defaultNow(),
+    respondedAt: timestamp("responded_at", { mode: "date" }),
+    // 'pending' (awaiting supplier) | 'on_track' | 'at_risk'
+    status: text("status").notNull().default("pending"),
+    note: text("note"),
+    escalatedAt: timestamp("escalated_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("stage_checkin_instance_idx").on(
+      t.poId,
+      t.supplierId,
+      t.stage,
+      t.stageEnteredAt,
+      t.thresholdPct,
+    ),
+    index("stage_checkin_supplier_idx").on(t.supplierId),
+    index("stage_checkin_po_idx").on(t.poId),
+  ],
+);
 
 // The production pipeline's stages — now data-driven (add / rename / delete /
 // reorder). `key` is the stable identifier stored on line items / events /

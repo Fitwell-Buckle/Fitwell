@@ -7,6 +7,7 @@ import {
   productionAttachment,
   productionComment,
   productionPo,
+  productionStageCheckin,
 } from "@/lib/schema";
 import { getPoDetail, getPoStageEstimates } from "@/lib/production/service";
 import { getSupplierScope } from "@/lib/production/supplier-session";
@@ -29,6 +30,10 @@ import {
 } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 import { SupplierLineItems } from "./supplier-line-items";
+import {
+  StageCheckinPrompts,
+  type CheckinPrompt,
+} from "./stage-checkin-prompts";
 import { PoTimeline } from "@/components/production/po-timeline";
 import { ProductionTimeline } from "@/components/production/production-timeline";
 import { buildPoTimeline } from "@/lib/production/timeline";
@@ -136,6 +141,42 @@ export default async function SupplierPoDetailPage({
       label: ownedStages.includes(s) ? stageLabels[s] : "Complete",
     }));
 
+  // Open positive-control stage check-ins for this supplier on this PO, grouped
+  // by stage instance — one prompt card per stage, surfaced at the top.
+  const pendingCheckins = await db
+    .select()
+    .from(productionStageCheckin)
+    .where(
+      and(
+        eq(productionStageCheckin.poId, po.id),
+        eq(productionStageCheckin.supplierId, scope.supplierId),
+        eq(productionStageCheckin.status, "pending"),
+      ),
+    );
+  const checkinByInstance = new Map<
+    string,
+    { id: string; stage: string; maxPct: number }
+  >();
+  for (const c of pendingCheckins) {
+    const key = `${c.stage}:${c.stageEnteredAt.toISOString()}`;
+    const prev = checkinByInstance.get(key);
+    // Keep the highest-threshold pending row as the representative.
+    if (!prev || c.thresholdPct > prev.maxPct) {
+      checkinByInstance.set(key, {
+        id: c.id,
+        stage: c.stage,
+        maxPct: c.thresholdPct,
+      });
+    }
+  }
+  const checkinPrompts: CheckinPrompt[] = [...checkinByInstance.values()].map(
+    (c) => ({
+      id: c.id,
+      stageLabel: stageLabels[c.stage] ?? c.stage,
+      detail: `About ${c.maxPct}% through the estimated stage time — ~${Math.max(0, 100 - c.maxPct)}% to go.`,
+    }),
+  );
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -157,6 +198,8 @@ export default async function SupplierPoDetailPage({
           </Button>
         </div>
       </div>
+
+      <StageCheckinPrompts prompts={checkinPrompts} />
 
       {/* Production-relevant fields only — no company / customer / price-tier.
         *  Expected delivery moved to the Line items table so the supplier can
