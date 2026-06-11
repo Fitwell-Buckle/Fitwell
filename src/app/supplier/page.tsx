@@ -34,6 +34,7 @@ import {
   KanbanBoard,
   type KanbanCard,
 } from "@/app/(admin)/modules/production/kanban/kanban-board";
+import { MissingEtaNudge } from "./missing-eta-nudge";
 
 export default async function SupplierHomePage() {
   const scope = await getSupplierScope();
@@ -59,7 +60,15 @@ export default async function SupplierHomePage() {
     with: {
       supplier: { columns: { name: true } },
       lineItems: {
-        columns: { id: true, sku: true, title: true, quantity: true, currentStage: true },
+        columns: {
+          id: true,
+          sku: true,
+          title: true,
+          quantity: true,
+          currentStage: true,
+          expectedCompletionDate: true,
+          shopifyReceivedAt: true,
+        },
       },
       stageAssignments: { columns: { stage: true, supplierId: true } },
     },
@@ -84,6 +93,10 @@ export default async function SupplierHomePage() {
   const terminal = terminalStage(order);
   const cards: KanbanCard[] = [];
   const cardStages = new Set<ProductionStage>();
+  // POs with line items this supplier owns that still lack a Final ETA — drives
+  // the login nudge.
+  const missingEtaPos: { poId: string; poNumber: string; missingCount: number }[] =
+    [];
   for (const po of pos) {
     const owned = stagesOwnedBySupplier(
       order,
@@ -92,6 +105,21 @@ export default async function SupplierHomePage() {
       me,
     ).filter((s) => s !== terminal);
     const ownedSet = new Set(owned);
+    const missingEta = po.lineItems.filter(
+      (li) =>
+        ownedSet.has(li.currentStage) &&
+        !li.shopifyReceivedAt &&
+        !li.expectedCompletionDate,
+    );
+    if (missingEta.length > 0) {
+      missingEtaPos.push({
+        poId: po.id,
+        poNumber: formatPoNumber(po.shopifyPoNumber, {
+          suffix: suffixByMaster.get(po.id) ?? undefined,
+        }),
+        missingCount: missingEta.length,
+      });
+    }
     const poCards = po.lineItems.filter((li) => ownedSet.has(li.currentStage));
     if (poCards.length === 0) continue;
     for (const li of poCards) {
@@ -126,6 +154,7 @@ export default async function SupplierHomePage() {
 
   return (
     <div>
+      <MissingEtaNudge pos={missingEtaPos} />
       <PageHeader title="Your production board" />
       <p className="mt-1 text-sm text-zinc-500">
         Your stages only. Drag a card forward to advance it; dropping it into the

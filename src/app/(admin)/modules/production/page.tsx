@@ -156,8 +156,11 @@ export default async function ProductionPage({
   const today = new Date().toISOString().slice(0, 10);
 
   // Collections (Shopify) a PO's items belong to, keyed by variant id.
+  // Skip the catch-all "All Products" collection — technically every variant
+  // is in it, so it's noise in the column.
   const collectionTitlesByVariant = new Map<string, Set<string>>();
   for (const g of collectionGroups) {
+    if (g.title.trim().toLowerCase() === "all products") continue;
     for (const vid of g.variantIds) {
       let set = collectionTitlesByVariant.get(vid);
       if (!set) collectionTitlesByVariant.set(vid, (set = new Set()));
@@ -271,6 +274,9 @@ export default async function ProductionPage({
       supplier: isMaster ? suppliersForMaster(po) : po.supplier?.name ?? "—",
       collections: collectionsFor(po.lineItems),
       customer: po.company?.name ?? "—",
+      etasMissing: po.lineItems.filter(
+        (li) => !li.shopifyReceivedAt && !li.expectedCompletionDate,
+      ).length,
       status: po.status,
       incomingQty,
       byStage,
@@ -460,6 +466,8 @@ export default async function ProductionPage({
       supplier: supplierLabel,
       collections: collectionsFor(ownedLines),
       customer: master.company?.name ?? "—",
+      // ownedLines are already unreceived; flag the ones without a Final ETA.
+      etasMissing: ownedLines.filter((li) => !li.expectedCompletionDate).length,
       status: master.status,
       incomingQty,
       byStage,

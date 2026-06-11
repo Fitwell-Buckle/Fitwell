@@ -55,6 +55,9 @@ export interface IncomingPoRow {
   collections: string;
   /** Downstream B2B customer (the linked company name), or "—". */
   customer: string;
+  /** Count of in-flight line items still missing an explicit Final ETA
+   *  (`expected_completion_date`). Drives the "N not set" flag in the list. */
+  etasMissing?: number;
   status: string;
   incomingQty: number;
   byStage: Partial<Record<ProductionStage, number>>;

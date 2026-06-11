@@ -166,9 +166,19 @@ export function PoExpandableList({
                     </span>
                   ))}
                 </div>
-                {/* Final ETA */}
+                {/* Final ETA (+ a flag when some line ETAs aren't set yet) */}
                 <div className={cn("w-24 shrink-0 text-right text-sm", isSelected ? "text-zinc-300" : "text-zinc-500")}>
                   {fmtDate(r.nearestEta)}
+                  {(r.etasMissing ?? 0) > 0 && (
+                    <div
+                      className={cn(
+                        "mt-0.5 text-xs font-medium",
+                        isSelected ? "text-amber-300" : "text-amber-600",
+                      )}
+                    >
+                      {r.etasMissing} ETA{r.etasMissing === 1 ? "" : "s"} not set
+                    </div>
+                  )}
                 </div>
                 {/* Expand chevron */}
                 <div className="ml-1 shrink-0">
