@@ -16,11 +16,13 @@ import type { IncomingRow } from "@/lib/production/inventory";
 interface Props {
   poNumber: string;
   poId: string;
-  /** When set (sub-PO rows), renders an extra "Open Master PO" link. */
-  masterPoId?: string;
   supplier: string;
   rows: IncomingRow[];
   stageLabels: Record<string, string>;
+  /** Suppress the banner "Open PO" link — the by-PO list puts Open-PO links
+   *  on each row instead, so the breakdown shouldn't repeat them. The board /
+   *  timeline views (no per-row link) leave this off and keep the link. */
+  hideOpenLinks?: boolean;
   /** Called when the user dismisses the breakdown (clicks "← Back"). */
   onClose: () => void;
 }
@@ -32,10 +34,10 @@ interface Props {
 export function PoSkuBreakdown({
   poNumber,
   poId,
-  masterPoId,
   supplier,
   rows,
   stageLabels,
+  hideOpenLinks,
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -72,20 +74,13 @@ export function PoSkuBreakdown({
             {poNumber}
           </span>
           <span className="text-sm text-zinc-500">{supplier}</span>
-          <a
-            href={`/modules/production/po/${poId}`}
-            className="text-xs text-zinc-400 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-600"
-            onClick={(e) => e.stopPropagation()}
-          >
-            Open PO →
-          </a>
-          {masterPoId && (
+          {!hideOpenLinks && (
             <a
-              href={`/modules/production/po/${masterPoId}`}
+              href={`/modules/production/po/${poId}`}
               className="text-xs text-zinc-400 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-600"
               onClick={(e) => e.stopPropagation()}
             >
-              Open Master PO →
+              Open PO →
             </a>
           )}
         </div>

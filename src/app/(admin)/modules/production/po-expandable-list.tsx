@@ -117,6 +117,22 @@ export function PoExpandableList({
                       {subtitles[r.poNumber]}
                     </div>
                   )}
+                  {/* Open-PO link, right under the row's banner. Label adapts:
+                      a master row opens the master, a sub-PO row its sub-PO. */}
+                  {isSelected && (
+                    <a
+                      href={`/modules/production/po/${r.poId}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-0.5 block font-sans text-xs text-zinc-300 underline decoration-zinc-400 underline-offset-2 hover:text-white"
+                    >
+                      {subRowsByPoNumber?.[r.poNumber]?.length
+                        ? "Open Master PO"
+                        : r.masterPoId
+                          ? "Open Sub PO"
+                          : "Open PO"}{" "}
+                      →
+                    </a>
+                  )}
                 </div>
                 {/* Supplier(s) — a master lists every involved supplier */}
                 <div className={cn("w-32 shrink-0 text-sm", isSelected ? "text-zinc-300" : "text-zinc-700")}>
@@ -188,7 +204,8 @@ export function PoExpandableList({
                   <PoSkuBreakdown
                     poNumber={r.poNumber}
                     poId={r.poId}
-                    masterPoId={r.masterPoId}
+                    // The row above already carries the Open-PO link.
+                    hideOpenLinks
                     supplier={r.supplier}
                     rows={skuRowsByPo[r.poNumber] ?? []}
                     stageLabels={stageLabels}
