@@ -15,13 +15,17 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Match local dev (node 24 / npm 11) — npm 11 lockfiles omit
-          # platform-skipped optional-dep entries (@emnapi/* via sharp)
-          # that npm 10 (node 22) treats as out-of-sync and fails ci on.
           node-version: 24
           cache: npm
 
-      - run: npm ci
+      # npm install (not npm ci): the lock is generated on macOS arm64, where
+      # sharp uses the native @img/sharp-darwin-arm64 binary and never pins the
+      # Linux-only @emnapi/* WASM-fallback packages. On the Linux runner those
+      # are required, so `npm ci`'s strict lock check hard-fails ("Missing
+      # @emnapi/runtime@1.11.0 from lock file"). Regenerating the lock on a Mac
+      # can't capture the Linux versions, so `npm install` reconciles per-
+      # platform at install time and proceeds. Mirrors newsletter-daily.yml.
+      - run: npm install --no-audit --no-fund
 
       - name: Typecheck
         run: npx tsc --noEmit
