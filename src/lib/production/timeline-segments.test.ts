@@ -192,6 +192,82 @@ describe("buildLineSegments — per-line stages", () => {
     }
   });
 
+  it("makes an explicit Final ETA authoritative — compresses the chain to land on it", () => {
+    const SPRING = ["supplier_po", "stamping", "packaging", "complete"];
+    // Natural estimate projection (2d each) would end at today+6. The ETA on
+    // the last projected stage (packaging) is today+3 — earlier than the
+    // projection.
+    const eta = today + 3 * MS_PER_DAY;
+    const segs = buildLineSegments(
+      {
+        currentStage: "supplier_po",
+        stages: SPRING,
+        stageEvents: [
+          { stage: "supplier_po", enteredAt: new Date(today), exitedAt: null },
+        ],
+      },
+      today,
+      "2026-06-09",
+      ORDER,
+      ESTIMATES,
+      new Map<ProductionStage, number>([["packaging", eta]]),
+    );
+    const projected = segs.filter((s) => s.projected);
+    // Bar ends exactly on the ETA, not the (later) estimate projection.
+    expect(projected[projected.length - 1].endMs).toBe(eta);
+    // Proportionally compressed (scale 0.5): supplier_po, stamping each 1d.
+    expect(projected.map((s) => s.endMs)).toEqual([
+      today + 1 * MS_PER_DAY,
+      today + 2 * MS_PER_DAY,
+      eta,
+    ]);
+    // Chain stays unbroken.
+    for (let i = 1; i < segs.length; i++) {
+      expect(segs[i].startMs).toBe(segs[i - 1].endMs);
+    }
+  });
+
+  it("stretches the chain to a later Final ETA too", () => {
+    const SPRING = ["supplier_po", "stamping", "packaging", "complete"];
+    const eta = today + 12 * MS_PER_DAY; // later than the today+6 estimate
+    const segs = buildLineSegments(
+      {
+        currentStage: "supplier_po",
+        stages: SPRING,
+        stageEvents: [
+          { stage: "supplier_po", enteredAt: new Date(today), exitedAt: null },
+        ],
+      },
+      today,
+      "2026-06-09",
+      ORDER,
+      ESTIMATES,
+      new Map<ProductionStage, number>([["packaging", eta]]),
+    );
+    const projected = segs.filter((s) => s.projected);
+    expect(projected[projected.length - 1].endMs).toBe(eta);
+  });
+
+  it("leaves the estimate projection alone when there's no Final ETA", () => {
+    const SPRING = ["supplier_po", "stamping", "packaging", "complete"];
+    const segs = buildLineSegments(
+      {
+        currentStage: "supplier_po",
+        stages: SPRING,
+        stageEvents: [
+          { stage: "supplier_po", enteredAt: new Date(today), exitedAt: null },
+        ],
+      },
+      today,
+      "2026-06-09",
+      ORDER,
+      ESTIMATES,
+    );
+    const projected = segs.filter((s) => s.projected);
+    // Unchanged: 3 stages × 2d estimate = ends at today+6.
+    expect(projected[projected.length - 1].endMs).toBe(today + 6 * MS_PER_DAY);
+  });
+
   it("empty stages array falls back to the global pipeline", () => {
     const segs = buildLineSegments(
       {

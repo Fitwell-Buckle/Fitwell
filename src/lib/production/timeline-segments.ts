@@ -180,5 +180,44 @@ export function buildLineSegments(
     });
     cursorMs = endMs;
   }
+
+  // Authoritative ETA: when the line's LAST projected stage carries an explicit
+  // target (the per-line "Final ETA" anchors exactly that stage), make the bar
+  // END on that date — scale the whole projected chain to fit [projStart,
+  // target] instead of letting cycle-time estimates overshoot it. Estimates now
+  // only set the *relative* widths of the projected stages; the ETA is the
+  // source of truth. (We have too little cycle-time history to trust the raw
+  // projection yet — so an explicit promise date wins over the algorithm.)
+  // With no such target the estimate projection stands unchanged. This also
+  // makes a no-op when the estimate projection already lands on the target.
+  const projected = segs.filter((s) => s.projected);
+  if (projected.length > 0) {
+    const last = projected[projected.length - 1];
+    const finalTarget = stageTargetsMs.get(last.stage);
+    if (finalTarget != null) {
+      const projStart = projected[0].startMs;
+      const naturalEnd = last.endMs;
+      if (naturalEnd > projStart && finalTarget > projStart) {
+        // Compress (ETA earlier than estimates) or stretch (ETA later) the
+        // projected chain so its last segment ends exactly on the target.
+        const scale = (finalTarget - projStart) / (naturalEnd - projStart);
+        for (const s of projected) {
+          s.startMs = projStart + (s.startMs - projStart) * scale;
+          s.endMs = projStart + (s.endMs - projStart) * scale;
+        }
+      } else if (naturalEnd > projStart) {
+        // ETA at/before the projection can even start: the deadline is already
+        // unrealistic — show each projected stage as a thin sliver rather than
+        // a negative-width bar.
+        let cur = projStart;
+        for (const s of projected) {
+          s.startMs = cur;
+          s.endMs = cur + MS_PER_DAY / 4;
+          cur = s.endMs;
+        }
+      }
+    }
+  }
+
   return segs;
 }
