@@ -553,12 +553,22 @@ export class KlaviyoClient {
     fromEmail: string;
     fromLabel: string;
     replyToEmail?: string;
+    /**
+     * Klaviyo "smart sending" suppresses recipients who got an email in the
+     * last ~16h. Defaults true (Klaviyo's default). A daily newsletter
+     * should set this false — every subscriber should get every issue
+     * regardless of other emails they received that day.
+     */
+    useSmartSending?: boolean;
   }): Promise<{ id: string; messageId: string }> {
     const body = {
       data: {
         type: "campaign",
         attributes: {
           name: opts.name,
+          ...(opts.useSmartSending === false
+            ? { send_options: { use_smart_sending: false } }
+            : {}),
           audiences: {
             included: opts.audiencesIncluded,
             ...(opts.audiencesExcluded

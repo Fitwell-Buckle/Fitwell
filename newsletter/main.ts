@@ -287,7 +287,15 @@ async function run(): Promise<void> {
   const klaviyoClient = new KlaviyoClient({
     apiKey: process.env.NEWSLETTER_KLAVIYO_API_KEY ?? process.env.KLAVIYO_API_KEY,
   });
-  const result = await draftCampaign({ slug, config, html, client: klaviyoClient });
+  const result = await draftCampaign({
+    slug,
+    config,
+    html,
+    client: klaviyoClient,
+    // Daily newsletter: every subscriber gets every issue, even if they
+    // received another email (a shipping note, a flow) the same morning.
+    useSmartSending: false,
+  });
   await db
     .update(newsletterCampaign)
     .set({ klaviyoCampaignId: result.campaignId })

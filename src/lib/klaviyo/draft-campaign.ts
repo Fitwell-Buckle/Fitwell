@@ -21,6 +21,12 @@ export interface DraftCampaignInput {
   /** Final compiled + UTM-injected HTML for the email body */
   html: string;
   client: KlaviyoClient;
+  /**
+   * Pass false for a daily newsletter so Klaviyo doesn't suppress
+   * subscribers who happened to get another email in the last ~16h.
+   * Omitted → Klaviyo's default (smart sending on).
+   */
+  useSmartSending?: boolean;
 }
 
 export interface DraftCampaignResult {
@@ -59,7 +65,7 @@ export class CampaignAlreadySentError extends Error {
 export async function draftCampaign(
   input: DraftCampaignInput,
 ): Promise<DraftCampaignResult> {
-  const { slug, config, html, client } = input;
+  const { slug, config, html, client, useSmartSending } = input;
 
   // 1. Template — upsert by name.
   const existingTemplate = await client.getTemplateByName(slug);
@@ -105,6 +111,7 @@ export async function draftCampaign(
       fromEmail: config.from_email,
       fromLabel: config.from_label,
       replyToEmail: config.reply_to_email,
+      useSmartSending,
     });
     campaignId = created.id;
     messageId = created.messageId;
