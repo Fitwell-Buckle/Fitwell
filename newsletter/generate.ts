@@ -12,6 +12,7 @@
  */
 import { compileMjml, injectUtms } from "../src/lib/klaviyo/templates";
 import { NEWSLETTER } from "./config";
+import { cleanHeadline } from "./text";
 import {
   NEWS_SECTION_ORDER,
   TYPE_LABELS,
@@ -77,7 +78,7 @@ function storyBlock(story: BriefStory): string {
           ${escapeHtml(story.sourceName)}
         </mj-text>
         <mj-text padding="4px 0 0 0" font-size="17px" font-weight="600" line-height="1.3">
-          <a href="${escapeHtml(story.url)}" style="color:#1a1a1a;text-decoration:none;">${escapeHtml(story.title)}</a>
+          <a href="${escapeHtml(story.url)}" style="color:#1a1a1a;text-decoration:none;">${escapeHtml(cleanHeadline(story.title))}</a>
         </mj-text>
         <mj-text padding="6px 0 ${bottomPad} 0" font-size="14px" line-height="1.55" color="#3d3d3d">
           ${escapeHtml(story.summary)}

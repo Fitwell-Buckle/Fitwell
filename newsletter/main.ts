@@ -27,6 +27,7 @@ import { filterNew, contentHash, normalizeUrl, type SeenArticle } from "./dedup"
 import { triageStories, summarizeAll } from "./editorial";
 import { enrichStories } from "./images";
 import { renderBrief } from "./generate";
+import { cleanHeadline } from "./text";
 import type { BriefStory, RawStory, Segment, StoryType } from "./types";
 
 const SEEN_WINDOW_DAYS = 14;
@@ -244,7 +245,7 @@ async function run(): Promise<void> {
   const brief: BriefStory[] = await summarizeAll(enriched);
 
   // 5. Render
-  const subject = buildSubject(now, brief[0].title);
+  const subject = buildSubject(now, cleanHeadline(brief[0].title));
   const { html, warnings } = await renderBrief(brief, now, slug);
   for (const w of warnings) console.warn(`mjml: ${w}`);
 

@@ -62,3 +62,58 @@ export function toPlainText(html: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/**
+ * Editorial prefixes outlets bolt onto headlines (case-insensitive),
+ * stripped for display so headlines read as ours, not the source's.
+ * Only matched when followed by a `:` / dash separator, so legitimate
+ * title words ("New CEO at Rolex") are never touched.
+ */
+const HEADLINE_PREFIXES = [
+  "Business News",
+  "Industry News",
+  "Introducing",
+  "First Look",
+  "Hands-On",
+  "Hands On",
+  "New Release",
+  "New",
+  "Photo Report",
+  "In Photos",
+  "Watch Spotting",
+  "Recommended Reading",
+  "Review",
+  "Exclusive",
+  "Breaking",
+  "Editorial",
+  "Opinion",
+  "Just Because",
+];
+
+// Longest-first so "New Release" wins over "New"; separators: colon, en/em
+// dash, or spaced hyphen.
+const HEADLINE_PREFIX_RE = new RegExp(
+  `^\\s*(?:${[...HEADLINE_PREFIXES]
+    .sort((a, b) => b.length - a.length)
+    .join("|")})\\s*(?::|\\u2013|\\u2014|\\s-)\\s+`,
+  "i",
+);
+
+// No-colon variant: "Introducing the Autodromo…" / "First Look at the…".
+// Only for these two prefixes, and only before an article/preposition, so
+// we strip the prefix word but keep the rest of the sentence intact.
+const HEADLINE_LEADIN_RE =
+  /^\s*(?:Introducing|First Look(?:\s+at)?)\s+(?=(?:the|a|an|this)\s)/i;
+
+/** Strip a leading editorial prefix from a headline (display only). */
+export function cleanHeadline(title: string): string {
+  let stripped = title.replace(HEADLINE_PREFIX_RE, "").trim();
+  if (stripped === title.trim()) {
+    stripped = title.replace(HEADLINE_LEADIN_RE, "").trim();
+  }
+  if (!stripped) return title.trim(); // never blank the headline
+  // Re-capitalize if the strip left a lowercase first letter.
+  return stripped[0].toLowerCase() === stripped[0] && /[a-z]/.test(stripped[0])
+    ? stripped[0].toUpperCase() + stripped.slice(1)
+    : stripped;
+}

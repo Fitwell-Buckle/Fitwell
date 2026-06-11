@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeEntities, toPlainText } from "./text";
+import { cleanHeadline, decodeEntities, toPlainText } from "./text";
 
 describe("decodeEntities", () => {
   it("decodes the named curly-quote entities that caused the title bug", () => {
@@ -32,5 +32,73 @@ describe("toPlainText", () => {
     expect(toPlainText("<p>The   <b>brand&rsquo;s</b>\n new\tline</p>")).toBe(
       "The brand’s new line",
     );
+  });
+});
+
+describe("cleanHeadline", () => {
+  it("strips colon-delimited editorial prefixes", () => {
+    expect(
+      cleanHeadline("Business News: Richard Mille Owner Files Legal Action"),
+    ).toBe("Richard Mille Owner Files Legal Action");
+    expect(cleanHeadline("Introducing: The Christopher Ward C60 Pool Diver")).toBe(
+      "The Christopher Ward C60 Pool Diver",
+    );
+    expect(cleanHeadline("New: Girard-Perregaux Laureato Fifty")).toBe(
+      "Girard-Perregaux Laureato Fifty",
+    );
+  });
+
+  it("strips dash-delimited prefixes (en, em, spaced hyphen)", () => {
+    expect(cleanHeadline("First Look – The Longines Master Collection")).toBe(
+      "The Longines Master Collection",
+    );
+    expect(cleanHeadline("Introducing — The Urwerk UR-120")).toBe("The Urwerk UR-120");
+    expect(cleanHeadline("Hands-On - The Oris Hölstein 2026")).toBe(
+      "The Oris Hölstein 2026",
+    );
+  });
+
+  it("prefers the longest matching prefix (New Release vs New)", () => {
+    expect(cleanHeadline("New Release: The Glashütte Original Seventies")).toBe(
+      "The Glashütte Original Seventies",
+    );
+  });
+
+  it("does NOT strip legitimate leading words", () => {
+    expect(cleanHeadline("New CEO at Rolex as Heinrich Steps Down")).toBe(
+      "New CEO at Rolex as Heinrich Steps Down",
+    );
+    expect(cleanHeadline("Rolex hikes prices by 5% on gold watches")).toBe(
+      "Rolex hikes prices by 5% on gold watches",
+    );
+  });
+
+  it("never blanks a headline that is only a prefix", () => {
+    expect(cleanHeadline("Introducing:")).toBe("Introducing:");
+  });
+
+  it("re-capitalizes when the strip leaves a lowercase start", () => {
+    expect(cleanHeadline("Introducing: the new Tudor Black Bay")).toBe(
+      "The new Tudor Black Bay",
+    );
+  });
+
+  it("is case-insensitive on the prefix", () => {
+    expect(cleanHeadline("INTRODUCING: The MB&F HM12")).toBe("The MB&F HM12");
+  });
+});
+
+describe("cleanHeadline — no-colon lead-ins", () => {
+  it("strips 'Introducing the/a' but keeps the rest", () => {
+    expect(
+      cleanHeadline("Introducing the Autodromo Group C Turbo Sport, the Brand’s First Ana-Digi Watch"),
+    ).toBe("The Autodromo Group C Turbo Sport, the Brand’s First Ana-Digi Watch");
+    expect(cleanHeadline("First Look at the New Oris Diver")).toBe("The New Oris Diver");
+  });
+
+  it("leaves a podcast/show name with a colon intact", () => {
+    expect(
+      cleanHeadline("The Business of Watches Podcast: Benjamin Arabov, CEO Of Jacob & Co."),
+    ).toBe("The Business of Watches Podcast: Benjamin Arabov, CEO Of Jacob & Co.");
   });
 });
