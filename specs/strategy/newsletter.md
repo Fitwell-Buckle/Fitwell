@@ -201,10 +201,45 @@ tagged for measurement:
   reputation and GDPR consent). Engine reads the list id from
   `NEWSLETTER_KLAVIYO_LIST_ID`.
 
+## Monetization & Fitwell branding (the whole point — added 2026-06-11)
+
+The newsletter exists to **drive Fitwell revenue**, not just to build
+goodwill. It must be unmistakably Fitwell's, with Fitwell as the visible
+lead sponsor, and it must convert attention into the three revenue
+motions. Execution must stay **classy** — an industry brief that happens
+to be Fitwell-sponsored, never an ad in newsletter clothing.
+
+Revenue motions to incorporate:
+1. **D2C — sell buckles.** Drive readers (P1a/P1b collectors) to
+   fitwellbuckle.co to buy. Tasteful product presence + CTA; a recurring
+   placement, not a banner blast.
+2. **B2B — the mechanism.** Encourage brands/OEMs (B1–B6) to work with
+   Fitwell's micro-adjust mechanism (license/supply/co-develop). The
+   brief reaches exactly these decision-makers; give them a reason and a
+   path to reach out.
+3. **Brand authority.** Being the publication the industry reads makes
+   Fitwell credible to both audiences — compounding the above.
+
+Open design questions (for a working session):
+- Masthead/branding: how prominently Fitwell shows up vs. the brief's own
+  identity ("The Micro-Adjust"). Likely "by Fitwell Buckle Co." lockup +
+  a tasteful sponsor block.
+- Placement & cadence of the D2C and B2B CTAs (every issue? rotating?
+  a fixed footer block + an occasional feature?).
+- Voice: how to be commercial without undercutting the editorial
+  credibility that makes anyone read it.
+- Measurement: UTM-tag every Fitwell link (engine already injects UTMs)
+  so we can attribute buckle sales + B2B inquiries back to the brief.
+
+Status: requirement captured; design + build is a dedicated workstream
+after the editorial-quality pass.
+
 ## Open items
 
 - **Tom: create the Klaviyo list** and set `NEWSLETTER_KLAVIYO_LIST_ID`
   (local + GitHub Actions secret).
+- **Fitwell branding + monetization build** (see section above) — design
+  the sponsor presence, D2C + B2B CTAs, and revenue attribution.
 - **Soft-launch contact list.** Tom compiles 20–30 watch-industry
   contacts (his current network — Fitwell-adjacent buyers,
   distributors, brand contacts). These he knows well enough to add to
