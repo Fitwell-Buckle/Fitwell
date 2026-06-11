@@ -69,7 +69,7 @@ describe("buildMjml", () => {
       [brief({}), brief({ segment: "microbrand", type: "release", url: "https://a.com/b", title: "Baltic Drops Diver" })],
       date,
     );
-    expect(mjml).toContain("The Micro-Adjust");
+    expect(mjml).toContain("The Daily Micro-Adjust");
     expect(mjml).toContain("https://hodinkee.com/articles/rolex-ceo");
     expect(mjml).toContain("Rolex has a new CEO. It matters.");
     expect(mjml).toContain("Hodinkee"); // source eyebrow (no brand-tier tag)
@@ -161,7 +161,33 @@ describe("buildMjml", () => {
     expect(withImage).toContain('<mj-image src="https://cdn.example.com/hm12.jpg"');
     expect(withImage).toContain('href="https://hodinkee.com/articles/rolex-ceo"');
 
+    // No story image → no story <mj-image> (the masthead logo is separate).
     const without = buildMjml([brief({})], date);
-    expect(without).not.toContain("<mj-image");
+    expect(without).not.toContain("cdn.example.com");
+    expect(without).not.toContain('alt="Rolex Names New CEO"');
+  });
+
+  it("renders white masthead logo, black module logo, and a rotating module", () => {
+    const mjml = buildMjml([brief({})], date, "micro-adjust-2026-06-11");
+    expect(mjml).toContain("fitwell-mark-white-2026.png"); // masthead (dark bg)
+    expect(mjml).toContain("fitwell-mark-gold-2026.png"); // module (cream bg)
+    // sponsor CTA carries a per-module utm_content
+    expect(mjml).toMatch(/utm_content=module-[a-z]+/);
+    expect(mjml).toContain("utm_campaign=micro-adjust-2026-06-11");
+  });
+
+  it("places the sponsor module right after Business & Industry", () => {
+    const mjml = buildMjml(
+      [
+        brief({}), // business → hard news section
+        brief({ type: "release", url: "https://a.com/r", title: "Baltic Diver" }),
+      ],
+      date,
+    );
+    const newsAt = mjml.indexOf("Business &amp; Industry");
+    const sponsorAt = mjml.indexOf("utm_content=module-"); // only the sponsor CTA has this
+    const releasesAt = mjml.indexOf("New Releases");
+    expect(newsAt).toBeLessThan(sponsorAt);
+    expect(sponsorAt).toBeLessThan(releasesAt);
   });
 });

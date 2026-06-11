@@ -13,6 +13,7 @@
 import { compileMjml, injectUtms } from "../src/lib/klaviyo/templates";
 import { NEWSLETTER } from "./config";
 import { cleanHeadline } from "./text";
+import { SPONSOR_GIF, pickSponsorModule, sponsorHref } from "./sponsor";
 import {
   NEWS_SECTION_ORDER,
   TYPE_LABELS,
@@ -89,11 +90,41 @@ function sectionShell(header: string, body: string): string {
   return `
     <mj-section background-color="#ffffff" padding="8px 24px">
       <mj-column>
-        <mj-text padding="16px 0 0 0" font-size="13px" font-weight="700" letter-spacing="2px" text-transform="uppercase" color="#b4541e">
+        <mj-text padding="16px 0 0 0" font-size="13px" font-weight="700" letter-spacing="2px" text-transform="uppercase" color="#c08a4d">
           ${escapeHtml(header)}
         </mj-text>
         <mj-divider border-width="1px" border-color="#e8e4dc" padding="8px 0 0 0" />
         ${body}
+      </mj-column>
+    </mj-section>`;
+}
+
+/**
+ * The day's rotating Fitwell sponsor module — the monetization block.
+ * Two columns: logo + copy + CTA on the left, the micro-adjust buckle GIF
+ * on the right (stacks below the copy on mobile). The GIF is the cropped,
+ * lightweight SPONSOR_GIF unless a module overrides it.
+ */
+function sponsorSection(date: Date, slug: string): string {
+  const m = pickSponsorModule(date);
+  const href = sponsorHref(m, slug);
+  const mediaUrl = m.imageUrl ?? SPONSOR_GIF;
+  return `
+    <mj-section background-color="#f0ead8" padding="18px 24px" border="1px solid #e0d8c4">
+      <mj-column width="58%" vertical-align="middle">
+        <mj-image src="${escapeHtml(NEWSLETTER.logoGoldUrl)}" alt="Fitwell" width="82px" align="left" padding="0 0 10px 0" />
+        <mj-text padding="0" font-size="18px" font-weight="700" line-height="1.25" color="#1a1a1a">
+          ${escapeHtml(m.headline)}
+        </mj-text>
+        <mj-text padding="6px 0 0 0" font-size="13px" line-height="1.5" color="#3d3d3d">
+          ${escapeHtml(m.body)}
+        </mj-text>
+        <mj-button href="${escapeHtml(href)}" background-color="#1a1a1a" color="#f4f1ea" font-size="13px" font-weight="600" border-radius="2px" padding="12px 0 0 0" inner-padding="10px 20px" align="left">
+          ${escapeHtml(m.ctaLabel)} →
+        </mj-button>
+      </mj-column>
+      <mj-column width="42%" vertical-align="middle">
+        <mj-image src="${escapeHtml(mediaUrl)}" alt="Fitwell micro-adjust buckle" href="${escapeHtml(href)}" width="210px" border-radius="6px" padding="0" />
       </mj-column>
     </mj-section>`;
 }
@@ -106,14 +137,39 @@ const DATE_FMT: Intl.DateTimeFormatOptions = {
   timeZone: "UTC",
 };
 
-export function buildMjml(stories: BriefStory[], date: Date): string {
+export function buildMjml(
+  stories: BriefStory[],
+  date: Date,
+  slug = "preview",
+): string {
   const { news, releases } = layoutBrief(stories);
 
-  const newsSections = [...news.entries()]
-    .map(([type, group]) =>
-      sectionShell(TYPE_LABELS[type], group.map(storyBlock).join("\n")),
-    )
-    .join("\n");
+  // Footer shop CTA — UTM-tagged (utm_content=footer) so persistent
+  // brand-sign-off clicks are attributable apart from the rotating module.
+  const footerHref = (() => {
+    const u = new URL("https://www.fitwellbuckle.co");
+    u.searchParams.set("utm_source", NEWSLETTER.utmSource);
+    u.searchParams.set("utm_medium", "email");
+    u.searchParams.set("utm_campaign", slug);
+    u.searchParams.set("utm_content", "footer");
+    return u.toString();
+  })();
+
+  // The Fitwell module sits right after Business & Industry (the top of the
+  // brief), not buried after the softer sections. Falls back to after the
+  // last news section if there's no Business section that day.
+  const sponsor = sponsorSection(date, slug);
+  const parts: string[] = [];
+  let sponsorPlaced = false;
+  for (const [type, group] of news.entries()) {
+    parts.push(sectionShell(TYPE_LABELS[type], group.map(storyBlock).join("\n")));
+    if (type === "business") {
+      parts.push(sponsor);
+      sponsorPlaced = true;
+    }
+  }
+  if (!sponsorPlaced) parts.push(sponsor);
+  const newsSections = parts.join("\n");
 
   const releaseSection =
     releases.length > 0
@@ -128,26 +184,31 @@ export function buildMjml(stories: BriefStory[], date: Date): string {
     <mj-preview>${escapeHtml(NEWSLETTER.tagline)}</mj-preview>
   </mj-head>
   <mj-body background-color="#f4f1ea">
-    <mj-section background-color="#1a1a1a" padding="28px 24px 20px 24px">
+    <mj-section background-color="#1a1a1a" padding="18px 24px 16px 24px">
       <mj-column>
-        <mj-text align="center" font-size="26px" font-weight="700" color="#f4f1ea" letter-spacing="1px">
+        <mj-image src="${escapeHtml(NEWSLETTER.logoUrl)}" alt="Fitwell" href="https://www.fitwellbuckle.co" width="150px" align="center" padding="0 0 4px 0" />
+        <mj-text align="center" font-size="24px" font-weight="700" color="#c08a4d" letter-spacing="1px">
           ${escapeHtml(NEWSLETTER.title)}
         </mj-text>
-        <mj-text align="center" font-size="12px" color="#b8b3a8" padding="6px 0 0 0">
+        <mj-text align="center" font-size="11px" color="#b8b3a8" padding="4px 0 0 0">
           ${escapeHtml(date.toLocaleDateString("en-US", DATE_FMT))} · ${escapeHtml(NEWSLETTER.tagline)}
         </mj-text>
       </mj-column>
     </mj-section>
 ${newsSections}
 ${releaseSection}
-    <mj-section background-color="#1a1a1a" padding="20px 24px">
+    <mj-section background-color="#1a1a1a" padding="28px 24px 22px 24px">
       <mj-column>
+        <mj-image src="${escapeHtml(NEWSLETTER.logoUrl)}" alt="Fitwell" href="${escapeHtml(footerHref)}" width="124px" align="center" padding="0 0 14px 0" />
         <mj-text align="center" font-size="12px" color="#b8b3a8" line-height="1.6">
           ${escapeHtml(NEWSLETTER.title)} is the industry-intelligence arm of
           <a href="https://fitwellbuckle.co" style="color:#e8e4dc;">Fitwell Buckle Co.</a>,
-          makers of precision micro-adjust watch buckles.
+          makers of precision micro-adjust technology for watches.
         </mj-text>
-        <mj-text align="center" font-size="11px" color="#8a8a8a" padding="8px 0 0 0">
+        <mj-button href="${escapeHtml(footerHref)}" background-color="#c08a4d" color="#f4f1ea" font-size="13px" font-weight="600" border-radius="10px" padding="16px 0 4px 0" inner-padding="11px 26px" align="center">
+          Discover the perfect fit →
+        </mj-button>
+        <mj-text align="center" font-size="11px" color="#8a8a8a" padding="14px 0 0 0">
           {% unsubscribe %}
         </mj-text>
       </mj-column>
@@ -167,7 +228,7 @@ export async function renderBrief(
   date: Date,
   slug: string,
 ): Promise<RenderedBrief> {
-  const { html, warnings } = await compileMjml(buildMjml(stories, date));
+  const { html, warnings } = await compileMjml(buildMjml(stories, date, slug));
   if (!html) {
     throw new Error(`MJML compile produced no HTML: ${warnings.join("; ")}`);
   }

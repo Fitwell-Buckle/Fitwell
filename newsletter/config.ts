@@ -6,14 +6,14 @@
 
 export const NEWSLETTER = {
   /** Working title — riff on Fitwell's micro-adjust positioning. */
-  title: "The Micro-Adjust",
+  title: "The Daily Micro-Adjust",
   tagline: "Everything that matters in watches. In your inbox before your first meeting.",
   /**
    * Klaviyo sender identity. info@fitwellbuckle.co is Fitwell's already-
    * authenticated Klaviyo sending domain (NOT the portal.* subdomain,
    * which is Resend/transactional only and unknown to Klaviyo).
    */
-  fromLabel: "The Micro-Adjust",
+  fromLabel: "The Daily Micro-Adjust",
   fromEmail: process.env.NEWSLETTER_FROM_EMAIL ?? "info@fitwellbuckle.co",
   /**
    * Klaviyo list the campaign drafts target. No default on purpose —
@@ -27,6 +27,15 @@ export const NEWSLETTER = {
   lookbackHours: 36,
   /** utm_source for all links in the brief. */
   utmSource: "newsletter",
+  /** Fitwell™ 2026 wordmark (white), trimmed to bbox — for the dark masthead. */
+  logoUrl:
+    "https://u7unnafmnzoxkkki.public.blob.vercel-storage.com/newsletter/fitwell-mark-white-2026.png",
+  /** Fitwell™ 2026 wordmark (black), trimmed to bbox. */
+  logoBlackUrl:
+    "https://u7unnafmnzoxkkki.public.blob.vercel-storage.com/newsletter/fitwell-mark-black-2026.png",
+  /** Fitwell™ 2026 wordmark recolored to the #c08a4d accent — for the cream sponsor module. */
+  logoGoldUrl:
+    "https://u7unnafmnzoxkkki.public.blob.vercel-storage.com/newsletter/fitwell-mark-gold-2026.png",
 } as const;
 
 /**
