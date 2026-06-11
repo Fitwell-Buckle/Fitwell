@@ -30,6 +30,9 @@ export interface SubPoCoverRow {
   lineItemIds: string[];
   quantity: number;
   unitCents: number | null;
+  /** Per-line Final ETA (`expected_completion_date`, YYYY-MM-DD) or null. For a
+   *  raw-blank group, the shared date of its lines. */
+  eta: string | null;
 }
 
 export function SubPoCovers({
@@ -61,6 +64,13 @@ export function SubPoCovers({
   const [savedPrices, setSavedPrices] = useState(false);
   const [savingStage, setSavingStage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per-line Final ETA (the supplier's promise date); admins can edit it here too.
+  const [etas, setEtas] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const r of rows) m[r.key] = r.eta ?? "";
+    return m;
+  });
+  const [savingEtaKey, setSavingEtaKey] = useState<string | null>(null);
   // This sub-PO's own ETA (independent of the master and the other sub-POs).
   const [eta, setEta] = useState(initialEta ?? "");
   const [savingEta, setSavingEta] = useState(false);
@@ -131,6 +141,33 @@ export function SubPoCovers({
       setError("Network error — please try again.");
     } finally {
       setSavingEta(false);
+    }
+  }
+
+  async function saveLineEta(row: SubPoCoverRow) {
+    const value = (etas[row.key] ?? "").trim();
+    if (value === (row.eta ?? "")) return; // unchanged
+    setError(null);
+    setSavingEtaKey(row.key);
+    try {
+      // A raw-blank row prices/dates several lines; apply the date to each.
+      for (const lineItemId of row.lineItemIds) {
+        const res = await fetch(`/api/production/line-items/${lineItemId}/eta`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ expectedCompletionDate: value || null }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setError(d.error || "Couldn't save the ETA.");
+          return;
+        }
+      }
+      router.refresh();
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setSavingEtaKey(null);
     }
   }
 
@@ -211,12 +248,13 @@ export function SubPoCovers({
               <TableHead className="text-right">Qty</TableHead>
               <TableHead className="text-right">Unit cost</TableHead>
               <TableHead className="text-right">Line total</TableHead>
+              <TableHead className="text-right">Final ETA</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-zinc-400">
+                <TableCell colSpan={6} className="py-6 text-center text-zinc-400">
                   No items on the master.
                 </TableCell>
               </TableRow>
@@ -286,6 +324,18 @@ export function SubPoCovers({
                         ? fmtMoney(Math.round(v * 100) * r.quantity)
                         : "—";
                     })()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Input
+                      type="date"
+                      className="w-40"
+                      value={etas[r.key] ?? ""}
+                      disabled={savingEtaKey === r.key}
+                      onChange={(e) =>
+                        setEtas((m) => ({ ...m, [r.key]: e.target.value }))
+                      }
+                      onBlur={() => saveLineEta(r)}
+                    />
                   </TableCell>
                 </TableRow>
               ))

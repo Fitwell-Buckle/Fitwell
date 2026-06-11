@@ -190,6 +190,9 @@ export default async function PoDetailPage({
         .filter((c) => c.supplierId === po.supplierId)
         .map((c) => [c.lineItemId, c.unitCostCents]),
     );
+    const etaByLine = new Map(
+      subItems.map((li) => [li.id, li.expectedCompletionDate ?? null]),
+    );
     if (subRawBlanks.length > 0) {
       // SKU → product title, so the printable shows what each SKU under the
       // blank actually is.
@@ -202,6 +205,7 @@ export default async function PoDetailPage({
         quantity: g.quantity,
         // Every SKU in the blank shares one per-piece price; read the first.
         unitCents: g.lineItemIds.length ? myCost.get(g.lineItemIds[0]) ?? null : null,
+        eta: g.lineItemIds.length ? etaByLine.get(g.lineItemIds[0]) ?? null : null,
       }));
     } else {
       subCoverRows = subItems.map((li) => ({
@@ -211,6 +215,7 @@ export default async function PoDetailPage({
         lineItemIds: [li.id],
         quantity: li.quantity,
         unitCents: myCost.get(li.id) ?? null,
+        eta: li.expectedCompletionDate ?? null,
       }));
     }
   }
