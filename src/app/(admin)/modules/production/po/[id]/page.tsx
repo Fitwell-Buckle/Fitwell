@@ -13,6 +13,7 @@ import {
 } from "@/lib/production/service";
 import { invoiceForPo } from "@/lib/invoicing/service";
 import { PageHeader } from "@/components/ui/page-header";
+import { SetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -262,6 +263,21 @@ export default async function PoDetailPage({
 
   return (
     <div>
+      {/* Breadcrumb: show the real PO number as the current crumb, and for a
+          sub-PO insert its master before it → POs › PO-…-Master › PO-…-B. */}
+      <SetBreadcrumb
+        label={formatPoNumber(po.shopifyPoNumber, { isMaster, suffix: po.poSuffix })}
+        trail={
+          isSubPo
+            ? [
+                {
+                  label: formatPoNumber(po.shopifyPoNumber, { isMaster: true }),
+                  href: `/modules/production/po/${po.parentPoId}`,
+                },
+              ]
+            : undefined
+        }
+      />
       <div className="flex items-center justify-between">
         <PageHeader
           title={formatPoNumber(po.shopifyPoNumber, { isMaster, suffix: po.poSuffix })}

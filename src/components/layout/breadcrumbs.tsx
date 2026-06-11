@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
-import { NON_NAVIGABLE } from "./breadcrumb-nav";
+import { NON_NAVIGABLE, applyBreadcrumbOverride } from "./breadcrumb-nav";
+import { useBreadcrumbOverride } from "./breadcrumb-context";
 
 // Display labels for known path segments. Anything not here falls back to a
 // title-cased slug, and id-looking segments use the parent's singular noun.
@@ -78,6 +79,7 @@ const LINK_OVERRIDES: Record<string, string> = {};
 // dashboard root and when printing.
 export function Breadcrumbs() {
   const pathname = usePathname();
+  const override = useBreadcrumbOverride();
   const segments = pathname.split("/").filter(Boolean);
 
   // Nothing useful to show at the dashboard root.
@@ -85,11 +87,15 @@ export function Breadcrumbs() {
     return null;
   }
 
-  const crumbs = segments.map((seg, i) => ({
-    label: labelFor(seg, i > 0 ? segments[i - 1] : null),
-    href: "/" + segments.slice(0, i + 1).join("/"),
-    last: i === segments.length - 1,
-  }));
+  // Page-supplied override (e.g. a PO page sets the real number + master crumb).
+  const crumbs = applyBreadcrumbOverride(
+    segments.map((seg, i) => ({
+      label: labelFor(seg, i > 0 ? segments[i - 1] : null),
+      href: "/" + segments.slice(0, i + 1).join("/"),
+      last: i === segments.length - 1,
+    })),
+    override,
+  );
 
   return (
     <nav

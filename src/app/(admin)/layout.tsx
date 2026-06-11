@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { auth } from "@/lib/auth";
 import { AdminSidebar, SidebarProvider } from "@/components/layout/admin-sidebar";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { BreadcrumbProvider } from "@/components/layout/breadcrumb-context";
 import { MobileHeader } from "@/components/layout/mobile-header";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { PosthogAdminIdentify } from "@/components/providers/posthog-admin-identify";
@@ -46,8 +47,10 @@ export default async function AdminLayout({
               </Suspense>
             </div>
             <main className="flex-1 overflow-auto bg-[#fafafa] px-4 py-8 md:px-10 print:overflow-visible print:bg-white print:p-0">
-              <Breadcrumbs />
-              {children}
+              <BreadcrumbProvider>
+                <Breadcrumbs />
+                {children}
+              </BreadcrumbProvider>
             </main>
           </div>
         </div>
