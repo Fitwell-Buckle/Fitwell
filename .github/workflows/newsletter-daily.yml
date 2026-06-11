@@ -42,6 +42,11 @@ jobs:
           NEWSLETTER_KLAVIYO_API_KEY: ${{ secrets.NEWSLETTER_KLAVIYO_API_KEY }}
           KLAVIYO_API_KEY: ${{ secrets.KLAVIYO_API_KEY }}
           NEWSLETTER_KLAVIYO_LIST_ID: ${{ secrets.NEWSLETTER_KLAVIYO_LIST_ID }}
+          # TEST-PHASE ONLY: distinct campaign-name suffix so scheduled runs
+          # don't collide with the same-date campaigns created during manual
+          # testing (Klaviyo won't reuse a Sent campaign name). REMOVE this
+          # line once the test dates pass / before real production sends.
+          NEWSLETTER_SLUG_SUFFIX: "-auto"
           # Production Neon branch — newsletter tables live in the shared schema
           DATABASE_URL: ${{ secrets.NEWSLETTER_DATABASE_URL }}
           # BrightData residential proxy — WatchPro + WatchTime fetch through
