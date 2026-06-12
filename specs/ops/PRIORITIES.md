@@ -12,45 +12,22 @@ ready before Tom returns ~06-21), ② post-purchase retention email content
 Pages write client, ④ UTM linking gap root-cause for Greg, ⑤ signup-lift
 experiment designs. Check there first when deciding what to work on.
 
-## ⚠️ Action needed — Shopify scope deploy + history import
+## ✅ Closed 2026-06-13 — Shopify scope deploy + history import
 
-**Owner**: Greg (Shopify Partner-org deploy + production import)
-**Priority note (2026-06-09):** now **#3 in Greg's queue** — behind the
-UTM linking gap and the PostHog theme redeploy (see Current Strategic
-Focus below). Nice-to-have for the LTV-back-to-launch view; not on the
-retention critical path. Also: the 2026-06-08 uninstall/reinstall for
-`write_products` may have already re-granted these scopes — verify
-before doing any work here, and close this section if so.
+The 2026-06-08 uninstall/reinstall **had** re-granted the pending scopes
+(as the side-effect note predicted). Verified empirically: an order from
+May 2025 — far past the 60-day cap — came back from the Orders API, so
+`read_all_orders` is live (the reinstall re-grants *all* declared scopes,
+so `write_customers` came with it; the leads address-push button should
+work now — worth a click-test next time someone's in a lead detail).
 
-`shopify.app.toml` requests two scopes that aren't live yet. Both ship in a
-single deploy + re-auth. See `specs/current/shopify-app-config.md`.
-
-- [ ] `shopify app deploy --message "add read_all_orders + write_customers scopes"`
-- [ ] `shopify app release --version <name> --allow-updates`
-- [ ] Re-authorize the app in Shopify Admin (scope change forces a re-grant — UI only)
-- [ ] **`read_all_orders` is a *protected* scope** — if the release prompts for it,
-      request access / justification in the Partner dashboard
-- [ ] Run the one-time history import (ready + idempotent), then sanity-check the
-      dashboard goes back to Feb 2024:
-      ```bash
-      npx vercel --global-config ~/.vercel-fitwell env pull .env.production.local --environment=production --yes
-      grep -v '^NEXT_PUBLIC_POSTHOG_KEY=' .env.production.local > .env.import && mv .env.import .env.production.local  # suppress historical attribution events
-      npx dotenv -e .env.production.local -- node --import tsx/esm scripts/import-history.ts 2024-02-01
-      rm -f .env.production.local
-      ```
-
-Why each scope:
-- **`write_customers`** — the "Add to Shopify addresses" button on leads (pushes a
-  lead's business-card address as an *additional* address, never overwriting).
-  Until live the button returns a graceful 502.
-- **`read_all_orders`** — the Orders API is capped to the last ~60 days without it.
-  Shopify has **1,694 orders back to Feb 2024**, but only ~596 (last 60 days) are
-  retrievable today — ~1,098 historical orders are unreachable. With the scope,
-  `scripts/import-history.ts` backfills them all (full fidelity: source/segment,
-  refunds, line items), extending Total sales / Segments / LTV back to launch.
-
-(Oliver or Tom can run the deploy too — all three have Partner-org access — but
-it's assigned to Greg as engineering owner.)
+**Feb-2024 history import ran 2026-06-13**: 1,743 orders synced, 0
+errors. Prod now holds **1,715 orders back to 2024-02-24** (launch) —
+Total sales / Segments / LTV extend to launch. Bonus: every imported
+order flowed through the discount-code capture, so `order_discount_code`
+now covers full history (708 rows; 430 coded orders predate 2026-04) —
+the C1 split is computable over the whole catalog lifetime, not just 60
+days. No Greg action was needed; nothing remains here.
 
 ## Current Strategic Focus (2026-06-09) — retention-led
 
