@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import {
@@ -170,6 +171,7 @@ export function PoControls({
               <TableHead>Warehouse</TableHead>
               <TableHead className="text-right">Stage</TableHead>
               <TableHead className="text-right">ETA</TableHead>
+              <TableHead className="text-right">Artwork</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -211,6 +213,17 @@ export function PoControls({
                     disabled={busy}
                     onSave={(d) => setLineEta(li.id, d)}
                   />
+                </TableCell>
+                <TableCell className="whitespace-nowrap pr-2 text-right">
+                  <Link
+                    href={`/products/${encodeURIComponent(li.sku)}/label`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800 hover:decoration-zinc-600"
+                    title="Open the printable label artwork for this SKU"
+                  >
+                    Label
+                  </Link>
                 </TableCell>
               </TableRow>
             ))}

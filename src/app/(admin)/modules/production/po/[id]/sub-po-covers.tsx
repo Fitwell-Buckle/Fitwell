@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -219,12 +220,13 @@ export function SubPoCovers({
               <TableHead className="text-right">Unit cost</TableHead>
               <TableHead className="text-right">Line total</TableHead>
               <TableHead className="text-right">Final ETA</TableHead>
+              <TableHead className="text-right">Artwork</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-6 text-center text-zinc-400">
+                <TableCell colSpan={7} className="py-6 text-center text-zinc-400">
                   No items on the master.
                 </TableCell>
               </TableRow>
@@ -306,6 +308,21 @@ export function SubPoCovers({
                       }
                       onBlur={() => saveLineEta(r)}
                     />
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap pr-2 text-right">
+                    {r.sku ? (
+                      <Link
+                        href={`/products/${encodeURIComponent(r.sku)}/label`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800 hover:decoration-zinc-600"
+                        title="Open the printable label artwork for this SKU"
+                      >
+                        Label
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-zinc-300">—</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

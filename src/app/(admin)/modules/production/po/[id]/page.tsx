@@ -607,6 +607,7 @@ export default async function PoDetailPage({
                               <TableHead className="text-right">Unit cost</TableHead>
                               <TableHead className="text-right">Qty</TableHead>
                               <TableHead className="text-right">Total cost</TableHead>
+                              <TableHead className="text-right">Artwork</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -642,6 +643,17 @@ export default async function PoDetailPage({
                                   </TableCell>
                                   <TableCell className="text-right font-medium text-zinc-900">
                                     {anyCost ? fmtMoney(unitSum * li.quantity) : "—"}
+                                  </TableCell>
+                                  <TableCell className="whitespace-nowrap pr-2 text-right">
+                                    <Link
+                                      href={`/products/${encodeURIComponent(li.sku)}/label`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800 hover:decoration-zinc-600"
+                                      title="Open the printable label artwork for this SKU"
+                                    >
+                                      Label
+                                    </Link>
                                   </TableCell>
                                 </TableRow>
                               );
