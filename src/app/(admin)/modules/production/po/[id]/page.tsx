@@ -451,7 +451,6 @@ export default async function PoDetailPage({
                         status={subState.status}
                         currentStage={subCurrentStageValue}
                         stageOptions={subStageOptions}
-                        eta={po.expectedDeliveryDate}
                       />
                     ),
                   },
