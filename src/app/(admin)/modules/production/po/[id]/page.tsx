@@ -46,7 +46,6 @@ import { PoCreateInvoice } from "./po-create-invoice";
 import { SubPoCovers, type SubPoCoverRow } from "./sub-po-covers";
 import { PoSentControl } from "./po-sent-control";
 import { PoTimeline } from "@/components/production/po-timeline";
-import { PoRelatedEmails } from "@/components/production/po-related-emails";
 import { ProductionTimeline } from "@/components/production/production-timeline";
 import { buildPoTimeline } from "@/lib/production/timeline";
 import { DetailTabs } from "@/components/ui/detail-tabs";
@@ -523,15 +522,13 @@ export default async function PoDetailPage({
               value: "activity",
               label: "Activity",
               content: (
-                <>
-                  <PoTimeline
-                    poId={po.id}
-                    viewer="admin"
-                    currentUserId={session.user?.id}
-                    entries={buildPoTimeline(po.comments, po.attachments, events)}
-                  />
-                  <PoRelatedEmails poId={po.id} />
-                </>
+                <PoTimeline
+                  poId={po.id}
+                  viewer="admin"
+                  currentUserId={session.user?.id}
+                  entries={buildPoTimeline(po.comments, po.attachments, events)}
+                  showRelatedEmails
+                />
               ),
             },
           ]}
@@ -733,15 +730,13 @@ export default async function PoDetailPage({
             value: "activity",
             label: "Activity",
             content: (
-              <>
-                <PoTimeline
-                  poId={po.id}
-                  viewer="admin"
-                  currentUserId={session.user?.id}
-                  entries={buildPoTimeline(po.comments, po.attachments, events)}
-                />
-                <PoRelatedEmails poId={po.id} />
-              </>
+              <PoTimeline
+                poId={po.id}
+                viewer="admin"
+                currentUserId={session.user?.id}
+                entries={buildPoTimeline(po.comments, po.attachments, events)}
+                showRelatedEmails
+              />
             ),
           },
         ]}

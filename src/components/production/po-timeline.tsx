@@ -1,12 +1,24 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Paperclip, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { PoTimelineEntry } from "@/lib/production/timeline";
+
+// A related email, fetched client-side and merged into the feed chronologically.
+interface EmailEntry {
+  id: string;
+  kind: "email";
+  at: string; // ISO
+  from: string;
+  subject: string | null;
+  snippet: string | null;
+  gmailUrl: string | null;
+  mailbox: string | null;
+}
 
 /**
  * Unified notes + documents feed for a PO, shared by the admin and supplier
@@ -19,6 +31,7 @@ export function PoTimeline({
   viewer,
   entries,
   currentUserId,
+  showRelatedEmails = false,
 }: {
   poId: string;
   viewer: "admin" | "supplier";
@@ -26,6 +39,10 @@ export function PoTimeline({
   /** The signed-in user's id — a note shows an Edit affordance only to its
    *  own author (admins in the dashboard, suppliers in the portal). */
   currentUserId?: string | null;
+  /** Admin-only: lazily pull Gmail messages that mention this PO and merge them
+   *  into the feed chronologically. Off on the supplier side (the endpoint is
+   *  admin-gated). */
+  showRelatedEmails?: boolean;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -35,6 +52,52 @@ export function PoTimeline({
   // Inline note editing: the id being edited + its working text.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
+  // Related emails, fetched lazily (admin only) and merged into the feed below.
+  const [emailEntries, setEmailEntries] = useState<EmailEntry[]>([]);
+
+  useEffect(() => {
+    if (!showRelatedEmails) return;
+    let active = true;
+    fetch(`/api/production/po/${poId}/emails`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("emails"))))
+      .then((d) => {
+        if (!active) return;
+        const raw = (d?.data?.emails ?? []) as {
+          id: string;
+          from: string;
+          subject: string | null;
+          snippet: string | null;
+          dateMs: number;
+          mailbox: string | null;
+          gmailUrl: string | null;
+        }[];
+        setEmailEntries(
+          raw.map((m) => ({
+            id: m.id,
+            kind: "email" as const,
+            at: new Date(m.dateMs).toISOString(),
+            from: m.from,
+            subject: m.subject,
+            snippet: m.snippet,
+            gmailUrl: m.gmailUrl,
+            mailbox: m.mailbox,
+          })),
+        );
+      })
+      .catch(() => {
+        /* Gmail unreachable / not connected — just show the rest of the feed. */
+      });
+    return () => {
+      active = false;
+    };
+  }, [poId, showRelatedEmails]);
+
+  // Notes, documents, edit-events (server-rendered) + related emails (client-
+  // fetched), interleaved oldest→… by timestamp into one chronological feed.
+  const items: (PoTimelineEntry | EmailEntry)[] = [
+    ...entries,
+    ...emailEntries,
+  ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 
   async function postNote() {
     const text = body.trim();
@@ -170,33 +233,78 @@ export function PoTimeline({
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       <div className="mt-4 space-y-4">
-        {entries.length === 0 ? (
+        {items.length === 0 ? (
           <p className="text-sm text-zinc-400">No activity yet.</p>
         ) : (
-          entries.map((e) => (
-            <div key={`${e.kind}-${e.id}`} className="text-sm">
-              <div className="flex items-baseline gap-2">
-                <span className="font-medium text-zinc-900">{e.authorName}</span>
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                    e.fromSupplier
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-blue-100 text-blue-700",
+          items.map((e) =>
+            e.kind === "email" ? (
+              <div key={`email-${e.id}`} className="text-sm">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="truncate font-medium text-zinc-900">
+                    {e.from}
+                  </span>
+                  <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+                    Email
+                  </span>
+                  <span className="text-xs text-zinc-400">
+                    {new Date(e.at).toLocaleString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  {e.mailbox && (
+                    <span className="text-xs text-zinc-400">
+                      · {e.mailbox}&apos;s inbox
+                    </span>
                   )}
-                >
-                  {e.fromSupplier ? "Supplier" : "Fitwell"}
-                </span>
-                <span className="text-xs text-zinc-400">
-                  {new Date(e.at).toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </span>
+                </div>
+                <div className="mt-0.5">
+                  <p className="text-sm font-medium text-zinc-800">
+                    {e.subject || "(no subject)"}
+                  </p>
+                  {e.snippet && (
+                    <p className="truncate text-xs text-zinc-500">{e.snippet}</p>
+                  )}
+                  {e.gmailUrl && (
+                    <a
+                      href={e.gmailUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-0.5 inline-block text-xs text-blue-600 hover:underline"
+                    >
+                      Open in Gmail →
+                    </a>
+                  )}
+                </div>
               </div>
-              {e.kind === "note" ? (
+            ) : (
+              <div key={`${e.kind}-${e.id}`} className="text-sm">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-medium text-zinc-900">
+                    {e.authorName}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                      e.fromSupplier
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-blue-100 text-blue-700",
+                    )}
+                  >
+                    {e.fromSupplier ? "Supplier" : "Fitwell"}
+                  </span>
+                  <span className="text-xs text-zinc-400">
+                    {new Date(e.at).toLocaleString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                {e.kind === "note" ? (
                 editingId === e.id ? (
                   <div className="mt-1">
                     <textarea

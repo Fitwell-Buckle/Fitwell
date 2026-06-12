@@ -353,15 +353,24 @@ export async function searchMessages(
   }
 }
 
-// Free-text Gmail search across ALL connected team inboxes, deduped by message
-// id, newest first — each tagged with the inbox it was found in.
+// Free-text Gmail search across ALL connected team inboxes, newest first, each
+// tagged with the inbox it was found in. Deduped by RFC822 Message-ID so the
+// SAME email CC'd to several teammates (a different per-mailbox id in each)
+// collapses to one. `preferUserId` orders that inbox first, so the kept copy —
+// and its deep-link — is theirs.
 export async function searchMessagesAllMailboxes(
   query: string,
   maxPerMailbox = 10,
+  preferUserId?: string,
 ): Promise<InboundMessage[]> {
   if (!query.trim()) return [];
-  const mailboxes = await listConnectedMailboxes();
+  let mailboxes = await listConnectedMailboxes();
   if (mailboxes.length === 0) return [];
+  if (preferUserId) {
+    mailboxes = [...mailboxes].sort((a, b) =>
+      a.userId === preferUserId ? -1 : b.userId === preferUserId ? 1 : 0,
+    );
+  }
   const perBox = await Promise.all(
     mailboxes.map(async (mb) => {
       const msgs = await searchMessages(mb.userId, query, maxPerMailbox);
@@ -372,9 +381,14 @@ export async function searchMessagesAllMailboxes(
       }));
     }),
   );
-  const byId = new Map<string, InboundMessage>();
-  for (const m of perBox.flat()) if (!byId.has(m.id)) byId.set(m.id, m);
-  return [...byId.values()].sort((a, b) => b.dateMs - a.dateMs);
+  // perBox preserves mailbox order (preferred first), so "keep first" keeps the
+  // preferred inbox's copy of a duplicate.
+  const seen = new Map<string, InboundMessage>();
+  for (const m of perBox.flat()) {
+    const key = m.messageId || m.id;
+    if (!seen.has(key)) seen.set(key, m);
+  }
+  return [...seen.values()].sort((a, b) => b.dateMs - a.dateMs);
 }
 
 export async function listInboundFromAllMailboxes(

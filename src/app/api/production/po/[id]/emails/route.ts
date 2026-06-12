@@ -66,7 +66,7 @@ export async function GET(
   }
   const query = terms.map((t) => `"${t}"`).join(" OR ");
 
-  const messages = await searchMessagesAllMailboxes(query, 15);
+  const messages = await searchMessagesAllMailboxes(query, 15, session.user.id);
   const emails: PoEmail[] = messages.slice(0, 40).map((m) => ({
     id: m.id,
     threadId: m.threadId ?? null,
