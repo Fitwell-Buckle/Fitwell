@@ -221,7 +221,7 @@ Interventions to test (none bundle-shaped):
 |---|---|---:|---|
 | 1 | Add signup-lift workstream to 360-campaign.md W5 §6 | Claude | ✅ Done 2026-06-10 — W5 §6 added; W1 §2(b) pointer + stale D14-gating text in §2(c) fixed |
 | 2 | Update [[../../ops/PRIORITIES]] with retention-led sequence + Greg's queue order + new dates | Claude | ✅ Done 2026-06-10 — strategic focus rewritten, Greg's queue folded in, workstream 10 added, resolved unknowns marked |
-| 3 | Scope discount-code-name visibility (Shopify GraphQL pull, ~½ day) | Claude + Greg signoff | ✅ Code-complete 2026-06-10 (Greg signed off) → [[../../work-plans/todo/discount-code-visibility]]. No GraphQL needed — payloads already carried `discount_codes`. First C1 read: 71.8% of first orders no-code. Prod deploy pending (Phase 4) |
+| 3 | Scope discount-code-name visibility (Shopify GraphQL pull, ~½ day) | Claude + Greg signoff | ✅ Code-complete 2026-06-10 (Greg signed off) → [[../../work-plans/completed/discount-code-visibility]]. No GraphQL needed — payloads already carried `discount_codes`. First C1 read: 71.8% of first orders no-code. Prod deploy pending (Phase 4) |
 | 4 | Tom creates Klaviyo Phase 4 post-purchase flow skeleton in Klaviyo UI | Tom (~15–20 min) | Pending |
 | 5 | Claude pulls Klaviyo YAML + writes D1 / D14 / D21 / D30 email content | Claude (~2–3 hrs) | Blocked on #4 |
 | 6 | Klaviyo D30 outfit code — generate in Shopify (25% off any 5+, 30-day expiry, single-use or shared code, name TBD) | Tom or Claude (~10 min) | Pending; choose shared vs single-use mechanic |

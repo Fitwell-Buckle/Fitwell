@@ -1,6 +1,6 @@
 // Discount-code family classification — computed at query time, never
 // stored (denormalized families drift as creators are added; see
-// specs/work-plans/todo/discount-code-visibility.md).
+// specs/work-plans/completed/discount-code-visibility.md).
 //
 // Bucketing convention (decided 2026-06-09, retention-led recal session;
 // service + event families added 2026-06-10 from backfill data, Tom's call):

@@ -642,7 +642,7 @@ function DiscountSplitSection({ d }: { d: DiscountSplitResult }) {
             No discount-code rows captured yet — codes land with the
             order sync once the <Mono>order_discount_code</Mono> migration
             is deployed and the backfill has run. See{" "}
-            <Mono>specs/work-plans/todo/discount-code-visibility.md</Mono>.
+            <Mono>specs/work-plans/completed/discount-code-visibility.md</Mono>.
           </p>
         ) : (
           <>

@@ -86,16 +86,17 @@ Full reasoning: `specs/strategy/sessions/2026-06-09-retention-led-recal.md`.
    D1 / D14 / D21 / D30 content, D30 outfit code generated in Shopify
    (25% off 5+, 30-day expiry; shared vs single-use TBD). Greg signed off
    on the Phase 4 architecture 2026-06-09.
-2. **Greg's queue (in order):** ① UTM linking gap — only 5.4% of orders
-   get `link_method` stamped (40/734 vs 1,249 converted UTM rows); root-
-   cause + backfill (`specs/work-plans/todo/utm-linking-gap.md`). Without
-   it the retention motion's channel attribution is unmeasurable.
-   ② PostHog theme redeploy — two paste actions in Shopify Admin (see
+2. **Greg's queue (in order):** ① UTM linking gap — *scope shrank
+   2026-06-12*: the pixel going live closed the forward gap (71% of June
+   orders linked vs 5.4% before); remaining work is the historical
+   backfill (`specs/work-plans/todo/utm-linking-gap.md`, see Update note).
+   ② ~~PostHog theme redeploy~~ — **done 2026-06-04**, data flowing (see
    workstream 6). ③ Shopify scope deploy + Feb-2024 history import (top
    of doc).
 3. **Signup-lift workstream (360 W5 §6)** — design experiments now;
    measurement gated on PostHog data accumulating. Discount-code-name
-   visibility (Shopify GraphQL, ~½ day) being scoped as its own work plan.
+   visibility **shipped 2026-06-10** (workstream 10) — first C1 read:
+   true online signup capture is only ~9% of first orders.
 4. **Creator program engineering compress** (Phases 1+2+4+5 of
    `creator-program.md`) starts **~2026-06-21** when Tom is back from
    Geneva; manual/spreadsheet cadence until then.
@@ -115,15 +116,20 @@ Full reasoning: `specs/strategy/sessions/2026-06-09-retention-led-recal.md`.
 
 Measured as an **event-based** funnel (HogQL `windowFunnel`, route-agnostic), not a strict URL flow. Visitors can enter on any page (`/`, `/pages/m1-micro-adjust-buckle`, `/collections/*`, `/products/*`) and traverse via any route — the stages are progression *events*, not page visits.
 
-| Stage (event) | Current | Target | Notes |
+| Stage (event) | Measured (2026-06-04→11) | Target | Notes |
 |---|---|---|---|
-| `$pageview` → `product_viewed` | ? | 60%+ | `product_viewed` includes Shopify's standard event on `/products/*` AND the storefront snippet's custom emission on declared landing PDPs (currently `/pages/m1-micro-adjust-buckle`). |
-| `product_viewed` → `product_added_to_cart` | ? | 8–12% | Industry baseline for considered purchase. |
-| `product_added_to_cart` → `checkout_started` | ? | 50%+ | |
-| `checkout_started` → `purchase_completed` | ? | 70%+ | Friction here is highest-leverage to fix. |
-| **`$pageview` → `purchase_completed` (overall)** | **~1.5%** | **3%+** | Doubling is the near-term target. |
+| `$pageview` → `product_viewed` | **83%** ✓ | 60%+ | `product_viewed` includes Shopify's standard event on `/products/*` AND the storefront snippet's custom emission on declared landing PDPs (currently `/pages/m1-micro-adjust-buckle`). |
+| `product_viewed` → `product_added_to_cart` | **5.2%** ✗ | 8–12% | **← THE LEAK.** ~11 ATC uniques/day, so small-n — but well under the band. PDP objection-handling (size finder, guarantee placement, anchor) is the lever, not checkout fixes. |
+| `product_added_to_cart` → `checkout_started` | **72%** ✓ | 50%+ | |
+| `checkout_started` → `purchase_completed` | **~90%** ✓ | 70%+ | Purchases read from the `order` table (~7/day), NOT PostHog — see caveat below. Checkout friction is a non-problem. |
+| **`$pageview` → `purchase_completed` (overall)** | **~2.8%** | **3%+** | First measured read; vs the ~1.5% GA4-sessions estimate. Denominators differ (daily-unique sums vs sessions) — don't celebrate yet, but the 3% target may be closer than assumed. |
 
-Each `?` gets a real number once `posthog_daily` accumulates and the `/funnel` page's event-funnel card has data. Targets are placeholders based on industry norms — replace with our own once we have baseline. The `/funnel` page's "Entry Pages" card complements this view by showing which doors visitors actually come in through.
+First real numbers landed 2026-06-12 from the 2026-06-04→11 window
+(theme redeploy went live 06-04; daily-unique sums from `posthog_daily`).
+**Caveat: `posthog_daily.purchase_completed` rows for 06-04→06-12 are
+inflated ~12×** — the attribution linker re-emitted on every cron
+re-sync until fixed in `d7bcf56`. Use the `order` table for purchase
+counts over that window. All client-side events are trustworthy.
 
 ### Catalog of Unknowns
 
@@ -134,7 +140,7 @@ Captured for systematic attack rather than ambient anxiety. Living index in `spe
 - **Creator attribution:** what's the correlation between creator post metrics (engagement, follower count, niche fit) and resulting sales lift?
 - **Creator × ad overlap:** what % of creator-driven sales were already ad-exposed beforehand? Is the creator a closer or an introducer?
 - ~~**Google mechanism**~~ **— largely resolved (Grapevine, 2026-06-09):** Google is the *closer*, not the introducer (~7.55% of self-reported intros vs Meta-family ≈ 58%). "Post-creator branded search" compound path validated directionally.
-- ~~**Funnel bail point**~~ **— resolved at the macro level (2026-06-09):** the structural leak is retention (Single Buyer → Outfitter), not first-touch CVR. Stage-level client-side detail still lands once PostHog accumulates.
+- ~~**Funnel bail point**~~ **— resolved (2026-06-09 macro, 2026-06-12 stage-level):** structurally the leak is retention (Single Buyer → Outfitter). Within the acquisition funnel, the first PostHog week pins it to **PDP → add-to-cart (5.2% vs 8–12% target)** — discovery and checkout both beat targets. See the Rightness table above.
 - **The 6–9 floor:** why is daily sales so tightly bounded? What's the algorithmic mechanism producing this?
 - **Signup leakage shape (new):** of the 67.5% of first orders with no discount, how does the miss split across creator-code redemption (C1), pre-purchase intent (C2), gifting (C3), and popup distrust (C4)? Discount-code-name visibility unlocks the C1 split.
 
@@ -242,8 +248,8 @@ Deferred — Shopify is the primary web property for now. Decision logged in `sp
 
 ---
 
-### 6. 🔨 Conversion Funnel Observability (PostHog)
-**Last worked**: 2026-06-03 (Phases 0–6 code-complete; awaiting Shopify theme redeploy + data accumulation)
+### 6. 🔨 Conversion Funnel Observability (PostHog) — **live, first week read**
+**Last worked**: 2026-06-12 (theme redeploy live since 06-04; first-week funnel read done; linker over-emission bug fixed)
 **Source of truth**: `specs/work-plans/todo/posthog-integration.md`, `specs/strategy/event-taxonomy.md`, `specs/strategy/funnel.md`
 **Owner**: Greg
 
@@ -259,15 +265,19 @@ Deferred — Shopify is the primary web property for now. Decision logged in `sp
 - [x] **Phase 6:** pixel subscribes to `checkout_started`, `checkout_completed`, `product_viewed`, `product_added_to_cart`.
 - [x] **Phase 7 (partial):** `/funnel` page now has a PostHog 5-stage funnel card; `/attribution` already shows orders+revenue by first-touch channel with link-confidence split.
 
-**Greg's deploy steps:**
-1. Re-paste `shopify/theme-posthog-snippet.html` into `theme.liquid` (replaces the Phase 0 minimal snippet — now includes UTM capture, cart-attribute backstop, person properties)
-2. Re-paste `shopify/custom-pixel.js` into the existing `posthog` Custom Pixel (Settings → Customer events → edit code — now includes `product_viewed` and `product_added_to_cart`)
+**Deployed 2026-06-04** (theme snippet + Custom Pixel re-paste) — full
+event taxonomy flowing since: pageview/product/cart/checkout events plus
+`section_dwelled` / `section_scrolled_into_view` / `cta_clicked`.
 
-**Then:**
-- [ ] Wait 24–72h for `posthog_daily` to accumulate baseline data (cron runs every 3h; needs a few cycles plus traffic).
-- [ ] Compare PostHog funnel card on `/funnel` against the "Rightness" targets above — identify the biggest leak.
+**Done (2026-06-12):**
+- [x] Baseline data accumulated (8 clean days, 06-04→11).
+- [x] Biggest leak identified: **`product_viewed` → `product_added_to_cart` at 5.2%** vs the 8–12% target — full read in the Rightness table above. Discovery (83%) and checkout legs (72% / ~90%) beat targets.
+- [x] **Fixed: server-side `purchase_completed` over-emission (~12×/day per order).** `linkOrderToAttribution` re-fired PostHog capture on every extract-shopify re-sync (2h cron, 25h overlap). Fixed in `d7bcf56` — emission now first-link-only, and re-syncs can no longer downgrade `self_report` links. `posthog_daily.purchase_completed` rows 06-04→06-12 remain inflated; read purchases from the `order` table for that window.
+- [x] Side effect of the pixel going live: **forward-looking order linking works** — 71% of June orders carry `link_method` (43 pixel / 5 self_report / 1 email_match of 69) vs the 5.4% that opened `utm-linking-gap.md`. That work plan's remaining scope is historical backfill only.
+
+**Remaining:**
 - [ ] Future: identify admin staff in the admin posthog-provider (so staff Persons aren't created backwards via test purchases — Greg's admin events were back-stitched onto his email Person during the Phase 0 test).
-- [ ] Future: backfill pre-pixel orders via email-match for historical attribution. Not load-bearing — defer until the live funnel is settled.
+- [ ] Future: backfill pre-pixel orders via email-match for historical attribution (overlaps `utm-linking-gap.md` backfill). Not load-bearing — defer until the live funnel is settled.
 
 **Why this matters now:** every dollar of additional ad spend without instrumentation is a dollar we can't learn from. Until the funnel is observable, scaling top-of-funnel is throwing darts.
 
@@ -336,7 +346,7 @@ everyone). Single discount touchpoint; product-experience-led posture.
 - [ ] Tom: create the post-purchase flow skeleton in Klaviyo UI (~15–20 min) — **blocks everything below**
 - [ ] Claude: pull flow as YAML + write D1 / D14 / D21 / D30 email content (~2–3 hrs)
 - [ ] Generate D30 outfit code in Shopify (25% off any 5+, 30-day expiry; decide shared vs single-use)
-- [x] Discount-code-name visibility — **code-complete 2026-06-10** (Greg signed off; `specs/work-plans/todo/discount-code-visibility.md`). New `order_discount_code` table (migration `0058`), sync captures codes, classifier families (welcome/creator/review/service/event/other), first-order discount split card on `/funnel/strategy`. First dev-DB C1 read: **71.8% of first orders no-code**, event 10.1% (Windup SF), welcome 8.8%, creator 7.6% (all watchbros), review 0.5%. **Remaining: deploy** — apply `0058` to prod before push, re-run 60-day backfill on prod (work plan Phase 4); full history rides on the Feb-2024 import. NOTE: was a capture gap, not a GraphQL gap — payloads already carry `discount_codes`
+- [x] Discount-code-name visibility — **SHIPPED to prod 2026-06-10, plan complete** (`specs/work-plans/completed/discount-code-visibility.md`). `order_discount_code` table (migration `0058`), sync captures codes, classifier families (welcome/creator/review/service/event/other), first-order discount split card on `/funnel/strategy`, prod backfilled (802 orders). **Prod C1 baseline (Apr 10 → Jun 10, 399 first orders): 71.9% no-code · event 10.0% (Windup SF) · welcome 8.8% · creator 7.5% (all watchbros, zero watchchris) · review 0.5%.** Key reframe for W5 §6: the "32.5% use a discount" band was hiding the SF event — true *online signup* capture is ~9% of first orders. Full history rides on the Feb-2024 import (auto-populates through `upsertOrder()`)
 - [x] Add signup-lift workstream to `360-campaign.md` W5 §6 — done 2026-06-10
 - [x] Update PRIORITIES.md with the retention-led sequence — done 2026-06-10
 - [ ] Signup-lift experiments: design now, launch once PostHog client-side data accumulates (see W5 §6 for the four candidates)

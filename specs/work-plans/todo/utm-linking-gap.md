@@ -2,6 +2,18 @@
 
 > **Status:** investigation queued. Discovered 2026-06-05 while building
 > Phase 3 of [[grapevine-integration]].
+>
+> **Update 2026-06-12 — the forward-looking half is closed.** Since the
+> PostHog theme redeploy went live (2026-06-04), 71% of June orders carry
+> `link_method` (43 pixel / 5 self_report / 1 email_match of 69). The
+> 5.4% figure below was measured on a mostly *pre-pixel* window — the
+> linker wasn't broken so much as starved of pixel ids. **Remaining scope
+> is historical:** the 1,209 converted-but-unlinked `utm_attribution`
+> rows and pre-pixel orders (email-match backfill). Also relevant:
+> `d7bcf56` fixed `linkOrderToAttribution` re-emitting `purchase_completed`
+> to PostHog on every cron re-sync (~12×/day) and made re-syncs unable to
+> downgrade `self_report` links — read that commit before touching the
+> linker.
 
 ## Context
 

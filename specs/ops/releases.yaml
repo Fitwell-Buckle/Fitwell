@@ -185,3 +185,41 @@
     - AGENTS.md
     - shopify.app.toml
     - scripts/shopify-cli.ts
+
+- date: "2026-06-10"
+  title: "Discount-code visibility: capture, classify, surface the C1 split"
+  priority: 10
+  layer: 1
+  notes: >
+    order_discount_code table (migration 0058) — upsertOrder() now persists
+    Shopify's discount_codes array (was being dropped; no GraphQL needed).
+    Query-time classifier (welcome/creator/review/service/event/other) +
+    first-order discount split card on /funnel/strategy. Prod backfilled
+    (802 orders). Prod C1 baseline: 71.9% of first orders no-code; true
+    online signup capture ~9% (welcome15) once the Windup SF event code is
+    separated out — strengthens the W5 §6 signup-lift case. Commits 314cd8b
+    (feature) + d6eedae (strategy docs).
+  artifacts:
+    - specs/work-plans/completed/discount-code-visibility.md
+    - src/lib/discount-codes.ts
+    - drizzle/migrations/0058_flawless_big_bertha.sql
+
+- date: "2026-06-12"
+  title: "PostHog funnel live — first-week read + purchase_completed over-emission fix"
+  priority: 6
+  layer: 1
+  notes: >
+    Theme redeploy live since 06-04; 8 clean days read against the
+    Rightness targets: pageview→PDP 83% (target 60+), PDP→ATC 5.2%
+    (target 8-12, THE LEAK), ATC→checkout 72% (target 50+),
+    checkout→purchase ~90% (target 70+). Fixed linkOrderToAttribution
+    re-emitting purchase_completed + $identify on every 2h cron re-sync
+    (~12x/day per order) and downgrading self_report links on re-sync
+    (d7bcf56). posthog_daily purchase rows 06-04→06-12 remain inflated —
+    use the order table for purchases in that window. Side effect of the
+    pixel: 71% of June orders now link_method-stamped (vs 5.4%), shrinking
+    utm-linking-gap.md to historical backfill only.
+  artifacts:
+    - specs/ops/PRIORITIES.md
+    - src/lib/analytics/order-attribution.ts
+    - specs/work-plans/todo/utm-linking-gap.md

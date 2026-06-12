@@ -117,15 +117,23 @@ needed; this is a capture-and-persist gap, not an API gap.
 (all watchbros — zero watchchris first-order redemptions) · review 0.5%.
 Re-read on prod after deploy + backfill.
 
-### Phase 4: Ship to production (remaining)
-- [ ] `npm run db:migrate:prod` (migration `0058`) **before** push —
-      Critical Rule 2. NOTE: tree currently also carries the newsletter
-      session's uncommitted `0057` + schema changes; coordinate commit
-      order so `schema.ts` lands coherently.
-- [ ] Commit + push; re-run the 60-day backfill against prod
-      (import-history recipe with PostHog key stripped)
-- [ ] Pin/extend registries as prod data lands (new creator codes, new
-      CS codes); re-read the C1 split on prod
+### Phase 4: Ship to production — ✅ done 2026-06-10
+- [x] `npm run db:migrate:prod` — 0057 + 0058 applied together, prod at
+      59/59 verified before push
+- [x] Committed (`314cd8b`) + pushed; prod backfill run (802 orders, 0
+      errors, import-history recipe with PostHog key stripped)
+- [x] Prod C1 read (2026-04-10 → 06-10, 399 first orders): **71.9%
+      no-code** · event 10.0% (Windup SF) · welcome 8.8% · creator 7.5%
+      (all watchbros, zero watchchris) · review 0.5% · service 1.0%.
+      Matches the dev read within 0.1pp. Registries extend as new codes
+      ship (ongoing, not a phase).
+
+**Plan complete 2026-06-12.** Takeaway for W5 §6: the headline "32.5%
+of first orders use a discount" was hiding the Windup SF event — true
+*online signup* capture is only ~9% of first orders (welcome15), which
+strengthens the signup-lift case. Full history backfill still rides on
+the Feb-2024 import (`read_all_orders`), which will auto-populate codes
+through the shared `upsertOrder()` path.
 
 ## Notes
 

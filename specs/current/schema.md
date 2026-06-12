@@ -132,7 +132,7 @@ review — 360 W5 §6 C1 measurement) and per-creator revenue rollups.
 Family classification is computed at query time via
 `src/lib/discount-codes.ts` (`jm-` prefix → review bucket; creator
 prefixes → per-creator; shared welcome code pinned post-backfill), never
-stored. See `specs/work-plans/todo/discount-code-visibility.md`.
+stored. See `specs/work-plans/completed/discount-code-visibility.md`.
 
 | Column | Type | Notes |
 |--------|------|-------|
