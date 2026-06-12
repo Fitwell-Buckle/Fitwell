@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,10 +21,41 @@ interface CartLine {
   quantity: number;
 }
 
-interface WireConfirmation {
+// A previously-saved order's line, used to seed the cart when editing.
+export interface InitialItem {
+  shopifyProductId: string | null;
+  shopifyVariantId: string;
+  sku: string;
+  title: string;
+  unitPriceCents: number;
+  quantity: number;
+}
+
+interface SubmitResult {
   invoiceNumber: string;
   totalCents: number;
+  paymentMethod: "card" | "wire";
+  payUrl: string | null;
   instructions: string | null;
+}
+
+type Action = "save" | "card" | "wire";
+
+function seedCart(items: InitialItem[]): CartLine[] {
+  return items.map((it) => ({
+    quantity: it.quantity,
+    variant: {
+      shopifyProductId: it.shopifyProductId ?? "",
+      shopifyVariantId: it.shopifyVariantId,
+      sku: it.sku,
+      title: it.title,
+      variantTitle: null,
+      priceCents: it.unitPriceCents,
+      sizeMm: null,
+      color: null,
+      material: null,
+    },
+  }));
 }
 
 export function PortalOrder({
@@ -30,16 +63,31 @@ export function PortalOrder({
   collections,
   discountPercent,
   allowWirePayment,
+  orderId,
+  status,
+  paymentMethod,
+  initialItems = [],
 }: {
   variants: CatalogVariant[];
   collections: CatalogCollection[];
   discountPercent: number;
   allowWirePayment: boolean;
+  /** Set when editing an existing order; omitted for a brand-new order. */
+  orderId?: string;
+  /** The existing order's status (edit mode). */
+  status?: "draft" | "sent";
+  /** The existing order's payment method (edit mode, used to regenerate). */
+  paymentMethod?: "card" | "wire";
+  initialItems?: InitialItem[];
 }) {
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [busy, setBusy] = useState<null | "card" | "wire">(null);
+  const router = useRouter();
+  const isEdit = !!orderId;
+  const isSent = status === "sent";
+
+  const [cart, setCart] = useState<CartLine[]>(seedCart(initialItems));
+  const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [placed, setPlaced] = useState<WireConfirmation | null>(null);
+  const [result, setResult] = useState<SubmitResult | null>(null);
 
   const inCart = new Set(cart.map((l) => l.variant.shopifyVariantId));
 
@@ -82,16 +130,16 @@ export function PortalOrder({
     discountPercent,
   );
 
-  async function checkout(paymentMethod: "card" | "wire") {
+  async function send(action: Action) {
     if (cart.length === 0) return;
-    setBusy(paymentMethod);
+    setBusy(action);
     setError(null);
     try {
-      const res = await fetch("/api/portal/checkout", {
-        method: "POST",
+      const res = await fetch(isEdit ? `/api/portal/orders/${orderId}` : "/api/portal/orders", {
+        method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          paymentMethod,
+          submit: action === "save" ? undefined : action,
           lineItems: cart.map((l) => ({
             shopifyVariantId: l.variant.shopifyVariantId,
             quantity: l.quantity,
@@ -100,59 +148,80 @@ export function PortalOrder({
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(d.error || "Checkout failed.");
+        setError(d.error || "Something went wrong.");
         setBusy(null);
         return;
       }
-      if (d.data?.paymentMethod === "wire") {
-        // Pay later by bank wire: order is placed, show the remittance info
-        // instead of redirecting to card checkout.
-        setPlaced({
-          invoiceNumber: d.data.invoiceNumber,
-          totalCents: d.data.totalCents ?? totals.totalCents,
-          instructions: d.data.wireInstructions ?? null,
-        });
-        setCart([]);
-        setBusy(null);
-        return;
-      }
-      if (d.data?.payUrl) {
-        // Off to Shopify checkout (Apple Pay / PayPal / card).
-        window.location.href = d.data.payUrl;
-      } else {
-        window.location.href = "/portal/orders";
-      }
+      handleSuccess(action, d.data ?? {});
     } catch {
       setError("Network error — please try again.");
       setBusy(null);
     }
   }
 
-  if (placed) {
+  function handleSuccess(action: Action, data: Record<string, unknown>) {
+    if (data.status === "draft") {
+      if (!isEdit) {
+        // New draft saved — continue editing it on its own page.
+        router.push(`/portal/orders/${data.invoiceId as string}`);
+      } else {
+        toast.success("Draft saved.");
+        router.refresh();
+        setBusy(null);
+      }
+      return;
+    }
+    // Submitted (status "sent").
+    if (data.paymentMethod === "card" && action !== "save") {
+      // Explicit "pay now" → straight to Shopify checkout.
+      window.location.href = data.payUrl as string;
+      return;
+    }
+    // Wire submit, or an edit-and-save of an already-sent order: show a
+    // confirmation with the (new) total + how to pay.
+    setResult({
+      invoiceNumber: data.invoiceNumber as string,
+      totalCents: (data.totalCents as number) ?? totals.totalCents,
+      paymentMethod: (data.paymentMethod as "card" | "wire") ?? "card",
+      payUrl: (data.payUrl as string) ?? null,
+      instructions: (data.wireInstructions as string) ?? null,
+    });
+    setBusy(null);
+  }
+
+  if (result) {
     return (
       <Card className="mt-6 p-6">
         <h2 className="text-base font-semibold text-zinc-900">
-          Order {placed.invoiceNumber} placed
+          Order {result.invoiceNumber} {isSent ? "updated" : "placed"}
         </h2>
         <p className="mt-1 text-sm text-zinc-600">
-          Total due: <span className="font-medium text-zinc-900">{fmtMoney(placed.totalCents)}</span>.
-          Please pay by bank wire using the details below — we’ll mark your order paid once the
-          transfer lands.
+          Total due: <span className="font-medium text-zinc-900">{fmtMoney(result.totalCents)}</span>.
         </p>
-        {placed.instructions ? (
-          <pre className="mt-4 whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-800">
-            {placed.instructions}
-          </pre>
+        {result.paymentMethod === "wire" ? (
+          result.instructions ? (
+            <pre className="mt-4 whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-800">
+              {result.instructions}
+            </pre>
+          ) : (
+            <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              Please pay by bank wire — we’ll email you the details shortly.
+            </p>
+          )
         ) : (
-          <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            We’ll email you the bank-wire details shortly.
+          <p className="mt-3 text-sm text-zinc-600">
+            Your payment link has been updated to reflect the new total.
           </p>
         )}
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
+          {result.paymentMethod === "card" && result.payUrl && (
+            <Button asChild>
+              <a href={result.payUrl}>Pay now</a>
+            </Button>
+          )}
           <Button asChild variant="ghost">
-            <a href="/portal/orders">View your orders</a>
+            <a href="/portal/orders">Back to your orders</a>
           </Button>
-          <Button onClick={() => setPlaced(null)}>Place another order</Button>
         </div>
       </Card>
     );
@@ -245,20 +314,39 @@ export function PortalOrder({
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
-        {allowWirePayment && (
+      {isSent ? (
+        // An already-submitted (unpaid) order: saving regenerates its pay link.
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+          <span className="mr-auto text-xs text-zinc-400">
+            Editing updates your {paymentMethod === "wire" ? "bank-wire total" : "payment link"}.
+          </span>
+          <Button onClick={() => send("save")} disabled={busy !== null || cart.length === 0}>
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button
-            variant="outline"
-            onClick={() => checkout("wire")}
+            variant="ghost"
+            onClick={() => send("save")}
             disabled={busy !== null || cart.length === 0}
           >
-            {busy === "wire" ? "Placing order…" : "Pay later by bank wire"}
+            {busy === "save" ? "Saving…" : "Save draft"}
           </Button>
-        )}
-        <Button onClick={() => checkout("card")} disabled={busy !== null || cart.length === 0}>
-          {busy === "card" ? "Starting checkout…" : "Checkout & pay"}
-        </Button>
-      </div>
+          {allowWirePayment && (
+            <Button
+              variant="outline"
+              onClick={() => send("wire")}
+              disabled={busy !== null || cart.length === 0}
+            >
+              {busy === "wire" ? "Placing order…" : "Pay later by bank wire"}
+            </Button>
+          )}
+          <Button onClick={() => send("card")} disabled={busy !== null || cart.length === 0}>
+            {busy === "card" ? "Starting checkout…" : "Checkout & pay"}
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

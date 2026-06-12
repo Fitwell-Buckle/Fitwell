@@ -1102,6 +1102,37 @@ class ShopifyClient {
     return [...codes];
   }
 
+  /**
+   * Delete an open Shopify draft order. Used when a B2B portal order is edited
+   * while still unpaid: we recreate the draft order from the new lines and
+   * delete the stale one so the customer's Shopify Admin doesn't accumulate
+   * duplicate, wrong-amount drafts. Best-effort — callers ignore failures (a
+   * left-behind draft is harmless; a completed/paid one simply won't delete).
+   */
+  async deleteDraftOrder(draftOrderId: string): Promise<void> {
+    const id = draftOrderId.startsWith("gid://")
+      ? draftOrderId
+      : `gid://shopify/DraftOrder/${draftOrderId}`;
+    const res = await this.graphql<{
+      draftOrderDelete: {
+        deletedId: string | null;
+        userErrors: { field: string[] | null; message: string }[];
+      };
+    }>(
+      `mutation FitwellDraftDelete($input: DraftOrderDeleteInput!) {
+        draftOrderDelete(input: $input) {
+          deletedId
+          userErrors { field message }
+        }
+      }`,
+      { input: { id } },
+    );
+    const errs = res.draftOrderDelete.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(`Draft order delete failed: ${errs.map((e) => e.message).join("; ")}`);
+    }
+  }
+
   // ── Generic paginator ─────────────────────────────────────────────
 
   /**
