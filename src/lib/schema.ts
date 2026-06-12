@@ -860,6 +860,29 @@ export const productionAttachment = pgTable(
   ],
 );
 
+// Documents attached directly to a B2B company (uploaded from its profile's
+// Activity tab). Separate from production_attachment, which is PO/line-item
+// scoped — the company Activity tab shows BOTH these and the company's POs'
+// attachments (read-only).
+export const companyAttachment = pgTable(
+  "company_attachment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    companyId: text("company_id")
+      .notNull()
+      .references(() => company.id, { onDelete: "cascade" }),
+    blobUrl: text("blob_url").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => user.id),
+    uploadedAt: timestamp("uploaded_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("company_attachment_company_id_idx").on(t.companyId)],
+);
+
 // Polymorphic comment — exactly one of poId or lineItemId is set (CHECK).
 export const productionComment = pgTable(
   "production_comment",

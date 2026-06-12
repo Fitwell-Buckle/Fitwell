@@ -435,6 +435,13 @@
       "when": 1781214685969,
       "tag": "0061_steep_champions",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1781273879221,
+      "tag": "0062_tiny_machine_man",
+      "breakpoints": true
     }
   ]
 }

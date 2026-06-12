@@ -38,6 +38,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/customers` | "Customers" → **Consumer** tab: consumer list with search/filter/sort. Tabbed with B2B (SectionTabs) |
 | `/customers/[id]` | Individual customer detail — orders, LTV, attribution |
 | `/customers/brands` | "Customers" → **B2B** tab: B2B companies + price tiers (CRUD) |
+| `/customers/brands/[id]` | B2B company detail — tabbed: **Overview** (details, People, order/PO/invoice history, inbound messages) and **Activity** (documents — manual uploads + read-only documents from the company's POs, each linking to its PO; `company-documents`) |
 | `/customers/companies` | Redirect → `/customers/brands` |
 | `/invoices` | "Orders" → **B2B** tab: B2B invoice list. Tabbed with Consumer (SectionTabs) |
 | `/invoices/new` | Create an invoice (company + line items at retail − tier) |
@@ -102,6 +103,8 @@ Magic-link auth; middleware requires `role='company'` (else → `/portal/login`)
 |--------|------|-------------|
 | GET | `/api/admin/customers` | List customers (paginated, filterable) |
 | GET | `/api/admin/customers/[id]` | Customer detail |
+| POST | `/api/customers/brands/[id]/attachments` | Upload a document to a B2B company (Vercel Blob → `company_attachment`); shown in the company Activity tab. Admin-only |
+| DELETE | `/api/customers/brands/attachments/[attachmentId]` | Remove a manually-uploaded company document (PO-sourced docs are read-only). Admin-only |
 | GET | `/api/admin/orders` | List orders (paginated, filterable) |
 | GET | `/api/admin/funnel` | Funnel data (date range) |
 | GET | `/api/admin/cohort` | Cohort analysis data |

@@ -5,21 +5,31 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   company,
+  companyAttachment,
   customer,
   customerAddress,
   invoice,
   lead,
   order,
   priceTier,
+  productionAttachment,
   productionPo,
   supplier,
+  user,
 } from "@/lib/schema";
 import { leadDisplayName } from "@/lib/crm/display";
+import { formatPoNumber } from "@/lib/production/sub-po";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { PageHeader } from "@/components/ui/page-header";
+import { DetailTabs } from "@/components/ui/detail-tabs";
 import { InboundMessages } from "@/components/crm/inbound-messages";
 import { CompanyPeople } from "@/components/crm/company-people";
 import { CompanyHistory } from "@/components/crm/company-history";
+import {
+  CompanyDocuments,
+  type CompanyDoc,
+  type PoDoc,
+} from "@/components/crm/company-documents";
 import { CustomerDetailView } from "./customer-detail-view";
 
 export const metadata: Metadata = {
@@ -255,9 +265,57 @@ export default async function CustomerDetailPage({
     }),
   }));
 
-  return (
-    <div>
-      <PageHeader title={companyRow.name} />
+  // Documents for the Activity tab: PO-level attachments from this company's POs
+  // (read-only) + documents uploaded directly to the company.
+  const poNumberById = new Map(pos.map((p) => [p.id, formatPoNumber(p.poNumber)]));
+  const poIds = pos.map((p) => p.id);
+  const [poAttachmentRows, companyDocRows] = await Promise.all([
+    poIds.length > 0
+      ? db
+          .select({
+            id: productionAttachment.id,
+            filename: productionAttachment.filename,
+            blobUrl: productionAttachment.blobUrl,
+            sizeBytes: productionAttachment.sizeBytes,
+            poId: productionAttachment.poId,
+          })
+          .from(productionAttachment)
+          .where(inArray(productionAttachment.poId, poIds))
+          .orderBy(desc(productionAttachment.uploadedAt))
+      : Promise.resolve([]),
+    db
+      .select({
+        id: companyAttachment.id,
+        filename: companyAttachment.filename,
+        blobUrl: companyAttachment.blobUrl,
+        sizeBytes: companyAttachment.sizeBytes,
+        uploadedByName: user.name,
+      })
+      .from(companyAttachment)
+      .leftJoin(user, eq(companyAttachment.uploadedByUserId, user.id))
+      .where(eq(companyAttachment.companyId, companyRow.id))
+      .orderBy(desc(companyAttachment.uploadedAt)),
+  ]);
+  const poDocs: PoDoc[] = poAttachmentRows
+    .filter((a) => a.poId)
+    .map((a) => ({
+      id: a.id,
+      filename: a.filename,
+      url: a.blobUrl,
+      sizeBytes: a.sizeBytes,
+      poId: a.poId as string,
+      poNumber: poNumberById.get(a.poId as string) ?? "PO",
+    }));
+  const companyDocs: CompanyDoc[] = companyDocRows.map((d) => ({
+    id: d.id,
+    filename: d.filename,
+    url: d.blobUrl,
+    sizeBytes: d.sizeBytes,
+    uploadedBy: d.uploadedByName ?? null,
+  }));
+
+  const overview = (
+    <>
       <CustomerDetailView
         customer={{
           id: companyRow.id,
@@ -305,6 +363,28 @@ export default async function CustomerDetailPage({
           ...companyRow.contacts.map((c) => c.email),
         ].filter((e): e is string => Boolean(e))}
         relationship="b2b_customer"
+      />
+    </>
+  );
+
+  return (
+    <div>
+      <PageHeader title={companyRow.name} />
+      <DetailTabs
+        tabs={[
+          { value: "overview", label: "Overview", content: overview },
+          {
+            value: "activity",
+            label: "Activity",
+            content: (
+              <CompanyDocuments
+                companyId={companyRow.id}
+                companyDocs={companyDocs}
+                poDocs={poDocs}
+              />
+            ),
+          },
+        ]}
       />
     </div>
   );
