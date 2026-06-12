@@ -40,6 +40,7 @@ export interface CompanyOption {
   tierName: string | null;
   tierDiscount: number | null;
   depositPercent: number;
+  allowWirePayment: boolean;
   notes: string | null;
   assignedCollectionIds: string[];
   assignedProductIds: string[];
@@ -355,6 +356,7 @@ export function PoForm({
       assignedCollectionIds: c.assignedCollectionIds,
       assignedProductIds: c.assignedProductIds,
       depositPercent: c.depositPercent > 0 ? String(c.depositPercent) : "",
+      allowWirePayment: c.allowWirePayment,
       notes: c.notes ?? "",
     };
   }
@@ -397,6 +399,7 @@ export function PoForm({
         depositPercent: customerDraft.depositPercent.trim()
           ? Number(customerDraft.depositPercent)
           : 0,
+        allowWirePayment: customerDraft.allowWirePayment,
         notes: customerDraft.notes.trim() || null,
       });
       const res = await fetch(url, {
@@ -425,6 +428,7 @@ export function PoForm({
         depositPercent: customerDraft.depositPercent.trim()
           ? Number(customerDraft.depositPercent)
           : 0,
+        allowWirePayment: customerDraft.allowWirePayment,
         notes: customerDraft.notes.trim() || null,
         assignedCollectionIds: customerDraft.assignedCollectionIds,
         assignedProductIds: customerDraft.assignedProductIds,

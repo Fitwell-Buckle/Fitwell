@@ -61,6 +61,7 @@ export async function POST(req: Request) {
         assignedCollectionIds: input.assignedCollectionIds ?? [],
         assignedProductIds: input.assignedProductIds ?? [],
         depositPercent: input.depositPercent ?? 0,
+        allowWirePayment: input.allowWirePayment ?? false,
         notes: input.notes || null,
       })
       .returning({ id: company.id });

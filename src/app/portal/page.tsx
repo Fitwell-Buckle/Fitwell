@@ -12,6 +12,7 @@ import {
 } from "@/lib/catalog/load";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
+import type { CatalogCollection } from "@/components/catalog/product-combobox";
 import { PortalOrder } from "./portal-order";
 
 export default async function PortalHomePage() {
@@ -25,6 +26,7 @@ export default async function PortalHomePage() {
         name: true,
         assignedCollectionIds: true,
         assignedProductIds: true,
+        allowWirePayment: true,
       },
       with: { priceTier: { columns: { name: true, discountPercent: true } } },
     }),
@@ -58,6 +60,18 @@ export default async function PortalHomePage() {
     ? catalog.filter((v) => allowed.has(v.shopifyVariantId))
     : catalog;
 
+  // Collection selector for the picker — same as the admin chooser. Built from
+  // the Shopify groups, narrowed to the variants this brand can actually see so
+  // empty/irrelevant collections don't show up.
+  const visibleIds = new Set(visibleCatalog.map((v) => v.shopifyVariantId));
+  const collections: CatalogCollection[] = groups
+    .map((g) => ({
+      id: g.id,
+      title: g.title,
+      variantIds: new Set(g.variantIds.filter((id) => visibleIds.has(id))),
+    }))
+    .filter((c) => c.variantIds.size > 0);
+
   return (
     <div>
       <PageHeader title="Place an order" />
@@ -76,7 +90,12 @@ export default async function PortalHomePage() {
         )}
       </p>
 
-      <PortalOrder variants={visibleCatalog} discountPercent={discount} />
+      <PortalOrder
+        variants={visibleCatalog}
+        collections={collections}
+        discountPercent={discount}
+        allowWirePayment={comp?.allowWirePayment ?? false}
+      />
     </div>
   );
 }

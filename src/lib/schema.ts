@@ -591,6 +591,11 @@ export const company = pgTable(
     // Upfront deposit required from this brand, as a % of order value (0 = pay
     // in full). The remaining balance is billed when the order is fulfilled.
     depositPercent: real("deposit_percent").notNull().default(0),
+    // When true, this brand may choose "pay later by bank wire" at portal
+    // checkout instead of being forced through Shopify card checkout. The order
+    // is still recorded (and a Shopify draft order created) so it can be paid by
+    // card too; the customer is shown our wire/remittance instructions.
+    allowWirePayment: boolean("allow_wire_payment").notNull().default(false),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
@@ -1245,6 +1250,11 @@ export const invoice = pgTable(
       .notNull()
       .references(() => company.id),
     status: text("status").notNull().default("draft"), // draft | sent | paid | void
+    // How the customer intends to settle this order: "card" (Shopify checkout)
+    // or "wire" (pay later by bank transfer, when the brand is allow-wire). The
+    // payment link still exists either way; this records the customer's choice
+    // so the admin can tell a wire order awaiting transfer from an unpaid card one.
+    paymentMethod: text("payment_method").notNull().default("card"), // card | wire
     issuedDate: date("issued_date").notNull(),
     dueDate: date("due_date"),
     notes: text("notes"),

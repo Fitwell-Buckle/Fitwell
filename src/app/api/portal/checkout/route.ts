@@ -13,6 +13,7 @@ import {
 import { getShopifyClient } from "@/lib/shopify/client";
 import { recordCompanyOrder, snapshotInvoiceDeposit } from "@/lib/invoicing/service";
 import { computeInvoiceTotals, computeDeposit } from "@/lib/invoicing/invoicing";
+import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 
 const schema = z.object({
   lineItems: z
@@ -23,6 +24,9 @@ const schema = z.object({
       }),
     )
     .min(1, "Your cart is empty."),
+  // How the customer wants to pay. "wire" (pay later by bank transfer) is only
+  // honoured for brands the admin has enabled for it; otherwise we 400.
+  paymentMethod: z.enum(["card", "wire"]).default("card"),
 });
 
 function isScopeError(msg: string): boolean {
@@ -61,6 +65,7 @@ export async function POST(req: Request) {
       assignedCollectionIds: true,
       assignedProductIds: true,
       depositPercent: true,
+      allowWirePayment: true,
     },
     with: {
       priceTier: { columns: { discountPercent: true } },
@@ -68,6 +73,15 @@ export async function POST(req: Request) {
     },
   });
   if (!comp) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
+
+  // Pay-later-by-wire is only honoured for brands the admin has enabled.
+  const wire = input.paymentMethod === "wire";
+  if (wire && !comp.allowWirePayment) {
+    return NextResponse.json(
+      { error: "Bank-wire payment isn't enabled for your account." },
+      { status: 400 },
+    );
+  }
 
   // Resolve each cart variant against the catalog (price, sku, title).
   let catalog;
@@ -122,7 +136,9 @@ export async function POST(req: Request) {
     discountPercent,
   );
   const split = computeDeposit(totals.totalCents, comp.depositPercent ?? 0);
-  const hasDeposit = split.depositCents > 0 && split.balanceCents > 0;
+  // Wire orders are billed in full (pay later) — the deposit-now split only
+  // applies to card checkout.
+  const hasDeposit = !wire && split.depositCents > 0 && split.balanceCents > 0;
 
   // 1) Shopify draft order (the payment checkout).
   let draft;
@@ -178,6 +194,7 @@ export async function POST(req: Request) {
     })),
     shopifyDraftOrderId: draft.draftOrderId,
     shopifyInvoiceUrl: draft.invoiceUrl,
+    paymentMethod: wire ? "wire" : "card",
   });
 
   // Snapshot the deposit terms onto the recorded invoice.
@@ -185,12 +202,27 @@ export async function POST(req: Request) {
     await snapshotInvoiceDeposit(order.id, comp.depositPercent ?? 0, totals.totalCents);
   }
 
+  // For a wire order, surface our remittance instructions so the portal can show
+  // them on the confirmation (the customer isn't redirected to card checkout).
+  let wireInstructions: string | null = null;
+  if (wire) {
+    try {
+      wireInstructions = (await getBillingSettings())?.instructions ?? null;
+    } catch {
+      /* best-effort — the order is recorded regardless */
+    }
+  }
+
   return NextResponse.json(
     {
       data: {
         invoiceId: order.id,
         invoiceNumber: order.invoiceNumber,
-        payUrl: draft.invoiceUrl,
+        paymentMethod: wire ? "wire" : "card",
+        // Card orders redirect here; wire orders are not auto-redirected.
+        payUrl: wire ? null : draft.invoiceUrl,
+        wireInstructions,
+        totalCents: totals.totalCents,
         deposit: hasDeposit
           ? {
               percent: comp.depositPercent,

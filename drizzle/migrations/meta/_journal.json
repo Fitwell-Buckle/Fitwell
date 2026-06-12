@@ -442,6 +442,13 @@
       "when": 1781273879221,
       "tag": "0062_tiny_machine_man",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1781277488065,
+      "tag": "0063_exotic_starhawk",
+      "breakpoints": true
     }
   ]
 }

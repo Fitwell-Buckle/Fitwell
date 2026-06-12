@@ -186,6 +186,11 @@ export default async function B2BOrdersPage({
                       <Badge className={cn(invoiceStatusBadgeClass(inv.status))}>
                         {INVOICE_STATUS_LABELS[inv.status as InvoiceStatus] ?? inv.status}
                       </Badge>
+                      {inv.paymentMethod === "wire" && inv.status !== "paid" && (
+                        <span className="mt-0.5 block text-xs text-amber-700">
+                          Awaiting bank wire
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-zinc-500">{fmtDate(inv.dueDate)}</TableCell>
                     <TableCell

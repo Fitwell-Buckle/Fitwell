@@ -673,6 +673,8 @@ export async function recordCompanyOrder(params: {
   lineItems: CreateInvoiceInput["lineItems"];
   shopifyDraftOrderId: string;
   shopifyInvoiceUrl: string | null;
+  /** How the customer chose to pay: "card" (default) or "wire" (pay later). */
+  paymentMethod?: "card" | "wire";
 }): Promise<{ id: string; invoiceNumber: string }> {
   const created = await createInvoice({
     companyId: params.companyId,
@@ -684,6 +686,7 @@ export async function recordCompanyOrder(params: {
     .set({
       status: "sent",
       sentAt: new Date(),
+      paymentMethod: params.paymentMethod ?? "card",
       shopifyDraftOrderId: params.shopifyDraftOrderId,
       shopifyInvoiceUrl: params.shopifyInvoiceUrl,
       updatedAt: new Date(),

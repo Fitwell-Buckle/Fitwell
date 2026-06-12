@@ -12,5 +12,7 @@ export const companySchema = z.object({
   assignedProductIds: z.array(z.string().max(200)).nullish(),
   // Upfront deposit as a % of order value (0 = pay in full).
   depositPercent: z.number().min(0).max(100).nullish(),
+  // Allow "pay later by bank wire" at portal checkout (vs. forced card checkout).
+  allowWirePayment: z.boolean().nullish(),
   notes: z.string().max(5000).nullish(),
 });

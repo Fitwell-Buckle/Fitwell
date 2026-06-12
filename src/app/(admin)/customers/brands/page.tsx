@@ -166,6 +166,7 @@ export default async function BrandsPage() {
             assignedCollectionIds: c.assignedCollectionIds ?? [],
             assignedProductIds: c.assignedProductIds ?? [],
             depositPercent: c.depositPercent ?? 0,
+            allowWirePayment: c.allowWirePayment ?? false,
             contacts: c.contacts.map((ct) => ({
               id: ct.id,
               email: ct.email,

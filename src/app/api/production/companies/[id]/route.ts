@@ -98,6 +98,9 @@ export async function PATCH(
         ...(input.depositPercent !== undefined
           ? { depositPercent: input.depositPercent ?? 0 }
           : {}),
+        ...(input.allowWirePayment !== undefined
+          ? { allowWirePayment: input.allowWirePayment ?? false }
+          : {}),
         ...(input.notes !== undefined ? { notes: input.notes || null } : {}),
         updatedAt: new Date(),
       })

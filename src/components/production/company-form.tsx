@@ -28,6 +28,7 @@ export interface CompanyDraft {
   assignedCollectionIds: string[];
   assignedProductIds: string[];
   depositPercent: string; // form input; "" = 0 (pay in full)
+  allowWirePayment: boolean; // let this brand pay later by bank wire at checkout
   notes: string;
 }
 
@@ -42,6 +43,7 @@ export function emptyCompanyDraft(): CompanyDraft {
     assignedCollectionIds: [],
     assignedProductIds: [],
     depositPercent: "",
+    allowWirePayment: false,
     notes: "",
   };
 }
@@ -138,6 +140,23 @@ export function CompanyForm({
           <p className="mt-1 text-xs text-zinc-500">
             Collected up front; the balance is billed when the order is fulfilled. 0 = pay in full.
           </p>
+        </div>
+        <div className="flex items-start gap-2 sm:col-span-2">
+          <input
+            id="allowWirePayment"
+            type="checkbox"
+            checked={draft.allowWirePayment}
+            onChange={(e) => setDraft({ ...draft, allowWirePayment: e.target.checked })}
+            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-300"
+          />
+          <label htmlFor="allowWirePayment" className="cursor-pointer text-sm text-zinc-700">
+            Allow pay later by bank wire
+            <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+              At portal checkout this brand can place the order and pay by bank transfer
+              instead of being required to pay by card. Wire instructions come from your
+              Wire info settings on the B2B Orders page.
+            </span>
+          </label>
         </div>
         <CustomerSearchField
           label="Contact name (search customers)"

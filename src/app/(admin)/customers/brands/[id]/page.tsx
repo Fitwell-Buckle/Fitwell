@@ -328,6 +328,7 @@ export default async function CustomerDetailPage({
           tierName: companyRow.priceTier?.name ?? null,
           tierDiscount: companyRow.priceTier?.discountPercent ?? 0,
           depositPercent: companyRow.depositPercent ?? 0,
+          allowWirePayment: companyRow.allowWirePayment ?? false,
           notes: companyRow.notes,
           assignedCollectionIds: companyRow.assignedCollectionIds ?? [],
           assignedProductIds: companyRow.assignedProductIds ?? [],

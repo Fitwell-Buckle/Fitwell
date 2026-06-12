@@ -28,6 +28,7 @@ export interface CustomerDetail {
   tierName: string | null;
   tierDiscount: number;
   depositPercent: number;
+  allowWirePayment: boolean;
   notes: string | null;
   assignedCollectionIds: string[];
   assignedProductIds: string[];
@@ -61,6 +62,7 @@ function toDraft(c: CustomerDetail): CompanyDraft {
     assignedCollectionIds: c.assignedCollectionIds,
     assignedProductIds: c.assignedProductIds,
     depositPercent: c.depositPercent > 0 ? String(c.depositPercent) : "",
+    allowWirePayment: c.allowWirePayment,
     notes: c.notes ?? "",
   };
 }
@@ -173,6 +175,7 @@ export function CustomerDetailView({
           depositPercent: draft.depositPercent.trim()
             ? Number(draft.depositPercent)
             : 0,
+          allowWirePayment: draft.allowWirePayment,
           notes: draft.notes.trim() || null,
         }),
       });

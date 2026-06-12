@@ -310,8 +310,12 @@ export default async function ProductionPage({
     );
     if (isMaster) {
       const allSent = sentTotal > 0 && sentCount === sentTotal;
-      masterSubtitles[number] = (
-        <span className={allSent ? "font-medium text-emerald-700" : undefined}>
+      // All sub-POs sent → show the same green "Sent ✓" as a standalone PO;
+      // otherwise the running "N/M sent" count.
+      masterSubtitles[number] = allSent ? (
+        <span className="font-medium text-emerald-700">Sent ✓</span>
+      ) : (
+        <span>
           {sentCount}/{sentTotal} sent
         </span>
       );

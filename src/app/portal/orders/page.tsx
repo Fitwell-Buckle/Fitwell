@@ -64,7 +64,11 @@ export default async function PortalOrdersPage() {
                     {fmtMoney(o.totalCents)}
                   </TableCell>
                   <TableCell>
-                    {o.status !== "paid" && o.shopifyInvoiceUrl ? (
+                    {o.status === "paid" ? (
+                      "—"
+                    ) : o.paymentMethod === "wire" ? (
+                      <span className="text-amber-700">Bank wire</span>
+                    ) : o.shopifyInvoiceUrl ? (
                       <a
                         href={o.shopifyInvoiceUrl}
                         target="_blank"

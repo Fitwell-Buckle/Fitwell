@@ -50,6 +50,7 @@ export interface Company {
   assignedCollectionIds: string[];
   assignedProductIds: string[];
   depositPercent: number;
+  allowWirePayment: boolean;
   contacts: CompanyLogin[];
 }
 
@@ -125,6 +126,7 @@ export function CompaniesManager({
       assignedCollectionIds: c?.assignedCollectionIds ?? [],
       assignedProductIds: c?.assignedProductIds ?? [],
       depositPercent: c?.depositPercent ? String(c.depositPercent) : "",
+      allowWirePayment: c?.allowWirePayment ?? false,
       notes: c?.notes ?? "",
     });
   }
@@ -154,6 +156,7 @@ export function CompaniesManager({
             depositPercent: draft.depositPercent.trim()
               ? Number(draft.depositPercent)
               : 0,
+            allowWirePayment: draft.allowWirePayment,
             notes: draft.notes.trim() || null,
           }),
         },
