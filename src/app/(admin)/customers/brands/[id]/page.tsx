@@ -22,14 +22,13 @@ import { formatPoNumber } from "@/lib/production/sub-po";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { PageHeader } from "@/components/ui/page-header";
 import { DetailTabs } from "@/components/ui/detail-tabs";
-import { InboundMessages } from "@/components/crm/inbound-messages";
 import { CompanyPeople } from "@/components/crm/company-people";
 import { CompanyHistory } from "@/components/crm/company-history";
 import {
-  CompanyDocuments,
+  CompanyActivity,
   type CompanyDoc,
   type PoDoc,
-} from "@/components/crm/company-documents";
+} from "@/components/crm/company-activity";
 import { CustomerDetailView } from "./customer-detail-view";
 
 export const metadata: Metadata = {
@@ -278,6 +277,7 @@ export default async function CustomerDetailPage({
             blobUrl: productionAttachment.blobUrl,
             sizeBytes: productionAttachment.sizeBytes,
             poId: productionAttachment.poId,
+            uploadedAt: productionAttachment.uploadedAt,
           })
           .from(productionAttachment)
           .where(inArray(productionAttachment.poId, poIds))
@@ -289,6 +289,7 @@ export default async function CustomerDetailPage({
         filename: companyAttachment.filename,
         blobUrl: companyAttachment.blobUrl,
         sizeBytes: companyAttachment.sizeBytes,
+        uploadedAt: companyAttachment.uploadedAt,
         uploadedByName: user.name,
       })
       .from(companyAttachment)
@@ -305,6 +306,7 @@ export default async function CustomerDetailPage({
       sizeBytes: a.sizeBytes,
       poId: a.poId as string,
       poNumber: poNumberById.get(a.poId as string) ?? "PO",
+      uploadedAt: a.uploadedAt.toISOString(),
     }));
   const companyDocs: CompanyDoc[] = companyDocRows.map((d) => ({
     id: d.id,
@@ -312,6 +314,7 @@ export default async function CustomerDetailPage({
     url: d.blobUrl,
     sizeBytes: d.sizeBytes,
     uploadedBy: d.uploadedByName ?? null,
+    uploadedAt: d.uploadedAt.toISOString(),
   }));
 
   const overview = (
@@ -357,14 +360,6 @@ export default async function CustomerDetailPage({
       />
 
       <CompanyHistory orders={orderRows} pos={pos} invoices={invoices} />
-
-      <InboundMessages
-        emails={[
-          companyRow.contactEmail,
-          ...companyRow.contacts.map((c) => c.email),
-        ].filter((e): e is string => Boolean(e))}
-        relationship="b2b_customer"
-      />
     </>
   );
 
@@ -378,7 +373,7 @@ export default async function CustomerDetailPage({
             value: "activity",
             label: "Activity",
             content: (
-              <CompanyDocuments
+              <CompanyActivity
                 companyId={companyRow.id}
                 companyDocs={companyDocs}
                 poDocs={poDocs}

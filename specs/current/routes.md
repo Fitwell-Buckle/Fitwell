@@ -38,7 +38,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/customers` | "Customers" → **Consumer** tab: consumer list with search/filter/sort. Tabbed with B2B (SectionTabs) |
 | `/customers/[id]` | Individual customer detail — orders, LTV, attribution |
 | `/customers/brands` | "Customers" → **B2B** tab: B2B companies + price tiers (CRUD) |
-| `/customers/brands/[id]` | B2B company detail — tabbed: **Overview** (details, People, order/PO/invoice history, inbound messages) and **Activity** (documents — manual uploads + read-only documents from the company's POs, each linking to its PO; `company-documents`) |
+| `/customers/brands/[id]` | B2B company detail — tabbed: **Overview** (details, People, order/PO/invoice history) and **Activity** (`company-activity`) — a unified, newest-first feed mirroring the PO Activity timeline: email correspondence (received + sent across all connected inboxes, lazily fetched, violet *Email* badge) merged with documents (manual uploads + read-only docs from the company's POs, each linking to its PO). Email is **only** here, not in Overview |
 | `/customers/companies` | Redirect → `/customers/brands` |
 | `/invoices` | "Orders" → **B2B** tab: B2B invoice list. Tabbed with Consumer (SectionTabs) |
 | `/invoices/new` | Create an invoice (company + line items at retail − tier) |
@@ -104,6 +104,7 @@ Magic-link auth; middleware requires `role='company'` (else → `/portal/login`)
 | GET | `/api/admin/customers` | List customers (paginated, filterable) |
 | GET | `/api/admin/customers/[id]` | Customer detail |
 | POST | `/api/customers/brands/[id]/attachments` | Upload a document to a B2B company (Vercel Blob → `company_attachment`); shown in the company Activity tab. Admin-only |
+| GET | `/api/customers/brands/[id]/emails` | Email correspondence for a B2B company — received from + sent to its contact addresses (free-text `contact_email` + portal-login contacts) across all connected team inboxes, deduped by Gmail id, newest first, with a Gmail deep-link each. Admin-only. Loaded lazily by the company Activity tab (`company-activity`) and merged into the documents feed (violet *Email* badge), mirroring the PO `emails` endpoint, so the page never blocks on Gmail |
 | DELETE | `/api/customers/brands/attachments/[attachmentId]` | Remove a manually-uploaded company document (PO-sourced docs are read-only). Admin-only |
 | GET | `/api/admin/orders` | List orders (paginated, filterable) |
 | GET | `/api/admin/funnel` | Funnel data (date range) |
