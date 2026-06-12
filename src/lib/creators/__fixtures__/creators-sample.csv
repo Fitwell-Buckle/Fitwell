@@ -1,0 +1,6 @@
+name,ig_handle,ig_url,ig_followers,ig_er_pct,ig_bio,ig_last_post_date,ig_is_business,ig_external_url,yt_handle,yt_url,yt_subscribers,yt_er_pct,yt_description,yt_last_post_date,email_chosen,data_source
+Watch Henry,@watchhenry,https://instagram.com/watchhenry,45000,3.2,"Horology nerd. Wristshot daily. Collabs: press@watchhenry.com",2026-06-05,true,https://watchhenry.com,watchhenry,https://youtube.com/@watchhenry,120000,4.1,"Watch reviews: Rolex, Grand Seiko, microbrand deep dives. Submariner & Speedmaster content weekly.",2026-06-08,press@watchhenry.com,full
+EDC Mia,@edc.mia,https://instagram.com/edc.mia,8200,5.5,"Everyday carry & field watch lover. nato strap addict. mia.edc [at] gmail [dot] com",2026-06-10,false,,,,,,,,,"apify_base"
+Strap Lab,,,,,,,,,straplab,https://youtube.com/@straplab,52000,,"Leather strap and buckle reviews. watch band comparisons.",,info@straplab.co,apify_base
+Lifestyle Lena,@lena.lifestyle,https://instagram.com/lena.lifestyle,250000,1.1,"Fashion | Travel | watch this space ✨",2026-04-01,true,,,,,,,,lena@gmail.com,full
+Broken Row,,,,,,,,,,,,,,,,

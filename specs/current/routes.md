@@ -51,7 +51,9 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/attribution` | UTM attribution analysis |
 | `/funnel` | Funnel visualization (sessions → users → orders, operational end-state view) |
 | `/funnel/strategy` | Strategic / diagnostic funnel — 6-stage acquisition, 5-stage retention loop, channel breakdown, first-order discount split (360 W5 §6 C1 measurement; classification in `src/lib/discount-codes.ts`). Aligned with `specs/strategy/funnel.md`, `retention-loop.md`, `personas.md`. |
-| `/influencers` | Influencer list (CRUD) — handle/platform, assigned collections, portal-login allowlist |
+| `/creators` | Unified creator database (735-prospect import) — sortable/filterable list (platform, status, search, fit/reach/ER/last-post sort, URL-state), burned hidden by default. Replaces the influencer pages once the gifting flow is re-pointed (creator-program.md decision 2026-06-12) |
+| `/creators/[id]` | Creator detail — per-platform stats cards (followers, ER, watch/fit scores), posts feed, gifting orders (via `creator_id` links), emails, discount codes, status + notes editor |
+| `/influencers` | Influencer list (CRUD) — handle/platform, assigned collections, portal-login allowlist. **Retiring into `/creators`** (unification in progress) |
 | `/influencer-tracking` | Gifting orders + content-deadline tracking (approaching / missed / hit); inline-edit deadline, mark published, affiliate link |
 | `/influencer-tracking/new` | Create a gifting order (100% off draft order; product picker limited to the influencer's assigned collections; content due date + affiliate link) |
 | `/products` | Product performance breakdown (+ incoming production qty per SKU) |
@@ -209,6 +211,14 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 ### Influencer API (each handler checks `auth()`; admin-only — suppliers/companies 403)
 | Method | Path | Description |
 |--------|------|-------------|
+| POST | `/api/admin/creators` | Manually add a creator (auto-approved vetting; 409 if handle already tracked, incl. rejected) |
+| PATCH | `/api/admin/creators/[id]` | Update a creator (status/vettingStatus/scoreBoost/notes; status→burned sets a 12-month `burned_until_date`) |
+| POST | `/api/admin/creators/[id]/promote` | Ensure a linked `influencer` row exists (idempotent) so the gifting flow can serve this creator; prospect/contacted → committed |
+| POST | `/api/admin/creators/[id]/discount-code` | Create a Shopify discount code (default 15%, once-per-customer) via `discountCodeBasicCreate` + register in `creator_discount_code`. Graceful 502 until `write_discounts` is granted |
+| POST | `/api/admin/creators/[id]/posts` | Manually log a creator post (TikTok / missed by polling); auto mention-detection; 409 on duplicate URL |
+| POST | `/api/admin/creators/[id]/outreach` | Start an outreach thread (channel + first-touch note); prospect → contacted |
+| POST | `/api/admin/creators/outreach/[outreachId]` | Log an event (out/in/note, optional status transition — recomputes follow-up date; agreed promotes the creator) |
+| PATCH | `/api/admin/creators/outreach/[outreachId]` | Edit thread status/terms/next-follow-up |
 | POST | `/api/influencers` | Create an influencer |
 | PATCH | `/api/influencers/[id]` | Update an influencer (incl. assigned collections) |
 | POST | `/api/influencers/[id]/contacts` | Add an influencer portal-login email (future portal allowlist) |

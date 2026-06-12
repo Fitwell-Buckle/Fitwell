@@ -96,6 +96,7 @@ const navItems: NavItem[] = [
       { href: "/campaigns", label: "Campaigns" },
       { href: "/funnel", label: "Funnel" },
       { href: "/funnel/strategy", label: "Funnel — Strategic" },
+      { href: "/creators", label: "Creators" },
       { href: "/influencers", label: "Influencer List" },
       { href: "/influencer-tracking", label: "Influencer Orders", icon: Gift },
     ],

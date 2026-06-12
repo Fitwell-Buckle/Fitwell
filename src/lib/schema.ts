@@ -1396,13 +1396,20 @@ export const influencer = pgTable(
     contactEmail: text("contact_email"),
     // Optional link to a synced Shopify customer (the gifting recipient).
     customerId: text("customer_id").references(() => customer.id),
+    // Mapping to the unified creator record (expand/contract migration —
+    // see "Creator program" section). Set by the backfill; rows without
+    // it predate the unification.
+    creatorId: text("creator_id").references((): AnyPgColumn => creator.id),
     // Shopify collection ids this influencer may order from. Empty = all.
     assignedCollectionIds: text("assigned_collection_ids").array(),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },
-  (t) => [index("influencer_customer_id_idx").on(t.customerId)],
+  (t) => [
+    index("influencer_customer_id_idx").on(t.customerId),
+    index("influencer_creator_id_idx").on(t.creatorId),
+  ],
 );
 
 // Allowlist of emails that may sign in to the influencer self-serve portal
@@ -1441,6 +1448,20 @@ export const influencerOrder = pgTable(
     influencerId: text("influencer_id")
       .notNull()
       .references(() => influencer.id),
+    // Unified-system link: gifting orders created from a creator record
+    // ("send sample", Phase 4) set this directly.
+    creatorId: text("creator_id").references((): AnyPgColumn => creator.id),
+    // ── Sample logistics (creator lifecycle, 2026-06-12) ──
+    // The real Shopify order created when the draft completes. Linked by
+    // the orders/create webhook via GraphQL order→draftOrder lookup.
+    shopifyOrderId: text("shopify_order_id"),
+    // Stamped from Shopify fulfillment webhooks; manual fallback via PATCH.
+    shippedAt: timestamp("shipped_at", { mode: "date" }),
+    deliveredAt: timestamp("delivered_at", { mode: "date" }),
+    trackingNumber: text("tracking_number"),
+    trackingUrl: text("tracking_url"),
+    // Where we expect the content to land (ig | yt | tt | other).
+    expectedPlatform: text("expected_platform"),
     status: text("status").notNull().default("draft"), // draft | sent | cancelled
     issuedDate: date("issued_date").notNull(),
     // When the influencer's content is due to be published (the deadline).
@@ -1465,6 +1486,7 @@ export const influencerOrder = pgTable(
   },
   (t) => [
     index("influencer_order_influencer_id_idx").on(t.influencerId),
+    index("influencer_order_creator_id_idx").on(t.creatorId),
     index("influencer_order_status_idx").on(t.status),
     index("influencer_order_content_due_date_idx").on(t.contentDueDate),
   ],
@@ -1527,6 +1549,340 @@ export const influencerOrderLineItemRelations = relations(
     order: one(influencerOrder, {
       fields: [influencerOrderLineItem.orderId],
       references: [influencerOrder.id],
+    }),
+  }),
+);
+
+// ─── Creator program ────────────────────────────────────────────────
+// Single unified creator system (decision 2026-06-12, creator-program.md):
+// `creator` is the master record for the 735-prospect database AND the
+// entity the gifting flow hangs off. The legacy `influencer` table is in
+// expand/contract retirement — its rows map across via influencer.creator_id
+// and the contract step (dropping it) waits for Oliver + Greg sign-off.
+// Scoring formulas: specs/strategy/creator-scoring.md.
+
+export const creator = pgTable(
+  "creator",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    primaryPlatform: text("primary_platform"), // ig | yt | tt
+    // prospect | contacted | committed | active | burned | archived
+    status: text("status").notNull().default("prospect"),
+    // Human vetting layer over the imported dataset (Tom, 2026-06-12):
+    // unreviewed | approved | rejected. Rejected = "dumped" — hidden from
+    // the default list but kept for dedup (re-discovery won't resurface).
+    vettingStatus: text("vetting_status").notNull().default("unreviewed"),
+    // Manual ranking adjustment in fit-score points (±). Effective rank =
+    // cross_platform_fit + score_boost; the algorithmic score is never
+    // mutated, so refreshes don't erase human judgment.
+    scoreBoost: real("score_boost").notNull().default(0),
+    // ISO 3166-1 alpha-2. Auto-filled from YT channel metadata (rollup of
+    // platform.country, only while null); manually editable. Creators in
+    // countries outside Shopify Markets are auto-sidelined ("out of
+    // market"): hidden + no API polling, and they rejoin the pipeline the
+    // moment that market is enabled in Shopify. NULL = unknown = in-market.
+    country: text("country"),
+    // max(per-platform fit) + 0.2 × min — the outreach ranking number.
+    crossPlatformFit: real("cross_platform_fit"),
+    burnedUntilDate: date("burned_until_date"),
+    // Optional link to a synced Shopify customer (gifting recipient).
+    customerId: text("customer_id").references(() => customer.id),
+    // Shopify collection ids this creator may order from. Empty = all.
+    // (Carried over from influencer for the self-serve portal phase.)
+    assignedCollectionIds: text("assigned_collection_ids").array(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("creator_status_idx").on(t.status),
+    index("creator_vetting_status_idx").on(t.vettingStatus),
+    index("creator_cross_platform_fit_idx").on(t.crossPlatformFit),
+    index("creator_customer_id_idx").on(t.customerId),
+  ],
+);
+
+export const creatorPlatform = pgTable(
+  "creator_platform",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    creatorId: text("creator_id")
+      .notNull()
+      .references(() => creator.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(), // ig | yt | tt
+    // Stored lowercased without leading @.
+    handle: text("handle").notNull(),
+    profileUrl: text("profile_url"),
+    isBusinessAccount: boolean("is_business_account"),
+    isVerified: boolean("is_verified"),
+    externalUrl: text("external_url"),
+    bio: text("bio"),
+    // ISO 3166-1 alpha-2 as reported by the platform (YT snippet.country;
+    // IG doesn't expose one). Raw signal — creator.country is the resolved value.
+    country: text("country"),
+    // Data depth of the source scrape (apify_base | full | manual) —
+    // watch_score is not comparable across depths (scoring doc §9).
+    dataSource: text("data_source"),
+    watchScore: real("watch_score"),
+    watchConfidence: text("watch_confidence"), // high | medium | low | none
+    fitScore: real("fit_score"),
+    // True when engagement/activity were missing and fit_score was
+    // renormalised pro-rata (scoring doc §3 special case).
+    fitScorePartial: boolean("fit_score_partial").default(false),
+    lastRefreshedAt: timestamp("last_refreshed_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("creator_platform_platform_handle_idx").on(
+      t.platform,
+      t.handle,
+    ),
+    index("creator_platform_creator_id_idx").on(t.creatorId),
+    index("creator_platform_fit_score_idx").on(t.fitScore),
+  ],
+);
+
+export const creatorStatsDaily = pgTable(
+  "creator_stats_daily",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    creatorPlatformId: text("creator_platform_id")
+      .notNull()
+      .references(() => creatorPlatform.id, { onDelete: "cascade" }),
+    snapshotDate: date("snapshot_date").notNull(),
+    followers: integer("followers"),
+    engagementRatePct: real("engagement_rate_pct"),
+    avgLikes: real("avg_likes"),
+    avgComments: real("avg_comments"),
+    avgViews: real("avg_views"),
+    lastPostDate: date("last_post_date"),
+    postsInWindow: integer("posts_in_window"),
+  },
+  (t) => [
+    // One snapshot per platform per day — refresh cron upserts.
+    uniqueIndex("creator_stats_daily_platform_date_idx").on(
+      t.creatorPlatformId,
+      t.snapshotDate,
+    ),
+  ],
+);
+
+export const creatorEmail = pgTable(
+  "creator_email",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    creatorId: text("creator_id")
+      .notNull()
+      .references(() => creator.id, { onDelete: "cascade" }),
+    email: text("email").notNull(), // stored lowercased
+    kind: text("kind"), // business | personal | manager
+    source: text("source"), // ig | yt | manual
+    verifiedAt: timestamp("verified_at", { mode: "date" }),
+    // Grants self-serve portal login (successor to influencer_contact's
+    // allowlist role; portal phase checks this flag).
+    portalAccess: boolean("portal_access").notNull().default(false),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("creator_email_creator_email_idx").on(t.creatorId, t.email),
+    index("creator_email_email_idx").on(t.email),
+  ],
+);
+
+export const creatorPost = pgTable(
+  "creator_post",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    creatorPlatformId: text("creator_platform_id")
+      .notNull()
+      .references(() => creatorPlatform.id, { onDelete: "cascade" }),
+    // The gifting order this post fulfills, when timing matches —
+    // unified system reuses influencer_order as the sample shipment.
+    giftOrderId: text("gift_order_id").references(() => influencerOrder.id),
+    postUrl: text("post_url").notNull(),
+    postedAt: timestamp("posted_at", { mode: "date" }),
+    caption: text("caption"),
+    likes: integer("likes"),
+    comments: integer("comments"),
+    views: integer("views"),
+    mentionedUs: boolean("mentioned_us").notNull().default(false),
+    usedCode: boolean("used_code").notNull().default(false),
+    detectedAt: timestamp("detected_at", { mode: "date" }).defaultNow(),
+    source: text("source").notNull().default("manual"), // api_poll | manual | backfill
+  },
+  (t) => [
+    uniqueIndex("creator_post_post_url_idx").on(t.postUrl),
+    index("creator_post_creator_platform_id_idx").on(t.creatorPlatformId),
+    index("creator_post_gift_order_id_idx").on(t.giftOrderId),
+  ],
+);
+
+// Registry of discount codes we issued per creator. Redemption counts and
+// attributed revenue are computed by joining order_discount_code on the
+// normalized code — no webhook-incremented counters (avoids the race
+// condition the original spec flagged).
+export const creatorDiscountCode = pgTable(
+  "creator_discount_code",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    creatorId: text("creator_id")
+      .notNull()
+      .references(() => creator.id, { onDelete: "cascade" }),
+    code: text("code").notNull(), // normalized lowercase (matches order_discount_code.code)
+    codeRaw: text("code_raw").notNull(), // as created in Shopify
+    shopifyPriceRuleId: text("shopify_price_rule_id"),
+    shopifyDiscountCodeId: text("shopify_discount_code_id"),
+    percentOff: real("percent_off"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+  },
+  (t) => [
+    uniqueIndex("creator_discount_code_code_idx").on(t.code),
+    index("creator_discount_code_creator_id_idx").on(t.creatorId),
+  ],
+);
+
+// One outreach conversation with a creator on one channel. A creator can
+// have several (email + IG DM + manager). Status transitions append
+// creator_outreach_event rows and recompute next_followup_at
+// (src/lib/creators/lifecycle.ts owns the rules).
+export const creatorOutreach = pgTable(
+  "creator_outreach",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    creatorId: text("creator_id")
+      .notNull()
+      .references(() => creator.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(), // email | ig_dm | yt_comment | manager | other
+    // no_reply | replied | negotiating | agreed | declined | ghosted
+    status: text("status").notNull().default("no_reply"),
+    terms: text("terms"),
+    firstContactAt: timestamp("first_contact_at", { mode: "date" }),
+    lastContactAt: timestamp("last_contact_at", { mode: "date" }),
+    nextFollowupAt: timestamp("next_followup_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("creator_outreach_creator_id_idx").on(t.creatorId),
+    index("creator_outreach_next_followup_idx").on(t.nextFollowupAt),
+  ],
+);
+
+// The activity log: every email/DM (in or out), internal note, and status
+// change on a thread. createdBy = the team member's email.
+export const creatorOutreachEvent = pgTable(
+  "creator_outreach_event",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    outreachId: text("outreach_id")
+      .notNull()
+      .references(() => creatorOutreach.id, { onDelete: "cascade" }),
+    occurredAt: timestamp("occurred_at", { mode: "date" }).notNull().defaultNow(),
+    direction: text("direction").notNull().default("note"), // out | in | note | status
+    summary: text("summary").notNull(),
+    body: text("body"),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("creator_outreach_event_outreach_id_idx").on(t.outreachId)],
+);
+
+export const creatorOutreachRelations = relations(
+  creatorOutreach,
+  ({ one, many }) => ({
+    creator: one(creator, {
+      fields: [creatorOutreach.creatorId],
+      references: [creator.id],
+    }),
+    events: many(creatorOutreachEvent),
+  }),
+);
+
+export const creatorOutreachEventRelations = relations(
+  creatorOutreachEvent,
+  ({ one }) => ({
+    outreach: one(creatorOutreach, {
+      fields: [creatorOutreachEvent.outreachId],
+      references: [creatorOutreach.id],
+    }),
+  }),
+);
+
+export const creatorRelations = relations(creator, ({ one, many }) => ({
+  customer: one(customer, {
+    fields: [creator.customerId],
+    references: [customer.id],
+  }),
+  platforms: many(creatorPlatform),
+  emails: many(creatorEmail),
+  discountCodes: many(creatorDiscountCode),
+  outreach: many(creatorOutreach),
+}));
+
+export const creatorPlatformRelations = relations(
+  creatorPlatform,
+  ({ one, many }) => ({
+    creator: one(creator, {
+      fields: [creatorPlatform.creatorId],
+      references: [creator.id],
+    }),
+    statsDaily: many(creatorStatsDaily),
+    posts: many(creatorPost),
+  }),
+);
+
+export const creatorStatsDailyRelations = relations(
+  creatorStatsDaily,
+  ({ one }) => ({
+    platform: one(creatorPlatform, {
+      fields: [creatorStatsDaily.creatorPlatformId],
+      references: [creatorPlatform.id],
+    }),
+  }),
+);
+
+export const creatorEmailRelations = relations(creatorEmail, ({ one }) => ({
+  creator: one(creator, {
+    fields: [creatorEmail.creatorId],
+    references: [creator.id],
+  }),
+}));
+
+export const creatorPostRelations = relations(creatorPost, ({ one }) => ({
+  platform: one(creatorPlatform, {
+    fields: [creatorPost.creatorPlatformId],
+    references: [creatorPlatform.id],
+  }),
+  giftOrder: one(influencerOrder, {
+    fields: [creatorPost.giftOrderId],
+    references: [influencerOrder.id],
+  }),
+}));
+
+export const creatorDiscountCodeRelations = relations(
+  creatorDiscountCode,
+  ({ one }) => ({
+    creator: one(creator, {
+      fields: [creatorDiscountCode.creatorId],
+      references: [creator.id],
     }),
   }),
 );

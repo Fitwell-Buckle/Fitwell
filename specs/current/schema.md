@@ -725,6 +725,43 @@ stored. A `user.influencer_id` column (for the future influencer portal,
 intentionally not added here, so the running app never queries a column the DB
 doesn't have.
 
+> **Unification in progress (2026-06-12, migration 0064):** the creator
+> program below makes `creator` the single entity for content creators.
+> `influencer.creator_id` and `influencer_order.creator_id` (both nullable)
+> map this system onto it; the `influencer` table retires in a later
+> contract migration once Oliver + Greg sign off. Decision log:
+> `specs/strategy/creator-program.md`.
+
+## Creator Program
+
+The unified creator system (decision 2026-06-12 — single system, "brain and
+hands"): the 735-creator scored prospect database from the May 2026 research
+pass, plus links into the existing gifting machinery above. Scoring formulas
+live in `specs/strategy/creator-scoring.md`, implemented as pure functions in
+`src/lib/creators/scoring.ts` (shared by the CSV import and the future
+nightly stats refresh). Import: `scripts/import-creators-csv.ts` (idempotent
+on `(platform, handle)`).
+
+| Table | Key columns |
+|-------|-------------|
+| `creator` | `name`, `primary_platform?` (ig\|yt\|tt), `status` (prospect\|contacted\|committed\|active\|burned\|archived), `vetting_status` (unreviewed\|approved\|rejected — human layer over the import; rejected = dumped, hidden but kept for dedup), `score_boost` (manual ± fit-points; effective rank = cross_platform_fit + score_boost, algorithmic score never mutated), `cross_platform_fit?` (ranking number, indexed), `burned_until_date?`, `customer_id?` (FK → customer), `assigned_collection_ids?` (text[], portal), `notes?` |
+| `creator_platform` | `creator_id` (FK, cascade), `platform` + `handle` (**unique pair**, handle lowercased no-@), `profile_url?`, `bio?`, `data_source?` (apify_base\|full\|manual — score depths aren't comparable), `watch_score?`, `watch_confidence?`, `fit_score?`, `fit_score_partial` (renormalised, profile-only rows), `is_business_account?`, `is_verified?`, `external_url?`, `last_refreshed_at?` |
+| `creator_stats_daily` | `creator_platform_id` (FK, cascade) + `snapshot_date` (**unique pair** — refresh cron upserts), `followers?`, `engagement_rate_pct?`, `avg_likes?`, `avg_comments?`, `avg_views?`, `last_post_date?`, `posts_in_window?` |
+| `creator_email` | `creator_id` (FK, cascade) + `email` (**unique pair**, lowercased), `kind?` (business\|personal\|manager), `source?` (ig\|yt\|manual), `verified_at?`, `portal_access` (bool — successor to `influencer_contact`'s allowlist role) |
+| `creator_post` | `creator_platform_id` (FK, cascade), `gift_order_id?` (FK → influencer_order — the sample this post fulfills), `post_url` (**unique**), `posted_at?`, `caption?`, `likes?`/`comments?`/`views?`, `mentioned_us`, `used_code`, `detected_at`, `source` (api_poll\|manual\|backfill) |
+| `creator_discount_code` | `creator_id` (FK, cascade), `code` (**unique**, normalized lowercase — joins `order_discount_code.code` for redemptions/attributed revenue; no stored counters), `code_raw`, `shopify_price_rule_id?`, `shopify_discount_code_id?`, `percent_off?`, `expires_at?` |
+| `creator_outreach` | `creator_id` (FK, cascade), `channel` (email\|ig_dm\|yt_comment\|manager\|other), `status` (no_reply\|replied\|negotiating\|agreed\|declined\|ghosted), `terms?`, `first_contact_at?`, `last_contact_at?`, `next_followup_at?` (indexed — drives the action cron). Status transitions recompute follow-up via `lifecycle.ts` rules |
+| `creator_outreach_event` | `outreach_id` (FK, cascade), `occurred_at`, `direction` (out\|in\|note\|status), `summary`, `body?`, `created_by?` — the per-creator activity log |
+
+**Sample logistics on `influencer_order`** (lifecycle chunk 1, migration
+0067): `shopify_order_id?` (real order, linked by webhook via GraphQL
+order→draftOrder lookup), `shipped_at?` / `delivered_at?` (stamped from
+fulfillment webhooks, stamp-once so manual edits win), `tracking_number?`,
+`tracking_url?`, `expected_platform?`. Pipeline stages (prospect →
+outreach → agreed → sample_sent → evaluating → posted) are **derived** in
+`src/lib/creators/lifecycle.ts` from status + these facts — never stored
+(zero-drift).
+
 ## CRM (leads)
 
 B2B leads from tradeshows + other sources. Lives under **Customers → Leads**

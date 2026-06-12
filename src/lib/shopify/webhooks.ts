@@ -5,6 +5,7 @@ import { order } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { upsertOrder, upsertCustomer } from "./sync";
 import { syncProductBarcodes } from "./sku-barcode-sync";
+import { syncGiftOrderLogistics } from "@/lib/creators/gift-logistics";
 import { CATALOG_CACHE_TAG } from "@/lib/catalog/load";
 import type { ShopifyOrder, ShopifyCustomer, ShopifyProduct } from "@/types/shopify";
 
@@ -36,6 +37,14 @@ export async function handleWebhookTopic(
     case "orders/updated": {
       const shopifyOrder = payload as unknown as ShopifyOrder;
       await upsertOrder(shopifyOrder);
+      // Creator sample logistics: link gifting draft orders to their real
+      // orders + stamp shipped/delivered from fulfillments. Never fatal —
+      // a logistics hiccup must not fail order ingestion.
+      try {
+        await syncGiftOrderLogistics(payload);
+      } catch (e) {
+        console.error(`Gift logistics sync failed for order ${shopifyId}:`, e);
+      }
       console.log(
         `Webhook ${topic}: order ${shopifyId} processed in ${Date.now() - start}ms`,
       );

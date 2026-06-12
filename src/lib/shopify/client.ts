@@ -933,6 +933,175 @@ class ShopifyClient {
     return { draftOrderId: draftOrder.id, invoiceUrl: draftOrder.invoiceUrl };
   }
 
+  // ── Creator discount codes ────────────────────────────────────────
+
+  /**
+   * Create a basic percentage discount code (creator program Phase 4).
+   * Defaults match the spec: single-use-per-customer, applies to all
+   * items/customers, no expiry unless given. Requires the write_discounts
+   * scope — without it Shopify returns "access denied" and this throws;
+   * the API route surfaces that as a graceful 502 (same pattern as the
+   * leads address-sync button).
+   */
+  async createBasicDiscountCode(params: {
+    code: string;
+    percentOff: number; // e.g. 15
+    title?: string;
+    expiresAt?: Date | null;
+  }): Promise<{ discountNodeId: string }> {
+    const result = await this.graphql<{
+      discountCodeBasicCreate: {
+        codeDiscountNode: { id: string } | null;
+        userErrors: { field: string[] | null; message: string }[];
+      };
+    }>(
+      `mutation FitwellCreatorCodeCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+        discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+          codeDiscountNode { id }
+          userErrors { field message }
+        }
+      }`,
+      {
+        basicCodeDiscount: {
+          title: params.title ?? `Creator: ${params.code}`,
+          code: params.code,
+          startsAt: new Date().toISOString(),
+          ...(params.expiresAt ? { endsAt: params.expiresAt.toISOString() } : {}),
+          customerSelection: { all: true },
+          customerGets: {
+            value: { percentage: params.percentOff / 100 },
+            items: { all: true },
+          },
+          appliesOncePerCustomer: true,
+        },
+      },
+    );
+
+    const errs = result.discountCodeBasicCreate.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(
+        `Discount code failed: ${errs.map((e) => e.message).join("; ")}`,
+      );
+    }
+    const node = result.discountCodeBasicCreate.codeDiscountNode;
+    if (!node) throw new Error("Discount code was not created");
+    return { discountNodeId: node.id };
+  }
+
+  /**
+   * The draft order a real order was completed from (null if none).
+   * REST webhook payloads don't carry this link — one GraphQL lookup
+   * connects gifting draft orders to their fulfilled orders.
+   */
+  async getOrderDraftOrderId(orderId: string): Promise<string | null> {
+    const result = await this.graphql<{
+      order: { draftOrder: { id: string } | null } | null;
+    }>(
+      `query FitwellOrderDraftLink($id: ID!) {
+        order(id: $id) { draftOrder { id } }
+      }`,
+      { id: `gid://shopify/Order/${orderId}` },
+    );
+    return result.order?.draftOrder?.id ?? null;
+  }
+
+  /**
+   * Countries covered by at least one shipping zone — "where we actually
+   * deliver" (the checkbox list in Settings → Shipping and delivery).
+   * Returns null when a zone covers Rest of World (= ships anywhere).
+   * Requires read_shipping; callers fall back to markets-only until the
+   * scope is granted.
+   */
+  async getShippingCountryCodes(): Promise<string[] | null> {
+    const result = await this.graphql<{
+      deliveryProfiles: {
+        nodes: {
+          profileLocationGroups: {
+            locationGroupZones: {
+              nodes: {
+                zone: {
+                  countries: {
+                    code: { countryCode: string | null; restOfWorld: boolean };
+                  }[];
+                };
+              }[];
+            };
+          }[];
+        }[];
+      };
+    }>(
+      `query FitwellShippingCountries {
+        deliveryProfiles(first: 10) {
+          nodes {
+            profileLocationGroups {
+              locationGroupZones(first: 50) {
+                nodes {
+                  zone {
+                    countries { code { countryCode restOfWorld } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }`,
+    );
+
+    const codes = new Set<string>();
+    for (const profile of result.deliveryProfiles.nodes) {
+      for (const group of profile.profileLocationGroups) {
+        for (const zoneNode of group.locationGroupZones.nodes) {
+          for (const country of zoneNode.zone.countries) {
+            if (country.code.restOfWorld) return null; // ships anywhere
+            if (country.code.countryCode) {
+              codes.add(country.code.countryCode.toUpperCase());
+            }
+          }
+        }
+      }
+    }
+    return [...codes];
+  }
+
+  // ── Markets ───────────────────────────────────────────────────────
+
+  /**
+   * Country codes (ISO 3166-1 alpha-2) of all ENABLED Shopify Markets —
+   * i.e., where we actually sell. Drives creator market-gating: enabling
+   * a market in Shopify automatically returns that country's sidelined
+   * creators to the pipeline. Requires read_markets (granted).
+   */
+  async getActiveMarketCountryCodes(): Promise<string[]> {
+    const result = await this.graphql<{
+      markets: {
+        nodes: {
+          enabled: boolean;
+          regions: { nodes: { code?: string }[] };
+        }[];
+      };
+    }>(
+      `query FitwellActiveMarkets {
+        markets(first: 50) {
+          nodes {
+            enabled
+            regions(first: 250) {
+              nodes { ... on MarketRegionCountry { code } }
+            }
+          }
+        }
+      }`,
+    );
+
+    const codes = new Set<string>();
+    for (const market of result.markets.nodes) {
+      if (!market.enabled) continue;
+      for (const region of market.regions.nodes) {
+        if (region.code) codes.add(region.code.toUpperCase());
+      }
+    }
+    return [...codes];
+  }
+
   // ── Generic paginator ─────────────────────────────────────────────
 
   /**

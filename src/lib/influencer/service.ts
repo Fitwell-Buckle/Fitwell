@@ -122,11 +122,19 @@ export async function recordInfluencerOrder(params: {
   const orderNumber = await nextOrderNumber();
   const hasDraft = !!params.shopifyDraftOrderId;
 
+  // Unified creator system: carry the influencer's creator link onto the
+  // order so /creators/[id] can list gifting orders directly.
+  const inf = await db.query.influencer.findFirst({
+    where: eq(influencer.id, params.influencerId),
+    columns: { creatorId: true },
+  });
+
   const [row] = await db
     .insert(influencerOrder)
     .values({
       orderNumber,
       influencerId: params.influencerId,
+      creatorId: inf?.creatorId ?? null,
       status: hasDraft ? "sent" : "draft",
       issuedDate: params.issuedDate ?? today(),
       contentDueDate: params.contentDueDate ?? null,
@@ -172,6 +180,12 @@ export const updateOrderSchema = z.object({
   publishedAt: dateString.nullable().optional(),
   affiliateLink: z.string().url().max(2000).nullable().or(z.literal("")).optional(),
   status: z.enum(["draft", "sent", "cancelled"]).optional(),
+  // Sample logistics — manual fallback when carrier data doesn't flow
+  // (webhooks stamp these automatically when Shopify has the facts).
+  shippedAt: dateString.nullable().optional(),
+  deliveredAt: dateString.nullable().optional(),
+  trackingNumber: z.string().max(200).nullable().optional(),
+  expectedPlatform: z.enum(["ig", "yt", "tt", "other"]).nullable().optional(),
 });
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
 
@@ -185,6 +199,12 @@ export async function updateInfluencerOrder(
   if (input.publishedAt !== undefined) patch.publishedAt = input.publishedAt;
   if (input.affiliateLink !== undefined) patch.affiliateLink = input.affiliateLink || null;
   if (input.status !== undefined) patch.status = input.status;
+  if (input.shippedAt !== undefined)
+    patch.shippedAt = input.shippedAt ? new Date(input.shippedAt) : null;
+  if (input.deliveredAt !== undefined)
+    patch.deliveredAt = input.deliveredAt ? new Date(input.deliveredAt) : null;
+  if (input.trackingNumber !== undefined) patch.trackingNumber = input.trackingNumber;
+  if (input.expectedPlatform !== undefined) patch.expectedPlatform = input.expectedPlatform;
 
   const [row] = await db
     .update(influencerOrder)

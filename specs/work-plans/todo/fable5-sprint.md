@@ -48,13 +48,125 @@ the Klaviyo UI — blocks *deployment* of WS2 content, not drafting).
 Pre-build before the planned 2026-06-21 start so Tom returns to
 outreach-ready tooling instead of a spreadsheet cadence. Pulls 360
 Workstream 2 forward ~2 weeks. Spec: `creator-program.md` + `creator-scoring.md`.
-- [ ] Phase 1: schema (creator, creator_contact, creator_post, sample/code tables — reuse existing entities per Critical Rule 6) + migration
-- [ ] Phase 2: 735-creator CSV import with watch_score / fit_score / cross_platform_fit scoring
-- [ ] Admin UI: creator list + detail under Marketing nav (read-first)
-- [ ] Phase 4: Shopify per-creator sample draft orders + discount code generation (write_draft_orders is live)
-- [ ] Phase 5: post detection — YouTube polling + Apify IG (needs Apify account ~$1–2/mo; flag for Tom)
-- [ ] Tests for each phase (`npm run check` green before any phase is called done)
-- [ ] Stage for Tom's return: seeded dev data + a 5-minute walkthrough note
+- [x] **Architecture decision (Tom, 2026-06-12): single unified system** —
+      `creator` is the one entity, brain AND hands. Oliver's gifting
+      machinery re-pointed via additive `creator_id` FKs; `influencer`
+      retires in a post-sprint contract migration (needs Oliver + Greg).
+      Logged in `creator-program.md`.
+- [x] Phase 1: schema — 6 creator tables + 2 link columns, migration
+      `0064_far_sway.sql`, applied to tom-dev (NOT prod yet — Greg gate)
+- [x] Scoring library (`src/lib/creators/scoring.ts`) — all formulas from
+      `creator-scoring.md` as pure functions, 36 unit tests
+- [x] CSV import — transform layer (`src/lib/creators/import.ts`, 15
+      tests) + idempotent upsert script (`scripts/import-creators-csv.ts`,
+      verified create→update on re-run against dev). Alias-driven header
+      mapping; adjusting to the real CSV is a one-minute edit.
+      **Waiting on Tom: the real `Fitwell_Creators_CrossPlatform.csv`.**
+- [x] Phase 2: admin UI — `/creators` list (filter pills, search, sortable
+      columns, URL-state, burned hidden by default) + `/creators/[id]`
+      detail (platform stats cards, posts, gifting orders, emails, codes,
+      status/notes editor via `PATCH /api/admin/creators/[id]`). Nav +
+      middleware wired; prod build verified; 11 list-logic tests.
+- [x] Backfill script `scripts/backfill-influencers-to-creators.ts` —
+      maps influencer rows → creator (reuses CSV-imported creators on
+      platform+handle match, migrates portal allowlist emails, stamps
+      `creator_id` on influencer + orders). Idempotent; dry-run verified
+      (dev branch has 0 rows; the real run happens on prod after the
+      Greg gate). Old influencer pages keep working until Phase 4
+      re-points the gifting flow, then become redirects.
+- [x] Phase 4: "Send sample" promotes a creator into the existing gifting
+      flow (`POST …/promote` → prefilled `/influencer-tracking/new`);
+      `recordInfluencerOrder` now stamps `creator_id`; discount codes via
+      new `createBasicDiscountCode` on the Shopify client
+      (`discountCodeBasicCreate`, default 15% once-per-customer) with
+      graceful 502 until `write_discounts` lands — **added to
+      shopify.app.toml; rides Greg's queued scope deploy**. Redemptions =
+      join on `order_discount_code` (refund-netted), shown on detail.
+- [x] Phase 5: post detection — YT nightly cron (04:00, ~2 quota
+      units/channel) + IG Apify cron (6h, ≤50 engaged-creator profiles,
+      cost-throttled) + manual entry API. Both crons no-op ("skipped")
+      until `YOUTUBE_API_KEY` / `APIFY_TOKEN` are set (.env.example
+      documents both; **Tom: fresh YT key + Apify token needed**).
+      Gift-order matching (≤30d window) + mention detection unit-tested.
+- [x] Tests ship with each phase — 916 passing (`npm run check` green),
+      prod build verified after every phase
+- [x] Stage for Tom's return: 4 seeded dev creators + walkthrough below
+- [x] **Real CSV imported to dev** (2026-06-12): 735 creators, 0 skipped,
+      104 multi-platform — importer trusts the research pass's precomputed
+      scores (CSV lacks the caption text they were computed from),
+      handles US dates + per-platform email columns. Fixtures removed.
+- [x] **Vetting workflow** (Tom's requirement — "vetting 735 in the
+      portal"): `vetting_status` + `score_boost` columns (migration
+      0065, applied to dev), inline ✓ approve / ✗ reject / ▲▼ boost on
+      every list row, "To vet / Approved / Rejected" pills, rejected
+      hidden by default but kept for dedup. Effective rank =
+      cross_platform_fit + boost; the algorithmic score is never
+      mutated, so refreshes don't erase human judgment.
+- [x] **Discovery pipeline** ("once the CSV is in we can't be done"):
+      ① Add-creator inline form (auto-approved, 409 on duplicates);
+      ② weekly YT keyword-search cron (Mon 05:00) feeding untracked
+      watch channels into the To-vet queue, ~600 quota units/run,
+      no-ops until `YOUTUBE_API_KEY`. IG discovery deliberately deferred
+      (no search API without Meta review; multi-platform matching pulls
+      IG handles in via YT channel links).
+- [x] **Stats refresh (Phase 6, pulled forward 2026-06-12)** — Tom hit
+      the staleness immediately ("The Watchlist says last post 5/22"):
+      the CSV froze at the May scrape. Built: nightly YT refresh cron
+      (03:00, subscribers/ER/last-upload + re-scoring) and IG stats
+      piggybacked on the Apify posts cron (now ALL non-rejected IG
+      profiles, 50/cycle round-robin ≈ full pool every 3–4 days).
+      `score_boost` is never touched by refreshes.
+      **Blocked on env: `YOUTUBE_API_KEY` + `APIFY_TOKEN` (Tom, ~10 min
+      total) — until then every date/count on /creators is the May-22
+      research snapshot.**
+- [x] **Country / market gating** (Tom, 2026-06-12): `country` columns
+      (migration 0066), auto-filled from YT channel metadata (135/169
+      backfilled; IG manual), gated against **live Shopify Markets**
+      (45 countries incl. IN — surfaced to Tom; "creator target markets"
+      override list pending his call). Out-of-market = parked: hidden +
+      zero API calls + auto-return when the market is enabled.
+- [x] **Creator lifecycle** (Tom's design session, 2026-06-12 — full
+      push-through): ① sample logistics on `influencer_order` (migration
+      0067: shopify_order_id via webhook GraphQL draft-link,
+      shipped/delivered from fulfillments, tracking, expected platform);
+      ② outreach threads + per-creator activity timeline
+      (`creator_outreach` + events, follow-up rules in `lifecycle.ts`,
+      status `committed`→`agreed`); ③ action cron (13:30 UTC): follow-ups
+      due, sample-landed drafts (approve-and-send, never auto), overdue
+      post nudges, 60-day auto-burn; ④ pipeline bar on /creators
+      (derived stages: prospect → outreach → agreed → sample_sent →
+      evaluating → posted, click-to-filter, zero-drift — logistics facts
+      outrank stale statuses). 936 tests green.
+- [ ] Prod go-live: migrations 0064–0067 → push → scope deploy → CSV
+      import on prod → influencer backfill (gated on Greg design review)
+
+#### WS1 walkthrough (5 minutes)
+
+1. **Marketing → Creators** — the unified list. Seeded with 4 fixture
+   creators on tom-dev; the real 735 land when the CSV is imported.
+   Pills filter platform/status; default view hides burned/archived;
+   column headers sort; search hits names + handles. Default rank =
+   `cross_platform_fit`.
+2. Click a creator → detail: per-platform stat cards, posts feed,
+   gifting orders, emails, codes, status + notes (editable, saves via
+   PATCH).
+3. **Send sample** → creates the influencer-bridge row if needed and
+   drops you in the existing gifting-order form, creator preselected.
+   The order comes back stamped with `creator_id` so it shows on the
+   creator's detail page.
+4. **Generate code (15%)** → returns a clear error until Greg's scope
+   deploy grants `write_discounts`; after that it creates the Shopify
+   code and registers it. Redemption counts/revenue appear automatically
+   (joined from `order_discount_code`, refund-netted).
+5. Post detection runs itself once `YOUTUBE_API_KEY` + `APIFY_TOKEN`
+   exist (until then the crons report "skipped" — visible in the cron
+   logs, harmless).
+
+**Go-live order:** ① Greg reviews schema/design (0064 + this section) →
+② `npm run db:migrate:prod` → ③ push (Vercel picks up the new crons) →
+④ `shopify app deploy` (scopes incl. `write_discounts`) + re-auth →
+⑤ import real CSV on prod → ⑥ run `backfill-influencers-to-creators.ts`
+on prod → ⑦ Wave 1 outreach (top-50 by fit_score) starts from the list.
 
 ### WS2: Post-purchase retention flow content (D1 / D14 / D21 / D30)
 The lead workstream's writing, draftable now — the Klaviyo skeleton only

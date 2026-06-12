@@ -449,6 +449,34 @@
       "when": 1781277488065,
       "tag": "0063_exotic_starhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1781295148771,
+      "tag": "0064_far_sway",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1781298699665,
+      "tag": "0065_spotty_sugar_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1781301055000,
+      "tag": "0066_even_lady_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1781301862703,
+      "tag": "0067_ordinary_the_initiative",
+      "breakpoints": true
     }
   ]
 }

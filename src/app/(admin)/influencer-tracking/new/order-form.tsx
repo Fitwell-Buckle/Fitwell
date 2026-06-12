@@ -38,12 +38,18 @@ function emptyRow(): Row {
 
 export function InfluencerOrderForm({
   influencers,
+  defaultInfluencerId,
 }: {
   influencers: InfluencerOption[];
+  defaultInfluencerId?: string;
 }) {
   const router = useRouter();
 
-  const [influencerId, setInfluencerId] = useState(influencers[0]?.id ?? "");
+  const [influencerId, setInfluencerId] = useState(
+    (defaultInfluencerId &&
+      influencers.find((i) => i.id === defaultInfluencerId)?.id) ||
+      (influencers[0]?.id ?? ""),
+  );
   const [contentDueDate, setContentDueDate] = useState("");
   const [affiliateLink, setAffiliateLink] = useState("");
   const [notes, setNotes] = useState("");

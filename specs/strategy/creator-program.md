@@ -20,7 +20,34 @@ References:
 - `specs/current/schema.md` — existing `customer`, `order`, `order_line_item`, `campaign` tables (reuse, don't duplicate)
 - `AGENTS.md` §3 rule 4 — this plan requires Greg sign-off before Phase 1 begins (new tables + new external integration)
 
-## Greg decisions required before Phase 1
+## Decision 2026-06-12 — single unified system (Tom)
+
+The repo already has Oliver's admin-managed influencer gifting tracker
+(`influencer`, `influencer_contact`, `influencer_order` + line items,
+shipped 2026-05-25). Tom's call: **we want one system, and it must be
+both brain and hands** — the creator database (scoring, stats, posts)
+AND the transactional machinery (gifting draft orders, deadlines,
+portal). So:
+
+- **`creator` is the single entity going forward.** The new tables below
+  are the master record.
+- **Oliver's gifting machinery is re-pointed, not rebuilt** — Phase 4's
+  "send sample" promotes a creator into the existing `influencer_order`
+  draft-order flow (additive `creator_id` FK) instead of building the
+  spec's parallel `sample_shipment` path. `creator_post` links to the
+  gifting order directly.
+- **Redemption tracking reuses `order_discount_code`** (migration 0058)
+  via a join on normalized code — replaces this spec's webhook-increment
+  design and its acknowledged race condition. The new
+  `creator_discount_code` table is only the registry of codes we issued.
+- **The `influencer` table eventually retires** (its rows migrate into
+  `creator`; `influencer_contact`'s portal-allowlist role becomes a flag
+  on `creator_email`). That contract step is expand/contract phase 2 —
+  it touches Oliver's live pages and his planned phase-2 portal, so it
+  needs Oliver + Greg sign-off and happens after this sprint, not during.
+- Everything in the current sprint is **additive only** (new tables +
+  nullable FK columns); nothing lands on main/prod before Greg sees the
+  design (per the sign-off gate below).
 
 These need explicit alignment before we start writing schema:
 

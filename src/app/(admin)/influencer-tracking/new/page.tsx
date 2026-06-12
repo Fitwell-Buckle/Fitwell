@@ -11,9 +11,15 @@ export const metadata: Metadata = {
   title: "New gifting order | Fitwell Admin",
 };
 
-export default async function NewInfluencerOrderPage() {
+export default async function NewInfluencerOrderPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ influencerId?: string }>;
+}) {
   const session = await auth();
   if (!session) redirect("/auth/login");
+
+  const { influencerId } = await searchParams;
 
   const influencers = await db.query.influencer.findMany({
     columns: { id: true, name: true, handle: true, assignedCollectionIds: true },
@@ -24,6 +30,7 @@ export default async function NewInfluencerOrderPage() {
     <div>
       <PageHeader title="New gifting order" />
       <InfluencerOrderForm
+        defaultInfluencerId={influencerId}
         influencers={influencers.map((i) => ({
           id: i.id,
           name: i.name,

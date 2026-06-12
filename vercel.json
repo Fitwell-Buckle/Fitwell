@@ -67,6 +67,26 @@
     {
       "path": "/api/cron/newsletter-trigger",
       "schedule": "55 8 * * *"
+    },
+    {
+      "path": "/api/cron/extract-creator-posts-yt",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/extract-creator-posts-ig",
+      "schedule": "30 */6 * * *"
+    },
+    {
+      "path": "/api/cron/discover-creators",
+      "schedule": "0 5 * * 1"
+    },
+    {
+      "path": "/api/cron/refresh-creator-stats",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/creator-actions",
+      "schedule": "30 13 * * *"
     }
   ]
 }

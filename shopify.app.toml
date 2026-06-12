@@ -10,7 +10,14 @@ api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_all_orders,read_content,read_customers,read_locations,read_marketing_events,read_markets,read_orders,read_products,read_script_tags,read_themes,write_customers,write_draft_orders,write_inventory,write_products"
+# write_discounts: per-creator discount codes (creator program Phase 4) —
+# rides the next scope deploy; the generate-code API degrades gracefully
+# (502 + explanation) until the scope is granted.
+# read_shipping: shipping-zone countries — "where we actually deliver",
+# intersected with enabled Markets for creator market-gating (a country in
+# a market region but absent from every shipping zone isn't sellable).
+# Falls back to markets-only until granted.
+scopes = "read_all_orders,read_content,read_customers,read_locations,read_marketing_events,read_markets,read_orders,read_products,read_script_tags,read_shipping,read_themes,write_customers,write_discounts,write_draft_orders,write_inventory,write_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
