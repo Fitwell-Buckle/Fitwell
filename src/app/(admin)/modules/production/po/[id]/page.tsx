@@ -577,6 +577,9 @@ export default async function PoDetailPage({
             companyOverridden: !!li.company,
             warehouse: li.locationName ?? po.locationName ?? null,
             warehouseOverridden: !!li.locationName,
+            // Per-line stage config — drives the scoped Stage dropdown (a SKU
+            // that skips stages won't list them). null/empty = full pipeline.
+            stages: li.stages ?? null,
           }))}
         />
       )}

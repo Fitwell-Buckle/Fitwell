@@ -29,6 +29,9 @@ interface LineItem {
   companyOverridden: boolean;
   warehouse: string | null;
   warehouseOverridden: boolean;
+  /** Per-line stage config (work stages this SKU goes through). null/empty =
+   *  the full pipeline; otherwise the dropdown hides stages it skips. */
+  stages: ProductionStage[] | null;
 }
 
 const STAGE_SELECT =
@@ -52,6 +55,25 @@ export function PoControls({
   const stageOrder = useStageOrder();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Stages every line can always reach regardless of its per-line config: the
+  // opening state (PO Acceptance) and the terminal (Complete).
+  const openingStage = stageOrder[0];
+  const terminalStage = stageOrder[stageOrder.length - 1];
+
+  // The stages a line's dropdown should offer — its configured work stages plus
+  // the universal opening/terminal and whatever it's currently at (so the
+  // selected value always has a matching option).
+  const stagesFor = (li: LineItem) =>
+    stageOrder.filter(
+      (s) =>
+        !li.stages ||
+        li.stages.length === 0 ||
+        li.stages.includes(s) ||
+        s === openingStage ||
+        s === terminalStage ||
+        s === li.currentStage,
+    );
 
   async function patchPo(body: Record<string, unknown>) {
     setError(null);
@@ -200,7 +222,7 @@ export function PoControls({
                     onChange={(e) => setStage(li.id, e.target.value)}
                     className={STAGE_SELECT}
                   >
-                    {stageOrder.map((s) => (
+                    {stagesFor(li).map((s) => (
                       <option key={s} value={s}>
                         {stageLabels[s]}
                       </option>
