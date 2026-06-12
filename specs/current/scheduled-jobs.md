@@ -1,13 +1,18 @@
 # Scheduled Jobs
 
-Last updated: 2026-06-10
+Last updated: 2026-06-12
 
 All currently-running cron jobs are Vercel Cron serverless functions
-with schedules defined in `vercel.json`. One planned exception (the
-daily newsletter, see [newsletter-engine.md](newsletter-engine.md))
-will run on GitHub Actions instead — serverless timeout ceilings
-break a workload that needs Playwright scraping, image processing, and
-~50 OpenAI calls in a single run.
+with schedules defined in `vercel.json`. One exception (the daily
+newsletter, see [newsletter-engine.md](newsletter-engine.md)) runs the
+heavy lifting on GitHub Actions instead — serverless timeout ceilings
+break a workload that needs proxied scraping, image processing, and
+~14 LLM calls in a single run. **But its *timing* is driven by Vercel
+Cron, not GitHub's `schedule:`** — `newsletter-trigger` (below) fires a
+GitHub `workflow_dispatch` on time, because GitHub batches scheduled
+workflows and runs them hours late (observed 3h+), whereas dispatches
+start within seconds. The GitHub `schedule:` cron is kept only as a
+late fallback that no-ops if the Vercel path already sent the brief.
 
 ## Job Inventory
 
@@ -28,6 +33,7 @@ break a workload that needs Playwright scraping, image processing, and
 | Scheduled sends | `/api/cron/send-scheduled` | `*/15 * * * *` | Every 15 min | Send `outbound_message` rows with `status='scheduled'` whose `scheduled_at` has passed, via the scheduler's Gmail (`created_by_user_id`), then mark them sent. Rows with no sender/recipient are skipped (stay scheduled, fixable) |
 | Lead reply alerts | `/api/cron/lead-replies` | `*/5 * * * *` | Every 5 min | Check active leads' owner Gmail (bounded concurrency) for new inbound replies; raise an admin notification ("X replied"). De-duped via `lead.replies_notified_at`. ~50 lightweight Gmail list calls/run. Needs the Gmail API enabled |
 | Customer messages | `/api/cron/customer-messages` | `*/15 * * * *` | Every 15 min | Scan each connected team inbox's recent inbound (≤25 msgs, `newer_than:7d`), match senders to stored customers/companies by email, record new `customer_message` rows (dedup on gmail id), raise a `customer_message` notification per match. Needs the Gmail API enabled |
+| Newsletter trigger | `/api/cron/newsletter-trigger` | `55 8 * * 1-5` | Weekdays 8:55 UTC | Reliable clock for the daily newsletter: fires a GitHub `workflow_dispatch` (`mode=send`, `scheduled=true`) for `newsletter-daily.yml` so the brief builds + sends ~09:00 UTC, instead of trusting GitHub's hours-late `schedule:`. Needs `GH_DISPATCH_TOKEN` (fine-grained PAT, Actions: read+write on `Fitwell-Buckle/Fitwell`) in Vercel env. Returns 500 (no dispatch) if the token is missing — the GitHub `schedule:` fallback at 10:00 UTC still covers that case |
 
 ## Sent follow-ups — Detail
 

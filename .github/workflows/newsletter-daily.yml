@@ -10,8 +10,14 @@
 # opt-in subscriber list.
 name: Newsletter Daily
 on:
+  # PRIMARY trigger is a Vercel Cron (minute-accurate on Pro) that calls
+  # /api/cron/newsletter-trigger, which fires a workflow_dispatch with
+  # scheduled=true at ~08:55 UTC. GitHub's own schedule: below is a FALLBACK
+  # only — it runs hours late (batched) and no-ops if the Vercel path already
+  # sent the day's brief. Kept so a Vercel/token failure still gets the brief
+  # out (late) rather than not at all.
   schedule:
-    - cron: "0 9 * * 1-5"
+    - cron: "0 10 * * 1-5"
   workflow_dispatch:
     inputs:
       mode:
@@ -19,6 +25,9 @@ on:
         type: choice
         default: draft
         options: [dry-run, draft, send]
+      scheduled:
+        description: "internal — set 'true' only by the Vercel cron trigger (uses the production -auto slug)"
+        default: "false"
 
 jobs:
   brief:
@@ -48,11 +57,13 @@ jobs:
           NEWSLETTER_KLAVIYO_LIST_ID: ${{ secrets.NEWSLETTER_KLAVIYO_LIST_ID }}
           # Campaign-name suffix. The slug is per-DAY, and Klaviyo refuses to
           # reuse a "Sent" name — so two runs on the same day with the same
-          # suffix collide. Scheduled runs own "-auto"; manual dispatches get a
-          # unique per-run suffix so a test send never consumes (and thus
-          # breaks) that day's scheduled campaign. REMOVE the suffix entirely
-          # before real production sends (clean "micro-adjust-<date>" name).
-          NEWSLETTER_SLUG_SUFFIX: ${{ github.event_name == 'schedule' && '-auto' || format('-manual-{0}', github.run_number) }}
+          # suffix collide. Both PRODUCTION paths (the Vercel-cron dispatch
+          # with scheduled=true, and the GitHub schedule: fallback) own "-auto"
+          # so they share one daily campaign and the second no-ops. HUMAN
+          # dispatches get a unique per-run suffix so a test send never consumes
+          # (and thus breaks) that day's production campaign. REMOVE the suffix
+          # entirely before real production sends (clean "micro-adjust-<date>").
+          NEWSLETTER_SLUG_SUFFIX: ${{ (github.event_name == 'schedule' || inputs.scheduled == 'true') && '-auto' || format('-manual-{0}', github.run_number) }}
           # Production Neon branch — newsletter tables live in the shared schema
           DATABASE_URL: ${{ secrets.NEWSLETTER_DATABASE_URL }}
           # BrightData residential proxy — WatchPro + WatchTime fetch through
