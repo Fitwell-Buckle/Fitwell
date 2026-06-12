@@ -25,7 +25,10 @@ import {
   newsletterSource,
 } from "../src/lib/schema";
 import { KlaviyoClient } from "../src/lib/klaviyo/client";
-import { draftCampaign } from "../src/lib/klaviyo/draft-campaign";
+import {
+  draftCampaign,
+  CampaignAlreadySentError,
+} from "../src/lib/klaviyo/draft-campaign";
 import type { CampaignConfig } from "../src/lib/klaviyo/campaign-config";
 import { NEWSLETTER, buildSubject, campaignSlug } from "./config";
 import { SOURCES, activeSources } from "./sources";
@@ -373,15 +376,29 @@ async function publishToKlaviyo({
   const klaviyoClient = new KlaviyoClient({
     apiKey: process.env.NEWSLETTER_KLAVIYO_API_KEY ?? process.env.KLAVIYO_API_KEY,
   });
-  const result = await draftCampaign({
-    slug,
-    config,
-    html,
-    client: klaviyoClient,
-    // Daily newsletter: every subscriber gets every issue, even if they
-    // received another email (a shipping note, a flow) the same morning.
-    useSmartSending: false,
-  });
+  let result: Awaited<ReturnType<typeof draftCampaign>>;
+  try {
+    result = await draftCampaign({
+      slug,
+      config,
+      html,
+      client: klaviyoClient,
+      // Daily newsletter: every subscriber gets every issue, even if they
+      // received another email (a shipping note, a flow) the same morning.
+      useSmartSending: false,
+    });
+  } catch (e) {
+    // Idempotent: today's brief already went out under this slug (e.g. a
+    // duplicate cron fire, or a same-day re-run). Nothing to do — exit clean
+    // rather than failing the workflow red.
+    if (e instanceof CampaignAlreadySentError) {
+      console.log(
+        `campaign "${slug}" already sent — skipping (idempotent no-op).`,
+      );
+      return;
+    }
+    throw e;
+  }
   await db
     .update(newsletterCampaign)
     .set({ klaviyoCampaignId: result.campaignId })

@@ -46,11 +46,13 @@ jobs:
           NEWSLETTER_KLAVIYO_API_KEY: ${{ secrets.NEWSLETTER_KLAVIYO_API_KEY }}
           KLAVIYO_API_KEY: ${{ secrets.KLAVIYO_API_KEY }}
           NEWSLETTER_KLAVIYO_LIST_ID: ${{ secrets.NEWSLETTER_KLAVIYO_LIST_ID }}
-          # TEST-PHASE ONLY: distinct campaign-name suffix so scheduled runs
-          # don't collide with the same-date campaigns created during manual
-          # testing (Klaviyo won't reuse a Sent campaign name). REMOVE this
-          # line once the test dates pass / before real production sends.
-          NEWSLETTER_SLUG_SUFFIX: "-auto"
+          # Campaign-name suffix. The slug is per-DAY, and Klaviyo refuses to
+          # reuse a "Sent" name — so two runs on the same day with the same
+          # suffix collide. Scheduled runs own "-auto"; manual dispatches get a
+          # unique per-run suffix so a test send never consumes (and thus
+          # breaks) that day's scheduled campaign. REMOVE the suffix entirely
+          # before real production sends (clean "micro-adjust-<date>" name).
+          NEWSLETTER_SLUG_SUFFIX: ${{ github.event_name == 'schedule' && '-auto' || format('-manual-{0}', github.run_number) }}
           # Production Neon branch — newsletter tables live in the shared schema
           DATABASE_URL: ${{ secrets.NEWSLETTER_DATABASE_URL }}
           # BrightData residential proxy — WatchPro + WatchTime fetch through
