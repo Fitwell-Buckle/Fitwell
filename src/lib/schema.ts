@@ -1755,6 +1755,48 @@ export const creatorDiscountCode = pgTable(
   ],
 );
 
+// Edited/raw deliverables a creator sends back. storage_url is a pointer
+// (Drive/Dropbox) — MVP decision in creator-program.md; rights_expires_at
+// is computed at insert from rights_tier (src/lib/creators/assets.ts) and
+// the action cron warns 14 days before paid rights lapse.
+export const creatorAsset = pgTable(
+  "creator_asset",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    creatorId: text("creator_id")
+      .notNull()
+      .references(() => creator.id, { onDelete: "cascade" }),
+    // The sample this deliverable came from, when known.
+    giftOrderId: text("gift_order_id").references(() => influencerOrder.id),
+    receivedAt: timestamp("received_at", { mode: "date" }).notNull().defaultNow(),
+    storageUrl: text("storage_url").notNull(),
+    assetType: text("asset_type").notNull().default("edited"), // raw | edited | both
+    // organic_only | paid_30d | paid_90d | perpetual
+    rightsTier: text("rights_tier").notNull().default("organic_only"),
+    rightsExpiresAt: timestamp("rights_expires_at", { mode: "date" }),
+    usageNotes: text("usage_notes"),
+    uploadedBy: text("uploaded_by"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("creator_asset_creator_id_idx").on(t.creatorId),
+    index("creator_asset_rights_expires_idx").on(t.rightsExpiresAt),
+  ],
+);
+
+export const creatorAssetRelations = relations(creatorAsset, ({ one }) => ({
+  creator: one(creator, {
+    fields: [creatorAsset.creatorId],
+    references: [creator.id],
+  }),
+  giftOrder: one(influencerOrder, {
+    fields: [creatorAsset.giftOrderId],
+    references: [influencerOrder.id],
+  }),
+}));
+
 // One outreach conversation with a creator on one channel. A creator can
 // have several (email + IG DM + manager). Status transitions append
 // creator_outreach_event rows and recompute next_followup_at
@@ -1835,6 +1877,7 @@ export const creatorRelations = relations(creator, ({ one, many }) => ({
   emails: many(creatorEmail),
   discountCodes: many(creatorDiscountCode),
   outreach: many(creatorOutreach),
+  assets: many(creatorAsset),
 }));
 
 export const creatorPlatformRelations = relations(

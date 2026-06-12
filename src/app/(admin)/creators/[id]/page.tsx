@@ -16,9 +16,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
+import { rightsStatus, type RightsTier } from "@/lib/creators/assets";
+import { AssetsPanel } from "./assets-panel";
 import { CreatorActions } from "./creator-actions";
 import { CreatorEditor } from "./creator-editor";
 import { OutreachPanel } from "./outreach-panel";
+import { StatsChart } from "./stats-chart";
 
 export const metadata: Metadata = {
   title: "Creator | Fitwell Admin",
@@ -57,6 +60,9 @@ export default async function CreatorDetailPage({
       platforms: true,
       emails: true,
       discountCodes: true,
+      assets: {
+        orderBy: (a, { desc: descOp }) => descOp(a.receivedAt),
+      },
       outreach: {
         with: {
           events: {
@@ -127,12 +133,16 @@ export default async function CreatorDetailPage({
 
   const redemptionByCode = new Map(redemptions.map((r) => [r.code, r]));
 
-  // Newest snapshot per platform.
+  // Newest snapshot per platform (latestStats is ordered desc).
   const latestByPlatform = new Map<string, (typeof latestStats)[number]>();
+  const historyByPlatform = new Map<string, typeof latestStats>();
   for (const s of latestStats) {
     if (!latestByPlatform.has(s.creatorPlatformId)) {
       latestByPlatform.set(s.creatorPlatformId, s);
     }
+    const hist = historyByPlatform.get(s.creatorPlatformId) ?? [];
+    if (hist.length < 90) hist.push(s);
+    historyByPlatform.set(s.creatorPlatformId, hist);
   }
 
   // Merged activity timeline: outreach events ∪ sample milestones ∪ posts.
@@ -263,6 +273,19 @@ export default async function CreatorDetailPage({
                     {p.bio}
                   </p>
                 )}
+                <div className="mt-3">
+                  <StatsChart
+                    label={PLATFORM_NAMES[p.platform] ?? p.platform}
+                    points={(historyByPlatform.get(p.id) ?? [])
+                      .slice()
+                      .reverse()
+                      .map((s) => ({
+                        date: s.snapshotDate,
+                        followers: s.followers,
+                        erPct: s.engagementRatePct,
+                      }))}
+                  />
+                </div>
               </DataTable>
             );
           })}
@@ -457,6 +480,32 @@ export default async function CreatorDetailPage({
                 })}
               </ul>
             )}
+          </DataTable>
+
+          {/* Assets + rights */}
+          <DataTable className="p-4">
+            <AssetsPanel
+              creatorId={record.id}
+              giftOrders={giftOrders.map((o) => ({
+                id: o.id,
+                orderNumber: o.orderNumber,
+              }))}
+              assets={record.assets.map((a) => ({
+                id: a.id,
+                storageUrl: a.storageUrl,
+                assetType: a.assetType,
+                rightsTier: a.rightsTier,
+                rightsExpiresAt: a.rightsExpiresAt
+                  ? a.rightsExpiresAt.toISOString().slice(0, 10)
+                  : null,
+                rightsStatus: rightsStatus(
+                  a.rightsTier as RightsTier,
+                  a.rightsExpiresAt,
+                ),
+                usageNotes: a.usageNotes,
+                receivedAt: a.receivedAt.toISOString().slice(0, 10),
+              }))}
+            />
           </DataTable>
 
           {/* Status + notes */}

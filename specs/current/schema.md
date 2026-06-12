@@ -752,6 +752,7 @@ on `(platform, handle)`).
 | `creator_discount_code` | `creator_id` (FK, cascade), `code` (**unique**, normalized lowercase — joins `order_discount_code.code` for redemptions/attributed revenue; no stored counters), `code_raw`, `shopify_price_rule_id?`, `shopify_discount_code_id?`, `percent_off?`, `expires_at?` |
 | `creator_outreach` | `creator_id` (FK, cascade), `channel` (email\|ig_dm\|yt_comment\|manager\|other), `status` (no_reply\|replied\|negotiating\|agreed\|declined\|ghosted), `terms?`, `first_contact_at?`, `last_contact_at?`, `next_followup_at?` (indexed — drives the action cron). Status transitions recompute follow-up via `lifecycle.ts` rules |
 | `creator_outreach_event` | `outreach_id` (FK, cascade), `occurred_at`, `direction` (out\|in\|note\|status), `summary`, `body?`, `created_by?` — the per-creator activity log |
+| `creator_asset` | `creator_id` (FK, cascade), `gift_order_id?` (FK → influencer_order), `received_at`, `storage_url` (Drive/Dropbox pointer — MVP decision), `asset_type` (raw\|edited\|both), `rights_tier` (organic_only\|paid_30d\|paid_90d\|perpetual), `rights_expires_at?` (computed at insert, indexed — action cron warns ≤14d), `usage_notes?`, `uploaded_by?` |
 
 **Sample logistics on `influencer_order`** (lifecycle chunk 1, migration
 0067): `shopify_order_id?` (real order, linked by webhook via GraphQL

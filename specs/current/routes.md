@@ -219,6 +219,7 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | POST | `/api/admin/creators/[id]/outreach` | Start an outreach thread (channel + first-touch note); prospect → contacted |
 | POST | `/api/admin/creators/outreach/[outreachId]` | Log an event (out/in/note, optional status transition — recomputes follow-up date; agreed promotes the creator) |
 | PATCH | `/api/admin/creators/outreach/[outreachId]` | Edit thread status/terms/next-follow-up |
+| POST/DELETE | `/api/admin/creators/[id]/assets` | Log / remove a deliverable (storage URL pointer, asset type, rights tier — expiry computed server-side) |
 | POST | `/api/influencers` | Create an influencer |
 | PATCH | `/api/influencers/[id]` | Update an influencer (incl. assigned collections) |
 | POST | `/api/influencers/[id]/contacts` | Add an influencer portal-login email (future portal allowlist) |

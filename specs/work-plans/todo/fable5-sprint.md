@@ -137,8 +137,22 @@ Workstream 2 forward ~2 weeks. Spec: `creator-program.md` + `creator-scoring.md`
       (derived stages: prospect → outreach → agreed → sample_sent →
       evaluating → posted, click-to-filter, zero-drift — logistics facts
       outrank stale statuses). 936 tests green.
-- [ ] Prod go-live: migrations 0064–0067 → push → scope deploy → CSV
-      import on prod → influencer backfill (gated on Greg design review)
+- [x] **Prod go-live DONE 2026-06-12** (Tom's call): migrations 0064–0067
+      applied, pushed, deployed; 735 creators + countries on prod; env
+      keys in Vercel; scope deploy `fitwell-admin-10` (write_discounts +
+      read_shipping live, re-granted in place — no uninstall needed);
+      market gating = markets ∩ shipping (India IS shipped to — stays).
+- [x] **Phase 6: asset capture + rights tracking** (Tom, 2026-06-12 —
+      "completely ready on the 21st"): `creator_asset` (migration 0068),
+      pointer-based storage (Drive/Dropbox URLs), rights tiers
+      (organic_only / paid_30d / paid_90d / perpetual) with computed
+      expiry, status badges (active / expiring soon / expired), action
+      cron warns ≤14d before paid rights lapse, 90-day followers+ER
+      trend chart per platform (fills as snapshots accumulate).
+- [ ] Final QA pass before 06-21: end-to-end manual run-through
+      (vet → outreach → send sample → delivered ping → post detected →
+      asset logged) + update releases.yaml + move creator-program work
+      plan forward
 
 #### WS1 walkthrough (5 minutes)
 

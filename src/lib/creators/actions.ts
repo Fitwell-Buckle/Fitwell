@@ -15,6 +15,7 @@ import { db } from "@/lib/db";
 import {
   adminNotification,
   creator,
+  creatorAsset,
   creatorOutreach,
   creatorOutreachEvent,
   creatorPost,
@@ -25,12 +26,14 @@ import {
   postOverdueNudgeDraft,
   sampleDeliveredDraft,
 } from "./lifecycle";
+import { EXPIRY_WARNING_DAYS } from "./assets";
 
 export interface ActionSummary {
   followupsDue: number;
   deliveredNeedingFollowup: number;
   postsOverdue: number;
   autoBurned: number;
+  rightsExpiring: number;
 }
 
 const DEDUPE_WINDOW_DAYS = 7;
@@ -62,6 +65,7 @@ export async function runCreatorActions(): Promise<ActionSummary> {
     deliveredNeedingFollowup: 0,
     postsOverdue: 0,
     autoBurned: 0,
+    rightsExpiring: 0,
   };
 
   // ── 1. Follow-ups due ─────────────────────────────────────────────
@@ -211,6 +215,37 @@ export async function runCreatorActions(): Promise<ActionSummary> {
       href: `/creators/${s.creatorId}`,
     });
     summary.autoBurned++;
+  }
+
+  // ── 5. Paid-usage rights expiring within the warning window ──────
+  const warningEnd = new Date(now.getTime() + EXPIRY_WARNING_DAYS * 86_400_000);
+  const expiring = await db
+    .select({
+      assetId: creatorAsset.id,
+      creatorId: creatorAsset.creatorId,
+      storageUrl: creatorAsset.storageUrl,
+      expiresAt: creatorAsset.rightsExpiresAt,
+      name: creator.name,
+    })
+    .from(creatorAsset)
+    .innerJoin(creator, eq(creatorAsset.creatorId, creator.id))
+    .where(
+      and(
+        isNotNull(creatorAsset.rightsExpiresAt),
+        gt(creatorAsset.rightsExpiresAt, now), // not yet expired
+        lte(creatorAsset.rightsExpiresAt, warningEnd),
+      ),
+    );
+  for (const a of expiring) {
+    const created = await notifyOnce({
+      type: "creator_rights_expiring",
+      title: `Paid-usage rights expiring — ${a.name}`,
+      body:
+        `Rights on ${a.storageUrl} lapse ${a.expiresAt?.toISOString().slice(0, 10)}. ` +
+        `Pull it from paid placements by then, or renegotiate an extension.`,
+      href: `/creators/${a.creatorId}`,
+    });
+    if (created) summary.rightsExpiring++;
   }
 
   return summary;
