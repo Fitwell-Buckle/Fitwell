@@ -29,6 +29,16 @@ now covers full history (708 rows; 430 coded orders predate 2026-04) —
 the C1 split is computable over the whole catalog lifetime, not just 60
 days. No Greg action was needed; nothing remains here.
 
+**Addendum 2026-06-12 (Tom + Claude): `fitwell-admin-10` deployed +
+released + re-granted in place** (dev dashboard "Install app" button — no
+uninstall needed, cleaner than the 06-08 procedure). Adds
+`write_discounts` (creator codes) and `read_shipping` (market gating =
+markets ∩ shipping zones) on top of the already-live scopes. Verified:
+deliveryProfiles queryable; prod redeployed to flush the cached token.
+Note: shipping zones DO include India — the creator market-gating
+question (override list vs. unchecking IN in shipping) is still open
+with Tom.
+
 ## Current Strategic Focus (2026-06-09) — retention-led
 
 **The thesis:** the 2026-05-25 "instrument-first" phase did its job — the
