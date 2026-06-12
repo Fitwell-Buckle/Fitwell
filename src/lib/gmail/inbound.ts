@@ -326,6 +326,57 @@ export async function hasInboundEmailFrom(
 // the lead owner's), newest first, each tagged with the inbox it was found in.
 // Lets the Replies tab show a contact's full history even when they emailed a
 // colleague. Returns [] when no Google accounts are connected.
+// Free-text Gmail search in one mailbox (subject + body), newest first. Used to
+// find messages mentioning a PO number / SKU. Returns [] on any failure.
+export async function searchMessages(
+  userId: string,
+  query: string,
+  max = 10,
+): Promise<InboundMessage[]> {
+  if (!query.trim()) return [];
+  try {
+    const acc = await getGoogleAccount(userId);
+    if (!acc?.access_token) return [];
+    const token = await ensureFreshAccessToken(acc);
+    if (!token) return [];
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=${max}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!listRes.ok) return [];
+    const listData = (await listRes.json()) as { messages?: { id: string }[] };
+    const refs = listData.messages ?? [];
+    if (refs.length === 0) return [];
+    return hydrateMessages(token, refs);
+  } catch {
+    return [];
+  }
+}
+
+// Free-text Gmail search across ALL connected team inboxes, deduped by message
+// id, newest first — each tagged with the inbox it was found in.
+export async function searchMessagesAllMailboxes(
+  query: string,
+  maxPerMailbox = 10,
+): Promise<InboundMessage[]> {
+  if (!query.trim()) return [];
+  const mailboxes = await listConnectedMailboxes();
+  if (mailboxes.length === 0) return [];
+  const perBox = await Promise.all(
+    mailboxes.map(async (mb) => {
+      const msgs = await searchMessages(mb.userId, query, maxPerMailbox);
+      return msgs.map((m) => ({
+        ...m,
+        mailbox: mb.label,
+        mailboxEmail: mb.email ?? undefined,
+      }));
+    }),
+  );
+  const byId = new Map<string, InboundMessage>();
+  for (const m of perBox.flat()) if (!byId.has(m.id)) byId.set(m.id, m);
+  return [...byId.values()].sort((a, b) => b.dateMs - a.dateMs);
+}
+
 export async function listInboundFromAllMailboxes(
   fromEmail: string,
   maxPerMailbox = 10,
