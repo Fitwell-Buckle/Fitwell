@@ -120,6 +120,41 @@ describe("linkOrderToAttribution", () => {
     );
   });
 
+  it("re-sync of an already-linked order: no re-emission to PostHog", async () => {
+    // The shared select stub returns this row for both the existing-order
+    // lookup (linkMethod set → not a first link) and the touch lookup.
+    setSelectRows([{ linkMethod: "pixel", converted: true }]);
+    const res = await linkOrderToAttribution(
+      "ord1",
+      "cust1",
+      order({ note_attributes: [{ name: "_fw_distinct_id", value: "ph_9" }] }),
+    );
+    expect(res.linkMethod).toBe("pixel");
+    expect(identify).not.toHaveBeenCalled();
+    expect(captureEvent).not.toHaveBeenCalled();
+  });
+
+  it("re-sync never downgrades a self_report link to pixel", async () => {
+    setSelectRows([{ linkMethod: "self_report", converted: true }]);
+    const res = await linkOrderToAttribution(
+      "ord1",
+      "cust1",
+      order({ note_attributes: [{ name: "_fw_distinct_id", value: "ph_9" }] }),
+    );
+    expect(res.linkMethod).toBe("self_report");
+    expect(db.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ linkMethod: "pixel" }),
+    );
+    expect(captureEvent).not.toHaveBeenCalled();
+  });
+
+  it("already-linked order with no pixel id: email_match fallback skipped", async () => {
+    setSelectRows([{ linkMethod: "email_match" }]);
+    const res = await linkOrderToAttribution("ord1", "cust1", order());
+    expect(res.linkMethod).toBe("email_match"); // preserved, not re-stamped
+    expect(db.set).not.toHaveBeenCalled();
+  });
+
   it("no pixel id and no customer → null, no PostHog", async () => {
     const res = await linkOrderToAttribution("ord1", null, order());
     expect(res.linkMethod).toBeNull();

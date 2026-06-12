@@ -37,13 +37,35 @@ export async function linkOrderToAttribution(
     const fwDistinctId = extractFwDistinctId(shopifyOrder);
     let linkMethod: LinkMethod | null = null;
 
+    // The extract-shopify cron re-upserts a ~25h window every 2 hours, so
+    // this function re-runs ~12×/day for every recent order. The DB-side
+    // linking below is idempotent, but PostHog emission must fire only on
+    // the FIRST link — unguarded, purchase_completed was inflated ~12× in
+    // posthog_daily. A prior link also wins on method: self_report
+    // (Grapevine) outranks pixel and must never be downgraded by a
+    // re-sync (specs/invariants/attribution.md §4 hierarchy).
+    const [existing] = await db
+      .select({ linkMethod: order.linkMethod })
+      .from(order)
+      .where(eq(order.id, orderId))
+      .limit(1);
+    const priorLinkMethod = (existing?.linkMethod ?? null) as
+      | LinkMethod
+      | null;
+    const firstLink = priorLinkMethod === null;
+
     // ── 1. Deterministic: pixel-carried distinct_id ──────────────────
     if (fwDistinctId) {
-      linkMethod = "pixel";
+      linkMethod = priorLinkMethod === "self_report" ? "self_report" : "pixel";
 
       await db
         .update(order)
-        .set({ posthogDistinctId: fwDistinctId, linkMethod })
+        .set({
+          posthogDistinctId: fwDistinctId,
+          ...(priorLinkMethod === "self_report"
+            ? {}
+            : { linkMethod: "pixel" as const }),
+        })
         .where(eq(order.id, orderId));
 
       if (customerId) {
@@ -85,6 +107,9 @@ export async function linkOrderToAttribution(
       }
 
       // Enrich the PostHog person: identity stitch + purchase + first-touch.
+      // First link only — see the re-sync note above.
+      if (!firstLink) return { linkMethod };
+
       const email = shopifyOrder.email ?? undefined;
       identify(
         fwDistinctId,
@@ -119,7 +144,10 @@ export async function linkOrderToAttribution(
 
     // ── 2. Fallback: identity via the Shopify customer's prior touch ──
     // Lower confidence; only for orders with no pixel id (pre-pixel or
-    // beacon blocked). See specs/invariants/attribution.md §4.
+    // beacon blocked), and only when nothing has linked this order yet
+    // (never overwrite self_report/pixel on a re-sync).
+    // See specs/invariants/attribution.md §4.
+    if (!firstLink) return { linkMethod: priorLinkMethod };
     if (customerId) {
       const [touch] = await db
         .select()
