@@ -4,8 +4,9 @@ import {
   __setAnthropicClientForTesting,
   summarizeAll,
   triageStories,
+  writeSubjectLine,
 } from "./editorial";
-import type { RawStory } from "./types";
+import type { BriefStory, RawStory } from "./types";
 
 function makeMockClient(
   createImpl: (...args: unknown[]) => Promise<unknown>,
@@ -136,5 +137,40 @@ describe("summarizeAll", () => {
       { ...story({}), segment: "luxury", type: "business" },
     ]);
     expect(result[0].summary).toContain("C-suite");
+  });
+});
+
+describe("writeSubjectLine", () => {
+  function briefStory(overrides: Partial<BriefStory>): BriefStory {
+    return {
+      ...story({}),
+      segment: "luxury",
+      type: "business",
+      summary: "A summary.",
+      ...overrides,
+    };
+  }
+
+  it("returns the model's subject + preheader", async () => {
+    __setAnthropicClientForTesting(
+      makeMockClient(async () =>
+        toolUseResponse("record_subject", {
+          subject: "Rolex names a new CEO",
+          preheader: "Plus 13 new releases, led by Baltic",
+        }),
+      ),
+    );
+    const result = await writeSubjectLine([briefStory({})]);
+    expect(result.subject).toBe("Rolex names a new CEO");
+    expect(result.preheader).toContain("releases");
+  });
+
+  it("retries once then throws on persistent validation failure (caller falls back)", async () => {
+    __setAnthropicClientForTesting(
+      makeMockClient(async () =>
+        toolUseResponse("record_subject", { subject: "x" }), // missing preheader, too short
+      ),
+    );
+    await expect(writeSubjectLine([briefStory({})])).rejects.toThrow();
   });
 });

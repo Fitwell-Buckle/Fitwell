@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSubject, campaignSlug } from "./config";
+import { NEWSLETTER, buildSubject, campaignSlug } from "./config";
 import { buildMjml, layoutBrief } from "./generate";
 import type { BriefStory } from "./types";
 
@@ -100,6 +100,28 @@ describe("buildMjml", () => {
     const mjml = buildMjml([brief({})], date);
     expect(mjml).toContain("{% unsubscribe %}");
     expect(mjml).toContain("fitwellbuckle.co");
+  });
+
+  it("includes the compliance footer (address, preferences, privacy, contact)", () => {
+    const mjml = buildMjml([brief({})], date);
+    // Physical address + sender identity from Klaviyo org settings (CAN-SPAM/CASL)
+    expect(mjml).toContain("{{ organization.name }}");
+    expect(mjml).toContain("{{ organization.full_address }}");
+    // Preference management + unsubscribe
+    expect(mjml).toContain("{% manage_preferences %}");
+    expect(mjml).toContain("{% unsubscribe %}");
+    // Reason-for-receipt line, privacy policy (GDPR) and contact (CASL)
+    expect(mjml).toContain("You're receiving this because you subscribed");
+    expect(mjml).toContain("/policies/privacy-policy");
+    expect(mjml).toContain("mailto:info@fitwellbuckle.co");
+  });
+
+  it("uses the given preheader as the email preview text", () => {
+    const withPreheader = buildMjml([brief({})], date, "preview", "13 new releases inside");
+    expect(withPreheader).toContain("<mj-preview>13 new releases inside</mj-preview>");
+    // defaults to the tagline when none is supplied
+    const without = buildMjml([brief({})], date);
+    expect(without).toContain(`<mj-preview>${NEWSLETTER.tagline}`);
   });
 
   it("renders New Releases as the LAST section", () => {

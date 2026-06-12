@@ -31,11 +31,11 @@ import { NEWSLETTER, buildSubject, campaignSlug } from "./config";
 import { SOURCES, activeSources } from "./sources";
 import { fetchAllSources } from "./fetch";
 import { filterNew, contentHash, normalizeUrl, type SeenArticle } from "./dedup";
-import { triageStories, summarizeAll } from "./editorial";
+import { triageStories, summarizeAll, writeSubjectLine } from "./editorial";
 import { enrichStories } from "./images";
 import { renderBrief } from "./generate";
 import { cleanHeadline } from "./text";
-import { saveBriefCache, loadBriefCache } from "./cache";
+import { saveBriefCache, loadBriefCache, type CachedBrief } from "./cache";
 import type { BriefStory, RawStory, Segment, StoryType } from "./types";
 
 const SEEN_WINDOW_DAYS = 14;
@@ -158,29 +158,32 @@ async function run(): Promise<void> {
   // Dropped-article rows to persist (draft/send only). Empty in cached mode:
   // we don't re-run dedup/triage, so there's no fresh drop list to record.
   let droppedForPersist: Array<{ story: RawStory; reason: string }> = [];
-  let brief: BriefStory[];
+  let data: CachedBrief;
 
   if (cached) {
-    brief = loadBriefCache(slug);
-    console.log(`reusing cached brief: ${brief.length} stories`);
+    data = loadBriefCache(slug);
+    console.log(`reusing cached brief: ${data.brief.length} stories`);
   } else {
-    brief = await buildBrief(now, dryRun, (d) => (droppedForPersist = d));
-    if (brief.length === 0) return; // nothing new / triage dropped everything
-    const path = saveBriefCache(slug, now, brief);
+    const built = await buildBrief(now, dryRun, (d) => (droppedForPersist = d));
+    if (!built) return; // nothing new / triage dropped everything
+    data = built;
+    const path = saveBriefCache(slug, now, data);
     console.log(
       `\ncached brief → ${path}\niterate on layout for free: npm run newsletter:render`,
     );
   }
 
+  const { brief, subject, preheader } = data;
+
   // 5. Render
-  const subject = buildSubject(now, cleanHeadline(brief[0].title));
-  const { html, warnings } = await renderBrief(brief, now, slug);
+  const { html, warnings } = await renderBrief(brief, now, slug, preheader);
   for (const w of warnings) console.warn(`mjml: ${w}`);
 
   if (dryRun) {
     const outPath = `/tmp/${slug}.html`;
     writeFileSync(outPath, html);
     console.log(`\nsubject: ${subject}`);
+    console.log(`preheader: ${preheader}`);
     console.log(
       `stories: ${brief.map((s) => `\n  [${s.segment}/${s.type}] ${s.title}`).join("")}`,
     );
@@ -193,14 +196,15 @@ async function run(): Promise<void> {
 
 /**
  * The expensive editorial pipeline: fetch → dedup → triage → enrich →
- * summarize. Returns the assembled brief (empty array = no brief today).
- * `reportDropped` hands back the dedup+triage drop list for DB persistence.
+ * summarize → subject line. Returns the assembled brief + its subject and
+ * preheader (null = no brief today). `reportDropped` hands back the
+ * dedup+triage drop list for DB persistence.
  */
 async function buildBrief(
   now: Date,
   dryRun: boolean,
   reportDropped: (dropped: Array<{ story: RawStory; reason: string }>) => void,
-): Promise<BriefStory[]> {
+): Promise<CachedBrief | null> {
   // 1. Fetch (RSS direct + proxied + scraped, dispatched by fetchMode)
   const sources = activeSources();
   const { stories, failures } = await fetchAllSources(sources, now);
@@ -221,7 +225,7 @@ async function buildBrief(
   console.log(`${fresh.length} fresh after dedup (${duplicates.length} duplicates)`);
   if (fresh.length === 0) {
     console.log("nothing new — no brief today");
-    return [];
+    return null;
   }
 
   // 3. Triage
@@ -291,7 +295,7 @@ async function buildBrief(
   }
   if (selected.length === 0) {
     console.log("triage dropped everything — no brief today");
-    return [];
+    return null;
   }
 
   // 4. Enrich every selected story (one page fetch → image + article
@@ -304,8 +308,23 @@ async function buildBrief(
   );
   const brief: BriefStory[] = await summarizeAll(enriched);
 
+  // 5. Editorial subject line + preheader, grounded in the lineup. Fail-soft:
+  // a subject hiccup falls back to the deterministic weekday+headline subject
+  // and the tagline preheader so a send is never blocked on it.
+  let subject: string;
+  let preheader: string;
+  try {
+    ({ subject, preheader } = await writeSubjectLine(brief));
+  } catch (e) {
+    console.warn(
+      `subject generation failed, using fallback: ${e instanceof Error ? e.message : e}`,
+    );
+    subject = buildSubject(now, cleanHeadline(brief[0].title));
+    preheader = NEWSLETTER.tagline;
+  }
+
   reportDropped([...duplicates, ...triagedOut]);
-  return brief;
+  return { brief, subject, preheader };
 }
 
 interface PublishArgs {

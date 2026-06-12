@@ -145,6 +145,7 @@ export function buildMjml(
   stories: BriefStory[],
   date: Date,
   slug = "preview",
+  preheader: string = NEWSLETTER.tagline,
 ): string {
   const { news, releases } = layoutBrief(stories);
 
@@ -185,7 +186,7 @@ export function buildMjml(
     <mj-attributes>
       <mj-all font-family="Georgia, 'Times New Roman', serif" />
     </mj-attributes>
-    <mj-preview>${escapeHtml(NEWSLETTER.tagline)}</mj-preview>
+    <mj-preview>${escapeHtml(preheader)}</mj-preview>
   </mj-head>
   <mj-body background-color="#f4f1ea">
     <mj-section background-color="#1a1a1a" padding="18px 24px 16px 24px">
@@ -212,8 +213,20 @@ ${releaseSection}
         <mj-button href="${escapeHtml(footerHref)}" background-color="#c08a4d" color="#f4f1ea" font-size="13px" font-weight="600" border-radius="10px" padding="16px 0 4px 0" inner-padding="11px 26px" align="center">
           Discover the perfect fit →
         </mj-button>
-        <mj-text align="center" font-size="11px" color="#8a8a8a" padding="14px 0 0 0">
-          {% unsubscribe %}
+        <mj-divider border-width="1px" border-color="#333333" padding="22px 0 16px 0" />
+        <!-- Compliance footer (CAN-SPAM / CASL / GDPR): sender identity +
+             physical postal address pulled from Klaviyo org settings, the
+             reason-for-receipt line, preference + unsubscribe controls, a
+             contact method (CASL) and the privacy policy (GDPR). -->
+        <mj-text align="center" font-size="11px" color="#8a8a8a" line-height="1.6">
+          You're receiving this because you subscribed to ${escapeHtml(NEWSLETTER.title)} at
+          <a href="https://fitwellbuckle.co" style="color:#a8a39a;">fitwellbuckle.co</a>.
+        </mj-text>
+        <mj-text align="center" font-size="11px" color="#8a8a8a" line-height="1.6" padding="8px 0 0 0">
+          {{ organization.name }}<br />{{ organization.full_address }}
+        </mj-text>
+        <mj-text align="center" font-size="11px" color="#8a8a8a" line-height="1.9" padding="10px 0 0 0">
+          {% manage_preferences %} &nbsp;·&nbsp; {% unsubscribe %} &nbsp;·&nbsp; <a href="https://www.fitwellbuckle.co/policies/privacy-policy" style="color:#8a8a8a;text-decoration:underline;">Privacy Policy</a> &nbsp;·&nbsp; <a href="mailto:info@fitwellbuckle.co" style="color:#8a8a8a;text-decoration:underline;">Contact</a>
         </mj-text>
       </mj-column>
     </mj-section>
@@ -231,8 +244,11 @@ export async function renderBrief(
   stories: BriefStory[],
   date: Date,
   slug: string,
+  preheader?: string,
 ): Promise<RenderedBrief> {
-  const { html, warnings } = await compileMjml(buildMjml(stories, date, slug));
+  const { html, warnings } = await compileMjml(
+    buildMjml(stories, date, slug, preheader),
+  );
   if (!html) {
     throw new Error(`MJML compile produced no HTML: ${warnings.join("; ")}`);
   }

@@ -10,6 +10,7 @@ import { NEWSLETTER } from "./config";
 import {
   SEGMENTS,
   STORY_TYPES,
+  type BriefStory,
   type RawStory,
   type StoryType,
   type TriageVerdict,
@@ -301,4 +302,111 @@ export async function summarizeAll<T extends RawStory>(
     Array.from({ length: Math.min(concurrency, stories.length) }, worker),
   );
   return out;
+}
+
+// --- Subject line + preheader -------------------------------------------
+
+const SUBJECT_VOICE = `You write the SUBJECT LINE and PREHEADER for today's issue of "${NEWSLETTER.title}", a daily watch-industry briefing for the trade. The publication name is already shown as the sender, so do NOT put it in the subject.
+
+SUBJECT LINE:
+- Lead with the single most compelling HARD-NEWS story of the day (the lead story you're given), optionally glancing at one more beat with a semicolon or comma.
+- ~55 characters is ideal so it isn't truncated on phones; hard cap ~70.
+- Insider-knowing and specific — name the actual company/brand that is the hook (a Morning Brew / Puck headline for the watch trade).
+- No publication name, no emoji, no clickbait ("you won't believe"), no ALL CAPS, no trailing period.
+
+PREHEADER (the preview line shown after the subject in the inbox):
+- Must COMPLEMENT the subject, not repeat its words.
+- Tease the day's NEW RELEASES: how many there are and one or two notable names.
+- ~50–110 characters, concrete and conversational.`;
+
+const SUBJECT_TOOL = "record_subject";
+
+const subjectSchema = z.object({
+  subject: z.string().min(8),
+  preheader: z.string().min(8),
+});
+
+const SUBJECT_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    subject: { type: "string" },
+    preheader: { type: "string" },
+  },
+  required: ["subject", "preheader"],
+  additionalProperties: false,
+};
+
+function subjectBriefDigest(brief: BriefStory[]): string {
+  const releases = brief.filter((s) => s.type === "release");
+  const hardNews = brief.filter((s) => s.type !== "release");
+  const lead = hardNews[0] ?? brief[0];
+  const others = hardNews.slice(1).map((s) => `- ${s.title}`);
+  return [
+    "LEAD STORY:",
+    lead.title,
+    lead.summary,
+    others.length ? `\nOTHER HARD NEWS:\n${others.join("\n")}` : "",
+    `\nNEW RELEASES (${releases.length}):`,
+    releases.length
+      ? releases.map((s) => `- ${s.title}`).join("\n")
+      : "(none today)",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function callSubjectOnce(brief: BriefStory[]): Promise<unknown> {
+  const result = await getAnthropic().messages.create({
+    model: MODEL,
+    max_tokens: 400,
+    system: SUBJECT_VOICE,
+    tools: [
+      {
+        name: SUBJECT_TOOL,
+        description:
+          "Record the subject line and preheader for today's issue.",
+        input_schema: SUBJECT_INPUT_SCHEMA,
+      },
+    ],
+    tool_choice: { type: "tool", name: SUBJECT_TOOL },
+    messages: [
+      {
+        role: "user",
+        content: `Here is today's lineup. Write the subject line and preheader.\n\n${subjectBriefDigest(
+          brief,
+        )}\n\nCall ${SUBJECT_TOOL}.`,
+      },
+    ],
+  });
+
+  const toolUse = result.content.find(
+    (block) => block.type === "tool_use" && block.name === SUBJECT_TOOL,
+  );
+  if (!toolUse || toolUse.type !== "tool_use") {
+    throw new Error(
+      `Anthropic response did not include a ${SUBJECT_TOOL} tool_use block`,
+    );
+  }
+  return toolUse.input;
+}
+
+/**
+ * Editorial subject line + preheader for the day's brief. One short call,
+ * grounded in the assembled lineup. Retries once on validation failure;
+ * the caller is expected to fall back to a deterministic subject if this
+ * throws, so a subject hiccup never blocks a send.
+ */
+export async function writeSubjectLine(
+  brief: BriefStory[],
+): Promise<{ subject: string; preheader: string }> {
+  let firstError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await callSubjectOnce(brief);
+    const parsed = subjectSchema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    if (firstError === null) firstError = parsed.error;
+  }
+  throw firstError instanceof Error
+    ? firstError
+    : new Error("writeSubjectLine: validation failed");
 }
