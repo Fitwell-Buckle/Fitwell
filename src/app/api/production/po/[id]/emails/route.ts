@@ -3,6 +3,10 @@ import { auth } from "@/lib/auth";
 import { getPoDetail } from "@/lib/production/service";
 import { formatPoNumber } from "@/lib/production/sub-po";
 import { searchMessagesAllMailboxes } from "@/lib/gmail/inbound";
+import {
+  canonicalPoNumber,
+  isAboutAnotherPo,
+} from "@/lib/production/po-email-filter";
 
 export interface PoEmail {
   id: string;
@@ -67,7 +71,24 @@ export async function GET(
   const query = terms.map((t) => `"${t}"`).join(" OR ");
 
   const messages = await searchMessagesAllMailboxes(query, 15, session.user.id);
-  const emails: PoEmail[] = messages.slice(0, 40).map((m) => ({
+
+  // This PO's canonical number(s). A sub-PO shares the master's number, so an
+  // email naming the master ("PO #104") belongs to the sub too.
+  const myPoNumbers = new Set<string>();
+  for (const n of [formatted, po.shopifyPoNumber, master?.shopifyPoNumber]) {
+    const c = canonicalPoNumber(n);
+    if (c) myPoNumbers.add(c);
+  }
+
+  // Drop emails that name only a different PO (cross-talk surfaced by a shared
+  // SKU, e.g. the "PO #14" thread on PO-00104).
+  const emails: PoEmail[] = messages
+    .filter(
+      (m) =>
+        !isAboutAnotherPo(`${m.subject ?? ""}\n${m.snippet ?? ""}`, myPoNumbers),
+    )
+    .slice(0, 40)
+    .map((m) => ({
     id: m.id,
     threadId: m.threadId ?? null,
     from: m.from,

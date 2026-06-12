@@ -26,7 +26,7 @@ const attachment = (over: Partial<TimelineAttachment> = {}): TimelineAttachment 
 });
 
 describe("buildPoTimeline", () => {
-  it("merges notes and documents in chronological order", () => {
+  it("merges notes and documents newest first", () => {
     const entries = buildPoTimeline(
       [
         comment({ id: "c1", createdAt: new Date("2026-05-01T12:00:00Z") }),
@@ -34,12 +34,13 @@ describe("buildPoTimeline", () => {
       ],
       [attachment({ id: "a1", uploadedAt: new Date("2026-05-01T10:30:00Z") })],
     );
-    expect(entries.map((e) => e.id)).toEqual(["c2", "a1", "c1"]);
+    expect(entries.map((e) => e.id)).toEqual(["c1", "a1", "c2"]);
     expect(entries.map((e) => e.kind)).toEqual(["note", "document", "note"]);
   });
 
   it("marks supplier-authored entries with fromSupplier", () => {
-    const [note, doc] = buildPoTimeline(
+    // attachment (11:00) is newer than the comment (10:00) → doc comes first.
+    const [doc, note] = buildPoTimeline(
       [comment({ author: { name: "Greg", email: null, role: "user" } })],
       [attachment({ uploadedBy: { name: "Acme", email: null, role: "supplier" } })],
     );
@@ -48,7 +49,8 @@ describe("buildPoTimeline", () => {
   });
 
   it("falls back to email then a side label for the author name", () => {
-    const [adminNote, supplierNote] = buildPoTimeline(
+    // c2 (05-02) is newer than c1 (05-01) → supplier note comes first.
+    const [supplierNote, adminNote] = buildPoTimeline(
       [
         comment({ id: "c1", author: { name: null, email: "a@b.co", role: "user" } }),
         comment({
@@ -106,7 +108,7 @@ describe("buildPoTimeline", () => {
     expect(doc.filename).toBe("spec.pdf");
   });
 
-  it("merges edit-history events with notes + documents in chronological order", () => {
+  it("merges edit-history events with notes + documents newest first", () => {
     const events: TimelineEvent[] = [
       {
         id: "e1",
@@ -128,12 +130,12 @@ describe("buildPoTimeline", () => {
       [attachment({ id: "a1", uploadedAt: new Date("2026-05-01T11:00:00Z") })],
       events,
     );
-    expect(entries.map((e) => e.id)).toEqual(["c1", "a1", "e1", "e2"]);
+    expect(entries.map((e) => e.id)).toEqual(["e2", "e1", "a1", "c1"]);
     expect(entries.map((e) => e.kind)).toEqual([
-      "note",
+      "event",
+      "event",
       "document",
-      "event",
-      "event",
+      "note",
     ]);
   });
 
@@ -154,7 +156,8 @@ describe("buildPoTimeline", () => {
         createdAt: new Date("2026-05-02T11:00:00Z"),
       },
     ];
-    const [supplierEvt, adminEvt] = buildPoTimeline([], [], events);
+    // a1 (05-02) is newer than s1 (05-01) → admin event comes first.
+    const [adminEvt, supplierEvt] = buildPoTimeline([], [], events);
     expect(supplierEvt.kind).toBe("event");
     expect(supplierEvt.fromSupplier).toBe(true);
     expect(supplierEvt.authorName).toBe("EPower");

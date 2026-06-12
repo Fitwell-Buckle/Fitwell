@@ -152,8 +152,9 @@ export function buildPoTimeline(
     };
   });
 
-  // ISO UTC strings sort lexicographically in chronological order.
+  // Newest first. ISO UTC strings sort lexicographically by time, so reverse
+  // the comparison to put the most recent activity on top.
   return [...notes, ...docs, ...evts].sort((x, y) =>
-    x.at < y.at ? -1 : x.at > y.at ? 1 : 0,
+    x.at > y.at ? -1 : x.at < y.at ? 1 : 0,
   );
 }

@@ -93,11 +93,11 @@ export function PoTimeline({
   }, [poId, showRelatedEmails]);
 
   // Notes, documents, edit-events (server-rendered) + related emails (client-
-  // fetched), interleaved oldest→… by timestamp into one chronological feed.
+  // fetched), interleaved by timestamp into one feed — newest first.
   const items: (PoTimelineEntry | EmailEntry)[] = [
     ...entries,
     ...emailEntries,
-  ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  ].sort((a, b) => (a.at > b.at ? -1 : a.at < b.at ? 1 : 0));
 
   async function postNote() {
     const text = body.trim();
