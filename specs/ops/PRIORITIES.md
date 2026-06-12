@@ -1,6 +1,16 @@
 # Priorities
 
-Last updated: 2026-06-11
+Last updated: 2026-06-12
+
+## 🎯 Active sprint (2026-06-12 → 2026-06-22) — Fable 5 sprint
+
+**Source of truth: `specs/work-plans/todo/fable5-sprint.md`** — the working
+agenda for the next ~10 days while Tom has Fable 5 access. Front-loads the
+model-capability-bound work: ① creator program pre-build (Phases 1+2+4+5,
+ready before Tom returns ~06-21), ② post-purchase retention email content
+(D1/D14/D21/D30 + welcome rewrite), ③ landing page variants A+B + Shopify
+Pages write client, ④ UTM linking gap root-cause for Greg, ⑤ signup-lift
+experiment designs. Check there first when deciding what to work on.
 
 ## ⚠️ Action needed — Shopify scope deploy + history import
 
