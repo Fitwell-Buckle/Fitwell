@@ -372,7 +372,27 @@ export default async function CreatorsPage({
                     <Mono>{formatFollowers(r.followersTotal)}</Mono>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Mono>{r.bestErPct != null ? r.bestErPct.toFixed(1) : "—"}</Mono>
+                    {/* ER >30% = small-account viral inflation (scoring doc
+                        §9) — eye-catching but not trustworthy. */}
+                    {r.bestErPct != null ? (
+                      <span
+                        title={
+                          r.bestErPct > 30
+                            ? "Suspiciously high — likely viral-post inflation on a small account. Treat with skepticism."
+                            : undefined
+                        }
+                        className={
+                          r.bestErPct > 30
+                            ? "font-mono text-amber-600"
+                            : "font-mono"
+                        }
+                      >
+                        {r.bestErPct.toFixed(1)}
+                        {r.bestErPct > 30 ? " ⚠" : ""}
+                      </span>
+                    ) : (
+                      <Mono>—</Mono>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge className={CONFIDENCE_STYLES[bestConfidence] ?? ""}>
