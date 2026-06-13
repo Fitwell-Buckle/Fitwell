@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   invoice,
@@ -340,6 +340,125 @@ export async function updateInvoice(
   );
 
   return { ok: true };
+}
+
+/**
+ * Re-apply a company's CURRENT tier discount to its open invoices — called
+ * after the company's price tier changes. Re-prices drafts and unpaid sent
+ * invoices (recomputing the discount, totals, and deposit amount) and
+ * regenerates the Shopify pay link for sent, Shopify-linked invoices so the
+ * amount charged matches the new total. Left untouched: paid, void, and any
+ * invoice with a payment already received (full / deposit / balance) — those
+ * are settled history. Best-effort per invoice on the Shopify side: a draft-
+ * order failure is logged and counted, never blocking the rest.
+ */
+export async function reapplyTierToOpenInvoices(
+  companyId: string,
+): Promise<{ repriced: number; regenerated: number; shopifyFailures: number }> {
+  const comp = await db.query.company.findFirst({
+    where: eq(company.id, companyId),
+    columns: { id: true, name: true, contactEmail: true },
+    with: {
+      priceTier: { columns: { discountPercent: true } },
+      customer: { columns: { shopifyId: true } },
+    },
+  });
+  if (!comp) return { repriced: 0, regenerated: 0, shopifyFailures: 0 };
+
+  const newDiscount = comp.priceTier?.discountPercent ?? 0;
+  const shopifyCustomerId = comp.customer?.shopifyId ?? null;
+
+  // Open = draft or sent, with NOTHING paid yet (full, deposit, or balance).
+  const open = await db.query.invoice.findMany({
+    where: and(
+      eq(invoice.companyId, companyId),
+      inArray(invoice.status, ["draft", "sent"]),
+      isNull(invoice.paidAt),
+      isNull(invoice.depositPaidAt),
+      isNull(invoice.balancePaidAt),
+    ),
+    with: { lineItems: true },
+  });
+
+  let repriced = 0;
+  let regenerated = 0;
+  let shopifyFailures = 0;
+
+  for (const inv of open) {
+    const totals = computeInvoiceTotals(
+      inv.lineItems.map((l) => ({ quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
+      newDiscount,
+    );
+    // Recompute the deposit AMOUNT off the new total, keeping the invoice's
+    // existing deposit % (its send-time snapshot, or 0 if none) — so we never
+    // surprise an order with a deposit it didn't have.
+    const depositPercent = inv.depositPercent ?? 0;
+    const split = computeDeposit(totals.totalCents, depositPercent);
+
+    await db
+      .update(invoice)
+      .set({
+        discountPercent: newDiscount,
+        ...totals,
+        depositCents: split.depositCents,
+        updatedAt: new Date(),
+      })
+      .where(eq(invoice.id, inv.id));
+    repriced++;
+
+    // Regenerate the live Shopify pay link for sent, Shopify-linked invoices so
+    // the customer is charged the new amount. Drafts have no pay link yet.
+    if (inv.status === "sent" && shopifyCustomerId) {
+      const hasDeposit = split.depositCents > 0 && split.balanceCents > 0;
+      try {
+        const r = await getShopifyClient().createDraftOrderInvoice({
+          email: comp.contactEmail,
+          shopifyCustomerId,
+          discountPercent: hasDeposit ? 0 : newDiscount,
+          note: hasDeposit
+            ? `Deposit (${depositPercent}%) for invoice ${inv.invoiceNumber}`
+            : `Invoice ${inv.invoiceNumber}`,
+          lines: hasDeposit
+            ? [
+                {
+                  variantId: null,
+                  title: `Deposit (${depositPercent}%) — ${inv.invoiceNumber}`,
+                  quantity: 1,
+                  unitPriceCents: split.depositCents,
+                },
+              ]
+            : inv.lineItems.map((l) => ({
+                variantId: l.shopifyVariantId,
+                title: l.title,
+                quantity: l.quantity,
+                unitPriceCents: l.unitPriceCents,
+              })),
+        });
+        // Drop the stale draft order so Shopify Admin doesn't keep duplicates.
+        if (inv.shopifyDraftOrderId) {
+          try {
+            await getShopifyClient().deleteDraftOrder(inv.shopifyDraftOrderId);
+          } catch (err) {
+            console.error("Stale draft order delete failed:", err);
+          }
+        }
+        await db
+          .update(invoice)
+          .set({
+            shopifyDraftOrderId: r.draftOrderId,
+            shopifyInvoiceUrl: r.invoiceUrl,
+            updatedAt: new Date(),
+          })
+          .where(eq(invoice.id, inv.id));
+        regenerated++;
+      } catch (err) {
+        console.error(`Re-pricing draft order failed for ${inv.invoiceNumber}:`, err);
+        shopifyFailures++;
+      }
+    }
+  }
+
+  return { repriced, regenerated, shopifyFailures };
 }
 
 /** Set an invoice's status, stamping sent_at / paid_at as appropriate. */

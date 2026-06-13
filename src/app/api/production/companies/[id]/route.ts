@@ -17,6 +17,7 @@ import {
   detectCompanyConflict,
   companyConflictMessage,
 } from "@/lib/b2b/company-conflict";
+import { reapplyTierToOpenInvoices } from "@/lib/invoicing/service";
 import { companySchema } from "../_schema";
 
 export async function PATCH(
@@ -67,6 +68,16 @@ export async function PATCH(
         { status: 409 },
       );
     }
+  }
+
+  // Capture the current tier so we can re-price open invoices if it changes.
+  let oldTierId: string | null = null;
+  if (input.priceTierId !== undefined) {
+    const cur = await db.query.company.findFirst({
+      where: eq(company.id, id),
+      columns: { priceTierId: true },
+    });
+    oldTierId = cur?.priceTierId ?? null;
   }
 
   try {
@@ -128,7 +139,19 @@ export async function PATCH(
         .onConflictDoNothing({ target: companyContact.email });
     }
 
-    return NextResponse.json({ data: { id: updated.id } });
+    // A tier change re-prices the company's open (unpaid) invoices: recompute
+    // discount + deposit and regenerate sent invoices' Shopify pay links. Paid
+    // invoices stay frozen. Best-effort — never fail the save over it.
+    let reprice: Awaited<ReturnType<typeof reapplyTierToOpenInvoices>> | null = null;
+    if (input.priceTierId !== undefined && (input.priceTierId || null) !== oldTierId) {
+      try {
+        reprice = await reapplyTierToOpenInvoices(id);
+      } catch (err) {
+        console.error("Re-pricing open invoices after tier change failed:", err);
+      }
+    }
+
+    return NextResponse.json({ data: { id: updated.id, reprice } });
   } catch (err) {
     console.error("Update company failed:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

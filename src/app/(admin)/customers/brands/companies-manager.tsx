@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -161,11 +162,21 @@ export function CompaniesManager({
           }),
         },
       );
+      const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
         setError(d.error || "Save failed.");
         setBusy(false);
         return;
+      }
+      const rp = d.data?.reprice;
+      if (rp?.repriced > 0) {
+        toast.success(
+          `Re-priced ${rp.repriced} open invoice${rp.repriced === 1 ? "" : "s"} to the new tier` +
+            (rp.shopifyFailures > 0
+              ? ` (${rp.shopifyFailures} pay link${rp.shopifyFailures === 1 ? "" : "s"} need a manual resend)`
+              : "") +
+            ".",
+        );
       }
       setCompanyEditing(null);
       clearNewParam();

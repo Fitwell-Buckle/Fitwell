@@ -179,11 +179,21 @@ export function CustomerDetailView({
           notes: draft.notes.trim() || null,
         }),
       });
+      const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
         setError(d.error || "Save failed.");
         setBusy(false);
         return;
+      }
+      const rp = d.data?.reprice;
+      if (rp?.repriced > 0) {
+        toast.success(
+          `Re-priced ${rp.repriced} open invoice${rp.repriced === 1 ? "" : "s"} to the new tier` +
+            (rp.shopifyFailures > 0
+              ? ` (${rp.shopifyFailures} pay link${rp.shopifyFailures === 1 ? "" : "s"} need a manual resend)`
+              : "") +
+            ".",
+        );
       }
       setEditing(false);
       router.refresh();
