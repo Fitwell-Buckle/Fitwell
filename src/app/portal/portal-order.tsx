@@ -15,6 +15,13 @@ import {
 } from "@/components/catalog/product-combobox";
 import { computeInvoiceTotals } from "@/lib/invoicing/invoicing";
 import { fmtMoney } from "@/lib/production/display";
+import type { CompanyAddress } from "@/lib/portal/addresses";
+
+function addressOptionLabel(a: CompanyAddress): string {
+  return [a.name || a.company, a.address1, a.city, a.provinceCode ?? a.province, a.zip]
+    .filter(Boolean)
+    .join(", ");
+}
 
 interface CartLine {
   variant: CatalogVariant;
@@ -63,6 +70,8 @@ export function PortalOrder({
   collections,
   discountPercent,
   allowWirePayment,
+  addresses = [],
+  initialAddressId,
   orderId,
   status,
   paymentMethod,
@@ -72,6 +81,10 @@ export function PortalOrder({
   collections: CatalogCollection[];
   discountPercent: number;
   allowWirePayment: boolean;
+  /** The company's saved Shopify addresses for the ship-to picker. */
+  addresses?: CompanyAddress[];
+  /** Pre-selected ship-to address id (edit mode — the order's stored ship-to). */
+  initialAddressId?: string;
   /** Set when editing an existing order; omitted for a brand-new order. */
   orderId?: string;
   /** The existing order's status (edit mode). */
@@ -88,6 +101,10 @@ export function PortalOrder({
   const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SubmitResult | null>(null);
+  // Ship-to: pre-select the order's stored address, else the company default.
+  const [addressId, setAddressId] = useState<string>(
+    initialAddressId || addresses.find((a) => a.isDefault)?.id || "",
+  );
 
   const inCart = new Set(cart.map((l) => l.variant.shopifyVariantId));
 
@@ -140,6 +157,7 @@ export function PortalOrder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           submit: action === "save" ? undefined : action,
+          addressId,
           lineItems: cart.map((l) => ({
             shopifyVariantId: l.variant.shopifyVariantId,
             quantity: l.quantity,
@@ -309,6 +327,28 @@ export function PortalOrder({
             <span>Total</span>
             <span className="w-28 text-right">{fmtMoney(totals.totalCents)}</span>
           </div>
+        </div>
+      )}
+
+      {addresses.length > 0 && (
+        <div className="mt-4 border-t border-zinc-100 pt-4">
+          <label className="mb-1 block text-xs font-medium text-zinc-500">Ship to</label>
+          <select
+            value={addressId}
+            onChange={(e) => setAddressId(e.target.value)}
+            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
+          >
+            <option value="">— Select a delivery address —</option>
+            {addresses.map((a) => (
+              <option key={a.id} value={a.id}>
+                {addressOptionLabel(a)}
+                {a.isDefault ? " (default)" : ""}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-zinc-400">
+            Your saved Shopify addresses. We’ll ship this order here.
+          </p>
         </div>
       )}
 

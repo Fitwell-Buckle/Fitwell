@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
 import { getCompanyScope } from "@/lib/portal/company-session";
+import { getCompanyAddresses } from "@/lib/portal/addresses";
 import { listInvoicesForCompany } from "@/lib/invoicing/service";
 import {
   getCatalogCached,
@@ -21,7 +22,7 @@ export default async function PortalHomePage() {
   const scope = await getCompanyScope();
   if (!scope) redirect("/portal/login");
 
-  const [comp, catalog, groups, orders] = await Promise.all([
+  const [comp, catalog, groups, orders, addresses] = await Promise.all([
     db.query.company.findFirst({
       where: eq(company.id, scope.companyId),
       columns: {
@@ -47,6 +48,7 @@ export default async function PortalHomePage() {
       }
     })(),
     listInvoicesForCompany(scope.companyId),
+    getCompanyAddresses(scope.companyId),
   ]);
 
   const discount = comp?.priceTier?.discountPercent ?? 0;
@@ -98,6 +100,7 @@ export default async function PortalHomePage() {
         collections={collections}
         discountPercent={discount}
         allowWirePayment={comp?.allowWirePayment ?? false}
+        addresses={addresses}
       />
 
       <div className="mt-10">

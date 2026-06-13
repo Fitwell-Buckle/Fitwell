@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { company, invoice, invoiceLineItem } from "@/lib/schema";
+import { company, invoice, invoiceLineItem, type InvoiceShipTo } from "@/lib/schema";
+import { shipToToShopify } from "@/lib/portal/addresses";
 import {
   getCatalogCached,
   getCatalogGroupsCached,
@@ -139,6 +140,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export async function createPortalDraft(
   scope: CompanyScope,
   lineItems: PortalLineInput[],
+  shipTo?: InvoiceShipTo | null,
 ): Promise<{ ok: true; invoiceId: string; invoiceNumber: string } | PortalError> {
   const r = await resolveCart(scope.companyId, lineItems);
   if (isErr(r)) return r;
@@ -155,6 +157,9 @@ export async function createPortalDraft(
       shopifyVariantId: v.shopifyVariantId,
     })),
   });
+  if (shipTo) {
+    await db.update(invoice).set({ shipTo, updatedAt: new Date() }).where(eq(invoice.id, created.id));
+  }
   return { ok: true, invoiceId: created.id, invoiceNumber: created.invoiceNumber };
 }
 
@@ -167,6 +172,7 @@ export async function savePortalOrderLines(
   scope: CompanyScope,
   invoiceId: string,
   lineItems: PortalLineInput[],
+  shipTo?: InvoiceShipTo | null,
 ): Promise<{ ok: true; status: string; paymentMethod: PaymentMethod } | PortalError> {
   const inv = await db.query.invoice.findFirst({
     where: eq(invoice.id, invoiceId),
@@ -189,7 +195,12 @@ export async function savePortalOrderLines(
 
   await db
     .update(invoice)
-    .set({ ...totals, updatedAt: new Date() })
+    .set({
+      ...totals,
+      // shipTo === undefined → leave unchanged; null → clear; object → set.
+      ...(shipTo !== undefined ? { shipTo } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(invoice.id, invoiceId));
   await db.delete(invoiceLineItem).where(eq(invoiceLineItem.invoiceId, invoiceId));
   await db.insert(invoiceLineItem).values(
@@ -244,6 +255,7 @@ export async function submitPortalOrder(
       status: true,
       discountPercent: true,
       shopifyDraftOrderId: true,
+      shipTo: true,
     },
     with: {
       lineItems: true,
@@ -289,6 +301,7 @@ export async function submitPortalOrder(
     draft = await getShopifyClient().createDraftOrderInvoice({
       email: scope.email ?? inv.company.contactEmail ?? null,
       shopifyCustomerId: inv.company.customer?.shopifyId ?? null,
+      shippingAddress: inv.shipTo ? shipToToShopify(inv.shipTo) : undefined,
       discountPercent: hasDeposit ? 0 : discountPercent,
       note: hasDeposit
         ? `Portal order deposit (${depositPercent}%) — ${inv.company.name}`

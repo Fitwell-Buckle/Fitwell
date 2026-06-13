@@ -114,6 +114,35 @@ describe("submitPortalOrder", () => {
     );
   });
 
+  it("passes the order's stored ship-to address to Shopify", async () => {
+    findFirst.mockResolvedValue(
+      order({
+        shipTo: {
+          addressId: "a1",
+          firstName: "Sam",
+          lastName: "Byon",
+          address1: "1 Main St",
+          city: "Austin",
+          province: "Texas",
+          provinceCode: "TX",
+          country: "United States",
+          zip: "78701",
+        },
+      }),
+    );
+    const r = await submitPortalOrder(scope, "inv1", "card");
+    expect(r.ok).toBe(true);
+    expect(createDraftOrderInvoice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shippingAddress: expect.objectContaining({
+          address1: "1 Main St",
+          city: "Austin",
+          province: "Texas",
+        }),
+      }),
+    );
+  });
+
   it("card with a deposit: bills only the deposit as a custom line", async () => {
     findFirst.mockResolvedValue(
       order({ company: { ...order().company, depositPercent: 50 } }),

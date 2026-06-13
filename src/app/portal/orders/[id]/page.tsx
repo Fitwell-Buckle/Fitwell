@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { company, invoice } from "@/lib/schema";
 import { getCompanyScope } from "@/lib/portal/company-session";
+import { getCompanyAddresses, shipToLabel } from "@/lib/portal/addresses";
 import {
   getCatalogCached,
   getCatalogGroupsCached,
@@ -32,7 +33,7 @@ export default async function PortalOrderEditPage({
 
   const { id } = await params;
 
-  const [inv, comp, catalog, groups] = await Promise.all([
+  const [inv, comp, catalog, groups, addresses] = await Promise.all([
     db.query.invoice.findFirst({
       where: eq(invoice.id, id),
       with: { lineItems: true },
@@ -61,6 +62,7 @@ export default async function PortalOrderEditPage({
         return [];
       }
     })(),
+    getCompanyAddresses(scope.companyId),
   ]);
 
   // Only the owning company may open its order.
@@ -116,6 +118,11 @@ export default async function PortalOrderEditPage({
             <span className="mr-6">Total</span>
             <span className="w-28 text-right">{fmtMoney(inv.totalCents)}</span>
           </div>
+          {inv.shipTo && (
+            <p className="mt-3 text-sm text-zinc-600">
+              <span className="text-zinc-400">Ships to:</span> {shipToLabel(inv.shipTo)}
+            </p>
+          )}
           <p className="mt-3 text-xs text-zinc-400">
             Issued {fmtDate(inv.issuedDate)}. This order is {INVOICE_STATUS_LABELS[status] ?? status}
             {status === "paid" ? " and can no longer be edited." : "."}
@@ -158,6 +165,8 @@ export default async function PortalOrderEditPage({
         collections={collections}
         discountPercent={discount}
         allowWirePayment={comp?.allowWirePayment ?? false}
+        addresses={addresses}
+        initialAddressId={inv.shipTo?.addressId ?? undefined}
         orderId={inv.id}
         status={status === "draft" ? "draft" : "sent"}
         paymentMethod={(inv.paymentMethod as "card" | "wire") ?? "card"}

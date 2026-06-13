@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { InvoiceShipTo } from "@/lib/schema";
 import { getCompanyScope } from "@/lib/portal/company-session";
+import { resolveShipTo } from "@/lib/portal/addresses";
 import { savePortalOrderLines, submitPortalOrder } from "@/lib/invoicing/portal-orders";
 
 const schema = z.object({
@@ -16,6 +18,8 @@ const schema = z.object({
   // On an already-submitted (sent) order, saving always regenerates the pay
   // link with its existing method even if `submit` is omitted.
   submit: z.enum(["card", "wire"]).optional(),
+  // The chosen saved-address id to ship to ("" = none). Resolved to a snapshot.
+  addressId: z.string().optional(),
 });
 
 // Edit a B2B portal order the buyer owns. Allowed while draft or sent (unpaid);
@@ -42,7 +46,12 @@ export async function PATCH(
     );
   }
 
-  const saved = await savePortalOrderLines(scope, id, input.lineItems);
+  let shipTo: InvoiceShipTo | null | undefined;
+  if (input.addressId !== undefined) {
+    shipTo = input.addressId ? await resolveShipTo(scope.companyId, input.addressId) : null;
+  }
+
+  const saved = await savePortalOrderLines(scope, id, input.lineItems, shipTo);
   if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: saved.status });
 
   // Submit when asked, OR implicitly when editing an already-sent order (its

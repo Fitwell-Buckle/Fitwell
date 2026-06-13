@@ -1237,6 +1237,24 @@ export const invoiceNumberSeq = pgSequence("invoice_number_seq", {
   startWith: 100,
 });
 
+// Snapshot of a ship-to address chosen for a portal order (a copy of one of the
+// company's synced Shopify addresses). Stored on the invoice so it stays stable
+// even though customer-address sync is delete-and-replace.
+export type InvoiceShipTo = {
+  addressId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  company?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  provinceCode?: string | null;
+  country?: string | null;
+  zip?: string | null;
+  phone?: string | null;
+};
+
 export const invoice = pgTable(
   "invoice",
   {
@@ -1287,6 +1305,12 @@ export const invoice = pgTable(
     // Set when the order is marked fulfilled — this is what generates + sends
     // the balance draft order.
     fulfilledAt: timestamp("fulfilled_at", { mode: "date" }),
+    // Ship-to address chosen for a portal order — a SNAPSHOT of one of the
+    // company's synced Shopify addresses (kept stable since the address sync is
+    // delete-and-replace). Drives the Shopify draft order's shipping address.
+    // null = no address chosen (legacy / not set). Phase B will add per-line
+    // split-fulfillment on top of this default.
+    shipTo: jsonb("ship_to").$type<InvoiceShipTo>(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },

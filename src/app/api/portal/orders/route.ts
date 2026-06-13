@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { InvoiceShipTo } from "@/lib/schema";
 import { getCompanyScope } from "@/lib/portal/company-session";
+import { resolveShipTo } from "@/lib/portal/addresses";
 import { createPortalDraft, submitPortalOrder } from "@/lib/invoicing/portal-orders";
 
 const schema = z.object({
@@ -15,6 +17,8 @@ const schema = z.object({
   // Omitted = save as a draft (no Shopify transaction). Set = submit the order
   // for payment by card or bank wire.
   submit: z.enum(["card", "wire"]).optional(),
+  // The chosen saved-address id to ship to ("" = none). Resolved to a snapshot.
+  addressId: z.string().optional(),
 });
 
 // Create a B2B portal order. Without `submit` it's saved as a draft (editable,
@@ -36,7 +40,12 @@ export async function POST(req: Request) {
     );
   }
 
-  const draft = await createPortalDraft(scope, input.lineItems);
+  let shipTo: InvoiceShipTo | null | undefined;
+  if (input.addressId !== undefined) {
+    shipTo = input.addressId ? await resolveShipTo(scope.companyId, input.addressId) : null;
+  }
+
+  const draft = await createPortalDraft(scope, input.lineItems, shipTo);
   if (!draft.ok) return NextResponse.json({ error: draft.error }, { status: draft.status });
 
   if (!input.submit) {
