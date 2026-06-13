@@ -1,15 +1,45 @@
 import { describe, it, expect, vi } from "vitest";
 
-// sync.ts pulls in the live db and Shopify client at import. Stub both — the
-// parseUtmParams parser under test touches neither.
-vi.mock("@/lib/db", () => ({ db: {} }));
+// sync.ts pulls in the live db and Shopify client at import. Stub both. The
+// pure parsers under test touch neither; the address-persistence test drives a
+// recording mock so we can assert which write path upsertCustomer takes.
+const { mockDb } = vi.hoisted(() => {
+  // A permissive chainable query-builder stub: every builder method returns the
+  // same object, and the terminal `.returning()` resolves to one inserted row.
+  const chain = () => {
+    const o: Record<string, unknown> = {};
+    o.values = vi.fn(() => o);
+    o.onConflictDoUpdate = vi.fn(() => o);
+    o.returning = vi.fn(async () => [{ id: "cust-1" }]);
+    o.where = vi.fn(() => o);
+    return o;
+  };
+  return {
+    mockDb: {
+      insert: vi.fn(() => chain()),
+      delete: vi.fn(() => chain()),
+      // neon-http: the supported atomic multi-statement path.
+      batch: vi.fn(async (_statements: unknown[]) => [[], []]),
+      // neon-http: NOT supported — must never be called (it throws at runtime).
+      transaction: vi.fn(async () => {
+        throw new Error("db.transaction is unsupported on the neon-http driver");
+      }),
+    },
+  };
+});
+vi.mock("@/lib/db", () => ({ db: mockDb }));
 vi.mock("./client", () => ({
   getShopifyClient: vi.fn(),
   toCents: (v: string | null | undefined) =>
     v ? Math.round(parseFloat(v) * 100) : 0,
 }));
 
-import { parseUtmParams, sumRefundedCents } from "@/lib/shopify/sync";
+import {
+  parseUtmParams,
+  sumRefundedCents,
+  upsertCustomer,
+} from "@/lib/shopify/sync";
+import type { ShopifyCustomer } from "@/types/shopify";
 import type { ShopifyOrder } from "@/types/shopify";
 
 // Minimal ShopifyOrder factory — only the fields sumRefundedCents reads.
@@ -118,5 +148,43 @@ describe("sumRefundedCents", () => {
       ),
     );
     expect(cents).toBe(13226);
+  });
+});
+
+describe("upsertCustomer address persistence (neon-http write path)", () => {
+  // Regression guard for the silent-no-persist bug: `db` is the neon-http
+  // driver, which throws on interactive `db.transaction()`. Because the address
+  // sync is wrapped in a best-effort try/catch, a transaction would fail
+  // invisibly and addresses would never persist — breaking every ship-to /
+  // split-fulfillment picker. The sync must use `db.batch` instead.
+  function shopifyCustomerWithAddresses(): ShopifyCustomer {
+    return {
+      id: 123,
+      email: "a@b.com",
+      first_name: "A",
+      last_name: "B",
+      phone: null,
+      total_spent: "0",
+      orders_count: 0,
+      tags: "",
+      created_at: "2024-01-01T00:00:00Z",
+      default_address: { id: 1, address1: "1 St", default: true },
+      addresses: [
+        { id: 1, address1: "1 St", default: true },
+        { id: 2, address1: "2 Ave" },
+      ],
+    } as unknown as ShopifyCustomer;
+  }
+
+  it("persists addresses via db.batch and never db.transaction", async () => {
+    mockDb.batch.mockClear();
+    mockDb.transaction.mockClear();
+
+    await upsertCustomer(shopifyCustomerWithAddresses());
+
+    expect(mockDb.batch).toHaveBeenCalledTimes(1);
+    // The batch carries exactly two statements: delete-then-insert.
+    expect(mockDb.batch.mock.calls[0][0]).toHaveLength(2);
+    expect(mockDb.transaction).not.toHaveBeenCalled();
   });
 });

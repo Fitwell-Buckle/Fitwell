@@ -323,6 +323,18 @@ export function PortalOrder({
         </div>
       )}
 
+      {/* No saved addresses: don't let the ship-to section vanish silently —
+          tell the buyer what to expect so a sync gap is visible, not confusing. */}
+      {addresses.length === 0 && cart.length > 0 && (
+        <div className="mt-4 border-t border-zinc-100 pt-4">
+          <p className="text-sm text-zinc-500">
+            No saved delivery addresses on file yet — we’ll confirm where to ship
+            after you submit. Need to ship to multiple locations? Mention it in
+            your order and we’ll set up the split.
+          </p>
+        </div>
+      )}
+
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       {isSent ? (

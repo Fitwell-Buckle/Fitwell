@@ -142,12 +142,15 @@ async function syncCustomerAddresses(
     updatedAt: new Date(),
   }));
 
-  await db.transaction(async (tx) => {
-    await tx
-      .delete(customerAddress)
-      .where(eq(customerAddress.customerId, customerId));
-    await tx.insert(customerAddress).values(rows);
-  });
+  // NOTE: the `db` here is the neon-http driver (see lib/db.ts), which does NOT
+  // support interactive `db.transaction()` — calling it throws, and since this
+  // whole function is wrapped in a best-effort try/catch in upsertCustomer, that
+  // failure is swallowed and addresses silently never persist. Use `db.batch`,
+  // which neon-http runs as a single atomic transaction over one HTTP round-trip.
+  await db.batch([
+    db.delete(customerAddress).where(eq(customerAddress.customerId, customerId)),
+    db.insert(customerAddress).values(rows),
+  ]);
 }
 
 // ── Order upsert ────────────────────────────────────────────────────

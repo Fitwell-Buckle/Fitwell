@@ -48,6 +48,23 @@ changing how shipping cost is charged; carrier/label generation.
 - Per-line address is a SNAPSHOT (address sync is delete-and-replace).
 - A line with `ship_to = null` ships to `invoice.ship_to` (the default).
 
+## Root-cause fix (2026-06-13): addresses never persisted
+
+The ship-to / split picker was silently empty for **every** company because
+customer addresses were never being written to `customer_address`.
+`syncCustomerAddresses` (in `src/lib/shopify/sync.ts`) did its delete-and-replace
+inside `db.transaction(...)`, but `db` is the **neon-http** driver
+(`src/lib/db.ts` → `drizzle-orm/neon-http`), which does **not** support
+interactive transactions — the call threw on every invocation. Since
+`upsertCustomer` wraps the address sync in a best-effort try/catch, the failure
+was swallowed and addresses never landed. The admin customer **Addresses** tab
+masked the bug with a *live* Shopify fallback (read-only, no persist), so it
+showed addresses while the order forms (which read persisted rows via
+`getCompanyAddresses`) stayed empty. Fixed by switching to `db.batch([...])`
+(neon-http's atomic multi-statement path) + a regression test asserting the sync
+uses `db.batch`, never `db.transaction`. Existing customers backfill on the next
+order webhook, the portal self-heal, or the "Sync from Shopify" button.
+
 ## Follow-ups (not blocking)
 - ~~`reapplyTierToOpenInvoices` doesn't re-emit the split custom attributes /
   note.~~ **Done** — the split logic is now the shared `buildSplitShipping`

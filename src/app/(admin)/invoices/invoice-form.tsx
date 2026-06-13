@@ -144,6 +144,9 @@ export function InvoiceForm({
   );
   // Ship-to / split fulfillment.
   const [addresses, setAddresses] = useState<CompanyAddress[]>([]);
+  // Gates the "no addresses" hint so it shows only after the async load resolves
+  // (not during the fetch, which would flash the hint before addresses arrive).
+  const [addrLoaded, setAddrLoaded] = useState(false);
   const [orderAddressId, setOrderAddressId] = useState(initial?.shipToAddressId ?? "");
   const [split, setSplit] = useState<boolean>(
     !!initial?.lineItems.some((l) => l.addressId),
@@ -153,21 +156,26 @@ export function InvoiceForm({
   useEffect(() => {
     if (!companyId) {
       setAddresses([]);
+      setAddrLoaded(false);
       return;
     }
     let active = true;
+    setAddrLoaded(false);
     fetch(`/api/production/companies/${companyId}/addresses`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!active || !d?.data) return;
-        const addrs = d.data as CompanyAddress[];
+        if (!active) return;
+        const addrs = (d?.data as CompanyAddress[]) ?? [];
         setAddresses(addrs);
         // Keep a valid selection; otherwise default to the company's default.
         setOrderAddressId((cur) =>
           addrs.some((a) => a.id === cur) ? cur : addrs.find((a) => a.isDefault)?.id || "",
         );
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (active) setAddrLoaded(true);
+      });
     return () => {
       active = false;
     };
@@ -724,6 +732,19 @@ export function InvoiceForm({
               {split
                 ? "Pick a destination per line above; lines on “Same as default” ship to the address selected here. One invoice — recorded on the Shopify order (per-line “Ship to” + an order note)."
                 : "The order's saved Shopify ship-to address. Synced to the Shopify draft order when the invoice is sent."}
+            </p>
+          </div>
+        )}
+
+        {/* No saved addresses for this company: make the sync gap visible
+            instead of silently hiding the ship-to / split controls. */}
+        {companyId && addrLoaded && addresses.length === 0 && (
+          <div className="mt-4 border-t border-zinc-100 pt-4">
+            <p className="text-sm text-zinc-500">
+              No saved addresses for this company yet. Add them on the customer in
+              Shopify, then click <strong>Sync from Shopify</strong> on the
+              customer&apos;s Addresses tab — the ship-to &amp; split-fulfillment
+              options will appear here.
             </p>
           </div>
         )}
