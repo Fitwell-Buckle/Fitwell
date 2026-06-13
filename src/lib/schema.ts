@@ -1337,6 +1337,11 @@ export const invoiceLineItem = pgTable(
     unitPriceCents: integer("unit_price_cents").notNull().default(0),
     shopifyProductId: text("shopify_product_id"),
     shopifyVariantId: text("shopify_variant_id"),
+    // Split fulfillment (Phase B): per-line ship-to SNAPSHOT. null = this line
+    // ships to the invoice's primary ship_to (the default / un-split case).
+    // Surfaced on the Shopify order as a line-item custom attribute, since
+    // Shopify can't hold multiple destination addresses on one order.
+    shipTo: jsonb("ship_to").$type<InvoiceShipTo>(),
     // Optional provenance back to the production line it was billed from.
     sourceLineItemId: text("source_line_item_id").references(
       () => productionPoLineItem.id,

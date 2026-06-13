@@ -1,0 +1,1 @@
+ALTER TABLE "invoice_line_item" ADD COLUMN "ship_to" jsonb;

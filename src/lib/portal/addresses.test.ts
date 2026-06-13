@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/schema", () => ({ company: {}, customer: {}, customerAddress: {} }));
 
-import { shipToLabel, shipToToShopify } from "./addresses";
+import { shipToLabel, shipToToShopify, isSplitOrder, buildShipPlan } from "./addresses";
 
 const s = {
   addressId: "a1",
@@ -47,5 +47,33 @@ describe("ship-to helpers", () => {
 
   it("shipToLabel falls back to company when there's no person name", () => {
     expect(shipToLabel({ company: "Byon Co", city: "Austin" })).toBe("Byon Co, Austin");
+  });
+});
+
+describe("ship plan (split fulfillment)", () => {
+  const primary = { addressId: "p", firstName: "HQ", address1: "1 HQ St", city: "Austin", provinceCode: "TX", zip: "78701" };
+  const wh = { addressId: "w", firstName: "WH", address1: "9 Dock Rd", city: "Reno", provinceCode: "NV", zip: "89501" };
+  const lines = [
+    { sku: "A", title: "Buckle A", quantity: 2, shipTo: null },
+    { sku: "B", title: "Buckle B", quantity: 1, shipTo: wh },
+    { sku: "C", title: "Buckle C", quantity: 3, shipTo: null },
+  ];
+
+  it("isSplitOrder is true only when a line has its own ship-to", () => {
+    expect(isSplitOrder(lines)).toBe(true);
+    expect(isSplitOrder([{ shipTo: null }, { shipTo: null }])).toBe(false);
+  });
+
+  it("buildShipPlan groups lines by destination, default-address lines together", () => {
+    const plan = buildShipPlan(lines, primary);
+    expect(plan).toHaveLength(2);
+
+    const def = plan.find((g) => g.isDefault)!;
+    expect(def.label).toContain("1 HQ St");
+    expect(def.lines.map((l) => l.sku)).toEqual(["A", "C"]);
+
+    const whGroup = plan.find((g) => !g.isDefault)!;
+    expect(whGroup.label).toContain("9 Dock Rd");
+    expect(whGroup.lines.map((l) => l.sku)).toEqual(["B"]);
   });
 });

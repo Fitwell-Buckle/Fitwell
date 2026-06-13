@@ -95,6 +95,38 @@ export async function resolveShipTo(
   };
 }
 
+/**
+ * Resolve an order's ship-to choices — the order-level address + each line's
+ * (split-fulfillment) address — into validated snapshots, de-duplicating the
+ * lookups. `orderShipTo` is `undefined` when no order-level address was sent
+ * (leave unchanged), `null` when explicitly cleared.
+ */
+export async function resolveOrderShipTos(
+  companyId: string,
+  orderAddressId: string | undefined,
+  lineAddressIds: (string | undefined)[],
+): Promise<{
+  orderShipTo: InvoiceShipTo | null | undefined;
+  lineShipTos: (InvoiceShipTo | null)[];
+}> {
+  const uniqueIds = [
+    ...new Set(
+      [orderAddressId, ...lineAddressIds].filter((x): x is string => Boolean(x)),
+    ),
+  ];
+  const snaps = new Map<string, InvoiceShipTo | null>();
+  for (const id of uniqueIds) snaps.set(id, await resolveShipTo(companyId, id));
+
+  const orderShipTo =
+    orderAddressId === undefined
+      ? undefined
+      : orderAddressId
+        ? snaps.get(orderAddressId) ?? null
+        : null;
+  const lineShipTos = lineAddressIds.map((id) => (id ? snaps.get(id) ?? null : null));
+  return { orderShipTo, lineShipTos };
+}
+
 /** A stored ship-to snapshot as the Shopify draft order's shipping address. */
 export function shipToToShopify(s: InvoiceShipTo) {
   return {
@@ -117,4 +149,47 @@ export function shipToLabel(s: InvoiceShipTo): string {
   return [name || s.company, s.address1, s.city, s.provinceCode ?? s.province, s.zip]
     .filter(Boolean)
     .join(", ");
+}
+
+export interface ShipPlanLine {
+  sku: string;
+  title: string;
+  quantity: number;
+  shipTo: InvoiceShipTo | null;
+}
+
+export interface ShipPlanGroup {
+  label: string;
+  isDefault: boolean;
+  lines: { sku: string; title: string; quantity: number }[];
+}
+
+/** Does this order ship to more than the default address (split fulfillment)? */
+export function isSplitOrder(lineItems: { shipTo: InvoiceShipTo | null }[]): boolean {
+  return lineItems.some((l) => l.shipTo != null);
+}
+
+/**
+ * Group an order's line items by destination address — the "ship plan" the
+ * admin packs against. Lines without a per-line ship-to fall under the order's
+ * primary (default) address.
+ */
+export function buildShipPlan(
+  lineItems: ShipPlanLine[],
+  primary: InvoiceShipTo | null,
+): ShipPlanGroup[] {
+  const primaryLabel = primary ? shipToLabel(primary) : "Default address";
+  const groups = new Map<string, ShipPlanGroup>();
+  for (const l of lineItems) {
+    const isDefault = l.shipTo == null;
+    const label = isDefault ? primaryLabel : shipToLabel(l.shipTo as InvoiceShipTo);
+    const key = isDefault ? "__default__" : label;
+    let g = groups.get(key);
+    if (!g) {
+      g = { label, isDefault, lines: [] };
+      groups.set(key, g);
+    }
+    g.lines.push({ sku: l.sku, title: l.title, quantity: l.quantity });
+  }
+  return [...groups.values()];
 }

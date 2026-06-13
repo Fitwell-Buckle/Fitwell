@@ -41,6 +41,26 @@ async function nextInvoiceNumber(): Promise<string> {
   return formatInvoiceNumber(Number((seq.rows[0] as { n: number }).n));
 }
 
+// Per-line split-fulfillment ship-to snapshot (Phase B). Loosely validated —
+// it's resolved server-side from one of the company's synced addresses, never
+// raw client input.
+const lineShipToSchema = z
+  .object({
+    addressId: z.string().nullish(),
+    firstName: z.string().nullish(),
+    lastName: z.string().nullish(),
+    company: z.string().nullish(),
+    address1: z.string().nullish(),
+    address2: z.string().nullish(),
+    city: z.string().nullish(),
+    province: z.string().nullish(),
+    provinceCode: z.string().nullish(),
+    country: z.string().nullish(),
+    zip: z.string().nullish(),
+    phone: z.string().nullish(),
+  })
+  .nullish();
+
 export const invoiceLineInputSchema = z.object({
   sku: z
     .string()
@@ -51,6 +71,7 @@ export const invoiceLineInputSchema = z.object({
   unitPriceCents: z.number().int().nonnegative(),
   shopifyProductId: z.string().max(200).nullish(),
   shopifyVariantId: z.string().max(200).nullish(),
+  shipTo: lineShipToSchema,
 });
 
 // Per-invoice deposit override. null/undefined = inherit the brand's default
@@ -138,6 +159,7 @@ export async function createInvoice(
       unitPriceCents: l.unitPriceCents,
       shopifyProductId: l.shopifyProductId ?? null,
       shopifyVariantId: l.shopifyVariantId ?? null,
+      shipTo: l.shipTo ?? null,
     })),
   );
 

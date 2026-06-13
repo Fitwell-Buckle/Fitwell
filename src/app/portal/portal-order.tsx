@@ -26,6 +26,8 @@ function addressOptionLabel(a: CompanyAddress): string {
 interface CartLine {
   variant: CatalogVariant;
   quantity: number;
+  /** Per-line split-fulfillment address id ("" = ship to the order's default). */
+  addressId: string;
 }
 
 // A previously-saved order's line, used to seed the cart when editing.
@@ -36,6 +38,8 @@ export interface InitialItem {
   title: string;
   unitPriceCents: number;
   quantity: number;
+  /** The line's stored per-line ship-to address id (split fulfillment). */
+  addressId?: string;
 }
 
 interface SubmitResult {
@@ -51,6 +55,7 @@ type Action = "save" | "card" | "wire";
 function seedCart(items: InitialItem[]): CartLine[] {
   return items.map((it) => ({
     quantity: it.quantity,
+    addressId: it.addressId ?? "",
     variant: {
       shopifyProductId: it.shopifyProductId ?? "",
       shopifyVariantId: it.shopifyVariantId,
@@ -105,15 +110,22 @@ export function PortalOrder({
   const [addressId, setAddressId] = useState<string>(
     initialAddressId || addresses.find((a) => a.isDefault)?.id || "",
   );
+  // Split fulfillment: when on, each line can ship to a different address.
+  // Seeded on when any line already has its own ship-to.
+  const [split, setSplit] = useState<boolean>(initialItems.some((it) => it.addressId));
 
   const inCart = new Set(cart.map((l) => l.variant.shopifyVariantId));
+  const primaryLabel =
+    addresses.find((a) => a.id === addressId) != null
+      ? addressOptionLabel(addresses.find((a) => a.id === addressId)!)
+      : null;
 
   function add(v: CatalogVariant) {
     setError(null);
     setCart((c) =>
       c.some((l) => l.variant.shopifyVariantId === v.shopifyVariantId)
         ? c
-        : [...c, { variant: v, quantity: 1 }],
+        : [...c, { variant: v, quantity: 1, addressId: "" }],
     );
   }
   function addMany(vs: CatalogVariant[]) {
@@ -123,7 +135,7 @@ export function PortalOrder({
       const next = [...c];
       for (const v of vs) {
         if (!have.has(v.shopifyVariantId)) {
-          next.push({ variant: v, quantity: 1 });
+          next.push({ variant: v, quantity: 1, addressId: "" });
           have.add(v.shopifyVariantId);
         }
       }
@@ -132,6 +144,9 @@ export function PortalOrder({
   }
   function setQty(id: string, qty: number) {
     setCart((c) => c.map((l) => (l.variant.shopifyVariantId === id ? { ...l, quantity: qty } : l)));
+  }
+  function setLineAddress(id: string, aId: string) {
+    setCart((c) => c.map((l) => (l.variant.shopifyVariantId === id ? { ...l, addressId: aId } : l)));
   }
   function remove(id: string) {
     setCart((c) => c.filter((l) => l.variant.shopifyVariantId !== id));
@@ -163,6 +178,8 @@ export function PortalOrder({
           lineItems: cart.map((l) => ({
             shopifyVariantId: l.variant.shopifyVariantId,
             quantity: l.quantity,
+            // Per-line override only when split is on (else ships to the default).
+            addressId: split ? l.addressId || undefined : undefined,
           })),
         }),
       });
@@ -267,36 +284,58 @@ export function PortalOrder({
         ) : (
           <div className="space-y-3">
             {cart.map((l, i) => (
-              <LineItemRow
-                key={l.variant.shopifyVariantId}
-                product={
-                  <div className="flex h-10 items-center text-sm text-zinc-800">
-                    {variantLabel(l.variant)}
+              <div key={l.variant.shopifyVariantId}>
+                <LineItemRow
+                  product={
+                    <div className="flex h-10 items-center text-sm text-zinc-800">
+                      {variantLabel(l.variant)}
+                    </div>
+                  }
+                  qty={
+                    <Input
+                      className="w-20"
+                      type="number"
+                      min="1"
+                      value={String(l.quantity)}
+                      onChange={(e) =>
+                        setQty(
+                          l.variant.shopifyVariantId,
+                          Math.max(1, Math.floor(Number(e.target.value) || 1)),
+                        )
+                      }
+                    />
+                  }
+                  unitPrice={
+                    <div className="flex h-10 w-28 items-center justify-end px-2 text-sm tabular-nums text-zinc-700">
+                      {fmtMoney(l.variant.priceCents)}
+                    </div>
+                  }
+                  unitDiscountCents={l.variant.priceCents - netLines[i].netUnitPriceCents}
+                  lineTotalCents={netLines[i].netLineTotalCents}
+                  onRemove={() => remove(l.variant.shopifyVariantId)}
+                />
+                {split && addresses.length > 0 && (
+                  <div className="mt-1 flex items-center gap-2 pl-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                      Ship to
+                    </span>
+                    <select
+                      value={l.addressId}
+                      onChange={(e) => setLineAddress(l.variant.shopifyVariantId, e.target.value)}
+                      className="h-9 max-w-[480px] flex-1 rounded-md border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
+                    >
+                      <option value="">
+                        Same as default{primaryLabel ? ` — ${primaryLabel}` : ""}
+                      </option>
+                      {addresses.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {addressOptionLabel(a)}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                }
-                qty={
-                  <Input
-                    className="w-20"
-                    type="number"
-                    min="1"
-                    value={String(l.quantity)}
-                    onChange={(e) =>
-                      setQty(
-                        l.variant.shopifyVariantId,
-                        Math.max(1, Math.floor(Number(e.target.value) || 1)),
-                      )
-                    }
-                  />
-                }
-                unitPrice={
-                  <div className="flex h-10 w-28 items-center justify-end px-2 text-sm tabular-nums text-zinc-700">
-                    {fmtMoney(l.variant.priceCents)}
-                  </div>
-                }
-                unitDiscountCents={l.variant.priceCents - netLines[i].netUnitPriceCents}
-                lineTotalCents={netLines[i].netLineTotalCents}
-                onRemove={() => remove(l.variant.shopifyVariantId)}
-              />
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -308,7 +347,9 @@ export function PortalOrder({
 
       {addresses.length > 0 && (
         <div className="mt-4 border-t border-zinc-100 pt-4">
-          <label className="mb-1 block text-xs font-medium text-zinc-500">Ship to</label>
+          <label className="mb-1 block text-xs font-medium text-zinc-500">
+            {split ? "Default ship-to" : "Ship to"}
+          </label>
           <select
             value={addressId}
             onChange={(e) => setAddressId(e.target.value)}
@@ -322,8 +363,19 @@ export function PortalOrder({
               </option>
             ))}
           </select>
+          <label className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
+            <input
+              type="checkbox"
+              checked={split}
+              onChange={(e) => setSplit(e.target.checked)}
+              className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-300"
+            />
+            Split fulfillment — ship some items to different addresses
+          </label>
           <p className="mt-1 text-xs text-zinc-400">
-            Your saved Shopify addresses. We’ll ship this order here.
+            {split
+              ? "Pick a destination per line above; lines left on “Same as default” ship to the address selected here. One invoice and payment — we route each line at fulfillment."
+              : "Your saved Shopify addresses. We’ll ship this order here."}
           </p>
         </div>
       )}

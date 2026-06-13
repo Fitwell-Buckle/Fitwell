@@ -78,6 +78,8 @@ export interface DraftOrderInvoiceParams {
     title: string;
     quantity: number;
     unitPriceCents: number;
+    /** Per-line custom attributes (e.g. split-fulfillment "Ship to" labels). */
+    customAttributes?: { key: string; value: string }[];
   }[];
 }
 
@@ -89,8 +91,8 @@ export interface DraftOrderInvoiceParams {
 export function buildDraftOrderInput(
   params: DraftOrderInvoiceParams,
 ): Record<string, unknown> {
-  const lineItems = params.lines.map((l) =>
-    l.variantId
+  const lineItems = params.lines.map((l) => {
+    const base = l.variantId
       ? {
           variantId: `gid://shopify/ProductVariant/${String(l.variantId).split("/").pop()}`,
           quantity: l.quantity,
@@ -99,8 +101,11 @@ export function buildDraftOrderInput(
           title: l.title,
           originalUnitPrice: (l.unitPriceCents / 100).toFixed(2),
           quantity: l.quantity,
-        },
-  );
+        };
+    return l.customAttributes && l.customAttributes.length > 0
+      ? { ...base, customAttributes: l.customAttributes }
+      : base;
+  });
 
   const input: Record<string, unknown> = { lineItems };
   if (params.email) input.email = params.email;

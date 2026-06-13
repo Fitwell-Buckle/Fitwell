@@ -81,6 +81,7 @@ export default async function PortalOrderEditPage({
       title: l.title,
       unitPriceCents: l.unitPriceCents,
       quantity: l.quantity,
+      addressId: l.shipTo?.addressId ?? undefined,
     }));
 
   const header = (

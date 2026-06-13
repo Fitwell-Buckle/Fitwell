@@ -97,6 +97,29 @@ describe("buildDraftOrderInput", () => {
     expect(input.tags).toEqual(["sample", "press"]);
   });
 
+  it("attaches per-line customAttributes (split-fulfillment Ship to) when present", () => {
+    const input = buildDraftOrderInput(
+      sampleParams({
+        lines: [
+          {
+            variantId: "gid://shopify/ProductVariant/123",
+            title: "x",
+            quantity: 1,
+            unitPriceCents: 100,
+            customAttributes: [{ key: "Ship to", value: "WH, 9 Dock Rd, Reno" }],
+          },
+        ],
+      }),
+    );
+    expect(input.lineItems).toEqual([
+      {
+        variantId: "gid://shopify/ProductVariant/123",
+        quantity: 1,
+        customAttributes: [{ key: "Ship to", value: "WH, 9 Dock Rd, Reno" }],
+      },
+    ]);
+  });
+
   it("omits tags when absent or empty", () => {
     expect(buildDraftOrderInput(sampleParams({ tags: undefined })).tags).toBeUndefined();
     expect(buildDraftOrderInput(sampleParams({ tags: [] })).tags).toBeUndefined();

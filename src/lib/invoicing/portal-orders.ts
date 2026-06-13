@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { company, invoice, invoiceLineItem, type InvoiceShipTo } from "@/lib/schema";
-import { shipToToShopify } from "@/lib/portal/addresses";
+import { shipToToShopify, shipToLabel } from "@/lib/portal/addresses";
 import {
   getCatalogCached,
   getCatalogGroupsCached,
@@ -22,7 +22,12 @@ import type { CompanyScope } from "@/lib/portal/company-session";
 //   paid   → locked (view only)
 // Shared by the portal order endpoints so the rules live in one place.
 
-export type PortalLineInput = { shopifyVariantId: string; quantity: number };
+export type PortalLineInput = {
+  shopifyVariantId: string;
+  quantity: number;
+  /** Per-line split-fulfillment ship-to (Phase B). null = ship to the order's primary address. */
+  shipTo?: InvoiceShipTo | null;
+};
 export type PaymentMethod = "card" | "wire";
 export type PortalError = { ok: false; status: number; error: string };
 
@@ -50,7 +55,7 @@ type ResolvedCompany = {
 
 type Resolved = {
   comp: ResolvedCompany;
-  lines: { v: CatalogVariant; quantity: number }[];
+  lines: { v: CatalogVariant; quantity: number; shipTo: InvoiceShipTo | null }[];
 };
 
 /**
@@ -105,7 +110,7 @@ async function resolveCart(
     catalog,
   });
 
-  const lines: { v: CatalogVariant; quantity: number }[] = [];
+  const lines: Resolved["lines"] = [];
   for (const li of lineItems) {
     const v = byVariant.get(li.shopifyVariantId);
     if (!v) {
@@ -114,7 +119,7 @@ async function resolveCart(
     if (allowed && !allowed.has(li.shopifyVariantId)) {
       return { ok: false, status: 400, error: "One or more items aren’t available to your brand." };
     }
-    lines.push({ v, quantity: li.quantity });
+    lines.push({ v, quantity: li.quantity, shipTo: li.shipTo ?? null });
   }
 
   return {
@@ -148,13 +153,14 @@ export async function createPortalDraft(
   const created = await createInvoice({
     companyId: scope.companyId,
     issuedDate: today(),
-    lineItems: r.lines.map(({ v, quantity }) => ({
+    lineItems: r.lines.map(({ v, quantity, shipTo: lineShipTo }) => ({
       sku: v.sku,
       title: lineTitle(v),
       quantity,
       unitPriceCents: v.priceCents,
       shopifyProductId: v.shopifyProductId,
       shopifyVariantId: v.shopifyVariantId,
+      shipTo: lineShipTo,
     })),
   });
   if (shipTo) {
@@ -204,7 +210,7 @@ export async function savePortalOrderLines(
     .where(eq(invoice.id, invoiceId));
   await db.delete(invoiceLineItem).where(eq(invoiceLineItem.invoiceId, invoiceId));
   await db.insert(invoiceLineItem).values(
-    r.lines.map(({ v, quantity }) => ({
+    r.lines.map(({ v, quantity, shipTo: lineShipTo }) => ({
       invoiceId,
       sku: v.sku,
       title: lineTitle(v),
@@ -212,6 +218,7 @@ export async function savePortalOrderLines(
       unitPriceCents: v.priceCents,
       shopifyProductId: v.shopifyProductId,
       shopifyVariantId: v.shopifyVariantId,
+      shipTo: lineShipTo,
     })),
   );
 
@@ -296,6 +303,29 @@ export async function submitPortalOrder(
   const split = computeDeposit(totals.totalCents, depositPercent);
   const hasDeposit = !wire && split.depositCents > 0 && split.balanceCents > 0;
 
+  // Split fulfillment: a line with its own ship-to means the order ships to
+  // more than one address. Shopify can't hold >1 destination on an order, so we
+  // record each line's destination as a "Ship to" custom attribute and append a
+  // grouped summary to the order note (the order-level address stays the primary).
+  const primaryLabel = inv.shipTo ? shipToLabel(inv.shipTo) : null;
+  const lineLabel = (s: InvoiceShipTo | null): string | null =>
+    s ? shipToLabel(s) : primaryLabel;
+  const isSplit = inv.lineItems.some((l) => l.shipTo != null);
+  let splitNote = "";
+  if (isSplit) {
+    const byDest = new Map<string, string[]>();
+    for (const l of inv.lineItems) {
+      const dest = lineLabel(l.shipTo) ?? "(no address on file)";
+      const entry = `${l.quantity}× ${l.sku || l.title}`;
+      const arr = byDest.get(dest);
+      if (arr) arr.push(entry);
+      else byDest.set(dest, [entry]);
+    }
+    splitNote =
+      "\n\nSplit fulfillment — ship to multiple addresses:\n" +
+      [...byDest.entries()].map(([dest, items]) => `• ${dest}: ${items.join(", ")}`).join("\n");
+  }
+
   let draft;
   try {
     draft = await getShopifyClient().createDraftOrderInvoice({
@@ -303,9 +333,10 @@ export async function submitPortalOrder(
       shopifyCustomerId: inv.company.customer?.shopifyId ?? null,
       shippingAddress: inv.shipTo ? shipToToShopify(inv.shipTo) : undefined,
       discountPercent: hasDeposit ? 0 : discountPercent,
-      note: hasDeposit
-        ? `Portal order deposit (${depositPercent}%) — ${inv.company.name}`
-        : `Portal order — ${inv.company.name}`,
+      note:
+        (hasDeposit
+          ? `Portal order deposit (${depositPercent}%) — ${inv.company.name}`
+          : `Portal order — ${inv.company.name}`) + splitNote,
       lines: hasDeposit
         ? [
             {
@@ -315,12 +346,16 @@ export async function submitPortalOrder(
               unitPriceCents: split.depositCents,
             },
           ]
-        : inv.lineItems.map((l) => ({
-            variantId: l.shopifyVariantId,
-            title: l.title,
-            quantity: l.quantity,
-            unitPriceCents: l.unitPriceCents,
-          })),
+        : inv.lineItems.map((l) => {
+            const dest = isSplit ? lineLabel(l.shipTo) : null;
+            return {
+              variantId: l.shopifyVariantId,
+              title: l.title,
+              quantity: l.quantity,
+              unitPriceCents: l.unitPriceCents,
+              ...(dest ? { customAttributes: [{ key: "Ship to", value: dest }] } : {}),
+            };
+          }),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "";

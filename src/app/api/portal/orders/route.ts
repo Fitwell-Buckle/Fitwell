@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { InvoiceShipTo } from "@/lib/schema";
 import { getCompanyScope } from "@/lib/portal/company-session";
-import { resolveShipTo } from "@/lib/portal/addresses";
+import { resolveOrderShipTos } from "@/lib/portal/addresses";
 import { createPortalDraft, submitPortalOrder } from "@/lib/invoicing/portal-orders";
 
 const schema = z.object({
@@ -11,13 +10,15 @@ const schema = z.object({
       z.object({
         shopifyVariantId: z.string().min(1),
         quantity: z.number().int().positive(),
+        // Per-line split-fulfillment address ("" / omitted = order's primary).
+        addressId: z.string().optional(),
       }),
     )
     .min(1, "Your order is empty."),
   // Omitted = save as a draft (no Shopify transaction). Set = submit the order
   // for payment by card or bank wire.
   submit: z.enum(["card", "wire"]).optional(),
-  // The chosen saved-address id to ship to ("" = none). Resolved to a snapshot.
+  // The order's primary saved-address id ("" = none). Resolved to a snapshot.
   addressId: z.string().optional(),
 });
 
@@ -40,12 +41,18 @@ export async function POST(req: Request) {
     );
   }
 
-  let shipTo: InvoiceShipTo | null | undefined;
-  if (input.addressId !== undefined) {
-    shipTo = input.addressId ? await resolveShipTo(scope.companyId, input.addressId) : null;
-  }
+  const { orderShipTo, lineShipTos } = await resolveOrderShipTos(
+    scope.companyId,
+    input.addressId,
+    input.lineItems.map((l) => l.addressId),
+  );
+  const lines = input.lineItems.map((l, i) => ({
+    shopifyVariantId: l.shopifyVariantId,
+    quantity: l.quantity,
+    shipTo: lineShipTos[i],
+  }));
 
-  const draft = await createPortalDraft(scope, input.lineItems, shipTo);
+  const draft = await createPortalDraft(scope, lines, orderShipTo);
   if (!draft.ok) return NextResponse.json({ error: draft.error }, { status: draft.status });
 
   if (!input.submit) {

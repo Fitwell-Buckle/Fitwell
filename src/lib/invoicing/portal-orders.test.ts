@@ -143,6 +143,39 @@ describe("submitPortalOrder", () => {
     );
   });
 
+  it("split fulfillment: per-line 'Ship to' attributes + a split note", async () => {
+    findFirst.mockResolvedValue(
+      order({
+        shipTo: { addressId: "p", firstName: "HQ", address1: "1 HQ St", city: "Austin", provinceCode: "TX" },
+        lineItems: [
+          { shopifyVariantId: "gid://shopify/ProductVariant/1", sku: "A", title: "Buckle A", quantity: 2, unitPriceCents: 4000, shipTo: null },
+          {
+            shopifyVariantId: "gid://shopify/ProductVariant/2",
+            sku: "B",
+            title: "Buckle B",
+            quantity: 1,
+            unitPriceCents: 4000,
+            shipTo: { addressId: "w", firstName: "WH", address1: "9 Dock Rd", city: "Reno", provinceCode: "NV" },
+          },
+        ],
+      }),
+    );
+    const r = await submitPortalOrder(scope, "inv1", "card");
+    expect(r.ok).toBe(true);
+
+    const call = createDraftOrderInvoice.mock.calls[0][0];
+    expect(call.note).toContain("Split fulfillment");
+    const lineB = call.lines.find((l: { title: string }) => l.title === "Buckle B");
+    const lineA = call.lines.find((l: { title: string }) => l.title === "Buckle A");
+    // B ships to its own address; A falls back to the order's default (HQ).
+    expect(lineB.customAttributes).toEqual([
+      { key: "Ship to", value: expect.stringContaining("9 Dock Rd") },
+    ]);
+    expect(lineA.customAttributes).toEqual([
+      { key: "Ship to", value: expect.stringContaining("1 HQ St") },
+    ]);
+  });
+
   it("card with a deposit: bills only the deposit as a custom line", async () => {
     findFirst.mockResolvedValue(
       order({ company: { ...order().company, depositPercent: 50 } }),

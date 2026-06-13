@@ -7,7 +7,9 @@ const { getCompanyScope, savePortalOrderLines, submitPortalOrder } = vi.hoisted(
 }));
 
 vi.mock("@/lib/portal/company-session", () => ({ getCompanyScope }));
-vi.mock("@/lib/portal/addresses", () => ({ resolveShipTo: vi.fn().mockResolvedValue(null) }));
+vi.mock("@/lib/portal/addresses", () => ({
+  resolveOrderShipTos: vi.fn().mockResolvedValue({ orderShipTo: undefined, lineShipTos: [] }),
+}));
 vi.mock("@/lib/invoicing/portal-orders", () => ({ savePortalOrderLines, submitPortalOrder }));
 
 import { PATCH } from "./route";
