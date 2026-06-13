@@ -244,3 +244,30 @@
     - specs/work-plans/completed/utm-linking-gap.md
     - scripts/cleanup-utm-duplicate-touches.ts
     - src/lib/shopify/sync.ts
+
+- date: "2026-06-13"
+  title: "Admin portal is an installable PWA with Web Push"
+  priority: 3
+  layer: 1
+  notes: >
+    The admin portal is now installable to the home screen (manifest +
+    service worker + icons) and pushes the in-app notification surface to
+    admins' devices via Web Push. Drivers: check ops on the go, get alerted
+    on a locked phone, and scan business cards into the B2B leads pipeline at
+    trade shows (the existing card scanner is pure web APIs, so it carried
+    over unchanged). New push_subscription table (migration 0073, applied to
+    prod). All 10 admin_notification inserts now route through one
+    createAdminNotification() chokepoint that fans out a push for admin-bound
+    types only (supplier-bound skipped). Settings → Push notifications: enable
+    per device + send-test + iOS add-to-home-screen hint. VAPID_* env set in
+    Vercel; VAPID_SUBJECT is the portal URL (no mailbox to own). Verified
+    end-to-end on iPhone; fixed a safe-area top-overlap on the installed
+    standalone header. Commits b2acf06 + e953577.
+  artifacts:
+    - specs/work-plans/completed/pwa-mobile-app.md
+    - src/app/manifest.ts
+    - public/sw.js
+    - src/lib/push/send.ts
+    - src/lib/notifications/admin-notify.ts
+    - src/app/api/push/subscribe/route.ts
+    - src/app/(admin)/settings/push-notification-settings.tsx
