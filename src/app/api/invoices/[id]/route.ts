@@ -8,10 +8,19 @@ import {
   updateInvoice,
   updateInvoiceStatus,
   updateInvoiceSchema,
+  invoiceLineInputSchema,
 } from "@/lib/invoicing/service";
+import { resolveOrderShipTos } from "@/lib/portal/addresses";
 import { INVOICE_STATUSES, type InvoiceStatus } from "@/lib/invoicing/invoicing";
 
 const statusSchema = z.object({ status: z.enum(INVOICE_STATUSES) });
+
+// The form sends saved-address ids (order-level + per-line); resolved to ship-to
+// snapshots against the invoice's company.
+const updateBodySchema = updateInvoiceSchema.extend({
+  addressId: z.string().nullish(),
+  lineItems: z.array(invoiceLineInputSchema.extend({ addressId: z.string().nullish() })).min(1),
+});
 
 // PATCH = status change (draft → sent → paid / void).
 export async function PATCH(
@@ -59,9 +68,9 @@ export async function PUT(
   }
 
   const { id } = await params;
-  let input;
+  let body;
   try {
-    input = updateInvoiceSchema.parse(await req.json());
+    body = updateBodySchema.parse(await req.json());
   } catch (err) {
     return NextResponse.json(
       {
@@ -75,7 +84,33 @@ export async function PUT(
     );
   }
 
-  const result = await updateInvoice(id, input);
+  // Resolve the chosen addresses against the invoice's own company.
+  const inv = await db.query.invoice.findFirst({
+    where: eq(invoice.id, id),
+    columns: { companyId: true },
+  });
+  if (!inv) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const { addressId, lineItems, ...rest } = body;
+  const { orderShipTo, lineShipTos } = await resolveOrderShipTos(
+    inv.companyId,
+    addressId ?? undefined,
+    lineItems.map((l) => l.addressId ?? undefined),
+  );
+
+  const result = await updateInvoice(id, {
+    ...rest,
+    shipTo: orderShipTo ?? null,
+    lineItems: lineItems.map((l, i) => ({
+      sku: l.sku,
+      title: l.title,
+      quantity: l.quantity,
+      unitPriceCents: l.unitPriceCents,
+      shopifyProductId: l.shopifyProductId,
+      shopifyVariantId: l.shopifyVariantId,
+      shipTo: lineShipTos[i],
+    })),
+  });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

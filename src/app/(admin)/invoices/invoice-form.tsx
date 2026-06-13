@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { LineItemRow, LineItemsHeader, LineItemsTotal } from "@/components/invoicing/line-item-row";
+import type { CompanyAddress } from "@/lib/portal/addresses";
 import {
   CompanyForm,
   emptyCompanyDraft,
@@ -54,6 +55,8 @@ export interface InvoiceFormInitial {
   issuedDate: string;
   dueDate: string;
   notes: string;
+  /** The order's primary ship-to address id (split fulfillment). */
+  shipToAddressId?: string;
   lineItems: {
     id: string;
     sku: string;
@@ -62,6 +65,8 @@ export interface InvoiceFormInitial {
     unitPriceCents: number;
     shopifyProductId: string | null;
     shopifyVariantId: string | null;
+    /** The line's per-line ship-to address id (split fulfillment). */
+    addressId?: string;
   }[];
 }
 
@@ -72,12 +77,20 @@ interface Row {
   title: string;
   quantity: string;
   unitPrice: string; // dollars
+  /** Per-line split-fulfillment address id ("" = ship to the order's default). */
+  addressId: string;
 }
 
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
 
+function addressOptionLabel(a: CompanyAddress): string {
+  return [a.name || a.company, a.address1, a.city, a.provinceCode ?? a.province, a.zip]
+    .filter(Boolean)
+    .join(", ");
+}
+
 function emptyRow(): Row {
-  return { variantKey: "", shopifyProductId: "", sku: "", title: "", quantity: "1", unitPrice: "" };
+  return { variantKey: "", shopifyProductId: "", sku: "", title: "", quantity: "1", unitPrice: "", addressId: "" };
 }
 
 export function InvoiceForm({
@@ -125,9 +138,40 @@ export function InvoiceForm({
           title: l.title,
           quantity: String(l.quantity),
           unitPrice: (l.unitPriceCents / 100).toString(),
+          addressId: l.addressId ?? "",
         }))
       : [emptyRow()],
   );
+  // Ship-to / split fulfillment.
+  const [addresses, setAddresses] = useState<CompanyAddress[]>([]);
+  const [orderAddressId, setOrderAddressId] = useState(initial?.shipToAddressId ?? "");
+  const [split, setSplit] = useState<boolean>(
+    !!initial?.lineItems.some((l) => l.addressId),
+  );
+
+  // Load the selected company's saved Shopify addresses for the ship-to picker.
+  useEffect(() => {
+    if (!companyId) {
+      setAddresses([]);
+      return;
+    }
+    let active = true;
+    fetch(`/api/production/companies/${companyId}/addresses`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!active || !d?.data) return;
+        const addrs = d.data as CompanyAddress[];
+        setAddresses(addrs);
+        // Keep a valid selection; otherwise default to the company's default.
+        setOrderAddressId((cur) =>
+          addrs.some((a) => a.id === cur) ? cur : addrs.find((a) => a.isDefault)?.id || "",
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [companyId]);
   // Remember the last line's collection so a newly-added line defaults to it.
   const [lastCollectionId, setLastCollectionId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -288,6 +332,10 @@ export function InvoiceForm({
   function updateRow(i: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
+  const primaryAddressLabel =
+    addresses.find((a) => a.id === orderAddressId) != null
+      ? addressOptionLabel(addresses.find((a) => a.id === orderAddressId)!)
+      : null;
   function addRow() {
     setRows((rs) => [...rs, emptyRow()]);
   }
@@ -302,6 +350,7 @@ export function InvoiceForm({
       title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
       quantity: "1",
       unitPrice: (v.priceCents / 100).toString(),
+      addressId: "",
     };
   }
   // Batch add: fill the current row with the first pick, insert the rest after.
@@ -346,7 +395,16 @@ export function InvoiceForm({
       if (!Number.isFinite(unitPriceCents) || unitPriceCents < 0) {
         return setError(`Line ${i + 1}: unit price must be a non-negative amount.`);
       }
-      lineItems.push({ sku, title, quantity, unitPriceCents, shopifyProductId, shopifyVariantId });
+      lineItems.push({
+        sku,
+        title,
+        quantity,
+        unitPriceCents,
+        shopifyProductId,
+        shopifyVariantId,
+        // Per-line override only when split is on (else ships to the default).
+        addressId: split ? r.addressId || undefined : undefined,
+      });
     }
 
     setSubmitting(true);
@@ -361,6 +419,7 @@ export function InvoiceForm({
             issuedDate,
             dueDate: dueDate || null,
             notes: notes.trim() || null,
+            addressId: orderAddressId,
             // Empty input = inherit the brand's default at send time. Any
             // entered number (incl. 0) overrides for this invoice only.
             depositPercent:
@@ -539,8 +598,8 @@ export function InvoiceForm({
                 ? rowUnitCents - netUnitPriceCents(rowUnitCents, discount)
                 : null;
             return (
-              <LineItemRow
-                key={i}
+              <div key={i}>
+                <LineItemRow
                 product={
                   catalogError ? (
                     <div className="flex gap-2">
@@ -607,12 +666,67 @@ export function InvoiceForm({
                 lineTotalCents={lineCents}
                 onRemove={() => removeRow(i)}
                 removeDisabled={rows.length === 1}
-              />
+                />
+                {split && addresses.length > 0 && (
+                  <div className="mt-1 flex items-center gap-2 pl-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                      Ship to
+                    </span>
+                    <select
+                      value={r.addressId}
+                      onChange={(e) => updateRow(i, { addressId: e.target.value })}
+                      className="h-9 max-w-[480px] flex-1 rounded-md border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
+                    >
+                      <option value="">
+                        Same as default{primaryAddressLabel ? ` — ${primaryAddressLabel}` : ""}
+                      </option>
+                      {addresses.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {addressOptionLabel(a)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
 
         <LineItemsTotal discountPercent={discount} totalCents={totals.totalCents} />
+
+        {addresses.length > 0 && (
+          <div className="mt-4 border-t border-zinc-100 pt-4">
+            <label className={fieldLabel}>{split ? "Default ship-to" : "Ship to"}</label>
+            <select
+              className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
+              value={orderAddressId}
+              onChange={(e) => setOrderAddressId(e.target.value)}
+            >
+              <option value="">— Select a delivery address —</option>
+              {addresses.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {addressOptionLabel(a)}
+                  {a.isDefault ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+            <label className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
+              <input
+                type="checkbox"
+                checked={split}
+                onChange={(e) => setSplit(e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-300"
+              />
+              Split fulfillment — ship some lines to different addresses
+            </label>
+            <p className="mt-1 text-xs text-zinc-400">
+              {split
+                ? "Pick a destination per line above; lines on “Same as default” ship to the address selected here. One invoice — recorded on the Shopify order (per-line “Ship to” + an order note)."
+                : "The order's saved Shopify ship-to address. Synced to the Shopify draft order when the invoice is sent."}
+            </p>
+          </div>
+        )}
       </Card>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

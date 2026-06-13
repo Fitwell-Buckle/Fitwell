@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { createInvoice, createInvoiceSchema } from "@/lib/invoicing/service";
+import { createInvoice, createInvoiceSchema, invoiceLineInputSchema } from "@/lib/invoicing/service";
+import { resolveOrderShipTos } from "@/lib/portal/addresses";
+
+// The form sends saved-address ids (order-level + per-line); the route resolves
+// them to stable ship-to snapshots before creating the invoice.
+const createBodySchema = createInvoiceSchema.extend({
+  addressId: z.string().nullish(),
+  lineItems: z
+    .array(invoiceLineInputSchema.extend({ addressId: z.string().nullish() }))
+    .min(1, "an invoice needs at least one line"),
+});
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -12,9 +22,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let input;
+  let body;
   try {
-    input = createInvoiceSchema.parse(await req.json());
+    body = createBodySchema.parse(await req.json());
   } catch (err) {
     // Surface the first validation message (e.g. the missing-SKU one) instead
     // of a generic "Invalid payload" so the form tells the user what to fix.
@@ -30,8 +40,27 @@ export async function POST(req: Request) {
     );
   }
 
+  const { addressId, lineItems, ...rest } = body;
+  const { orderShipTo, lineShipTos } = await resolveOrderShipTos(
+    body.companyId,
+    addressId ?? undefined,
+    lineItems.map((l) => l.addressId ?? undefined),
+  );
+
   try {
-    const result = await createInvoice(input);
+    const result = await createInvoice({
+      ...rest,
+      shipTo: orderShipTo ?? null,
+      lineItems: lineItems.map((l, i) => ({
+        sku: l.sku,
+        title: l.title,
+        quantity: l.quantity,
+        unitPriceCents: l.unitPriceCents,
+        shopifyProductId: l.shopifyProductId,
+        shopifyVariantId: l.shopifyVariantId,
+        shipTo: lineShipTos[i],
+      })),
+    });
     return NextResponse.json({ data: result }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";

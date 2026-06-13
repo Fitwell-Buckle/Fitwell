@@ -93,6 +93,9 @@ export const createInvoiceSchema = z.object({
   // Set when the invoice is created from a PO — links it back and prevents
   // creating a second invoice from the same PO.
   sourcePoId: z.string().max(200).nullish(),
+  // Order-level (primary / default) ship-to snapshot. Per-line overrides live on
+  // each line's shipTo (split fulfillment).
+  shipTo: lineShipToSchema,
   lineItems: z.array(invoiceLineInputSchema).min(1, "an invoice needs at least one line"),
 });
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
@@ -103,6 +106,7 @@ export const updateInvoiceSchema = z.object({
   notes: z.string().max(5000).nullable(),
   /** Per-invoice deposit override; null clears it (falls back to brand default). */
   depositPercent: depositPercentInput,
+  shipTo: lineShipToSchema,
   lineItems: z.array(invoiceLineInputSchema).min(1),
 });
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
@@ -143,6 +147,7 @@ export async function createInvoice(
       notes: input.notes ?? null,
       sourcePoId: input.sourcePoId ?? null,
       discountPercent,
+      shipTo: input.shipTo ?? null,
       // Pre-set the per-invoice deposit override if the caller provided one.
       // Sent invoices still get depositCents recomputed by snapshotInvoiceDeposit.
       depositPercent: input.depositPercent ?? null,
@@ -344,6 +349,8 @@ export async function updateInvoice(
         input.depositPercent != null && input.depositPercent > 0
           ? Math.round((totals.totalCents * input.depositPercent) / 100)
           : 0,
+      // shipTo === undefined → leave unchanged; null → clear; object → set.
+      ...(input.shipTo !== undefined ? { shipTo: input.shipTo } : {}),
       updatedAt: new Date(),
       ...totals,
     })
@@ -359,6 +366,7 @@ export async function updateInvoice(
       unitPriceCents: l.unitPriceCents,
       shopifyProductId: l.shopifyProductId ?? null,
       shopifyVariantId: l.shopifyVariantId ?? null,
+      shipTo: l.shipTo ?? null,
     })),
   );
 

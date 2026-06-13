@@ -56,5 +56,8 @@ changing how shipping cost is charged; carrier/label generation.
   `submitPortalOrder` and reuse it there.
 - Portal order **read-only** view (paid orders) shows only the primary ship-to;
   could show the per-line split too.
-- Admin invoice **edit** form has no per-line ship-to control (admin-created
-  invoices can't split yet — portal only).
+- ~~Admin invoice form has no per-line ship-to control.~~ **Done** — the admin
+  invoice create/edit form now has the ship-to picker + "Split fulfillment"
+  toggle + per-line address pickers (fetches the company's addresses, resolves
+  + stores order-level `invoice.ship_to` and per-line `invoice_line_item.ship_to`
+  through the invoice POST/PUT routes).

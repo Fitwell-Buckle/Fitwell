@@ -86,6 +86,7 @@ export default async function EditInvoicePage({
     issuedDate: inv.issuedDate,
     dueDate: inv.dueDate ?? "",
     notes: inv.notes ?? "",
+    shipToAddressId: inv.shipTo?.addressId ?? undefined,
     lineItems: inv.lineItems.map((l) => ({
       id: l.id,
       sku: l.sku,
@@ -94,6 +95,7 @@ export default async function EditInvoicePage({
       unitPriceCents: l.unitPriceCents,
       shopifyProductId: l.shopifyProductId,
       shopifyVariantId: l.shopifyVariantId,
+      addressId: l.shipTo?.addressId ?? undefined,
     })),
   };
 
