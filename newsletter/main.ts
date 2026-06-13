@@ -17,7 +17,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { eq, gte } from "drizzle-orm";
+import { gte } from "drizzle-orm";
 import { db } from "../src/lib/db";
 import {
   newsletterArticle,
@@ -35,6 +35,7 @@ import { SOURCES, activeSources } from "./sources";
 import { fetchAllSources } from "./fetch";
 import { filterNew, contentHash, normalizeUrl, type SeenArticle } from "./dedup";
 import { triageStories, summarizeAll, writeSubjectLine } from "./editorial";
+import { campaignAlreadySent } from "./guard";
 import { enrichStories } from "./images";
 import { renderBrief } from "./generate";
 import { cleanHeadline } from "./text";
@@ -42,6 +43,17 @@ import { saveBriefCache, loadBriefCache, type CachedBrief } from "./cache";
 import type { BriefStory, RawStory, Segment, StoryType } from "./types";
 
 const SEEN_WINDOW_DAYS = 14;
+
+/**
+ * Newsletter uses its own write-scoped Klaviyo key (campaigns + templates
+ * write) so the analytics KLAVIYO_API_KEY can stay read-only. Falls back
+ * to KLAVIYO_API_KEY if the dedicated key isn't set.
+ */
+function newsletterKlaviyoClient(): KlaviyoClient {
+  return new KlaviyoClient({
+    apiKey: process.env.NEWSLETTER_KLAVIYO_API_KEY ?? process.env.KLAVIYO_API_KEY,
+  });
+}
 
 /** Sync the code-side registry into newsletter_source (upsert on slug). */
 async function seedSources(): Promise<Map<string, string>> {
@@ -157,6 +169,17 @@ async function run(): Promise<void> {
   const slug = campaignSlug(now);
   const mode = dryRun ? "dry-run" : send ? "send" : "draft";
   console.log(`[${slug}] mode=${mode}${cached ? " (cached — no API calls)" : ""}`);
+
+  // Idempotency guard (draft/send only). If today's issue already went out
+  // — e.g. the GitHub schedule: fallback firing after the Vercel-cron
+  // primary already sent — back off BEFORE the pipeline runs. This avoids
+  // both the wasted editorial spend and, critically, persisting freshly-
+  // fetched stories that could never be emailed (the swallowed-stories
+  // bug — see newsletter/guard.ts).
+  if (!dryRun && (await campaignAlreadySent(slug, newsletterKlaviyoClient()))) {
+    console.log(`campaign "${slug}" already sent — skipping run (idempotent no-op).`);
+    return;
+  }
 
   // Dropped-article rows to persist (draft/send only). Empty in cached mode:
   // we don't re-run dedup/triage, so there's no fresh drop list to record.
@@ -340,7 +363,17 @@ interface PublishArgs {
   send: boolean;
 }
 
-/** Persist the brief + create the Klaviyo draft (and send, if --send). */
+/**
+ * Create the Klaviyo draft (and send, if --send), THEN persist the brief.
+ *
+ * Order matters: DB writes happen only after the Klaviyo action succeeds,
+ * so a story is marked "seen" (in `newsletter_article`) only once the
+ * issue it belongs to has actually shipped. If the draft/send fails — or
+ * the slug already sent — nothing is persisted, so the stories stay
+ * eligible for the next run instead of being silently swallowed. (The
+ * early guard in run() normally short-circuits the already-sent case
+ * before we get here; this ordering is the backstop if it didn't.)
+ */
 async function publishToKlaviyo({
   slug,
   brief,
@@ -354,14 +387,6 @@ async function publishToKlaviyo({
       "NEWSLETTER_KLAVIYO_LIST_ID not set — create the newsletter list in Klaviyo first",
     );
   }
-  const htmlHash = createHash("sha256").update(html).digest("hex");
-  const [campaign] = await db
-    .insert(newsletterCampaign)
-    .values({ subject, articleCount: brief.length, htmlHash })
-    .returning({ id: newsletterCampaign.id });
-
-  const sourceIds = await seedSources();
-  await persistArticles(sourceIds, brief, droppedForPersist, campaign.id);
 
   const config: CampaignConfig = {
     subject,
@@ -370,12 +395,7 @@ async function publishToKlaviyo({
     from_label: NEWSLETTER.fromLabel,
     audiences: { included: [NEWSLETTER.klaviyoListId] },
   };
-  // Newsletter uses its own write-scoped Klaviyo key (campaigns + templates
-  // write) so the analytics KLAVIYO_API_KEY can stay read-only. Falls back
-  // to KLAVIYO_API_KEY if the dedicated key isn't set.
-  const klaviyoClient = new KlaviyoClient({
-    apiKey: process.env.NEWSLETTER_KLAVIYO_API_KEY ?? process.env.KLAVIYO_API_KEY,
-  });
+  const klaviyoClient = newsletterKlaviyoClient();
   let result: Awaited<ReturnType<typeof draftCampaign>>;
   try {
     result = await draftCampaign({
@@ -389,8 +409,9 @@ async function publishToKlaviyo({
     });
   } catch (e) {
     // Idempotent: today's brief already went out under this slug (e.g. a
-    // duplicate cron fire, or a same-day re-run). Nothing to do — exit clean
-    // rather than failing the workflow red.
+    // duplicate cron fire, or a same-day re-run that raced past the guard).
+    // Nothing has been persisted, so exit clean — the stories remain
+    // eligible for tomorrow rather than being marked seen-but-unsent.
     if (e instanceof CampaignAlreadySentError) {
       console.log(
         `campaign "${slug}" already sent — skipping (idempotent no-op).`,
@@ -399,22 +420,41 @@ async function publishToKlaviyo({
     }
     throw e;
   }
-  await db
-    .update(newsletterCampaign)
-    .set({ klaviyoCampaignId: result.campaignId })
-    .where(eq(newsletterCampaign.id, campaign.id));
   console.log(`\nKlaviyo draft ${result.mode}: ${result.klaviyoUrl}`);
 
+  let sentAt: Date | null = null;
   if (send) {
     // The only line in the whole engine that emails anyone. Sends to the
     // campaign's audience (NEWSLETTER_KLAVIYO_LIST_ID).
     await klaviyoClient.sendCampaign(result.campaignId);
-    await db
-      .update(newsletterCampaign)
-      .set({ status: "sent", sentAt: new Date() })
-      .where(eq(newsletterCampaign.id, campaign.id));
+    sentAt = new Date();
     console.log(`SENT to list ${NEWSLETTER.klaviyoListId}`);
   }
+
+  // Now that the issue has shipped, record it. Upsert on the Klaviyo id so
+  // a same-slug re-draft updates its one row rather than inserting a
+  // duplicate (which the klaviyo_campaign_id unique index would reject).
+  const htmlHash = createHash("sha256").update(html).digest("hex");
+  const status = send ? "sent" : "draft";
+  const [campaign] = await db
+    .insert(newsletterCampaign)
+    .values({
+      klaviyoCampaignId: result.campaignId,
+      subject,
+      articleCount: brief.length,
+      htmlHash,
+      status,
+      sentAt,
+    })
+    .onConflictDoUpdate({
+      target: newsletterCampaign.klaviyoCampaignId,
+      set: { subject, articleCount: brief.length, htmlHash, status, sentAt },
+    })
+    .returning({ id: newsletterCampaign.id });
+
+  const sourceIds = await seedSources();
+  await persistArticles(sourceIds, brief, droppedForPersist, campaign.id);
+
   console.log(`subject: ${subject} · ${brief.length} stories`);
 }
 

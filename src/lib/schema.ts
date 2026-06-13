@@ -2597,9 +2597,9 @@ export const newsletterSource = pgTable(
   (t) => [uniqueIndex("newsletter_source_slug_uniq").on(t.slug)],
 );
 
-// One row per send (or attempted send). The Klaviyo campaign is created
-// as a draft by the engine; klaviyo_campaign_id is null only if the
-// draft step failed after articles were already written.
+// One row per shipped issue. Written only after the Klaviyo draft/send
+// succeeds (persist-after-send ordering — see newsletter/main.ts), so
+// klaviyo_campaign_id is always populated; the row is upserted on it.
 export const newsletterCampaign = pgTable(
   "newsletter_campaign",
   {

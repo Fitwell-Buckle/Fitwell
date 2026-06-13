@@ -213,8 +213,44 @@ Christie's, Sotheby's, Swatch Group IR, Richemont IR.
 | Triage returns invalid tool input | One retry, then run fails (no brief beats a garbage brief) |
 | Single summary call fails | Story keeps its feed excerpt |
 | Zero fresh stories / triage drops all | Run exits cleanly, "no brief today" |
-| Klaviyo draft fails | Articles + campaign row already written; `klaviyo_campaign_id` stays null; re-run is safe (article upserts are `onConflictDoNothing`, `draftCampaign` is idempotent by slug) |
-| Campaign already sent for slug | `CampaignAlreadySentError` — refuses to overwrite |
+| Klaviyo draft/send fails | **Nothing is persisted** — DB writes happen only after the Klaviyo action succeeds, so no story is marked seen-but-unsent. The Klaviyo draft may exist; a re-run re-drafts (idempotent by slug) and ships. Stories stay eligible for the next run. |
+| Campaign already sent for slug | The early guard in `run()` short-circuits to a clean no-op *before the pipeline runs* (no fetch, no triage, no DB writes). If a run races past the guard, `draftCampaign` throws `CampaignAlreadySentError` and `publishToKlaviyo` exits before any persist — same net effect. |
+
+## Idempotency & the dual trigger
+
+The production newsletter fires from **two** triggers that share the same
+`-auto` slug for a given date:
+
+1. **Primary — Vercel cron → `/api/cron/newsletter-trigger`** fires a
+   `workflow_dispatch` (`scheduled=true`) at ~08:55 UTC. This is the run
+   that actually sends.
+2. **Fallback — GitHub `schedule:` cron** at 10:00 UTC. Exists so a Vercel
+   outage or token failure still gets the brief out.
+
+Because both own the same slug, exactly one must send and the other must
+be a complete no-op. Two layers enforce this:
+
+- **Early guard (`newsletter/guard.ts`, checked at the top of `run()`):**
+  looks up the slug in Klaviyo; if its status is anything but `draft`, the
+  run exits immediately — *before* fetch/triage/enrich. This is the normal
+  path for the fallback on a day the primary already sent: no wasted Claude
+  / BrightData spend, and no DB writes.
+- **Persist-after-send ordering (`publishToKlaviyo`):** all DB writes
+  (`newsletter_campaign` row + `persistArticles`) happen only *after* the
+  Klaviyo draft/send succeeds. A story is therefore marked "seen" only once
+  the issue carrying it has shipped.
+
+> **Why both — the swallowed-stories bug (fixed 2026-06-13).** The original
+> ordering persisted articles *before* calling Klaviyo, then bailed on
+> `CampaignAlreadySentError`. On 2026-06-13 the 10:00 fallback found two
+> releases the 08:55 send had missed (published in between), wrote them to
+> `newsletter_article` (marking them seen + `included_in_campaign_id`), then
+> discovered the campaign was already sent and exited — so they were never
+> emailed and the 14-day dedup would suppress them forever. The guard stops
+> the fallback before it can fetch them; the persist-after-send ordering is
+> the backstop if anything ever races past the guard. The fallback's
+> purpose is preserved: if the primary never sent, no sent campaign exists,
+> so the guard lets the fallback through to send.
 
 ## Remaining phases
 
