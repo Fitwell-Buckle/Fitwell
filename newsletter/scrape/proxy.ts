@@ -23,6 +23,26 @@ const UA =
 let cachedAgent: ProxyAgent | null = null;
 let cachedKey = "";
 
+// Serialize proxied fetches: every proxied source shares ONE BrightData
+// residential zone, and the zone throttles concurrent sessions. When
+// WatchTime + WatchPro fire at once (fetchAllSources runs every source in
+// parallel) they compete for a session and one transiently fails all its
+// retries — exactly what was killing WatchTime. Running proxied fetches
+// one-at-a-time trades a little wall-clock (a few proxied sources, each a
+// few seconds) for reliability; direct RSS fetches still run in parallel.
+let proxyTail: Promise<unknown> = Promise.resolve();
+
+/** Run fn only after all previously-queued proxied fetches have settled. */
+export function runProxiedExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const result = proxyTail.then(fn, fn);
+  // Keep the chain alive regardless of individual success/failure.
+  proxyTail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
 export function isProxyConfigured(): boolean {
   return Boolean(
     process.env.BRIGHTDATA_USERNAME && process.env.BRIGHTDATA_PASSWORD,
@@ -61,32 +81,35 @@ export async function proxiedFetch(
 ): Promise<string | null> {
   const agent = getAgent();
   if (!agent) return null;
-  // Residential proxies fail a fraction of requests per hop (bad exit
-  // node, transient CF challenge, or concurrent-session throttling when
-  // several sources hit the zone at once). Retry WITH BACKOFF — immediate
-  // retries are useless against rate limits; a short wait lets the zone
-  // free a session. The cannabis engine's scraper had the same ladder.
-  const MAX_ATTEMPTS = 4;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      const res = await undiciFetch(url, {
-        headers: {
-          "User-Agent": UA,
-          Accept: accept,
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        redirect: "follow",
-        dispatcher: agent,
-      });
-      if (res.ok) return await res.text();
-      // 403/429/5xx → likely a bad exit node or throttle; a fresh hop may work
-    } catch {
-      // timeout / connection reset → retry
+  // Serialized against other proxied fetches (one zone session at a time).
+  return runProxiedExclusive(async () => {
+    // Residential proxies fail a fraction of requests per hop (bad exit
+    // node, transient CF challenge, or concurrent-session throttling when
+    // several sources hit the zone at once). Retry WITH BACKOFF — immediate
+    // retries are useless against rate limits; a short wait lets the zone
+    // free a session. The cannabis engine's scraper had the same ladder.
+    const MAX_ATTEMPTS = 4;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const res = await undiciFetch(url, {
+          headers: {
+            "User-Agent": UA,
+            Accept: accept,
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          redirect: "follow",
+          dispatcher: agent,
+        });
+        if (res.ok) return await res.text();
+        // 403/429/5xx → likely a bad exit node or throttle; a fresh hop may work
+      } catch {
+        // timeout / connection reset → retry
+      }
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, attempt * 800));
+      }
     }
-    if (attempt < MAX_ATTEMPTS) {
-      await new Promise((r) => setTimeout(r, attempt * 800));
-    }
-  }
-  return null;
+    return null;
+  });
 }

@@ -11,7 +11,7 @@
 import type { SourceDef } from "../sources";
 import type { RawStory } from "../types";
 import { decodeEntities } from "../text";
-import { proxiedFetch } from "./proxy";
+import { isProxyConfigured, proxiedFetch } from "./proxy";
 
 const LISTING_URL = "https://www.watchpro.com/news/";
 
@@ -75,8 +75,28 @@ export function parseWatchProListing(html: string, source: SourceDef): RawStory[
   return stories;
 }
 
-export async function scrapeWatchPro(source: SourceDef): Promise<RawStory[]> {
-  const html = await proxiedFetch(LISTING_URL, "text/html");
-  if (!html) return []; // proxy not configured / fetch failed — fail soft
+/**
+ * Scrape the WatchPro listing through the proxy.
+ *
+ * Fail behavior is deliberately split so a scheduled run is never blind:
+ * - proxy creds ABSENT (typical local dev) → return [] quietly; we don't
+ *   want a dev run to go red just because BrightData isn't wired locally.
+ * - proxy creds PRESENT but the fetch came back empty (CI/prod) → THROW,
+ *   so `fetchAllSources` records it as a `source failed: watchpro` line.
+ *   The old silent `return []` made a proxy/Cloudflare failure look
+ *   identical to "fetched fine, nothing new" — invisible in the logs.
+ *
+ * `fetcher` is injectable purely as a test seam; production passes the
+ * real proxiedFetch.
+ */
+export async function scrapeWatchPro(
+  source: SourceDef,
+  fetcher: (url: string, accept?: string) => Promise<string | null> = proxiedFetch,
+): Promise<RawStory[]> {
+  const html = await fetcher(LISTING_URL, "text/html");
+  if (!html) {
+    if (!isProxyConfigured()) return [];
+    throw new Error("watchpro listing fetch returned nothing (proxy/Cloudflare)");
+  }
   return parseWatchProListing(html, source);
 }

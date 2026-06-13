@@ -114,8 +114,13 @@ Each source declares a `fetchMode` (in `newsletter/sources.ts`):
   So we scrape the live `/news/` HTML listing through the BrightData
   proxy (`newsletter/scrape/watchpro.ts`); dates come from each
   article's `<time datetime>` (the `/cloud/YYYY/MM/DD/` image path is a
-  fallback). Needs `BRIGHTDATA_USERNAME`/`PASSWORD`; fails soft (returns
-  []) without them. Verified live 2026-06-10 — contributed 8 stories
+  fallback). Needs `BRIGHTDATA_USERNAME`/`PASSWORD`. Fail behavior (fixed
+  2026-06-13): creds **absent** → returns [] quietly (dev runs without
+  BrightData stay green); creds **present** but the fetch comes back empty
+  → **throws**, so the run logs `source failed: watchpro`. The old silent
+  `return []` made a proxy/Cloudflare failure indistinguishable from
+  "fetched fine, nothing new" — a scheduled run could lose WatchPro
+  without any trace. Verified live 2026-06-10 — contributed 8 stories
   (the brief's biggest source that run: Rolex price hike, Swiss export
   data, retailer financials).
 _(Europa Star was evaluated and dropped 2026-06-10 — publishes too
@@ -157,13 +162,21 @@ approach and Tom's existing BrightData account (`newsletter/scrape/proxy.ts`,
 undici `ProxyAgent`). Still-blocked sources without a proxy route are
 left inactive rather than half-working.
 
-Two gotchas the proxy code handles: (1) pair undici's `fetch` with its
+Three gotchas the proxy code handles: (1) pair undici's `fetch` with its
 `ProxyAgent` — Node's global fetch uses a different bundled undici and
 throws `invalid onRequestStart method`. (2) Residential zones throttle
 concurrent sessions, so when several proxied sources (WatchPro +
 WatchTime) fetch at once, some requests transiently fail; `proxiedFetch`
 retries 4× with linear backoff and a broad `Accept` (RSS + Atom).
 Without the backoff, WatchTime intermittently dropped from the brief.
+(3) Backoff alone wasn't enough — `fetchAllSources` fires every source in
+parallel, so both proxied sources still hit the one zone simultaneously.
+`proxiedFetch` now runs its calls through `runProxiedExclusive`, a
+width-1 queue that **serializes proxied fetches** (WatchPro waits for
+WatchTime, etc.) while direct RSS keeps running in parallel. Trades a few
+seconds of wall-clock for not competing over a single zone session
+(added 2026-06-13, after WatchTime failed all 4 retries in back-to-back
+scheduled runs).
 
 Not yet attempted: Reddit / WatchCrunch (403 bot fetches — community
 signal, lower priority; Reddit has an authed API option), Hairspring,
