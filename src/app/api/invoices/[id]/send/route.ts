@@ -14,6 +14,7 @@ import { buildInvoiceEmailHtml } from "@/lib/invoicing/email";
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { sendEmail } from "@/lib/email/resend";
 import { getShopifyClient } from "@/lib/shopify/client";
+import { buildSplitShipping, shipToToShopify } from "@/lib/portal/addresses";
 
 function isScopeError(msg: string): boolean {
   const m = msg.toLowerCase();
@@ -96,15 +97,20 @@ export async function POST(
   // than email a linkless invoice or mark it "sent".
   let payUrl: string | null = inv.shopifyInvoiceUrl ?? null;
   let pushedShopify = false;
+  // Split fulfillment: per-line "Ship to" attributes + a grouped order note,
+  // and the order-level ship-to address (same as the portal submit path).
+  const { productLines, splitNote } = buildSplitShipping(inv.lineItems, inv.shipTo ?? null);
   if (shopifyCustomerId) {
     try {
       const r = await getShopifyClient().createDraftOrderInvoice({
         email: primary,
         shopifyCustomerId,
+        shippingAddress: inv.shipTo ? shipToToShopify(inv.shipTo) : undefined,
         discountPercent: hasDeposit ? 0 : inv.discountPercent ?? 0,
-        note: hasDeposit
-          ? `Deposit (${depositPercent}%) for invoice ${inv.invoiceNumber}`
-          : `Invoice ${inv.invoiceNumber}`,
+        note:
+          (hasDeposit
+            ? `Deposit (${depositPercent}%) for invoice ${inv.invoiceNumber}`
+            : `Invoice ${inv.invoiceNumber}`) + splitNote,
         lines: hasDeposit
           ? [
               {
@@ -114,12 +120,7 @@ export async function POST(
                 unitPriceCents: split.depositCents,
               },
             ]
-          : inv.lineItems.map((l) => ({
-              variantId: l.shopifyVariantId,
-              title: l.title,
-              quantity: l.quantity,
-              unitPriceCents: l.unitPriceCents,
-            })),
+          : productLines,
       });
       payUrl = r.invoiceUrl ?? payUrl;
       pushedShopify = true;

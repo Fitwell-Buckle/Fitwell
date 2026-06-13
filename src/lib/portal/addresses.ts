@@ -212,6 +212,66 @@ export interface ShipPlanLine {
   shipTo: InvoiceShipTo | null;
 }
 
+/**
+ * Build the Shopify draft-order product lines (with per-line "Ship to" custom
+ * attributes when the order is split) plus a grouped split note for the order.
+ * Shopify can't hold >1 destination per order, so split fulfillment is recorded
+ * as line attributes + the note; the order-level address stays the primary.
+ * Shared by the portal submit, the admin invoice send, and the tier-reprice
+ * regeneration so all three sync the split identically.
+ */
+export function buildSplitShipping(
+  lineItems: {
+    sku: string;
+    title: string;
+    quantity: number;
+    shopifyVariantId: string | null;
+    unitPriceCents: number;
+    shipTo: InvoiceShipTo | null;
+  }[],
+  primary: InvoiceShipTo | null,
+): {
+  productLines: {
+    variantId: string | null;
+    title: string;
+    quantity: number;
+    unitPriceCents: number;
+    customAttributes?: { key: string; value: string }[];
+  }[];
+  splitNote: string;
+} {
+  const primaryLabel = primary ? shipToLabel(primary) : null;
+  const lineLabel = (s: InvoiceShipTo | null): string | null => (s ? shipToLabel(s) : primaryLabel);
+  const split = isSplitOrder(lineItems);
+
+  const productLines = lineItems.map((l) => {
+    const dest = split ? lineLabel(l.shipTo) : null;
+    return {
+      variantId: l.shopifyVariantId,
+      title: l.title,
+      quantity: l.quantity,
+      unitPriceCents: l.unitPriceCents,
+      ...(dest ? { customAttributes: [{ key: "Ship to", value: dest }] } : {}),
+    };
+  });
+
+  let splitNote = "";
+  if (split) {
+    const byDest = new Map<string, string[]>();
+    for (const l of lineItems) {
+      const dest = lineLabel(l.shipTo) ?? "(no address on file)";
+      const entry = `${l.quantity}× ${l.sku || l.title}`;
+      const arr = byDest.get(dest);
+      if (arr) arr.push(entry);
+      else byDest.set(dest, [entry]);
+    }
+    splitNote =
+      "\n\nSplit fulfillment — ship to multiple addresses:\n" +
+      [...byDest.entries()].map(([dest, items]) => `• ${dest}: ${items.join(", ")}`).join("\n");
+  }
+  return { productLines, splitNote };
+}
+
 export interface ShipPlanGroup {
   label: string;
   isDefault: boolean;

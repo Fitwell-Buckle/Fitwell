@@ -12,7 +12,7 @@ import {
 import { createPo, createMultiSupplierPo } from "@/lib/production/service";
 import type { ProductionStage } from "@/lib/production/stages";
 import { getShopifyClient } from "@/lib/shopify/client";
-import { shipToToShopify } from "@/lib/portal/addresses";
+import { shipToToShopify, buildSplitShipping } from "@/lib/portal/addresses";
 import {
   computeInvoiceTotals,
   computeDeposit,
@@ -441,15 +441,17 @@ export async function reapplyTierToOpenInvoices(
     // the customer is charged the new amount. Drafts have no pay link yet.
     if (inv.status === "sent" && shopifyCustomerId) {
       const hasDeposit = split.depositCents > 0 && split.balanceCents > 0;
+      const { productLines, splitNote } = buildSplitShipping(inv.lineItems, inv.shipTo ?? null);
       try {
         const r = await getShopifyClient().createDraftOrderInvoice({
           email: comp.contactEmail,
           shopifyCustomerId,
           shippingAddress: inv.shipTo ? shipToToShopify(inv.shipTo) : undefined,
           discountPercent: hasDeposit ? 0 : newDiscount,
-          note: hasDeposit
-            ? `Deposit (${depositPercent}%) for invoice ${inv.invoiceNumber}`
-            : `Invoice ${inv.invoiceNumber}`,
+          note:
+            (hasDeposit
+              ? `Deposit (${depositPercent}%) for invoice ${inv.invoiceNumber}`
+              : `Invoice ${inv.invoiceNumber}`) + splitNote,
           lines: hasDeposit
             ? [
                 {
@@ -459,12 +461,7 @@ export async function reapplyTierToOpenInvoices(
                   unitPriceCents: split.depositCents,
                 },
               ]
-            : inv.lineItems.map((l) => ({
-                variantId: l.shopifyVariantId,
-                title: l.title,
-                quantity: l.quantity,
-                unitPriceCents: l.unitPriceCents,
-              })),
+            : productLines,
         });
         // Drop the stale draft order so Shopify Admin doesn't keep duplicates.
         if (inv.shopifyDraftOrderId) {

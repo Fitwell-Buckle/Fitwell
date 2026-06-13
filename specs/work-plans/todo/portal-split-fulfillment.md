@@ -49,11 +49,11 @@ changing how shipping cost is charged; carrier/label generation.
 - A line with `ship_to = null` ships to `invoice.ship_to` (the default).
 
 ## Follow-ups (not blocking)
-- `reapplyTierToOpenInvoices` (tier-change regeneration) does NOT re-emit the
-  split custom attributes / note on the regenerated Shopify draft order — our DB
-  keeps the split, but a tier change on a split *sent* order would drop the split
-  hints from Shopify until the next portal edit. Factor the split logic out of
-  `submitPortalOrder` and reuse it there.
+- ~~`reapplyTierToOpenInvoices` doesn't re-emit the split custom attributes /
+  note.~~ **Done** — the split logic is now the shared `buildSplitShipping`
+  helper, used by the portal submit, the admin invoice **send**, and the
+  tier-reprice regeneration, so all three sync the split (+ order-level ship-to)
+  to Shopify identically.
 - Portal order **read-only** view (paid orders) shows only the primary ship-to;
   could show the per-line split too.
 - ~~Admin invoice form has no per-line ship-to control.~~ **Done** — the admin

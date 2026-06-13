@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { company, invoice, invoiceLineItem, type InvoiceShipTo } from "@/lib/schema";
-import { shipToToShopify, shipToLabel } from "@/lib/portal/addresses";
+import { shipToToShopify, buildSplitShipping } from "@/lib/portal/addresses";
 import {
   getCatalogCached,
   getCatalogGroupsCached,
@@ -308,28 +308,9 @@ export async function submitPortalOrder(
   const split = computeDeposit(totals.totalCents, depositPercent);
   const hasDeposit = !wire && split.depositCents > 0 && split.balanceCents > 0;
 
-  // Split fulfillment: a line with its own ship-to means the order ships to
-  // more than one address. Shopify can't hold >1 destination on an order, so we
-  // record each line's destination as a "Ship to" custom attribute and append a
-  // grouped summary to the order note (the order-level address stays the primary).
-  const primaryLabel = inv.shipTo ? shipToLabel(inv.shipTo) : null;
-  const lineLabel = (s: InvoiceShipTo | null): string | null =>
-    s ? shipToLabel(s) : primaryLabel;
-  const isSplit = inv.lineItems.some((l) => l.shipTo != null);
-  let splitNote = "";
-  if (isSplit) {
-    const byDest = new Map<string, string[]>();
-    for (const l of inv.lineItems) {
-      const dest = lineLabel(l.shipTo) ?? "(no address on file)";
-      const entry = `${l.quantity}× ${l.sku || l.title}`;
-      const arr = byDest.get(dest);
-      if (arr) arr.push(entry);
-      else byDest.set(dest, [entry]);
-    }
-    splitNote =
-      "\n\nSplit fulfillment — ship to multiple addresses:\n" +
-      [...byDest.entries()].map(([dest, items]) => `• ${dest}: ${items.join(", ")}`).join("\n");
-  }
+  // Split fulfillment: record each line's destination as a "Ship to" custom
+  // attribute + a grouped order note (Shopify can't hold >1 destination).
+  const { productLines, splitNote } = buildSplitShipping(inv.lineItems, inv.shipTo ?? null);
 
   let draft;
   try {
@@ -351,16 +332,7 @@ export async function submitPortalOrder(
               unitPriceCents: split.depositCents,
             },
           ]
-        : inv.lineItems.map((l) => {
-            const dest = isSplit ? lineLabel(l.shipTo) : null;
-            return {
-              variantId: l.shopifyVariantId,
-              title: l.title,
-              quantity: l.quantity,
-              unitPriceCents: l.unitPriceCents,
-              ...(dest ? { customAttributes: [{ key: "Ship to", value: dest }] } : {}),
-            };
-          }),
+        : productLines,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "";

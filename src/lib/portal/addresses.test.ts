@@ -5,7 +5,13 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/schema", () => ({ company: {}, customer: {}, customerAddress: {} }));
 
-import { shipToLabel, shipToToShopify, isSplitOrder, buildShipPlan } from "./addresses";
+import {
+  shipToLabel,
+  shipToToShopify,
+  isSplitOrder,
+  buildShipPlan,
+  buildSplitShipping,
+} from "./addresses";
 
 const s = {
   addressId: "a1",
@@ -62,6 +68,33 @@ describe("ship plan (split fulfillment)", () => {
   it("isSplitOrder is true only when a line has its own ship-to", () => {
     expect(isSplitOrder(lines)).toBe(true);
     expect(isSplitOrder([{ shipTo: null }, { shipTo: null }])).toBe(false);
+  });
+
+  it("buildSplitShipping: per-line Ship to attributes + grouped note when split", () => {
+    const lineItems = [
+      { sku: "A", title: "Buckle A", quantity: 2, shopifyVariantId: "v1", unitPriceCents: 4000, shipTo: null },
+      { sku: "B", title: "Buckle B", quantity: 1, shopifyVariantId: "v2", unitPriceCents: 4000, shipTo: wh },
+    ];
+    const { productLines, splitNote } = buildSplitShipping(lineItems, primary);
+    // A → default (HQ), B → its own (WH).
+    expect(productLines[0].customAttributes).toEqual([
+      { key: "Ship to", value: expect.stringContaining("1 HQ St") },
+    ]);
+    expect(productLines[1].customAttributes).toEqual([
+      { key: "Ship to", value: expect.stringContaining("9 Dock Rd") },
+    ]);
+    expect(splitNote).toContain("Split fulfillment");
+    expect(splitNote).toContain("9 Dock Rd"); // the WH destination group
+    expect(splitNote).toContain("1× B");
+  });
+
+  it("buildSplitShipping: no attributes / note when not split", () => {
+    const lineItems = [
+      { sku: "A", title: "Buckle A", quantity: 2, shopifyVariantId: "v1", unitPriceCents: 4000, shipTo: null },
+    ];
+    const { productLines, splitNote } = buildSplitShipping(lineItems, primary);
+    expect(productLines[0]).not.toHaveProperty("customAttributes");
+    expect(splitNote).toBe("");
   });
 
   it("buildShipPlan groups lines by destination, default-address lines together", () => {
