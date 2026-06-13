@@ -99,7 +99,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             "https://www.googleapis.com/auth/gmail.send",
           ].join(" "),
           access_type: "offline",
-          prompt: "consent",
+          // Force the account chooser on every sign-in. Without "select_account",
+          // a browser with exactly one Google account signed in (typical on
+          // mobile) skips the picker entirely — Google auto-selects that single
+          // account and dead-ends on org_internal if it's the wrong one, with no
+          // "use another account" option offered. Adding select_account always
+          // surfaces the chooser. "consent" stays so scope changes re-prompt.
+          prompt: "select_account consent",
         },
       },
     }),
