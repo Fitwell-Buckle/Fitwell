@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-06-12
+Last updated: 2026-06-13
 
 ## 🎯 Active sprint (2026-06-12 → 2026-06-22) — Fable 5 sprint
 
@@ -11,6 +11,40 @@ ready before Tom returns ~06-21), ② post-purchase retention email content
 (D1/D14/D21/D30 + welcome rewrite), ③ landing page variants A+B + Shopify
 Pages write client, ④ UTM linking gap root-cause for Greg, ⑤ signup-lift
 experiment designs. Check there first when deciding what to work on.
+
+## 📨 Daily check (added 2026-06-13) — Newsletter editorial QA, while the new model beds in
+
+We just shipped a big change to the newsletter editorial model (commits
+`527a3dc` + `f5a5706`, pushed to main): new **Reviews**, **Podcasts** and
+**Community & Culture** sections, business analysis routed to Business,
+plus **WatchPro now fails loudly** (was silent) and proxied fetches are
+**serialized** to stop WatchPro/WatchTime competing for the BrightData
+zone. **First send on the new model is 2026-06-14 08:55 UTC.**
+
+**Daily, for the next ~1–2 weeks, check two things:**
+1. **What got accepted vs rejected** — is triage routing stories to the
+   right sections and dropping the right noise (listicles, self-promo,
+   non-watch)? Don't just trust the counts; eyeball the actual stories.
+2. **WatchPro went through** — confirm it's not silently missing. It now
+   logs `source failed: watchpro` on a real proxy failure; absence of that
+   line + WatchPro rows in the brief = good.
+
+**How to check:**
+- *Quick glance (automated):* the **"Newsletter run check"** cloud routine
+  (`trig_01ENYo7X6NFXCD1AGGkPcC2h`) emails Tom a daily summary at 13:00 UTC
+  — SENT verdict, subject, fetch/dedup/triage counts, and explicit
+  WatchPro/WatchTime OK-or-FAILED. Killable via `/schedule` or
+  https://claude.ai/code/routines.
+- *Story-level accept/reject:* the summary only gives counts. To see the
+  actual kept-vs-dropped list, query prod `newsletter_article` for the day
+  — `included_in_campaign_id` set = kept (with `type`/`segment`),
+  `dropped_reason` set = rejected (the triage verdict is the audit trail).
+  Recipe + the env-pull pattern are in `specs/current/newsletter-engine.md`.
+- A local `npm run newsletter:dry-run` also prints the full
+  "dropped by triage" list with reasons (but skips dedup — preview only).
+
+Stop the daily check once the classification looks reliable and WatchPro
+is consistently landing.
 
 ## ✅ Closed 2026-06-13 — Shopify scope deploy + history import
 
