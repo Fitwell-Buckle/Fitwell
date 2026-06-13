@@ -50,6 +50,14 @@ describe.skipIf(noDb)("shopify sync dedupe (real DB)", () => {
         .delete(schema.orderLineItem)
         .where(eq(schema.orderLineItem.orderId, ord.id));
     }
+    const cust = await db.query.customer.findFirst({
+      where: eq(schema.customer.shopifyId, custShopifyId),
+    });
+    if (cust) {
+      await db
+        .delete(schema.utmAttribution)
+        .where(eq(schema.utmAttribution.visitorId, cust.id));
+    }
     await db.delete(schema.order).where(eq(schema.order.shopifyId, orderShopifyId));
     await db
       .delete(schema.customer)
@@ -168,6 +176,52 @@ describe.skipIf(noDb)("shopify sync dedupe (real DB)", () => {
       .from(schema.orderLineItem)
       .where(eq(schema.orderLineItem.orderId, oid1));
     expect(items).toHaveLength(1); // replaced, not 3
+  });
+
+  it("inserts the order-derived UTM touch once, not on every re-sync", async () => {
+    const utmOrder: ShopifyOrder = {
+      id: orderShopifyId as unknown as number,
+      order_number: 1001,
+      email: "itest@example.com",
+      total_price: "40.00",
+      subtotal_price: "40.00",
+      total_discounts: "0.00",
+      total_tax: "0.00",
+      currency: "USD",
+      financial_status: "paid",
+      fulfillment_status: null,
+      discount_codes: [],
+      refunds: [],
+      processed_at: "2026-03-01T00:00:00.000Z",
+      created_at: "2026-03-01T00:00:00.000Z",
+      updated_at: "2026-03-01T00:00:00.000Z",
+      customer: makeCustomer(),
+      source_name: "web",
+      landing_site: "/?utm_source=itest&utm_medium=cpc",
+      referring_site: null,
+      note: null,
+      note_attributes: [],
+      tags: "",
+      line_items: [],
+    };
+    utmOrder.customer.id = custShopifyId as unknown as number;
+
+    await upsertOrder(utmOrder); // may be a re-sync if earlier tests created the order
+    const cust = await db.query.customer.findFirst({
+      where: eq(schema.customer.shopifyId, custShopifyId),
+    });
+    const countTouches = async () =>
+      (
+        await db
+          .select()
+          .from(schema.utmAttribution)
+          .where(eq(schema.utmAttribution.visitorId, cust!.id))
+      ).length;
+
+    const after1 = await countTouches();
+    await upsertOrder(utmOrder); // definite re-sync
+    await upsertOrder(utmOrder); // and again
+    expect(await countTouches()).toBe(after1); // no new rows on re-sync
   });
 
   it("replaces (not duplicates) discount-code rows on re-sync and normalizes casing", async () => {

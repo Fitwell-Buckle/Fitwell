@@ -38,7 +38,7 @@ describe("commitAttribution", () => {
   it("does NOT upgrade platform → channel even when UTM agrees (paid/organic ambiguity stays honest)", () => {
     // We deliberately do not turn 'instagram + meta/cpc' into 'paid_meta_cold'
     // here yet — that refinement comes after the UTM linking gap is fixed.
-    // See specs/work-plans/todo/utm-linking-gap.md.
+    // See specs/work-plans/completed/utm-linking-gap.md.
     const result = commitAttribution(ig, { source: "meta", medium: "cpc" });
     expect(result.source).toBe("survey_platform");
     expect(result.platform).toBe("instagram");

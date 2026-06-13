@@ -1,19 +1,52 @@
 # UTM ↔ Order Linking Gap
 
-> **Status:** investigation queued. Discovered 2026-06-05 while building
+> **Status: CLOSED 2026-06-13.** Investigation complete; everything
+> recoverable has been recovered. Discovered 2026-06-05 while building
 > Phase 3 of [[grapevine-integration]].
 >
-> **Update 2026-06-12 — the forward-looking half is closed.** Since the
+> **Update 2026-06-12 — the forward-looking half closed.** Since the
 > PostHog theme redeploy went live (2026-06-04), 71% of June orders carry
 > `link_method` (43 pixel / 5 self_report / 1 email_match of 69). The
 > 5.4% figure below was measured on a mostly *pre-pixel* window — the
-> linker wasn't broken so much as starved of pixel ids. **Remaining scope
-> is historical:** the 1,209 converted-but-unlinked `utm_attribution`
-> rows and pre-pixel orders (email-match backfill). Also relevant:
+> linker wasn't broken so much as starved of pixel ids. Also relevant:
 > `d7bcf56` fixed `linkOrderToAttribution` re-emitting `purchase_completed`
 > to PostHog on every cron re-sync (~12×/day) and made re-syncs unable to
-> downgrade `self_report` links — read that commit before touching the
-> linker.
+> downgrade `self_report` links.
+
+## Resolution (2026-06-13) — verified diagnosis
+
+Prod-data diagnosis of the historical half, hypothesis by hypothesis:
+
+1. **The historical backfill is structurally impossible, not pending.**
+   1,189 unlinked orders (104 from 2024, 253 from 2025, 832 from 2026);
+   only **2** have any UTM in their own `landing_site`, and only **2**
+   are matchable to a customer-identified touch inside the 30-day
+   window. Pre-pixel storefront touches were captured *anonymously* —
+   no `visitor_id`, no order-side distinct id — so the identity edge
+   needed for linking was never recorded. You cannot backfill data that
+   was never captured. **These orders stay `link_method = NULL`
+   permanently and that is the correct representation.** Channel-level
+   history for them still exists via `customer.utm_*` first-touch
+   fields and the Grapevine survey view.
+2. **The "1,249 converted-but-unlinked rows" stat was mostly an
+   artifact.** `upsertOrder()` inserted an order-derived
+   `utm_attribution` row on *every* sync pass — the 2h cron's 25h
+   overlap window re-inserted identical rows ~12×/day (one visitor
+   accumulated 194 copies). 55% of the table was duplicates: **2,823
+   dupes deleted** (312 real order-derived touches kept, preferring
+   converted rows, then earliest) via
+   `scripts/cleanup-utm-duplicate-touches.ts`, and the insert is now
+   guarded to fire only on first sync of an order.
+3. **Self-report backfill: already complete** — `backfill-self-report-
+   link-method.ts` re-run 2026-06-13, zero rows to update.
+
+Nothing remains for Greg. Read-side consumers should treat
+`link_method IS NULL` + `processed_at < 2026-06-04` as "pre-
+instrumentation era," not as a data quality bug.
+
+---
+
+*Original investigation brief below, kept for context.*
 
 ## Context
 

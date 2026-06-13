@@ -73,13 +73,19 @@ Full reasoning: `specs/strategy/sessions/2026-06-09-retention-led-recal.md`.
    D1 / D14 / D21 / D30 content, D30 outfit code generated in Shopify
    (25% off 5+, 30-day expiry; shared vs single-use TBD). Greg signed off
    on the Phase 4 architecture 2026-06-09.
-2. **Greg's queue (in order):** ① UTM linking gap — *scope shrank
-   2026-06-12*: the pixel going live closed the forward gap (71% of June
-   orders linked vs 5.4% before); remaining work is the historical
-   backfill (`specs/work-plans/todo/utm-linking-gap.md`, see Update note).
+2. **Greg's queue: empty as of 2026-06-13.** ① ~~UTM linking gap~~ —
+   **closed**: forward gap fixed by the pixel (71% of June orders
+   linked); historical half proven *unrecoverable* (pre-pixel touches
+   were anonymous — no identity edge ever captured) — pre-2026-06-04
+   `link_method IS NULL` is the pre-instrumentation era, not a bug.
+   Bonus finds: 2,823 duplicate `utm_attribution` rows (55% of table)
+   deleted + the duplicating insert in `upsertOrder()` fixed. Full
+   diagnosis: `specs/work-plans/completed/utm-linking-gap.md`.
    ② ~~PostHog theme redeploy~~ — **done 2026-06-04**, data flowing (see
-   workstream 6). ③ Shopify scope deploy + Feb-2024 history import (top
-   of doc).
+   workstream 6). ③ ~~Shopify scope deploy + Feb-2024 history import~~ —
+   **closed 2026-06-13** (top of doc). Remaining Greg involvement is
+   gates only: prod migrations when sprint work ships, and the
+   influencer→creator contract migration sign-off with Oliver.
 3. **Signup-lift workstream (360 W5 §6)** — design experiments now;
    measurement gated on PostHog data accumulating. Discount-code-name
    visibility **shipped 2026-06-10** (workstream 10) — first C1 read:

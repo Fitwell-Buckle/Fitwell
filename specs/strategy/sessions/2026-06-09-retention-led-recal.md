@@ -74,7 +74,7 @@ Per [[../personas]] Distribution + `scripts/persona-segments.ts` +
 While building Grapevine Phase 3 the team discovered only **5.4% of
 orders have `link_method` stamped** (40 of 734) even though 1,249 UTM
 rows are marked `converted=true`. The UTM linker is firing on ~3% of
-what it should. Filed at [[../../work-plans/todo/utm-linking-gap]].
+what it should. Filed at [[../../work-plans/completed/utm-linking-gap]].
 
 ### COGS confirmed (2026-06-06)
 
@@ -316,7 +316,7 @@ Work plans referenced:
 
 - [[../../work-plans/todo/klaviyo-integration]] — Phase 4 ready to
   start
-- [[../../work-plans/todo/utm-linking-gap]] — Greg's queue #1
+- [[../../work-plans/completed/utm-linking-gap]] — Greg's queue #1
 - [[../../work-plans/todo/posthog-integration]] — theme redeploy
   pending Greg
 - [[../creator-program]] — engineering compress ~2026-06-21

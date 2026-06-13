@@ -4,7 +4,7 @@
 // The data reality on prod (2026-06-05):
 //   - 24% of orders have a Grapevine survey response
 //   - Only ~5% of orders have UTM linkage on `order.link_method`
-//     (see specs/work-plans/todo/utm-linking-gap.md)
+//     (see specs/work-plans/completed/utm-linking-gap.md)
 // So this function is survey-first: when the survey commits to a channel
 // (creator/forum/in-person/etc), use it; when it only reveals a platform,
 // keep it platform-level rather than guessing paid vs organic; only fall

@@ -65,7 +65,7 @@ Note: PostHog's standard Shopify install already identifies every purchase by cu
 - If none of the three resolve, the purchase is "direct/unattributed".
 - The self-report method can coexist with pixel/email-match — the survey row's `order_id` links the survey to the order, and the UTM row (when present) is independently linked via methods 2/3. The view layer merges both signals via `commitAttribution` in `src/lib/grapevine/attribution-merge.ts`.
 
-**Known gap as of 2026-06-05:** the pixel + email-match linker fires only ~5% of in-window orders (40/734 in the 178-day window). The self-report path now covers ~24% of orders (Grapevine survey-response rate). Until the linker gap closes, the self-report signal is the dominant per-order attribution method on prod. See [[../work-plans/todo/utm-linking-gap]] for the investigation queue.
+**Known gap as of 2026-06-05:** the pixel + email-match linker fires only ~5% of in-window orders (40/734 in the 178-day window). The self-report path now covers ~24% of orders (Grapevine survey-response rate). Until the linker gap closes, the self-report signal is the dominant per-order attribution method on prod. See [[../work-plans/completed/utm-linking-gap]] for the investigation queue.
 
 ### 5. Deduplication
 Prevent double-counting conversions.

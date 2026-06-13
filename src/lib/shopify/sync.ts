@@ -186,6 +186,18 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
 
   const shopifyId = String(shopifyOrder.id);
   const utm = parseUtmParams(shopifyOrder.landing_site);
+
+  // Detect re-syncs before the upsert: the order-derived utm_attribution
+  // insert below must fire only for NEW orders. Unguarded, the 2h cron's
+  // 25h overlap window re-inserted an identical touch row on every pass
+  // (one visitor accumulated 194 dupes; cleanup:
+  // scripts/cleanup-utm-duplicate-touches.ts).
+  const [preExisting] = await db
+    .select({ id: order.id })
+    .from(order)
+    .where(eq(order.shopifyId, shopifyId))
+    .limit(1);
+  const isNewOrder = !preExisting;
   const orderValues = {
     shopifyId,
     shopifyOrderNumber: shopifyOrder.order_number,
@@ -242,8 +254,8 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
 
   const orderId = result.id;
 
-  // Track UTM attribution if present
-  if (Object.keys(utm).length > 0) {
+  // Track UTM attribution if present — first sync of the order only
+  if (isNewOrder && Object.keys(utm).length > 0) {
     await db.insert(utmAttribution).values({
       visitorId: customerId,
       source: utm.utm_source ?? null,

@@ -26,7 +26,7 @@ this artifact?* If no, it doesn't belong in this sprint.
 - `specs/strategy/360-campaign.md` (W2, W3, W5) — workstream definitions
 - `specs/strategy/creator-program.md` + `creator-scoring.md` — Workstream 1 spec
 - `specs/strategy/personas.md` + `vocabulary-map.md` — grounding for all copy
-- `specs/work-plans/todo/utm-linking-gap.md` — Workstream 4 investigation brief
+- `specs/work-plans/completed/utm-linking-gap.md` — Workstream 4 investigation brief
 - `specs/work-plans/todo/klaviyo-integration.md` — Phase 4 architecture (signed off 2026-06-09)
 - Tom in Geneva until ~2026-06-21 — everything here must be executable without him present, with review-on-return checkpoints
 
@@ -206,10 +206,10 @@ Only 40/734 orders get `link_method` stamped vs 1,249 converted UTM rows.
 Deliverable is a **verified diagnosis + backfill plan** Greg can execute —
 clears his critical path without waiting for his cycle. Brief:
 `utm-linking-gap.md`.
-- [ ] Trace the full path: theme snippet → `_fw_distinct_id` cart attribute → orders/create webhook → `link_method` stamp
-- [ ] Identify where the ~95% drop happens (with evidence, not hypothesis)
-- [ ] Write backfill plan (and script if the fix is data-side)
-- [ ] Update `utm-linking-gap.md` with findings; hand off to Greg
+- [x] Trace the full path — done across 06-12/06-13 sessions; path works, it was starved of pixel ids pre-06-04
+- [x] Identify where the ~95% drop happens — verified with prod data: pre-pixel touches captured anonymously (no visitor_id / distinct id), so the identity edge never existed; only 2 of 1,189 unlinked orders are window-matchable. Historical backfill is structurally impossible, not pending.
+- [x] Backfill executed where possible: self-report re-run (0 remaining), 2,823 duplicate utm_attribution rows deleted (`scripts/cleanup-utm-duplicate-touches.ts`), duplicating insert in `upsertOrder()` fixed + integration test
+- [x] `utm-linking-gap.md` updated with verified diagnosis → moved to completed/. **Nothing for Greg.**
 
 ### WS5: Signup-lift experiment designs (360 W5 §6)
 Pure design work, explicitly "design now, launch once PostHog data

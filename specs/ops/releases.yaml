@@ -222,4 +222,25 @@
   artifacts:
     - specs/ops/PRIORITIES.md
     - src/lib/analytics/order-attribution.ts
-    - specs/work-plans/todo/utm-linking-gap.md
+    - specs/work-plans/completed/utm-linking-gap.md
+
+- date: "2026-06-13"
+  title: "UTM linking gap closed: dedup + verified no-backfill diagnosis"
+  priority: 6
+  layer: 1
+  notes: >
+    Historical half of the linking gap diagnosed against prod data and
+    closed: pre-pixel touches were captured anonymously, so the identity
+    edge for linking 1,189 pre-06-04 orders never existed — they stay
+    link_method NULL by design (pre-instrumentation era). Recovered what
+    existed: self-report backfill re-run (0 remaining), 2,823 duplicate
+    utm_attribution rows deleted (55% of the table — upsertOrder inserted
+    an order-derived touch on every 2h cron pass), and the duplicating
+    insert fixed with an isNewOrder guard + integration test. Also same
+    day: Feb-2024 history import (1,743 orders, prod back to launch) after
+    verifying the 06-08 reinstall had granted read_all_orders. Greg's
+    queue is now empty; gates only.
+  artifacts:
+    - specs/work-plans/completed/utm-linking-gap.md
+    - scripts/cleanup-utm-duplicate-touches.ts
+    - src/lib/shopify/sync.ts
