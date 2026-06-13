@@ -40,6 +40,7 @@ const SOURCE_LABELS: Record<LeadSourceChannel, string> = {
   b2b_peer_referral: "Peer referral",
   b2b_strap_maker_referral_into_brand_customers: "Strap-maker referral",
   b2b_d2c_reverse_attribution: "D2C reverse-attribution",
+  b2b_creator_pipeline: "Creator pipeline",
 };
 
 export function sourceChannelLabel(channel: string): string {

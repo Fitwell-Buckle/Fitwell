@@ -1660,8 +1660,16 @@ export const creator = pgTable(
     // max(per-platform fit) + 0.2 × min — the outreach ranking number.
     crossPlatformFit: real("cross_platform_fit"),
     burnedUntilDate: date("burned_until_date"),
-    // Optional link to a synced Shopify customer (gifting recipient).
+    // Optional link to a synced Shopify customer — the customer record that
+    // IS this creator (set by gifting as the recipient, or by a
+    // "convert to customer" reclassification).
     customerId: text("customer_id").references(() => customer.id),
+    // Reclassification links: when a creator turns out to be a B2B prospect
+    // (a strap brand surfaced by follower count, not a content creator) it's
+    // converted into a CRM lead or company and archived. These remember
+    // where it went (provenance + dedup so it can't be re-converted).
+    leadId: text("lead_id").references(() => lead.id),
+    companyId: text("company_id").references(() => company.id),
     // Shopify collection ids this creator may order from. Empty = all.
     // (Carried over from influencer for the self-serve portal phase.)
     assignedCollectionIds: text("assigned_collection_ids").array(),
@@ -1674,6 +1682,8 @@ export const creator = pgTable(
     index("creator_vetting_status_idx").on(t.vettingStatus),
     index("creator_cross_platform_fit_idx").on(t.crossPlatformFit),
     index("creator_customer_id_idx").on(t.customerId),
+    index("creator_lead_id_idx").on(t.leadId),
+    index("creator_company_id_idx").on(t.companyId),
   ],
 );
 

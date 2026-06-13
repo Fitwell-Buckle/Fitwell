@@ -5,10 +5,13 @@ import { count, desc, eq, inArray, or, sum } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  company,
   creatorPost,
   creatorStatsDaily,
+  customer,
   influencer,
   influencerOrder,
+  lead,
   order,
   orderDiscountCode,
 } from "@/lib/schema";
@@ -20,6 +23,7 @@ import { rightsStatus, type RightsTier } from "@/lib/creators/assets";
 import { flagPossibleMismatch } from "@/lib/creators/edit";
 import { AddPlatform } from "./add-platform";
 import { AssetsPanel } from "./assets-panel";
+import { ConvertCreator } from "./convert-creator";
 import { CreatorActions } from "./creator-actions";
 import { CreatorEditor } from "./creator-editor";
 import { EmailsEditor } from "./emails-editor";
@@ -85,6 +89,58 @@ export default async function CreatorDetailPage({
     record.name,
     record.platforms.map((p) => ({ platform: p.platform, handle: p.handle })),
   );
+
+  // Reclassification state: was this creator converted to a B2B lead/company
+  // or a retail customer? (customerId alone = gifting recipient; only count it
+  // as a customer reclassification once the creator is archived.)
+  let convertedTo:
+    | { kind: "B2B lead" | "B2B company" | "customer"; href: string; label: string }
+    | null = null;
+  if (record.leadId) {
+    const [l] = await db
+      .select({
+        companyName: lead.companyName,
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+      })
+      .from(lead)
+      .where(eq(lead.id, record.leadId));
+    convertedTo = {
+      kind: "B2B lead",
+      href: `/leads/${record.leadId}`,
+      label:
+        l?.companyName ||
+        [l?.firstName, l?.lastName].filter(Boolean).join(" ") ||
+        "lead",
+    };
+  } else if (record.companyId) {
+    const [co] = await db
+      .select({ name: company.name })
+      .from(company)
+      .where(eq(company.id, record.companyId));
+    convertedTo = {
+      kind: "B2B company",
+      href: `/customers/brands/${record.companyId}`,
+      label: co?.name ?? "company",
+    };
+  } else if (record.customerId && record.status === "archived") {
+    const [cu] = await db
+      .select({
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        email: customer.email,
+      })
+      .from(customer)
+      .where(eq(customer.id, record.customerId));
+    convertedTo = {
+      kind: "customer",
+      href: `/customers/${record.customerId}`,
+      label:
+        [cu?.firstName, cu?.lastName].filter(Boolean).join(" ") ||
+        cu?.email ||
+        "customer",
+    };
+  }
 
   const codeStrings = record.discountCodes.map((c) => c.code);
 
@@ -231,6 +287,16 @@ export default async function CreatorDetailPage({
         </div>
       )}
 
+      {convertedTo && (
+        <div className="mb-3 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+          Reclassified — this creator was converted to a{" "}
+          <span className="font-medium">{convertedTo.kind}</span> and archived.{" "}
+          <Link href={convertedTo.href} className="font-medium underline">
+            Open {convertedTo.label} ↗
+          </Link>
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <VetButtons
           creatorId={record.id}
@@ -238,6 +304,12 @@ export default async function CreatorDetailPage({
         />
         <CreatorActions creatorId={record.id} />
       </div>
+
+      {!convertedTo && (
+        <div className="mb-4">
+          <ConvertCreator creatorId={record.id} creatorName={record.name} />
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

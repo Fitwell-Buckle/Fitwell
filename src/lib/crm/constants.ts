@@ -8,7 +8,10 @@
 export const LEAD_STAGES = ["lead", "sample", "customer"] as const;
 export type LeadStage = (typeof LEAD_STAGES)[number];
 
-// Seven B2B entry channels from specs/strategy/b2b-pipeline.md.
+// Seven B2B entry channels from specs/strategy/b2b-pipeline.md, plus
+// `b2b_creator_pipeline`: a brand surfaced by the creator-discovery import
+// (by follower count) that turned out to be a B2B prospect, reclassified
+// via the creator detail page's "Convert to B2B lead/company" action.
 export const LEAD_SOURCE_CHANNELS = [
   "b2b_trade_shows_consumer",
   "b2b_trade_shows_industry",
@@ -17,6 +20,7 @@ export const LEAD_SOURCE_CHANNELS = [
   "b2b_peer_referral",
   "b2b_strap_maker_referral_into_brand_customers",
   "b2b_d2c_reverse_attribution",
+  "b2b_creator_pipeline",
 ] as const;
 export type LeadSourceChannel = (typeof LEAD_SOURCE_CHANNELS)[number];
 

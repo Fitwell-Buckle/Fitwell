@@ -87,6 +87,7 @@ Server-side rollup persistence + handle-uniqueness checks live in
 | `creators/vet-actions` | Client — inline list-row ✓ approve / ✗ reject / ↺ reset / ▲▼ boost |
 | `creators/[id]/vet-buttons` | Client — detail-page Approve / Reject / Reset (header) |
 | `creators/[id]/creator-editor` | Client — name, primary platform, status, rank boost (±10), country, notes |
+| `creators/[id]/convert-creator` | Client — reclassify a creator → B2B lead / B2B company / customer (customer typeahead reuses `/api/production/customer-search`). Archives the creator; detail page shows a "Reclassified →" banner after |
 | `creators/[id]/add-platform` | Client — add a channel to a creator; server auto-populates stats + posts via `lib/creators/populate.ts` `populatePlatform()` (defers to cron if the API key is unset) |
 | `creators/[id]/platform-editor` | Client — per-platform Edit / fix: edit handle/platform/url/bio/verified, **Split off** (→ new creator), **Reassign** (typeahead picker → another creator), Delete |
 | `creators/[id]/emails-editor` | Client — add / remove emails, edit kind + portal-access toggle |

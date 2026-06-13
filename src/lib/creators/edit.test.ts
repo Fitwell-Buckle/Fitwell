@@ -4,6 +4,7 @@ import {
   recomputeRollups,
   deriveNameFromHandle,
   flagPossibleMismatch,
+  splitName,
 } from "./edit";
 
 describe("pickPrimaryPlatform", () => {
@@ -77,6 +78,30 @@ describe("deriveNameFromHandle", () => {
   });
   it("falls back when handle is empty", () => {
     expect(deriveNameFromHandle("", "ig")).toBe("Untitled ig creator");
+  });
+});
+
+describe("splitName", () => {
+  it("splits first + last", () => {
+    expect(splitName("Teddy Baldassarre")).toEqual({
+      firstName: "Teddy",
+      lastName: "Baldassarre",
+    });
+  });
+  it("puts everything after the first token in lastName", () => {
+    expect(splitName("Jean Claude Van Damme")).toEqual({
+      firstName: "Jean",
+      lastName: "Claude Van Damme",
+    });
+  });
+  it("single-token brand → firstName only", () => {
+    expect(splitName("Crownandcaliber")).toEqual({
+      firstName: "Crownandcaliber",
+      lastName: null,
+    });
+  });
+  it("handles empty / whitespace", () => {
+    expect(splitName("   ")).toEqual({ firstName: null, lastName: null });
   });
 });
 

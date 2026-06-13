@@ -76,6 +76,22 @@ export function deriveNameFromHandle(
   return h ? `@${h} (${platform})` : `Untitled ${platform} creator`;
 }
 
+/**
+ * Split a creator's free-text name into first/last for the CRM lead/customer
+ * record it converts into. First token → firstName, the rest → lastName.
+ * A single-token name (a brand like "The Watch Couple") becomes firstName
+ * only, lastName null — the CRM treats companyName separately anyway.
+ */
+export function splitName(name: string): {
+  firstName: string | null;
+  lastName: string | null;
+} {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: null, lastName: null };
+  if (parts.length === 1) return { firstName: parts[0], lastName: null };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
 // ─── Possible-mismatch heuristic ────────────────────────────────────
 
 const STOPWORDS = new Set([
