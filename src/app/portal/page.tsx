@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { company } from "@/lib/schema";
 import { getCompanyScope } from "@/lib/portal/company-session";
+import { listInvoicesForCompany } from "@/lib/invoicing/service";
 import {
   getCatalogCached,
   getCatalogGroupsCached,
@@ -14,12 +15,13 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import type { CatalogCollection } from "@/components/catalog/product-combobox";
 import { PortalOrder } from "./portal-order";
+import { PortalOrdersTable } from "./orders/orders-table";
 
 export default async function PortalHomePage() {
   const scope = await getCompanyScope();
   if (!scope) redirect("/portal/login");
 
-  const [comp, catalog, groups] = await Promise.all([
+  const [comp, catalog, groups, orders] = await Promise.all([
     db.query.company.findFirst({
       where: eq(company.id, scope.companyId),
       columns: {
@@ -44,6 +46,7 @@ export default async function PortalHomePage() {
         return [];
       }
     })(),
+    listInvoicesForCompany(scope.companyId),
   ]);
 
   const discount = comp?.priceTier?.discountPercent ?? 0;
@@ -96,6 +99,13 @@ export default async function PortalHomePage() {
         discountPercent={discount}
         allowWirePayment={comp?.allowWirePayment ?? false}
       />
+
+      <div className="mt-10">
+        <h2 className="text-sm font-semibold text-zinc-900">Your orders</h2>
+        <div className="mt-3">
+          <PortalOrdersTable orders={orders} />
+        </div>
+      </div>
     </div>
   );
 }
