@@ -107,7 +107,8 @@ Full reasoning: `specs/strategy/sessions/2026-06-09-retention-led-recal.md`.
    D1 / D14 / D21 / D30 content, D30 outfit code generated in Shopify
    (25% off 5+, 30-day expiry; shared vs single-use TBD). Greg signed off
    on the Phase 4 architecture 2026-06-09.
-2. **Greg's queue: empty as of 2026-06-13.** ① ~~UTM linking gap~~ —
+2. **Greg's queue (2026-06-13): one known-drift item — orphan prod
+   migration.** ① ~~UTM linking gap~~ —
    **closed**: forward gap fixed by the pixel (71% of June orders
    linked); historical half proven *unrecoverable* (pre-pixel touches
    were anonymous — no identity edge ever captured) — pre-2026-06-04
@@ -117,9 +118,30 @@ Full reasoning: `specs/strategy/sessions/2026-06-09-retention-led-recal.md`.
    diagnosis: `specs/work-plans/completed/utm-linking-gap.md`.
    ② ~~PostHog theme redeploy~~ — **done 2026-06-04**, data flowing (see
    workstream 6). ③ ~~Shopify scope deploy + Feb-2024 history import~~ —
-   **closed 2026-06-13** (top of doc). Remaining Greg involvement is
-   gates only: prod migrations when sprint work ships, and the
-   influencer→creator contract migration sign-off with Oliver.
+   **closed 2026-06-13** (top of doc). ④ **NEW — orphan prod migration to
+   reconcile.** Prod's `drizzle.__drizzle_migrations` has **74 rows vs 73
+   on-disk**: one applied row at **`2026-06-11T14:38:45Z`** (between `0058`
+   and `0059`) has **no matching file in the repo**. Verified read-only via
+   `db:pending:prod` + a hash-diff of the prod table against the on-disk
+   journal (2026-06-13). Correlates with the **2026-06-11 newsletter
+   branding/monetization work** — that session generated a migration,
+   applied it to prod, then the file was renumbered/discarded when the work
+   was reworked, leaving the tracking row (and whatever it `ALTER`ed)
+   orphaned. *Benign for deploys* — drizzle ignores unrecognised rows and
+   applies new migrations by timestamp, which is why `0059`–`0072` all
+   landed fine. **Only future risk:** if the newsletter schema work is
+   revived and re-migrated it could hit "already exists" on prod (the same
+   class as the influencer-branch `production_stage already exists` bug).
+   **Recipe to reconcile (destructive → Greg owns):** (a) diff prod's
+   `newsletter_*` table columns against `src/lib/schema.ts` to identify what
+   the orphan added; (b) if those columns are wanted, hand-author a
+   migration file matching prod so the journal catches up; if unwanted, drop
+   them; (c) delete the orphan row from `drizzle.__drizzle_migrations`
+   (match on its `created_at`/`hash`) so prod = repo. Fold into the
+   migration-history reconciliation already queued below. Remaining Greg
+   involvement otherwise is gates only: prod migrations when sprint work
+   ships, and the influencer→creator contract migration sign-off with
+   Oliver.
 3. **Signup-lift workstream (360 W5 §6)** — design experiments now;
    measurement gated on PostHog data accumulating. Discount-code-name
    visibility **shipped 2026-06-10** (workstream 10) — first C1 read:
