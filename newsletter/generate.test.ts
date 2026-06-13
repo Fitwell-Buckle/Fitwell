@@ -59,6 +59,26 @@ describe("layoutBrief", () => {
     ]);
     expect(news.get("business")).toHaveLength(3);
   });
+
+  it("buckets reviews and podcasts into their own groups, not into news", () => {
+    const { news, releases, reviews, podcasts } = layoutBrief([
+      brief({ type: "business", url: "https://a.com/1" }),
+      brief({ type: "review", url: "https://a.com/2" }),
+      brief({ type: "review", url: "https://a.com/3" }),
+      brief({ type: "podcast", url: "https://a.com/4" }),
+    ]);
+    expect([...news.keys()]).toEqual(["business"]);
+    expect(releases).toHaveLength(0);
+    expect(reviews).toHaveLength(2);
+    expect(podcasts).toHaveLength(1);
+  });
+
+  it("routes community/culture into the news map under Community & Culture", () => {
+    const { news } = layoutBrief([
+      brief({ type: "community", url: "https://a.com/1" }),
+    ]);
+    expect(news.get("community")).toHaveLength(1);
+  });
 });
 
 describe("buildMjml", () => {
@@ -75,6 +95,28 @@ describe("buildMjml", () => {
     expect(mjml).toContain("Hodinkee"); // source eyebrow (no brand-tier tag)
     expect(mjml).toContain("Business &amp; Industry"); // type-led section header
     expect(mjml).toContain("New Releases");
+  });
+
+  it("renders Reviews and Podcasts section headers when present", () => {
+    const mjml = buildMjml(
+      [
+        brief({}),
+        brief({ type: "review", url: "https://a.com/r", title: "Hands-On: The Diver", summary: "Worn & Wound finds it solid." }),
+        brief({ type: "podcast", url: "https://a.com/p", title: "Episode 5", summary: "An hour on dial supply." }),
+        brief({ type: "community", url: "https://a.com/c", title: "A Collector's Story" }),
+      ],
+      date,
+    );
+    expect(mjml).toContain("Reviews");
+    expect(mjml).toContain("Podcasts");
+    expect(mjml).toContain("Community &amp; Culture");
+    expect(mjml).toContain("https://a.com/p");
+  });
+
+  it("omits Reviews and Podcasts sections when there are none", () => {
+    const mjml = buildMjml([brief({})], date);
+    expect(mjml).not.toContain("Reviews");
+    expect(mjml).not.toContain("Podcasts");
   });
 
   it("does not render brand-tier (segment) labels", () => {

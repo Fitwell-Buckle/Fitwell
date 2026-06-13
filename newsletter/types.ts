@@ -6,7 +6,14 @@
 export const SEGMENTS = ["luxury", "mid", "microbrand", "vintage-auction"] as const;
 export type Segment = (typeof SEGMENTS)[number];
 
-export const STORY_TYPES = ["release", "business", "auction", "community"] as const;
+export const STORY_TYPES = [
+  "release",
+  "business",
+  "auction",
+  "community",
+  "review",
+  "podcast",
+] as const;
 export type StoryType = (typeof STORY_TYPES)[number];
 
 export const SEGMENT_LABELS: Record<Segment, string> = {
@@ -17,13 +24,22 @@ export const SEGMENT_LABELS: Record<Segment, string> = {
 };
 
 export const TYPE_LABELS: Record<StoryType, string> = {
-  release: "New Releases",
   business: "Business & Industry",
   auction: "Auction & Market",
-  community: "Community & Analysis",
+  community: "Community & Culture",
+  release: "New Releases",
+  review: "Reviews",
+  podcast: "Podcasts",
 };
 
-/** Hard-news section order in the brief; releases always render last. */
+/**
+ * The "hard news" group: subject to the maxStories cap, lead-eligible,
+ * rendered first as full cards. Business & market ANALYSIS rides with
+ * Business (not Community). Community & Culture is profiles / culture /
+ * collector human-interest. Releases, Reviews and Podcasts are NOT in
+ * this group — each is uncapped and rendered in its own section after the
+ * news (see generate.ts for the full render order).
+ */
 export const NEWS_SECTION_ORDER = ["business", "auction", "community"] as const;
 
 /** A story as it comes off a feed, before dedup/triage. */

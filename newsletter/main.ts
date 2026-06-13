@@ -290,19 +290,26 @@ async function buildBrief(
       };
     });
 
-  const hardNews = included
-    .filter((s) => s.type !== "release")
+  // The maxStories cap applies to HARD NEWS only (business/auction/
+  // community). Releases, Reviews and Podcasts each get their own uncapped
+  // section after the news — the brief is the complete record of what the
+  // press published, and we don't arbitrate between the brands we court.
+  const NEWS_TYPES = new Set<StoryType>(["business", "auction", "community"]);
+  const news = included
+    .filter((s) => NEWS_TYPES.has(s.type))
     .slice(0, NEWSLETTER.maxStories);
   const releases = included.filter((s) => s.type === "release");
+  const reviews = included.filter((s) => s.type === "review");
+  const podcasts = included.filter((s) => s.type === "podcast");
 
-  // Hard-news lead enforced in code too: never lead with a podcast-shaped
-  // community story when a business/auction story exists
-  const leadIdx = hardNews.findIndex(
+  // Hard-news lead enforced in code too: never lead with a culture/profile
+  // story when a business/auction story exists.
+  const leadIdx = news.findIndex(
     (s) => s.type === "business" || s.type === "auction",
   );
-  if (leadIdx > 0) hardNews.unshift(hardNews.splice(leadIdx, 1)[0]);
+  if (leadIdx > 0) news.unshift(news.splice(leadIdx, 1)[0]);
 
-  const selected = [...hardNews, ...releases];
+  const selected = [...news, ...reviews, ...releases, ...podcasts];
   const triagedOut = fresh
     .filter((s) => !verdictByUrl.get(s.url)?.include)
     .map((s) => ({
@@ -311,7 +318,7 @@ async function buildBrief(
     }));
   stats.included = selected.length;
   console.log(
-    `triage kept ${hardNews.length} hard-news + ${releases.length} releases, dropped ${triagedOut.length}`,
+    `triage kept ${news.length} news + ${releases.length} releases + ${reviews.length} reviews + ${podcasts.length} podcasts, dropped ${triagedOut.length}`,
   );
   if (dryRun && triagedOut.length > 0) {
     console.log(`\ndropped by triage:`);

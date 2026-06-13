@@ -1,11 +1,12 @@
 /**
  * Brief assembly: BriefStory[] → MJML → HTML.
  *
- * Structure: sections are organized by NEWS TYPE (Business & Industry →
- * Auction & Market → Community & Analysis), because news doesn't sort by
- * brand price tier — segment (luxury/micro/…) is just the eyebrow tag on
- * each story. "New Releases" renders LAST and is complete: featured
- * releases get full cards, routine drops get a compact "Also new" list.
+ * Structure (top → bottom): the hard-news sections by Type (Business &
+ * Industry → Auction & Market → Community & Culture), then Reviews, then
+ * New Releases, then Podcasts — all as full cards. News doesn't sort by
+ * brand price tier, so segment (luxury/micro/…) is just the eyebrow tag
+ * on each story. Releases and Reviews are complete (uncapped); the
+ * Fitwell sponsor module sits right after Business.
  * Stories carry images when resolution succeeded, and "Also at" links
  * when triage collapsed multi-outlet coverage. Reuses the Klaviyo MJML
  * pipeline (compileMjml + injectUtms).
@@ -32,19 +33,24 @@ function escapeHtml(s: string): string {
 export interface BriefLayout {
   /** Hard news grouped by type: business → auction → community. */
   news: Map<StoryType, BriefStory[]>;
-  /** All releases — equal full-card treatment, rendered last. */
+  /** All releases — equal full-card treatment. */
   releases: BriefStory[];
+  /** Editorial reviews — full cards, the publication's verdict attributed. */
+  reviews: BriefStory[];
+  /** Podcasts — full cards, rendered last. */
+  podcasts: BriefStory[];
 }
 
 export function layoutBrief(stories: BriefStory[]): BriefLayout {
   const releases = stories.filter((s) => s.type === "release");
-  const hardNews = stories.filter((s) => s.type !== "release");
+  const reviews = stories.filter((s) => s.type === "review");
+  const podcasts = stories.filter((s) => s.type === "podcast");
   const news = new Map<StoryType, BriefStory[]>();
   for (const type of NEWS_SECTION_ORDER) {
-    const inSection = hardNews.filter((s) => s.type === type);
+    const inSection = stories.filter((s) => s.type === type);
     if (inSection.length > 0) news.set(type, inSection);
   }
-  return { news, releases };
+  return { news, releases, reviews, podcasts };
 }
 
 function alsoCoveredLine(story: BriefStory): string {
@@ -147,7 +153,7 @@ export function buildMjml(
   slug = "preview",
   preheader: string = NEWSLETTER.tagline,
 ): string {
-  const { news, releases } = layoutBrief(stories);
+  const { news, releases, reviews, podcasts } = layoutBrief(stories);
 
   // Footer shop CTA — UTM-tagged (utm_content=footer) so persistent
   // brand-sign-off clicks are attributable apart from the rotating module.
@@ -176,9 +182,19 @@ export function buildMjml(
   if (!sponsorPlaced) parts.push(sponsor);
   const newsSections = parts.join("\n");
 
+  // After the news: Reviews → New Releases → Podcasts, all full cards,
+  // each rendered only when it has content that day.
+  const reviewSection =
+    reviews.length > 0
+      ? sectionShell(TYPE_LABELS.review, reviews.map(storyBlock).join("\n"))
+      : "";
   const releaseSection =
     releases.length > 0
       ? sectionShell(TYPE_LABELS.release, releases.map(storyBlock).join("\n"))
+      : "";
+  const podcastSection =
+    podcasts.length > 0
+      ? sectionShell(TYPE_LABELS.podcast, podcasts.map(storyBlock).join("\n"))
       : "";
 
   return `<mjml>
@@ -201,7 +217,9 @@ export function buildMjml(
       </mj-column>
     </mj-section>
 ${newsSections}
+${reviewSection}
 ${releaseSection}
+${podcastSection}
     <mj-section background-color="#1a1a1a" padding="28px 24px 22px 24px">
       <mj-column>
         <mj-image src="${escapeHtml(NEWSLETTER.logoUrl)}" alt="Fitwell" href="${escapeHtml(footerHref)}" width="124px" align="center" padding="0 0 14px 0" />

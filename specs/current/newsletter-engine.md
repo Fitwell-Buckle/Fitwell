@@ -176,18 +176,26 @@ Christie's, Sotheby's, Swatch Group IR, Richemont IR.
 ## Editorial pipeline
 
 - **Triage**: one Claude call over the whole fresh batch. Editorial cut
-  prompt encodes the cover-heavy rules, the Segment × Type taxonomy,
-  per-story priority (1 = lead; **never a podcast/interview/release**,
-  enforced again in code), and duplicate collapsing (`duplicateOfUrl` →
-  "Also at" links). Verdicts matched by URL; missing/incomplete
-  verdicts degrade to "dropped", never fail the run.
-- **Caps**: `maxStories` (12) applies to hard news only — **releases
-  are never capped**. The New Releases section is the complete, neutral
-  record of what's new; we don't arbitrate between brands we court
-  (decision 2026-06-10, see strategy doc → New Releases).
-- **Layout**: sections by Type (Business & Industry → Auction & Market
-  → Community & Analysis → New Releases last); segment is the eyebrow
-  tag on each story.
+  prompt encodes the cover-heavy rules, the Segment × Type taxonomy
+  (6 types — see below), per-story priority (1 = lead; **never a
+  review/podcast/release**, enforced again in code), and duplicate
+  collapsing (`duplicateOfUrl` → "Also at" links). The brief is now a
+  near-complete record of the serious press: most genuine watch-trade
+  content is *routed to a section* rather than dropped (decision
+  2026-06-13). Verdicts matched by URL; missing/incomplete verdicts
+  degrade to "dropped", never fail the run.
+- **Types & sections** (`newsletter/types.ts` `STORY_TYPES`/`TYPE_LABELS`):
+  `business` (hard news **and** business/market analysis — analysis rides
+  with Business, not Community), `auction`, `community` (Community &
+  Culture — profiles, culture, vintage human-interest), `release`,
+  `review` (NEW), `podcast` (NEW). Render order: Business & Industry →
+  Auction & Market → Community & Culture → Reviews → New Releases →
+  Podcasts — all full cards (image + summary).
+- **Caps**: `maxStories` (12) applies to the hard-news group
+  (`business`/`auction`/`community`) only — **releases, reviews and
+  podcasts are never capped** (`NEWS_TYPES` set in `main.ts`). Those
+  sections are the complete record of what the press published; we don't
+  arbitrate between the brands we court (decision 2026-06-10/06-13).
 - **Enrichment (post-triage)**: ONE page fetch per selected story yields
   both the image (feed image → og:image) and the **full article text**
   (`extractArticleText`: `<article>`-scoped paragraphs, 12K-char cap).
@@ -198,10 +206,12 @@ Christie's, Sotheby's, Swatch Group IR, Richemont IR.
   price/run-size/date/spec not present in the source (vague beats
   invented; misstating a brand's price in front of retailers is a
   credibility wound). Fail-soft to the feed excerpt with a
-  be-careful-with-specifics note. Releases additionally get the
-  brand-neutrality instruction (factual/generous, no verdicts); the
-  opinionated Puck-for-watches voice applies to business/market
-  analysis only.
+  be-careful-with-specifics note. Per-type notes: **releases** get the
+  brand-neutrality instruction (factual/generous, no verdicts);
+  **reviews** report the publication's verdict *attributed to that outlet*
+  ("Worn & Wound finds…") so the opinion is theirs, never Fitwell's;
+  **podcasts** get one sentence (who/what/why-care). The opinionated
+  Puck-for-watches voice applies to business/market analysis only.
 - Voice iteration happens by editing the `EDITORIAL_CUT` / `VOICE`
   prompts in `newsletter/editorial.ts` after Tom reviews test briefs.
 

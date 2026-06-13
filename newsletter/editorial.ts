@@ -36,25 +36,35 @@ export function __setAnthropicClientForTesting(c: Anthropic | null): void {
 
 const EDITORIAL_CUT = `You are the editor of "${NEWSLETTER.title}", a daily B2B-leaning watch-industry briefing read by strap makers, retailers, microbrand founders, brand sourcing directors, OEM manufacturers, and serious collectors.
 
-COVER HEAVY: brand financials and earnings; M&A and credible M&A rumors; retail movements (boutique openings/closings, dealer changes, curation shifts); auction results with market significance; microbrand drops with business context (run size, founder backstory, trajectory); supply chain news (movement makers, dial suppliers — anything affecting multiple brands); executive moves and brand strategy shifts.
+The brief LEADS with hard news and closes with softer, browse-able sections. It is a near-complete record of what the serious watch press published today — so most genuine watch-trade content is INCLUDED and sorted into the right section, rather than dropped. Use the Type tag to route each story.
 
-DROP: reviews of watches that are not newly released; "top N watches under $X" listicles; lifestyle / wrist-shot / collector-of-the-day content; sponsored or advertorial content; a publication's own promos (magazine issues, awards-show plugs, podcasts about nothing). KEEP (as type=community): vintage/collector features with genuine market or provenance interest — a notable piece coming to market, a story behind a significant watch, market-trend analysis. Pure nostalgia with no market angle still drops.
+COVER HEAVY (these lead the brief): brand financials and earnings; M&A and credible M&A rumors; retail movements (boutique openings/closings, dealer changes, curation shifts); auction results with market significance; microbrand drops with business context (run size, founder backstory, trajectory); supply chain news (movement makers, dial suppliers — anything affecting multiple brands); executive moves and brand strategy shifts; and business/market ANALYSIS or opinion (it rides with Business & Industry, not Community).
 
-NEW RELEASES rule (the brief closes with a New Releases section — readers expect it to be COMPLETE and NEUTRAL): every genuinely new release is INCLUDED — never drop a release for being routine, and never act as the arbiter of which brand's release is more interesting. The publication courts every brand it covers; all releases get equal treatment. Still DROP (include=false): reviews of watches that are not newly released, buyer's-guide listicles, wrist-shot content.
+DROP (include=false) ONLY: "top N watches under $X" / buyer's-guide listicles; pure wrist-shot / "what I wore this week" filler with no subject of substance; sponsored or advertorial content; a publication's OWN self-promotion (its magazine issues, its awards-show plugs, its own anniversary-party recaps); and content that is not about watches or the watch industry (e.g. a car feature). Everything else gets a home below.
 
-DUPLICATES: when multiple outlets cover the same story, include EXACTLY ONE — the version with the strongest business framing — and drop the rest with duplicateOfUrl set to the kept story's url (this powers "Also at" links under the kept story, so the reader still gets every outlet's take).
+TYPE ROUTING (exactly one Type per included story):
+- "business" — hard business/industry news AND business/market analysis or opinion (earnings, M&A, executive moves, retail, supply chain, price changes, plus commentary on any of these).
+- "auction" — auction results, previews, and vintage-market movements.
+- "community" — Community & Culture: collector and personality profiles, magazine features about people or shops, watch-culture pieces, and vintage/provenance human-interest with genuine substance.
+- "release" — a genuinely NEW product announcement.
+- "review" — a hands-on or critical REVIEW of a specific watch by an editorial outlet (new or existing model). This is reporting that a major publication reviewed something — it belongs in the brief, in the Reviews section.
+- "podcast" — any podcast / audio episode (interviews, roundtables, "inside the archives"-style series). Goes in the Podcasts section. Do NOT drop a podcast as "self-promo" merely because it is produced by an outlet or features a brand — a watch-industry podcast is legitimate content.
+
+NEW RELEASES rule (the Releases section is COMPLETE and NEUTRAL): every genuinely new release is INCLUDED — never drop a release for being routine, and never arbitrate which brand's release is more interesting. The publication courts every brand it covers; all releases get equal treatment.
+
+DUPLICATES: when multiple outlets cover the same story, include EXACTLY ONE — the version with the strongest framing — and drop the rest with duplicateOfUrl set to the kept story's url (this powers "Also at" links under the kept story, so the reader still gets every outlet's take).
 
 PRIORITY: give every included story a priority from 1 (lead) to 10, ranking by NEWS HARDNESS — not just topic. Format caps hardness: a CEO interview or podcast is soft EVEN IF it is about business. Use these tiers:
 
 - TIER 1 (priority 1–3, lead-eligible): hard business/market news — earnings & financials, M&A and credible M&A rumors, legal action, executive moves, price changes, dealer/retail openings/closings/shifts, supply-chain news; and auction RESULTS with market significance. The lead (priority 1) MUST be a Tier 1 story.
-- TIER 2 (priority 4–6, never the lead): sponsorships, official-timekeeper deals, partnerships, brand collaborations, marketing tie-ins, anniversary campaigns — real but soft. Always rank below every Tier 1 story.
-- TIER 3 (priority 7–10, include only if genuinely notable): podcasts, interviews, photo essays/reports, opinion/analysis. These NEVER get priority 1–6 regardless of how business-y the topic is.
+- TIER 2 (priority 4–6, never the lead): sponsorships, official-timekeeper deals, partnerships, brand collaborations, marketing tie-ins, business/market analysis & opinion, culture/profile features. Real but soft.
+- TIER 3 (priority 7–10): reviews, podcasts, interviews, photo essays/reports. These NEVER get priority 1–6.
 
-Releases are not part of this hard-news ranking (they live in their own section); give them priority 5+ so they never displace hard news at the top. If no Tier 1 story exists on a given day, lead with the strongest Tier 2 — but NEVER a podcast, interview, or release at priority 1.
+Releases, Reviews and Podcasts live in their own sections, not the hard-news ranking — give releases priority 5+, reviews 7+, podcasts 8+ so they never displace hard news at the top. If no Tier 1 story exists, lead with the strongest Tier 2 — but NEVER a podcast, review, or release at priority 1.
 
 Segment (exactly one): "luxury" (Rolex, Patek, AP, Vacheron, Lange, Breguet, Blancpain, high-end Cartier), "mid" (Omega, IWC, Jaeger, Tudor, Grand Seiko, Longines, TAG, Zenith), "microbrand" (Halios, Nodus, Lorier, Baltic, Christopher Ward, Farer, Anordain, Studio Underd0g, MB&F, Urwerk, Massena LAB and peers), "vintage-auction" (vintage market and auction stories).
 
-Type (exactly one): "release", "business", "auction", "community".`;
+Type (exactly one): "release", "business", "auction", "community", "review", "podcast".`;
 
 const TRIAGE_TOOL = "record_triage";
 
@@ -133,7 +143,7 @@ async function callTriageOnce(stories: RawStory[]): Promise<unknown> {
     messages: [
       {
         role: "user",
-        content: `Triage today's candidate stories. Apply the editorial cut strictly for hard news — aim for the strongest ${NEWSLETTER.maxStories} or fewer hard-news stories. Releases are NOT capped: include every genuine new release.\n\n${stories
+        content: `Triage today's candidate stories. Apply the editorial cut strictly for hard news — aim for the strongest ${NEWSLETTER.maxStories} or fewer hard-news stories (business/auction/community). Releases, Reviews and Podcasts are NOT capped: include every genuine new release, every editorial review, and every watch-industry podcast.\n\n${stories
           .map((s, i) => `--- Story ${i + 1} ---\n${storyDigest(s)}`)
           .join("\n\n")}\n\nCall ${TRIAGE_TOOL} with one verdict per story.`,
       },
@@ -215,10 +225,14 @@ const SUMMARY_INPUT_SCHEMA = {
 async function callSummaryOnce(
   story: RawStory & { type?: StoryType },
 ): Promise<unknown> {
-  const releaseNote =
+  const typeNote =
     story.type === "release"
       ? " This is a NEW RELEASE — apply the brand-neutrality rule: factual and generous, specs/price/run-size/availability, no verdicts on the watch."
-      : "";
+      : story.type === "review"
+        ? ` This is a REVIEW by ${story.sourceName}. Report THEIR verdict, attributed to them ("${story.sourceName} finds…", "they praise / fault…") — the opinion is the reviewer's, never ours; Fitwell stays neutral on the watch. Capture what they concluded and the one detail a trade reader would care about.`
+        : story.type === "podcast"
+          ? " This is a PODCAST episode. ONE sentence only: who's on it / what it covers and why a trade listener might care. No verdicts."
+          : "";
   // Grounding: facts must come from the provided text, full stop. A brief
   // that misstates a price or run size in front of retailers and the
   // brands themselves is a credibility wound — vague beats invented.
@@ -242,7 +256,7 @@ async function callSummaryOnce(
     messages: [
       {
         role: "user",
-        content: `Summarize for the brief:${releaseNote}${grounding}\n\n${storyDigest(story)}${articleSection}\n\nCall ${SUMMARY_TOOL}.`,
+        content: `Summarize for the brief:${typeNote}${grounding}\n\n${storyDigest(story)}${articleSection}\n\nCall ${SUMMARY_TOOL}.`,
       },
     ],
   });
@@ -336,9 +350,11 @@ const SUBJECT_INPUT_SCHEMA = {
   additionalProperties: false,
 };
 
+const NEWS_TYPES = new Set<StoryType>(["business", "auction", "community"]);
+
 function subjectBriefDigest(brief: BriefStory[]): string {
   const releases = brief.filter((s) => s.type === "release");
-  const hardNews = brief.filter((s) => s.type !== "release");
+  const hardNews = brief.filter((s) => NEWS_TYPES.has(s.type));
   const lead = hardNews[0] ?? brief[0];
   const others = hardNews.slice(1).map((s) => `- ${s.title}`);
   return [

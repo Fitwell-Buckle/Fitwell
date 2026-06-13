@@ -79,18 +79,31 @@ and market analysis. Multi-outlet coverage of one release collapses to
 a single entry (best business framing) with "Also at" links to the
 other outlets.
 
+**Carry as subordinate sections (decided 2026-06-13):** reviews and
+podcasts from the serious watch press are no longer dropped — they ride
+*below* the hard news in their own sections (Reviews = full cards with
+the verdict attributed to the publication; Podcasts = a "what's worth a
+listen" section at the foot). The reasoning: for a trade reader,
+"what did Hodinkee/W&W/ABTW review or podcast today" is genuine industry
+pulse — it signals what enthusiasts will be asking about. The line we
+hold is that the brief stays *led* by hard news and never becomes
+review- or lifestyle-led (that's the incumbent/consumer territory we
+don't compete for, per the audience note above). Collector/personality
+profiles and culture features go in **Community & Culture**.
+
 **Drop entirely:**
-- Reviews of watches that aren't newly released
-- "Top 10 watches under $X" listicles
-- Lifestyle / wrist-shot / collector-of-the-day content
-- Outlets' own promos (magazine issues, podcast banter episodes)
+- "Top N watches under $X" / buyer's-guide listicles and content roundups
+- Pure wrist-shot / "what I wore this week" filler with no subject of substance
+- Sponsored / advertorial content
+- An outlet's own self-promotion (its magazine issues, awards plugs, anniversary-party recaps)
+- Content that isn't about watches or the trade (e.g. car features)
 
 ## Classification axis
 
 Each story gets one Segment tag and one Type tag. **The email organizes
-by Type** (Business & Industry → Auction & Market → Community &
-Analysis → New Releases last); Segment is the eyebrow tag on each story
-and the analytics dimension in the DB. (Flipped from segment-led on
+by Type** (Business & Industry → Auction & Market → Community & Culture →
+Reviews → New Releases → Podcasts); Segment is the eyebrow tag on each
+story and the analytics dimension in the DB. (Flipped from segment-led on
 2026-06-10: news doesn't sort by brand price tier — a Swatch Group
 story is industry news, not "mid-tier news".)
 
@@ -101,10 +114,12 @@ story is industry news, not "mid-tier news".)
 - Vintage & Auction
 
 **Type** (one of):
-- Releases & Launches
-- Business & Industry (M&A, earnings, executive moves, retail, supply chain)
+- Business & Industry — hard news AND business/market **analysis & opinion** (M&A, earnings, executive moves, retail, supply chain, commentary). Analysis rides here, not in Community.
 - Auction & Market
-- Community / Culture / Analysis
+- Community & Culture — collector/personality profiles, culture pieces, vintage & provenance human-interest
+- New Releases — complete & neutral; equal full-card treatment
+- Reviews — editorial reviews of specific watches (new or existing); the verdict is **attributed to the publication**, never ours
+- Podcasts — watch-industry audio; compact list at the foot of the brief
 
 ## Voice direction
 
