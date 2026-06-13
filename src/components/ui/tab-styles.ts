@@ -1,17 +1,11 @@
-// Shared visual language for tab strips across the admin.
+// "Lifted pill" visual language — each item is a rounded button; the active one
+// fills white with a subtle drop shadow so it reads as a raised surface.
 //
-// "Lifted pill" — each tab is a rounded button. The active tab fills with
-// white and gets a subtle drop shadow, so it reads as a small raised surface
-// floating on the page background. Inactive tabs are transparent muted text
-// that lift to a white-translucent pill on hover.
-//
-// The active tab shares its visual language (white + shadow-sm + rounded)
-// with the content card below it, so the two surfaces look like they belong
-// to the same group without needing any connecting shapes between them.
-//
-// Used by:
-//   • SectionTabs (route-level navigation: Customers, Leads, …)
-//   • ProductionViewToggle (Inventory / Board / Timeline)
+// Used ONLY by the ProductionViewToggle (Inventory / Board / Timeline) — a
+// segmented view switcher, where the pill look reads as a control. The actual
+// TAB strips — route-level nav (SectionTabs) and detail-page tabs (Radix
+// ui/tabs / DetailTabs) — use the underline style instead (the standard); see
+// section-tabs.tsx and ui/tabs.tsx.
 
 export const tabBarFlexCls =
   "mt-4 inline-flex items-center gap-1 text-sm";
