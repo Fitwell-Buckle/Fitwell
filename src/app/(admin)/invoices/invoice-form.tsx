@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,17 @@ import {
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { LineItemRow, LineItemsHeader, LineItemsTotal } from "@/components/invoicing/line-item-row";
+import {
+  SplitFulfillmentGrid,
+  addressOptionLabel,
+} from "@/components/invoicing/split-fulfillment-grid";
+import {
+  expandAlloc,
+  reconstructAlloc,
+  anyOverAllocated,
+  type SplitLocation,
+  type Alloc,
+} from "@/lib/invoicing/split-alloc";
 import type { CompanyAddress } from "@/lib/portal/addresses";
 import {
   CompanyForm,
@@ -77,20 +88,49 @@ interface Row {
   title: string;
   quantity: string;
   unitPrice: string; // dollars
-  /** Per-line split-fulfillment address id ("" = ship to the order's default). */
-  addressId: string;
 }
 
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
 
-function addressOptionLabel(a: CompanyAddress): string {
-  return [a.name || a.company, a.address1, a.city, a.provinceCode ?? a.province, a.zip]
-    .filter(Boolean)
-    .join(", ");
+function emptyRow(): Row {
+  return { variantKey: "", shopifyProductId: "", sku: "", title: "", quantity: "1", unitPrice: "" };
 }
 
-function emptyRow(): Row {
-  return { variantKey: "", shopifyProductId: "", sku: "", title: "", quantity: "1", unitPrice: "", addressId: "" };
+// Group an order's stored lines into one row per variant (a split order has one
+// line per (SKU, destination)). Quantities sum into the row's total.
+function seedRows(initial?: InvoiceFormInitial): Row[] {
+  if (!initial) return [emptyRow()];
+  const byKey = new Map<string, Row>();
+  for (const l of initial.lineItems) {
+    const key = l.shopifyVariantId ?? `__${l.sku}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.quantity = String(Number(existing.quantity) + l.quantity);
+      continue;
+    }
+    byKey.set(key, {
+      variantKey: l.shopifyVariantId ?? "",
+      shopifyProductId: l.shopifyProductId ?? "",
+      sku: l.sku,
+      title: l.title,
+      quantity: String(l.quantity),
+      unitPrice: (l.unitPriceCents / 100).toString(),
+    });
+  }
+  return [...byKey.values()];
+}
+
+// Seed split-fulfillment grid state from an order's stored lines (each line
+// carries a per-line ship-to address id). Default column = the order's primary.
+function seedSplit(initial: InvoiceFormInitial | undefined, defaultAddressId: string | undefined) {
+  const lines = (initial?.lineItems ?? []).map((l) => ({
+    shopifyVariantId: l.shopifyVariantId,
+    quantity: l.quantity,
+    shipTo: l.addressId ? { addressId: l.addressId } : null,
+  }));
+  const isSplit = lines.some((l) => l.shipTo != null);
+  const { locationIds, alloc } = reconstructAlloc(lines, defaultAddressId);
+  return { isSplit, locationIds, alloc };
 }
 
 export function InvoiceForm({
@@ -129,28 +169,24 @@ export function InvoiceForm({
   const [depositOverride, setDepositOverride] = useState(
     initial?.depositPercent != null ? String(initial.depositPercent) : "",
   );
-  const [rows, setRows] = useState<Row[]>(
-    initial
-      ? initial.lineItems.map((l) => ({
-          variantKey: l.shopifyVariantId ?? "",
-          shopifyProductId: l.shopifyProductId ?? "",
-          sku: l.sku,
-          title: l.title,
-          quantity: String(l.quantity),
-          unitPrice: (l.unitPriceCents / 100).toString(),
-          addressId: l.addressId ?? "",
-        }))
-      : [emptyRow()],
-  );
-  // Ship-to / split fulfillment.
+  const [rows, setRows] = useState<Row[]>(() => seedRows(initial));
+  // Ship-to / split fulfillment. Addresses load async after a company is chosen.
   const [addresses, setAddresses] = useState<CompanyAddress[]>([]);
   // Gates the "no addresses" hint so it shows only after the async load resolves
   // (not during the fetch, which would flash the hint before addresses arrive).
   const [addrLoaded, setAddrLoaded] = useState(false);
-  const [orderAddressId, setOrderAddressId] = useState(initial?.shipToAddressId ?? "");
-  const [split, setSplit] = useState<boolean>(
-    !!initial?.lineItems.some((l) => l.addressId),
+  const splitSeed = seedSplit(initial, initial?.shipToAddressId || undefined);
+  const [orderAddressId, setOrderAddressId] = useState(
+    initial?.shipToAddressId || splitSeed.locationIds[0] || "",
   );
+  const [split, setSplit] = useState<boolean>(splitSeed.isSplit);
+  // Extra destination columns beyond the default (always grid column 0).
+  const [extraIds, setExtraIds] = useState<string[]>(
+    splitSeed.locationIds.filter(
+      (id) => id && id !== (initial?.shipToAddressId || splitSeed.locationIds[0]),
+    ),
+  );
+  const [alloc, setAlloc] = useState<Alloc>(splitSeed.alloc);
 
   // Load the selected company's saved Shopify addresses for the ship-to picker.
   useEffect(() => {
@@ -340,10 +376,40 @@ export function InvoiceForm({
   function updateRow(i: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
-  const primaryAddressLabel =
-    addresses.find((a) => a.id === orderAddressId) != null
-      ? addressOptionLabel(addresses.find((a) => a.id === orderAddressId)!)
-      : null;
+
+  // Ordered split-grid columns: the default ship-to first, then added locations.
+  const locations: SplitLocation[] = useMemo(() => {
+    const ids = [orderAddressId, ...extraIds].filter(
+      (id, i, arr) => id && arr.indexOf(id) === i,
+    );
+    return ids.map((id) => {
+      const a = addresses.find((x) => x.id === id);
+      return { addressId: id, label: a ? addressOptionLabel(a) : id };
+    });
+  }, [orderAddressId, extraIds, addresses]);
+  // Split-grid rows: one per variant with its total quantity.
+  const splitLines = rows
+    .filter((r) => r.variantKey)
+    .map((r) => ({
+      shopifyVariantId: r.variantKey,
+      sku: r.sku,
+      label: r.title || r.sku,
+      total: Math.max(1, Math.floor(Number(r.quantity) || 1)),
+    }));
+  const overAllocated =
+    split &&
+    locations.length >= 2 &&
+    anyOverAllocated(splitLines, locations, alloc);
+
+  function setCell(variantId: string, aId: string, qty: number) {
+    setAlloc((a) => ({ ...a, [variantId]: { ...a[variantId], [aId]: qty } }));
+  }
+  function addLocation(id: string) {
+    setExtraIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }
+  function removeLocation(id: string) {
+    setExtraIds((prev) => prev.filter((x) => x !== id));
+  }
   function addRow() {
     setRows((rs) => [...rs, emptyRow()]);
   }
@@ -358,7 +424,6 @@ export function InvoiceForm({
       title: v.title + (v.variantTitle ? ` — ${v.variantTitle}` : ""),
       quantity: "1",
       unitPrice: (v.priceCents / 100).toString(),
-      addressId: "",
     };
   }
   // Batch add: fill the current row with the first pick, insert the rest after.
@@ -376,7 +441,20 @@ export function InvoiceForm({
     if (!companyId) return setError("Select a customer.");
     if (!issuedDate) return setError("Enter the issued date.");
 
-    const lineItems = [];
+    if (overAllocated) {
+      return setError("Some items have more allocated across locations than ordered.");
+    }
+
+    type BaseLine = {
+      sku: string;
+      title: string;
+      quantity: number;
+      unitPriceCents: number;
+      shopifyProductId: string | null;
+      shopifyVariantId: string | null;
+      variantKey: string;
+    };
+    const baseLines: BaseLine[] = [];
     for (const [i, r] of rows.entries()) {
       let sku = r.sku.trim();
       let title = r.title.trim();
@@ -403,16 +481,46 @@ export function InvoiceForm({
       if (!Number.isFinite(unitPriceCents) || unitPriceCents < 0) {
         return setError(`Line ${i + 1}: unit price must be a non-negative amount.`);
       }
-      lineItems.push({
+      baseLines.push({
         sku,
         title,
         quantity,
         unitPriceCents,
         shopifyProductId,
         shopifyVariantId,
-        // Per-line override only when split is on (else ships to the default).
-        addressId: split ? r.addressId || undefined : undefined,
+        variantKey: r.variantKey,
       });
+    }
+
+    // Split with ≥2 locations → expand each variant line into one payload line
+    // per destination (qty from the grid). Manual lines (no variant) and the
+    // non-split case ship as a single line to the order's default address.
+    const useSplit = split && locations.length >= 2;
+    const toPayload = (b: BaseLine, quantity: number, addressId: string | undefined) => ({
+      sku: b.sku,
+      title: b.title,
+      quantity,
+      unitPriceCents: b.unitPriceCents,
+      shopifyProductId: b.shopifyProductId,
+      shopifyVariantId: b.shopifyVariantId,
+      addressId,
+    });
+    let lineItems;
+    if (useSplit) {
+      const byKey = new Map(baseLines.filter((b) => b.variantKey).map((b) => [b.variantKey, b]));
+      const expanded = expandAlloc(
+        baseLines
+          .filter((b) => b.variantKey)
+          .map((b) => ({ shopifyVariantId: b.variantKey, total: b.quantity })),
+        locations,
+        alloc,
+      );
+      lineItems = expanded.map((e) => toPayload(byKey.get(e.shopifyVariantId)!, e.quantity, e.addressId));
+      for (const b of baseLines.filter((b) => !b.variantKey)) {
+        lineItems.push(toPayload(b, b.quantity, undefined));
+      }
+    } else {
+      lineItems = baseLines.map((b) => toPayload(b, b.quantity, undefined));
     }
 
     setSubmitting(true);
@@ -675,27 +783,6 @@ export function InvoiceForm({
                 onRemove={() => removeRow(i)}
                 removeDisabled={rows.length === 1}
                 />
-                {split && addresses.length > 0 && (
-                  <div className="mt-1 flex items-center gap-2 pl-1">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-                      Ship to
-                    </span>
-                    <select
-                      value={r.addressId}
-                      onChange={(e) => updateRow(i, { addressId: e.target.value })}
-                      className="h-9 max-w-[480px] flex-1 rounded-md border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
-                    >
-                      <option value="">
-                        Same as default{primaryAddressLabel ? ` — ${primaryAddressLabel}` : ""}
-                      </option>
-                      {addresses.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {addressOptionLabel(a)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -730,9 +817,25 @@ export function InvoiceForm({
             </label>
             <p className="mt-1 text-xs text-zinc-400">
               {split
-                ? "Pick a destination per line above; lines on “Same as default” ship to the address selected here. One invoice — recorded on the Shopify order (per-line “Ship to” + an order note)."
+                ? "Add the locations below and enter how many of each item ships to each. One invoice — recorded on the Shopify order (per-line “Ship to” + an order note)."
                 : "The order's saved Shopify ship-to address. Synced to the Shopify draft order when the invoice is sent."}
             </p>
+            {split && splitLines.length > 0 && (
+              <SplitFulfillmentGrid
+                lines={splitLines}
+                addresses={addresses}
+                locations={locations}
+                alloc={alloc}
+                onSetCell={setCell}
+                onAddLocation={addLocation}
+                onRemoveLocation={removeLocation}
+              />
+            )}
+            {overAllocated && (
+              <p className="mt-2 text-sm text-red-600">
+                Some items have more allocated across locations than ordered — adjust to save.
+              </p>
+            )}
           </div>
         )}
 
@@ -753,7 +856,7 @@ export function InvoiceForm({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex justify-end">
-        <Button onClick={submit} disabled={submitting}>
+        <Button onClick={submit} disabled={submitting || overAllocated}>
           {submitting ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save changes" : "Create invoice"}
         </Button>
       </div>

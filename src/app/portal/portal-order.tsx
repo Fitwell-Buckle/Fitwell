@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -15,19 +15,22 @@ import {
 import { computeInvoiceTotals, netLineDisplays } from "@/lib/invoicing/invoicing";
 import { fmtMoney } from "@/lib/production/display";
 import { LineItemRow, LineItemsHeader, LineItemsTotal } from "@/components/invoicing/line-item-row";
+import {
+  SplitFulfillmentGrid,
+  addressOptionLabel,
+} from "@/components/invoicing/split-fulfillment-grid";
+import {
+  expandAlloc,
+  reconstructAlloc,
+  anyOverAllocated,
+  type SplitLocation,
+  type Alloc,
+} from "@/lib/invoicing/split-alloc";
 import type { CompanyAddress } from "@/lib/portal/addresses";
-
-function addressOptionLabel(a: CompanyAddress): string {
-  return [a.name || a.company, a.address1, a.city, a.provinceCode ?? a.province, a.zip]
-    .filter(Boolean)
-    .join(", ");
-}
 
 interface CartLine {
   variant: CatalogVariant;
   quantity: number;
-  /** Per-line split-fulfillment address id ("" = ship to the order's default). */
-  addressId: string;
 }
 
 // A previously-saved order's line, used to seed the cart when editing.
@@ -45,22 +48,45 @@ export interface InitialItem {
 
 type Action = "save" | "card" | "wire";
 
+// Group saved lines by variant — a split order has one stored line per
+// (SKU, destination), so the cart needs each SKU once with its total quantity.
 function seedCart(items: InitialItem[]): CartLine[] {
-  return items.map((it) => ({
+  const byVariant = new Map<string, CartLine>();
+  for (const it of items) {
+    const existing = byVariant.get(it.shopifyVariantId);
+    if (existing) {
+      existing.quantity += it.quantity;
+      continue;
+    }
+    byVariant.set(it.shopifyVariantId, {
+      quantity: it.quantity,
+      variant: {
+        shopifyProductId: it.shopifyProductId ?? "",
+        shopifyVariantId: it.shopifyVariantId,
+        sku: it.sku,
+        title: it.title,
+        variantTitle: null,
+        priceCents: it.unitPriceCents,
+        sizeMm: null,
+        color: null,
+        material: null,
+      },
+    });
+  }
+  return [...byVariant.values()];
+}
+
+// Seed split-fulfillment grid state from the stored lines (each carries a
+// per-line ship-to address id). Default column = the order's primary ship-to.
+function seedSplit(items: InitialItem[], defaultAddressId: string | undefined) {
+  const lines = items.map((it) => ({
+    shopifyVariantId: it.shopifyVariantId,
     quantity: it.quantity,
-    addressId: it.addressId ?? "",
-    variant: {
-      shopifyProductId: it.shopifyProductId ?? "",
-      shopifyVariantId: it.shopifyVariantId,
-      sku: it.sku,
-      title: it.title,
-      variantTitle: null,
-      priceCents: it.unitPriceCents,
-      sizeMm: null,
-      color: null,
-      material: null,
-    },
+    shipTo: it.addressId ? { addressId: it.addressId } : null,
   }));
+  const isSplit = lines.some((l) => l.shipTo != null);
+  const { locationIds, alloc } = reconstructAlloc(lines, defaultAddressId);
+  return { isSplit, locationIds, alloc };
 }
 
 export function PortalOrder({
@@ -95,29 +121,62 @@ export function PortalOrder({
   const isEdit = !!orderId;
   const isSent = status === "sent";
 
+  // Default ship-to, then the split-fulfillment grid state seeded from the order.
+  const defaultGuess =
+    initialAddressId || addresses.find((a) => a.isDefault)?.id || "";
+  const seeded = useMemo(
+    () => seedSplit(initialItems, defaultGuess || undefined),
+    // Seed once from the initial props.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   const [cart, setCart] = useState<CartLine[]>(seedCart(initialItems));
   const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Ship-to: pre-select the order's stored address, else the company default.
+  // Ship-to: the order's default destination (split-grid column 0).
   const [addressId, setAddressId] = useState<string>(
-    initialAddressId || addresses.find((a) => a.isDefault)?.id || "",
+    defaultGuess || seeded.locationIds[0] || "",
   );
-  // Split fulfillment: when on, each line can ship to a different address.
-  // Seeded on when any line already has its own ship-to.
-  const [split, setSplit] = useState<boolean>(initialItems.some((it) => it.addressId));
+  // Split fulfillment: when on, quantities are distributed across locations.
+  const [split, setSplit] = useState<boolean>(seeded.isSplit);
+  // Extra destination columns beyond the default; the default is always col 0.
+  const [extraIds, setExtraIds] = useState<string[]>(
+    seeded.locationIds.filter((id) => id && id !== (defaultGuess || seeded.locationIds[0])),
+  );
+  const [alloc, setAlloc] = useState<Alloc>(seeded.alloc);
 
   const inCart = new Set(cart.map((l) => l.variant.shopifyVariantId));
-  const primaryLabel =
-    addresses.find((a) => a.id === addressId) != null
-      ? addressOptionLabel(addresses.find((a) => a.id === addressId)!)
-      : null;
+
+  // Ordered grid columns: the default ship-to first, then the added locations.
+  const locations: SplitLocation[] = useMemo(() => {
+    const ids = [addressId, ...extraIds].filter(
+      (id, i, arr) => id && arr.indexOf(id) === i,
+    );
+    return ids.map((id) => {
+      const a = addresses.find((x) => x.id === id);
+      return { addressId: id, label: a ? addressOptionLabel(a) : id };
+    });
+  }, [addressId, extraIds, addresses]);
+
+  const overAllocated =
+    split &&
+    locations.length >= 2 &&
+    anyOverAllocated(
+      cart.map((l) => ({
+        shopifyVariantId: l.variant.shopifyVariantId,
+        total: Math.max(0, l.quantity || 0),
+      })),
+      locations,
+      alloc,
+    );
 
   function add(v: CatalogVariant) {
     setError(null);
     setCart((c) =>
       c.some((l) => l.variant.shopifyVariantId === v.shopifyVariantId)
         ? c
-        : [...c, { variant: v, quantity: 1, addressId: "" }],
+        : [...c, { variant: v, quantity: 1 }],
     );
   }
   function addMany(vs: CatalogVariant[]) {
@@ -127,7 +186,7 @@ export function PortalOrder({
       const next = [...c];
       for (const v of vs) {
         if (!have.has(v.shopifyVariantId)) {
-          next.push({ variant: v, quantity: 1, addressId: "" });
+          next.push({ variant: v, quantity: 1 });
           have.add(v.shopifyVariantId);
         }
       }
@@ -137,11 +196,17 @@ export function PortalOrder({
   function setQty(id: string, qty: number) {
     setCart((c) => c.map((l) => (l.variant.shopifyVariantId === id ? { ...l, quantity: qty } : l)));
   }
-  function setLineAddress(id: string, aId: string) {
-    setCart((c) => c.map((l) => (l.variant.shopifyVariantId === id ? { ...l, addressId: aId } : l)));
-  }
   function remove(id: string) {
     setCart((c) => c.filter((l) => l.variant.shopifyVariantId !== id));
+  }
+  function setCell(variantId: string, aId: string, qty: number) {
+    setAlloc((a) => ({ ...a, [variantId]: { ...a[variantId], [aId]: qty } }));
+  }
+  function addLocation(id: string) {
+    setExtraIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }
+  function removeLocation(id: string) {
+    setExtraIds((prev) => prev.filter((x) => x !== id));
   }
 
   const totals = computeInvoiceTotals(
@@ -157,9 +222,26 @@ export function PortalOrder({
   );
 
   async function send(action: Action) {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || overAllocated) return;
     setBusy(action);
     setError(null);
+    // Split with ≥2 locations → expand each SKU into one line per destination;
+    // otherwise one line per SKU shipping to the default.
+    const useSplit = split && locations.length >= 2;
+    const lineItems = useSplit
+      ? expandAlloc(
+          cart.map((l) => ({
+            shopifyVariantId: l.variant.shopifyVariantId,
+            total: Math.max(1, l.quantity || 1),
+          })),
+          locations,
+          alloc,
+        )
+      : cart.map((l) => ({
+          shopifyVariantId: l.variant.shopifyVariantId,
+          quantity: l.quantity,
+          addressId: undefined,
+        }));
     try {
       const res = await fetch(isEdit ? `/api/portal/orders/${orderId}` : "/api/portal/orders", {
         method: isEdit ? "PATCH" : "POST",
@@ -167,12 +249,7 @@ export function PortalOrder({
         body: JSON.stringify({
           submit: action === "save" ? undefined : action,
           addressId,
-          lineItems: cart.map((l) => ({
-            shopifyVariantId: l.variant.shopifyVariantId,
-            quantity: l.quantity,
-            // Per-line override only when split is on (else ships to the default).
-            addressId: split ? l.addressId || undefined : undefined,
-          })),
+          lineItems,
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -257,27 +334,6 @@ export function PortalOrder({
                   lineTotalCents={netLines[i].netLineTotalCents}
                   onRemove={() => remove(l.variant.shopifyVariantId)}
                 />
-                {split && addresses.length > 0 && (
-                  <div className="mt-1 flex items-center gap-2 pl-1">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-                      Ship to
-                    </span>
-                    <select
-                      value={l.addressId}
-                      onChange={(e) => setLineAddress(l.variant.shopifyVariantId, e.target.value)}
-                      className="h-9 max-w-[480px] flex-1 rounded-md border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-300"
-                    >
-                      <option value="">
-                        Same as default{primaryLabel ? ` — ${primaryLabel}` : ""}
-                      </option>
-                      {addresses.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {addressOptionLabel(a)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -317,9 +373,25 @@ export function PortalOrder({
           </label>
           <p className="mt-1 text-xs text-zinc-400">
             {split
-              ? "Pick a destination per line above; lines left on “Same as default” ship to the address selected here. One invoice and payment — we route each line at fulfillment."
+              ? "Add the locations below and enter how many of each item ships to each. One invoice and payment — we route each line at fulfillment."
               : "Your saved Shopify addresses. We’ll ship this order here."}
           </p>
+          {split && cart.length > 0 && (
+            <SplitFulfillmentGrid
+              lines={cart.map((l) => ({
+                shopifyVariantId: l.variant.shopifyVariantId,
+                sku: l.variant.sku,
+                label: variantLabel(l.variant),
+                total: Math.max(1, l.quantity || 1),
+              }))}
+              addresses={addresses}
+              locations={locations}
+              alloc={alloc}
+              onSetCell={setCell}
+              onAddLocation={addLocation}
+              onRemoveLocation={removeLocation}
+            />
+          )}
         </div>
       )}
 
@@ -335,6 +407,11 @@ export function PortalOrder({
         </div>
       )}
 
+      {overAllocated && (
+        <p className="mt-3 text-sm text-red-600">
+          Some items have more allocated across locations than ordered — adjust the quantities to save.
+        </p>
+      )}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       {isSent ? (
@@ -343,7 +420,7 @@ export function PortalOrder({
           <span className="mr-auto text-xs text-zinc-400">
             Editing updates your {paymentMethod === "wire" ? "bank-wire total" : "payment link"}.
           </span>
-          <Button onClick={() => send("save")} disabled={busy !== null || cart.length === 0}>
+          <Button onClick={() => send("save")} disabled={busy !== null || cart.length === 0 || overAllocated}>
             {busy ? "Saving…" : "Save changes"}
           </Button>
         </div>
@@ -352,7 +429,7 @@ export function PortalOrder({
           <Button
             variant="ghost"
             onClick={() => send("save")}
-            disabled={busy !== null || cart.length === 0}
+            disabled={busy !== null || cart.length === 0 || overAllocated}
           >
             {busy === "save" ? "Saving…" : "Save draft"}
           </Button>
@@ -360,12 +437,12 @@ export function PortalOrder({
             <Button
               variant="outline"
               onClick={() => send("wire")}
-              disabled={busy !== null || cart.length === 0}
+              disabled={busy !== null || cart.length === 0 || overAllocated}
             >
               {busy === "wire" ? "Placing order…" : "Pay later by bank wire"}
             </Button>
           )}
-          <Button onClick={() => send("card")} disabled={busy !== null || cart.length === 0}>
+          <Button onClick={() => send("card")} disabled={busy !== null || cart.length === 0 || overAllocated}>
             {busy === "card" ? "Starting checkout…" : "Checkout & pay"}
           </Button>
         </div>

@@ -65,6 +65,29 @@ showed addresses while the order forms (which read persisted rows via
 uses `db.batch`, never `db.transaction`. Existing customers backfill on the next
 order webhook, the portal self-heal, or the "Sync from Shopify" button.
 
+## Redesign (2026-06-13): per-SKU quantity allocation grid
+
+The original split model shipped each whole order line to one address (a per-line
+ship-to `<select>`). Replaced with a **quantity-allocation grid**: when split is
+on, you pick N destination addresses and enter how many units of each SKU go to
+each location; the **last column auto-fills the remainder** (`total − Σ others`,
+read-only). Lives in **both** the portal order form and the admin invoice form via
+shared pieces — no schema/service/API change (a split SKU just persists as one
+`invoice_line_item` per (SKU, destination), which the whole pipeline already
+supports).
+
+- **`src/lib/invoicing/split-alloc.ts`** (+ test) — pure helpers: `expandAlloc`
+  (grid → one line per (SKU, location) with qty>0; <2 locations → non-split),
+  `reconstructAlloc` (stored lines → grid state, default column first, backward
+  compatible with old one-line-per-SKU orders), `anyOverAllocated`/`remainderQty`.
+- **`src/components/invoicing/split-fulfillment-grid.tsx`** — shared grid (SKU rows
+  × location columns + Total; last column read-only "(auto)"; Add/remove location;
+  over-allocation highlight). Also exports the shared `addressOptionLabel`.
+- Both forms: removed the per-line `<select>`; added the grid; expand on
+  save / reconstruct on edit; block save while over-allocated.
+- **`invoice-document.tsx`** shows a per-line "→ Ship to: <label>" so split orders
+  (multiple rows per SKU) read coherently on the printable invoice.
+
 ## Follow-ups (not blocking)
 - ~~`reapplyTierToOpenInvoices` doesn't re-emit the split custom attributes /
   note.~~ **Done** — the split logic is now the shared `buildSplitShipping`

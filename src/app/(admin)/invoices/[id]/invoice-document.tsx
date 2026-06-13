@@ -8,6 +8,7 @@ import {
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getShopifyClient } from "@/lib/shopify/client";
+import { shipToLabel } from "@/lib/portal/addresses";
 import type { getInvoiceDetail } from "@/lib/invoicing/service";
 
 type Invoice = NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>;
@@ -117,6 +118,9 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
             <tr key={l.id} className="border-b border-zinc-100">
               <td className="py-2 pr-6 text-zinc-700">
                 <span className="font-mono text-xs text-zinc-500">{l.sku}</span> — {l.title}
+                {l.shipTo && (
+                  <div className="mt-0.5 text-xs text-zinc-400">→ Ship to: {shipToLabel(l.shipTo)}</div>
+                )}
               </td>
               <td className="whitespace-nowrap py-2 pl-6 text-right text-zinc-500">
                 {l.quantity}
