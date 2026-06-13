@@ -1,6 +1,7 @@
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import {
   INVOICE_STATUS_LABELS,
+  consolidateLinesBySku,
   netLineDisplays,
   shippingAddressLines,
   type InvoiceStatus,
@@ -8,7 +9,7 @@ import {
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getShopifyClient } from "@/lib/shopify/client";
-import { shipToLabel } from "@/lib/portal/addresses";
+import { isSplitOrder, buildShipPlan } from "@/lib/portal/addresses";
 import type { getInvoiceDetail } from "@/lib/invoicing/service";
 
 type Invoice = NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>;
@@ -39,13 +40,20 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
   ].filter(Boolean);
 
   const discountPercent = inv.discountPercent ?? 0;
+  // One row per SKU — split fulfillment stores a line per destination, but the
+  // invoice reads as a single consolidated row; the split is summarised below.
+  const displayLines = consolidateLinesBySku(inv.lineItems);
   // Net (post-discount) prices the customer pays — shown instead of retail.
   // Foots exactly to inv.totalCents.
   const netLines = netLineDisplays(
-    inv.lineItems.map((l) => ({ quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
+    displayLines.map((l) => ({ quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
     discountPercent,
     inv.totalCents,
   );
+  // Split fulfillment: the per-address breakdown, shown under the line items.
+  const shipPlan = isSplitOrder(inv.lineItems)
+    ? buildShipPlan(inv.lineItems, inv.shipTo ?? null)
+    : null;
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-8 print:border-0 print:p-0">
@@ -114,13 +122,10 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           </tr>
         </thead>
         <tbody>
-          {inv.lineItems.map((l, i) => (
-            <tr key={l.id} className="border-b border-zinc-100">
+          {displayLines.map((l, i) => (
+            <tr key={`${l.sku} ${l.unitPriceCents}`} className="border-b border-zinc-100">
               <td className="py-2 pr-6 text-zinc-700">
                 <span className="font-mono text-xs text-zinc-500">{l.sku}</span> — {l.title}
-                {l.shipTo && (
-                  <div className="mt-0.5 text-xs text-zinc-400">→ Ship to: {shipToLabel(l.shipTo)}</div>
-                )}
               </td>
               <td className="whitespace-nowrap py-2 pl-6 text-right text-zinc-500">
                 {l.quantity}
@@ -147,6 +152,30 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           <span className="w-32 text-right">{fmtMoney(inv.totalCents)}</span>
         </div>
       </div>
+
+      {/* Split fulfillment: the per-address breakdown under the consolidated
+          line items (the line items above read as one row per SKU). */}
+      {shipPlan && (
+        <div className="mt-6 border-t border-zinc-100 pt-4">
+          <div className="text-xs uppercase tracking-wider text-zinc-400">
+            Split fulfillment — shipped to {shipPlan.length} addresses
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {shipPlan.map((g, i) => (
+              <div key={i} className="rounded-md border border-zinc-100 p-3 text-sm">
+                <div className="font-medium text-zinc-800">{g.label}</div>
+                <ul className="mt-1 space-y-0.5 text-zinc-600">
+                  {g.lines.map((l, j) => (
+                    <li key={j}>
+                      {l.quantity}× <span className="font-mono text-xs">{l.sku}</span> {l.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {inv.notes && <p className="mt-6 text-sm text-zinc-600">{inv.notes}</p>}
 

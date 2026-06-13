@@ -1500,6 +1500,12 @@ export const influencerOrder = pgTable(
     // The affiliate/tracking link for this order's content.
     affiliateLink: text("affiliate_link"),
     notes: text("notes"),
+    // Default ship-to for the gifting order — a SNAPSHOT of one of the linked
+    // Shopify customer's addresses (kept stable since the address sync is
+    // delete-and-replace). Drives the Shopify draft order's shipping address.
+    // null = no address chosen. Per-line split-fulfillment layers on top of this.
+    // Mirrors invoice.shipTo so the two order systems share the split machinery.
+    shipTo: jsonb("ship_to").$type<InvoiceShipTo>(),
     // Money in cents. Gifting => discountPercent 100, totalCents 0; subtotal is
     // the retail gift value (kept for reporting).
     subtotalCents: integer("subtotal_cents").notNull().default(0),
@@ -1537,6 +1543,10 @@ export const influencerOrderLineItem = pgTable(
     unitPriceCents: integer("unit_price_cents").notNull().default(0),
     shopifyProductId: text("shopify_product_id"),
     shopifyVariantId: text("shopify_variant_id"),
+    // Split fulfillment: per-line ship-to SNAPSHOT. null = this line ships to
+    // the order's default ship_to (the un-split case). Mirrors
+    // invoiceLineItem.shipTo so both order systems share split-alloc + grid.
+    shipTo: jsonb("ship_to").$type<InvoiceShipTo>(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   },
   (t) => [index("influencer_order_line_item_order_id_idx").on(t.orderId)],
@@ -1569,6 +1579,7 @@ export const influencerOrderRelations = relations(
       references: [influencer.id],
     }),
     lineItems: many(influencerOrderLineItem),
+    attachments: many(influencerOrderAttachment),
   }),
 );
 
@@ -1577,6 +1588,38 @@ export const influencerOrderLineItemRelations = relations(
   ({ one }) => ({
     order: one(influencerOrder, {
       fields: [influencerOrderLineItem.orderId],
+      references: [influencerOrder.id],
+    }),
+  }),
+);
+
+// Documents attached to a gifting order (e.g. a signed gifting agreement or a
+// content brief PDF). Stored in Vercel Blob; the row keeps the metadata.
+// Mirrors invoice_attachment so the shared attachments UI drives both.
+export const influencerOrderAttachment = pgTable(
+  "influencer_order_attachment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => influencerOrder.id, { onDelete: "cascade" }),
+    blobUrl: text("blob_url").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => user.id),
+    uploadedAt: timestamp("uploaded_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("influencer_order_attachment_order_id_idx").on(t.orderId)],
+);
+
+export const influencerOrderAttachmentRelations = relations(
+  influencerOrderAttachment,
+  ({ one }) => ({
+    order: one(influencerOrder, {
+      fields: [influencerOrderAttachment.orderId],
       references: [influencerOrder.id],
     }),
   }),

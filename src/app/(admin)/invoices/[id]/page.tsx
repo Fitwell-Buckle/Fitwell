@@ -6,7 +6,11 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { supplier, company, priceTier } from "@/lib/schema";
 import { getInvoiceDetail } from "@/lib/invoicing/service";
-import { netLineDisplays, shippingAddressLines } from "@/lib/invoicing/invoicing";
+import {
+  consolidateLinesBySku,
+  netLineDisplays,
+  shippingAddressLines,
+} from "@/lib/invoicing/invoicing";
 import { buildInvoiceHistory } from "@/lib/invoicing/history";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { formatPoNumber } from "@/lib/production/sub-po";
@@ -83,10 +87,14 @@ export default async function InvoiceDetailPage({
 
   const editable = inv.status === "draft" || inv.status === "sent";
   const discountPercent = inv.discountPercent ?? 0;
+  // One row per SKU: split fulfillment stores a line per destination, but the
+  // line-items table reads as a single consolidated row (the split breakdown is
+  // the Ship plan below).
+  const displayLines = consolidateLinesBySku(inv.lineItems);
   // Net (post-discount) prices the customer actually pays — shown instead of
   // retail. Foots exactly to inv.totalCents (the charged amount).
   const netLines = netLineDisplays(
-    inv.lineItems.map((l) => ({ quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
+    displayLines.map((l) => ({ quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
     discountPercent,
     inv.totalCents,
   );
@@ -240,8 +248,8 @@ export default async function InvoiceDetailPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {inv.lineItems.map((l, i) => (
-                <TableRow key={l.id}>
+              {displayLines.map((l, i) => (
+                <TableRow key={`${l.sku} ${l.unitPriceCents}`}>
                   <TableCell className="font-mono text-xs">{l.sku}</TableCell>
                   <TableCell>{l.title}</TableCell>
                   <TableCell className="text-right text-zinc-500">{l.quantity}</TableCell>

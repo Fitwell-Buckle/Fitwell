@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   formatInvoiceNumber,
   computeInvoiceTotals,
+  consolidateLinesBySku,
   groupByCompany,
   computeDeposit,
   netUnitPriceCents,
@@ -177,5 +178,37 @@ describe("groupByCompany", () => {
     const { groups, unassigned } = groupByCompany([{ id: "x", c: "" }], (i) => i.c);
     expect(groups).toHaveLength(0);
     expect(unassigned).toHaveLength(1);
+  });
+});
+
+describe("consolidateLinesBySku", () => {
+  it("collapses split lines (same SKU) into one row, summing quantity", () => {
+    const out = consolidateLinesBySku([
+      { sku: "A", title: "Buckle A", quantity: 5, unitPriceCents: 1520 },
+      { sku: "A", title: "Buckle A", quantity: 5, unitPriceCents: 1520 },
+      { sku: "B", title: "Buckle B", quantity: 4, unitPriceCents: 1520 },
+      { sku: "B", title: "Buckle B", quantity: 6, unitPriceCents: 1520 },
+    ]);
+    expect(out).toEqual([
+      { sku: "A", title: "Buckle A", quantity: 10, unitPriceCents: 1520 },
+      { sku: "B", title: "Buckle B", quantity: 10, unitPriceCents: 1520 },
+    ]);
+  });
+
+  it("keeps lines with the same SKU but different unit prices separate", () => {
+    const out = consolidateLinesBySku([
+      { sku: "A", title: "Buckle A", quantity: 2, unitPriceCents: 1520 },
+      { sku: "A", title: "Buckle A (sale)", quantity: 3, unitPriceCents: 1000 },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.map((l) => l.quantity)).toEqual([2, 3]);
+  });
+
+  it("is a no-op for a non-split order (one line per SKU)", () => {
+    const lines = [
+      { sku: "A", title: "Buckle A", quantity: 3, unitPriceCents: 1520 },
+      { sku: "B", title: "Buckle B", quantity: 1, unitPriceCents: 1520 },
+    ];
+    expect(consolidateLinesBySku(lines)).toEqual(lines);
   });
 });
