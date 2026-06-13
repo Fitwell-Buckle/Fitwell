@@ -22,6 +22,8 @@
     "check:supplier-login:prod": "bash scripts/check-supplier-login-prod.sh",
     "backfill:portal-logins": "node --env-file=.env.local --import tsx/esm scripts/backfill-portal-logins.ts",
     "backfill:portal-logins:prod": "bash scripts/backfill-portal-logins-prod.sh",
+    "backfill:customer-addresses": "node --env-file=.env.local --import tsx/esm scripts/backfill-customer-addresses.ts",
+    "backfill:customer-addresses:prod": "bash scripts/backfill-customer-addresses-prod.sh",
     "db:studio": "drizzle-kit studio",
     "vc": "vercel --global-config ~/.vercel-fitwell",
     "shopify": "node --env-file=.env.local --import tsx/esm scripts/shopify-cli.ts",
