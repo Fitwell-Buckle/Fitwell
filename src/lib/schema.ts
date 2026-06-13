@@ -1119,6 +1119,33 @@ export const adminNotification = pgTable(
   (t) => [index("admin_notification_read_at_idx").on(t.readAt)],
 );
 
+// Web Push subscriptions — one row per (user, device/browser). Created when an
+// admin taps "Enable notifications on this device" in Settings; the endpoint is
+// the browser's push service URL and the keys encrypt the payload. Dead
+// endpoints (404/410 on send) are pruned automatically. Cascade-deletes with
+// the user. See src/lib/push/send.ts.
+export const pushSubscription = pgTable(
+  "push_subscription",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // The push service endpoint — unique per device/browser, the dedup key.
+    endpoint: text("endpoint").notNull().unique(),
+    // Encryption keys from the browser PushSubscription (getKey p256dh/auth).
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    // User-agent at subscribe time, so the device list reads "iPhone Safari".
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+  },
+  (t) => [index("push_subscription_user_id_idx").on(t.userId)],
+);
+
 export const productionPoRelations = relations(productionPo, ({ one, many }) => ({
   supplier: one(supplier, {
     fields: [productionPo.supplierId],

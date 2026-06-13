@@ -7,6 +7,7 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { BreadcrumbProvider } from "@/components/layout/breadcrumb-context";
 import { MobileHeader } from "@/components/layout/mobile-header";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { RegisterServiceWorker } from "@/components/pwa/register-sw";
 import { PosthogAdminIdentify } from "@/components/providers/posthog-admin-identify";
 import { StageLabelsProvider } from "@/components/production/stage-labels-provider";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
@@ -31,6 +32,7 @@ export default async function AdminLayout({
 
   return (
     <AuthSessionProvider>
+      <RegisterServiceWorker />
       {session.user.email && (
         <PosthogAdminIdentify email={session.user.email} />
       )}

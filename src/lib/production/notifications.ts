@@ -6,6 +6,7 @@ import {
   supplierContact,
 } from "@/lib/schema";
 import { sendEmail } from "@/lib/email/resend";
+import { createAdminNotification } from "@/lib/notifications/admin-notify";
 import { formatPoNumber } from "./sub-po";
 import { SUPPLIER_NOTIFICATION_TYPES } from "./notification-types";
 
@@ -40,7 +41,7 @@ export async function notifyStageHandoff(params: {
   const body = `${params.sku} handed off from ${params.supplierName} to ${params.nextSupplierName}.`;
 
   try {
-    await db.insert(adminNotification).values({
+    await createAdminNotification({
       type: "stage_handoff",
       title,
       body,
@@ -265,7 +266,7 @@ async function recordNotification(values: {
   supplierId: string | null;
 }): Promise<void> {
   try {
-    await db.insert(adminNotification).values(values);
+    await createAdminNotification(values);
   } catch (err) {
     console.error("Failed to record notification:", err);
   }

@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { createAdminNotification } from "@/lib/notifications/admin-notify";
 import {
-  adminNotification,
   customer,
   lead,
   supplier,
@@ -145,7 +145,7 @@ export async function recordInboundWhatsApp(
     : match.customerId
       ? `/customers/${match.customerId}`
       : null;
-  await db.insert(adminNotification).values({
+  await createAdminNotification({
     type: "whatsapp_message",
     title: `WhatsApp from ${who}`,
     body: msg.body ?? null,

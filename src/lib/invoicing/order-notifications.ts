@@ -1,6 +1,7 @@
 import { and, count, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { adminNotification } from "@/lib/schema";
+import { createAdminNotification } from "@/lib/notifications/admin-notify";
 import { sendEmail } from "@/lib/email/resend";
 import { fmtMoney } from "@/lib/production/display";
 
@@ -51,7 +52,7 @@ export async function notifyNewB2bOrder(params: {
   const href = `/invoices/${params.invoiceId}`;
 
   try {
-    await db.insert(adminNotification).values({ type: B2B_ORDER_TYPE, title, body, href });
+    await createAdminNotification({ type: B2B_ORDER_TYPE, title, body, href });
   } catch (err) {
     console.error("Failed to record new-order notification:", err);
   }

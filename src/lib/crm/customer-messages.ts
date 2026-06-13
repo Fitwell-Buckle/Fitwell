@@ -1,8 +1,8 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
+import { createAdminNotification } from "@/lib/notifications/admin-notify";
 import {
-  adminNotification,
   company,
   companyContact,
   customer,
@@ -144,7 +144,7 @@ export async function scanCustomerMessages(): Promise<{
             : match.audience === "b2b"
               ? "/customers/brands"
               : "/customers";
-      await db.insert(adminNotification).values({
+      await createAdminNotification({
         type: "customer_message",
         title: `New message from ${who}`,
         // Richer preview: subject + snippet when both are present.

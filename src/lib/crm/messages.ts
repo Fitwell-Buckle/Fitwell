@@ -12,8 +12,8 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { createAdminNotification } from "@/lib/notifications/admin-notify";
 import {
-  adminNotification,
   customer,
   lead,
   outboundMessage,
@@ -99,7 +99,7 @@ export async function createOutboundMessage(
       if (who) name = who.name;
     }
     const kind = (input.sequenceStep ?? 1) >= 2 ? "follow-up nudge" : "follow-up";
-    await db.insert(adminNotification).values({
+    await createAdminNotification({
       type: "lead_followup_drafted",
       title: `Draft ${kind} ready for ${name}`,
       body: input.subject ?? null,

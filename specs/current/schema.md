@@ -845,6 +845,35 @@ the client follows up with `POST /api/leads` once the user has reviewed.
 Helper lives at `src/lib/ai/anthropic.ts` — first server-side LLM
 integration in the repo.
 
+## PWA / Push Notifications
+
+The admin portal is an installable PWA (manifest at `/manifest.webmanifest`,
+service worker at `/sw.js`). Web Push lets the in-app notification surface reach
+admins' phones.
+
+### `push_subscription`
+
+One row per (admin user, device/browser). Created when an admin taps **Enable
+notifications on this device** in Settings; deleted on disable or when the push
+service reports the endpoint as gone.
+
+- `user_id` → `user.id` (cascade delete).
+- `endpoint` — the browser's push-service URL; **unique**, the dedup key
+  (re-subscribing the same browser upserts on it).
+- `p256dh` / `auth` — the subscription's encryption keys (from the browser
+  `PushSubscription`).
+- `user_agent` — captured at subscribe time so the device list is recognizable.
+- `last_used_at` — bumped on subscribe; dead endpoints (404/410 on send) are
+  pruned automatically by `src/lib/push/send.ts`.
+
+Push is wired to the existing in-app notification path: every admin-bound
+`admin_notification` insert goes through `createAdminNotification()`
+(`src/lib/notifications/admin-notify.ts`), which fans the alert out to all
+registered devices via `broadcastWebPush()`. Supplier-bound notification types
+(see `SUPPLIER_NOTIFICATION_TYPES`) are skipped — push mirrors the *admin* inbox
+1:1. Requires the `VAPID_*` env vars; unset → push silently no-ops. Suppliers and
+B2B-company users can't register subscriptions (the subscribe route 403s them).
+
 ## Open Questions
 
 - [ ] Do we need a `product` table, or is Shopify sufficient as source of truth for product catalog?

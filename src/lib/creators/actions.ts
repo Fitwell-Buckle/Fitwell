@@ -12,6 +12,7 @@
 
 import { and, eq, gt, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { createAdminNotification } from "@/lib/notifications/admin-notify";
 import {
   adminNotification,
   creator,
@@ -54,7 +55,7 @@ async function notifyOnce(params: {
     columns: { id: true },
   });
   if (existing) return false;
-  await db.insert(adminNotification).values(params);
+  await createAdminNotification(params);
   return true;
 }
 

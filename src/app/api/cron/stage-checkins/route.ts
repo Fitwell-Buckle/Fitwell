@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { createAdminNotification } from "@/lib/notifications/admin-notify";
 import {
-  adminNotification,
   productionPo,
   productionPoStageEstimate,
   productionStageCheckin,
@@ -215,7 +215,7 @@ export async function GET(req: NextRequest) {
         const remaining = Math.max(0, Math.round(100 - pct));
         const title = `Confirm you're on track: ${stageLabel} on PO ${poDisplay}`;
         const body = `Your ${stageLabel} work is ~${Math.round(pct)}% through its estimated time (about ${remaining}% to go). Open the PO to confirm you're on track or flag a delay.`;
-        await db.insert(adminNotification).values({
+        await createAdminNotification({
           type: "stage_checkin_for_supplier",
           title,
           body,
@@ -274,7 +274,7 @@ export async function GET(req: NextRequest) {
         const body = flagged
           ? `${owner.name} reported ${stageLabel} on PO ${poDisplay} is running behind.`
           : `${stageLabel} on PO ${poDisplay} is ~${Math.round(pct)}% through its estimate and ${owner.name} hasn't confirmed they're on track.`;
-        await db.insert(adminNotification).values({
+        await createAdminNotification({
           type: "stage_checkin_overdue",
           title,
           body,

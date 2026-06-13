@@ -22,6 +22,7 @@ import { PriceTiersManager } from "@/components/production/price-tiers-manager";
 import { LeadFollowupSettings } from "./lead-followup-settings";
 import { EtaReminderSettings } from "./eta-reminder-settings";
 import { StageCheckinSettings } from "./stage-checkin-settings";
+import { PushNotificationSettings } from "./push-notification-settings";
 
 export const metadata: Metadata = {
   title: "Settings | Fitwell Admin",
@@ -129,6 +130,21 @@ export default async function SettingsPage() {
               track at set points through its estimated time.
             </p>
             <StageCheckinSettings initial={productionSettings} />
+          </CardContent>
+        </Card>
+
+        <Card className="sm:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-lg">Push notifications</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-zinc-500">
+              Get the same alerts as the in-app inbox pushed to this device —
+              new B2B orders, lead replies, production handoffs, and more.
+              Enable per device; on iPhone, add the app to your home screen
+              first.
+            </p>
+            <PushNotificationSettings />
           </CardContent>
         </Card>
 

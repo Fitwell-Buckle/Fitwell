@@ -512,6 +512,13 @@
       "when": 1781388790159,
       "tag": "0072_flashy_blockbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1781390683036,
+      "tag": "0073_chubby_famine",
+      "breakpoints": true
     }
   ]
 }

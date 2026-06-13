@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { adminNotification } from "@/lib/schema";
+import { createAdminNotification } from "@/lib/notifications/admin-notify";
 import { verifyCronOrAdmin } from "@/lib/cron-auth";
 import {
   hasInboundEmailFrom,
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
         const mb = mailboxById.get(
           r.lead.ownerUserId ?? r.lead.capturedByUserId ?? "",
         );
-        await db.insert(adminNotification).values({
+        await createAdminNotification({
           type: "lead_reply",
           title: `${leadDisplayName(r.lead)} replied`,
           body: r.lead.email,
