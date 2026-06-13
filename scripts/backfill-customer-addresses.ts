@@ -20,7 +20,7 @@
 
 import { isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { customer } from "@/lib/schema";
+import { company, customer } from "@/lib/schema";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { upsertCustomer } from "@/lib/shopify/sync";
 
@@ -28,13 +28,29 @@ async function main() {
   const start = Date.now();
   const shopify = getShopifyClient();
 
-  const customers = await db
-    .select({ id: customer.id, shopifyId: customer.shopifyId })
+  // `--b2b` limits the run to customers linked to a B2B company (their People
+  // link via customer.companyId, or a company's primary Shopify link via
+  // company.customerId) — the only ones whose addresses drive the portal /
+  // invoice ship-to picker. Far faster + less churn than the whole base.
+  const b2bOnly = process.argv.includes("--b2b");
+
+  let customers = await db
+    .select({ id: customer.id, shopifyId: customer.shopifyId, companyId: customer.companyId })
     .from(customer)
     .where(isNotNull(customer.shopifyId));
 
+  if (b2bOnly) {
+    const companies = await db
+      .select({ customerId: company.customerId })
+      .from(company);
+    const primaryIds = new Set(
+      companies.map((c) => c.customerId).filter((x): x is string => Boolean(x)),
+    );
+    customers = customers.filter((c) => c.companyId != null || primaryIds.has(c.id));
+  }
+
   console.log(
-    `Backfilling addresses for ${customers.length} customers via Shopify…\n`,
+    `Backfilling addresses for ${customers.length} ${b2bOnly ? "B2B-linked " : ""}customers via Shopify…\n`,
   );
 
   let synced = 0;
