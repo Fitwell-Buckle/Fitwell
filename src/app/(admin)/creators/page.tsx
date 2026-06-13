@@ -223,6 +223,40 @@ export default async function CreatorsPage({
     return qs ? `/creators?${qs}` : "/creators";
   };
 
+  // Column-sort helper: clicking the active column flips direction,
+  // clicking a new one starts at its natural default (name asc, the rest
+  // desc — matching sortCreators in list.ts). Always sets dir explicitly
+  // so a leftover dir from another column can't bleed through.
+  const defaultDir = (col: string) => (col === "name" ? "asc" : "desc");
+  const currentSort = params.sort ?? "fit";
+  const currentDir = params.dir ?? defaultDir(currentSort);
+  const sortHref = (col: string) => {
+    const next = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v && k !== "sort" && k !== "dir") next.set(k, v);
+    }
+    next.set("sort", col);
+    next.set(
+      "dir",
+      col === currentSort
+        ? currentDir === "asc"
+          ? "desc"
+          : "asc"
+        : defaultDir(col),
+    );
+    return `/creators?${next.toString()}`;
+  };
+  const SortHead = ({ col, label }: { col: string; label: string }) => (
+    <Link href={sortHref(col)}>
+      {label}
+      {col === currentSort && (
+        <span className="ml-0.5 text-zinc-400">
+          {currentDir === "asc" ? "↑" : "↓"}
+        </span>
+      )}
+    </Link>
+  );
+
   const pill = (label: string, key: string, value: string | null, active: boolean) => (
     <Link
       key={`${key}:${value ?? "all"}`}
@@ -332,21 +366,21 @@ export default async function CreatorsPage({
           <TableHeader>
             <TableRow>
               <TableHead>
-                <Link href={pillHref("sort", "name")}>Name</Link>
+                <SortHead col="name" label="Name" />
               </TableHead>
               <TableHead>Platforms</TableHead>
               <TableHead className="text-right">
-                <Link href={pillHref("sort", "followers")}>Reach</Link>
+                <SortHead col="followers" label="Reach" />
               </TableHead>
               <TableHead className="text-right">
-                <Link href={pillHref("sort", "er")}>ER%</Link>
+                <SortHead col="er" label="ER%" />
               </TableHead>
               <TableHead>Watch</TableHead>
               <TableHead className="text-right">
-                <Link href={pillHref("sort", "fit")}>Fit</Link>
+                <SortHead col="fit" label="Fit" />
               </TableHead>
               <TableHead>
-                <Link href={pillHref("sort", "lastpost")}>Last post</Link>
+                <SortHead col="lastpost" label="Last post" />
               </TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Email</TableHead>
