@@ -1,6 +1,8 @@
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { company, customer, customerAddress, type InvoiceShipTo } from "@/lib/schema";
+import { getShopifyClient } from "@/lib/shopify/client";
+import { upsertCustomer } from "@/lib/shopify/sync";
 
 // A company's saved Shopify address, for the portal ship-to picker.
 export interface CompanyAddress {
@@ -37,11 +39,48 @@ async function linkedCustomerIds(companyId: string): Promise<string[]> {
 }
 
 /**
+ * Self-heal: when a company has no synced `customer_address` rows, re-fetch its
+ * linked Shopify customers and upsert them (delete-and-replaces their
+ * addresses) — so the portal ship-to / split-fulfillment picker works even if
+ * the customer sync hasn't populated addresses yet. Same effect as the admin
+ * "Sync from Shopify" button. Best-effort, never throws.
+ */
+async function syncCompanyAddressesFromShopify(companyId: string): Promise<void> {
+  const co = await db.query.company.findFirst({
+    where: eq(company.id, companyId),
+    columns: { customerId: true },
+  });
+  // Every Shopify-linked customer for this company: its primary link + People.
+  const rows = await db
+    .select({ id: customer.id, shopifyId: customer.shopifyId })
+    .from(customer)
+    .where(and(isNotNull(customer.shopifyId), eq(customer.companyId, companyId)));
+  const shopifyIds = new Set(rows.map((r) => r.shopifyId).filter((x): x is string => Boolean(x)));
+  if (co?.customerId) {
+    const [primary] = await db
+      .select({ shopifyId: customer.shopifyId })
+      .from(customer)
+      .where(eq(customer.id, co.customerId));
+    if (primary?.shopifyId) shopifyIds.add(primary.shopifyId);
+  }
+  if (shopifyIds.size === 0) return;
+
+  const client = getShopifyClient();
+  for (const sid of shopifyIds) {
+    try {
+      await upsertCustomer(await client.getCustomer(sid));
+    } catch (err) {
+      console.error(`portal address self-heal failed for shopify customer ${sid}:`, err);
+    }
+  }
+}
+
+/**
  * The company's saved Shopify addresses (across all its linked customers),
  * default first. Same source the admin B2B page uses; surfaced in the portal
  * so the buyer can pick a ship-to for their order.
  */
-export async function getCompanyAddresses(companyId: string): Promise<CompanyAddress[]> {
+async function readSyncedAddresses(companyId: string): Promise<CompanyAddress[]> {
   const ids = await linkedCustomerIds(companyId);
   if (ids.length === 0) return [];
   const rows = await db.query.customerAddress.findMany({
@@ -62,6 +101,21 @@ export async function getCompanyAddresses(companyId: string): Promise<CompanyAdd
     phone: a.phone,
     isDefault: a.isDefault ?? false,
   }));
+}
+
+export async function getCompanyAddresses(companyId: string): Promise<CompanyAddress[]> {
+  let rows = await readSyncedAddresses(companyId);
+  // Self-heal from Shopify if nothing is synced yet, so the ship-to / split
+  // picker isn't silently empty for a company whose addresses haven't synced.
+  if (rows.length === 0) {
+    try {
+      await syncCompanyAddressesFromShopify(companyId);
+      rows = await readSyncedAddresses(companyId);
+    } catch (err) {
+      console.error("getCompanyAddresses self-heal failed:", err);
+    }
+  }
+  return rows;
 }
 
 /**
