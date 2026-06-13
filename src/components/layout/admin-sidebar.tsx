@@ -152,6 +152,7 @@ function SidebarContent({
   const [customerMsgs, setCustomerMsgs] = useState(0);
   const [supplierMsgs, setSupplierMsgs] = useState(0);
   const [influencerMsgs, setInfluencerMsgs] = useState(0);
+  const [newOrders, setNewOrders] = useState(0);
 
   // Unread admin-notification badge. Stays in sync three ways: on navigation,
   // when a notification is marked read elsewhere (the notifications page
@@ -215,12 +216,33 @@ function SidebarContent({
     };
   }, [pathname]);
 
+  // New B2B portal orders → blue dot on Orders. Polls every 60s (+ on nav),
+  // and clears when an admin opens the B2B orders list (marks them read).
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      fetch("/api/orders/new-count")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (active && d) setNewOrders(d.count ?? 0);
+        })
+        .catch(() => {});
+    };
+    load();
+    const poll = setInterval(load, 60_000);
+    return () => {
+      active = false;
+      clearInterval(poll);
+    };
+  }, [pathname]);
+
   // Nav hrefs that should show a blue dot.
   const dotHrefs = new Set<string>();
   if (pendingDrafts > 0) dotHrefs.add("/leads");
   if (customerMsgs > 0) dotHrefs.add("/customers/brands");
   if (supplierMsgs > 0) dotHrefs.add("/modules/production/suppliers");
   if (influencerMsgs > 0) dotHrefs.add("/influencers");
+  if (newOrders > 0) dotHrefs.add("/invoices");
 
   function toggle(label: string, fallback: boolean) {
     setOpen((o) => ({ ...o, [label]: !(o[label] ?? fallback) }));

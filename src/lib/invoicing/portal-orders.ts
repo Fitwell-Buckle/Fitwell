@@ -11,6 +11,7 @@ import {
 } from "@/lib/catalog/load";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { createInvoice, snapshotInvoiceDeposit } from "./service";
+import { notifyNewB2bOrder } from "./order-notifications";
 import { computeInvoiceTotals, computeDeposit } from "./invoicing";
 import { getBillingSettings } from "./billing-settings";
 import type { CompanyScope } from "@/lib/portal/company-session";
@@ -287,6 +288,10 @@ export async function submitPortalOrder(
     return { ok: false, status: 400, error: "Your order is empty." };
   }
 
+  // A brand-new order = a draft being submitted for the first time. Edits /
+  // regenerations of an already-sent order don't re-notify.
+  const isNewOrder = inv.status === "draft";
+
   const wire = paymentMethod === "wire";
   if (wire && !inv.company.allowWirePayment) {
     return { ok: false, status: 400, error: "Bank-wire payment isn't enabled for your account." };
@@ -395,6 +400,17 @@ export async function submitPortalOrder(
 
   // Snapshot (or clear) the deposit terms for the current total.
   await snapshotInvoiceDeposit(invoiceId, hasDeposit ? depositPercent : 0, totals.totalCents);
+
+  // Notify admins of a genuinely new order (blue dot + email). Best-effort.
+  if (isNewOrder) {
+    await notifyNewB2bOrder({
+      invoiceId: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      companyName: inv.company.name,
+      totalCents: totals.totalCents,
+      paymentMethod: wire ? "wire" : "card",
+    });
+  }
 
   let wireInstructions: string | null = null;
   if (wire) {

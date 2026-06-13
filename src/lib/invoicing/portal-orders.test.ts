@@ -8,6 +8,7 @@ const {
   snapshotInvoiceDeposit,
   createInvoice,
   getBillingSettings,
+  notifyNewB2bOrder,
 } = vi.hoisted(() => ({
   findFirst: vi.fn(),
   dbUpdate: vi.fn(() => ({ set: () => ({ where: vi.fn().mockResolvedValue(undefined) }) })),
@@ -16,6 +17,7 @@ const {
   snapshotInvoiceDeposit: vi.fn().mockResolvedValue({ depositCents: 0, balanceCents: 0 }),
   createInvoice: vi.fn(),
   getBillingSettings: vi.fn().mockResolvedValue({ instructions: "Bank: Acme\nAcct: 123" }),
+  notifyNewB2bOrder: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -31,6 +33,7 @@ vi.mock("@/lib/shopify/client", () => ({
 }));
 vi.mock("@/lib/invoicing/service", () => ({ createInvoice, snapshotInvoiceDeposit }));
 vi.mock("@/lib/invoicing/billing-settings", () => ({ getBillingSettings }));
+vi.mock("@/lib/invoicing/order-notifications", () => ({ notifyNewB2bOrder }));
 // computeInvoiceTotals / computeDeposit are kept real (pure money math).
 
 import { submitPortalOrder } from "./portal-orders";
@@ -141,6 +144,22 @@ describe("submitPortalOrder", () => {
         }),
       }),
     );
+  });
+
+  it("notifies admins on a NEW order (first submit, draft → sent) but not on re-submit", async () => {
+    // First submit: the invoice was a draft.
+    findFirst.mockResolvedValue(order({ status: "draft" }));
+    await submitPortalOrder(scope, "inv1", "wire");
+    expect(notifyNewB2bOrder).toHaveBeenCalledTimes(1);
+    expect(notifyNewB2bOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ invoiceNumber: "INV-00100", companyName: "Acme", paymentMethod: "wire" }),
+    );
+
+    // Re-submit / edit of an already-sent order: no new-order notification.
+    notifyNewB2bOrder.mockClear();
+    findFirst.mockResolvedValue(order({ status: "sent" }));
+    await submitPortalOrder(scope, "inv1", "card");
+    expect(notifyNewB2bOrder).not.toHaveBeenCalled();
   });
 
   it("split fulfillment: per-line 'Ship to' attributes + a split note", async () => {

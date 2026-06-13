@@ -12,6 +12,7 @@ import {
 } from "@/lib/invoicing/invoicing";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { parseDateRange } from "@/lib/date-range";
+import { markB2bOrdersRead } from "@/lib/invoicing/order-notifications";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
 import { getStageOrder } from "@/lib/production/stage-labels";
 import { aggregateIncoming, type IncomingLine } from "@/lib/production/inventory";
@@ -43,6 +44,9 @@ export default async function B2BOrdersPage({
 }) {
   const session = await auth();
   if (!session) redirect("/auth/login");
+
+  // Opening the B2B orders list clears the "new orders" nav dot.
+  await markB2bOrdersRead();
 
   const params = await searchParams;
   const { from, to } = parseDateRange(params);
