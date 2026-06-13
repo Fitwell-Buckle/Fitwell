@@ -14,7 +14,7 @@ import {
 } from "@/components/catalog/product-combobox";
 import { computeInvoiceTotals, netLineDisplays } from "@/lib/invoicing/invoicing";
 import { fmtMoney } from "@/lib/production/display";
-import { LineItemRow, LineItemsTotal } from "@/components/invoicing/line-item-row";
+import { LineItemRow, LineItemsHeader, LineItemsTotal } from "@/components/invoicing/line-item-row";
 import type { CompanyAddress } from "@/lib/portal/addresses";
 
 function addressOptionLabel(a: CompanyAddress): string {
@@ -42,13 +42,6 @@ export interface InitialItem {
   addressId?: string;
 }
 
-interface SubmitResult {
-  invoiceNumber: string;
-  totalCents: number;
-  paymentMethod: "card" | "wire";
-  payUrl: string | null;
-  instructions: string | null;
-}
 
 type Action = "save" | "card" | "wire";
 
@@ -105,7 +98,6 @@ export function PortalOrder({
   const [cart, setCart] = useState<CartLine[]>(seedCart(initialItems));
   const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<SubmitResult | null>(null);
   // Ship-to: pre-select the order's stored address, else the company default.
   const [addressId, setAddressId] = useState<string>(
     initialAddressId || addresses.find((a) => a.isDefault)?.id || "",
@@ -208,60 +200,10 @@ export function PortalOrder({
       }
       return;
     }
-    // Submitted (status "sent").
-    if (data.paymentMethod === "card" && action !== "save") {
-      // Explicit "pay now" → straight to Shopify checkout.
-      window.location.href = data.payUrl as string;
-      return;
-    }
-    // Wire submit, or an edit-and-save of an already-sent order: show a
-    // confirmation with the (new) total + how to pay.
-    setResult({
-      invoiceNumber: data.invoiceNumber as string,
-      totalCents: (data.totalCents as number) ?? totals.totalCents,
-      paymentMethod: (data.paymentMethod as "card" | "wire") ?? "card",
-      payUrl: (data.payUrl as string) ?? null,
-      instructions: (data.wireInstructions as string) ?? null,
-    });
-    setBusy(null);
-  }
-
-  if (result) {
-    return (
-      <Card className="mt-6 p-6">
-        <h2 className="text-base font-semibold text-zinc-900">
-          Order {result.invoiceNumber} {isSent ? "updated" : "placed"}
-        </h2>
-        <p className="mt-1 text-sm text-zinc-600">
-          Total due: <span className="font-medium text-zinc-900">{fmtMoney(result.totalCents)}</span>.
-        </p>
-        {result.paymentMethod === "wire" ? (
-          result.instructions ? (
-            <pre className="mt-4 whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-800">
-              {result.instructions}
-            </pre>
-          ) : (
-            <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              Please pay by bank wire — we’ll email you the details shortly.
-            </p>
-          )
-        ) : (
-          <p className="mt-3 text-sm text-zinc-600">
-            Your payment link has been updated to reflect the new total.
-          </p>
-        )}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {result.paymentMethod === "card" && result.payUrl && (
-            <Button asChild>
-              <a href={result.payUrl}>Pay now</a>
-            </Button>
-          )}
-          <Button asChild variant="ghost">
-            <a href="/portal/orders">Back to your orders</a>
-          </Button>
-        </div>
-      </Card>
-    );
+    // Submitted → open the printable invoice (pay link + bank-wire info live
+    // there, with Print / Save PDF). The detail page shows the invoice document
+    // for any submitted order.
+    router.push(`/portal/orders/${data.invoiceId as string}`);
   }
 
   return (
@@ -283,6 +225,7 @@ export function PortalOrder({
           <p className="text-sm text-zinc-400">Your cart is empty. Search and add products above.</p>
         ) : (
           <div className="space-y-3">
+            <LineItemsHeader />
             {cart.map((l, i) => (
               <div key={l.variant.shopifyVariantId}>
                 <LineItemRow

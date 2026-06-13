@@ -14,7 +14,7 @@ import {
 } from "@/lib/invoicing/invoicing";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
-import { LineItemRow, LineItemsTotal } from "@/components/invoicing/line-item-row";
+import { LineItemRow, LineItemsHeader, LineItemsTotal } from "@/components/invoicing/line-item-row";
 import {
   CompanyForm,
   emptyCompanyDraft,
@@ -514,6 +514,7 @@ export function InvoiceForm({
         )}
 
         <div className="mt-4 space-y-3">
+          <LineItemsHeader />
           {rows.map((r, i) => {
             const taken = new Set(
               rows.filter((_, j) => j !== i).map((x) => x.variantKey).filter(Boolean),

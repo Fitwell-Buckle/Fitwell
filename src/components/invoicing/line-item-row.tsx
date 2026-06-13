@@ -5,18 +5,32 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fmtMoney } from "@/lib/production/display";
 
-// Shared uppercase column label for a line-item row. One definition so the
-// admin invoice form and the B2B portal order form read identically.
-export const lineRowLabel =
-  "mb-1 block text-[11px] font-medium uppercase tracking-wider text-zinc-400";
+const headerLabel = "text-[11px] font-medium uppercase tracking-wider text-zinc-400";
 
 /**
- * One line-item row — the shared visual language for the admin invoice form and
- * the B2B portal order form. The variable cells (product picker, qty, unit
- * price) are slotted because they differ (the admin edits them; the customer
- * sees read-only catalog pricing); the labels, the computed unit-discount +
- * line-total cells, the remove button, and the layout are shared. Edit this and
- * both surfaces change together.
+ * Column headers for the line-items table — rendered ONCE above the rows so the
+ * labels aren't repeated on every line. Column widths match `LineItemRow`.
+ * Shared by the admin invoice form and the B2B portal order form.
+ */
+export function LineItemsHeader() {
+  return (
+    <div className="flex items-center gap-2 border-b border-zinc-100 px-0 pb-2">
+      <div className={`min-w-[200px] flex-1 ${headerLabel}`}>Product</div>
+      <div className={`w-20 ${headerLabel}`}>Qty</div>
+      <div className={`w-28 ${headerLabel}`}>Unit price</div>
+      <div className={`w-24 px-2 text-right ${headerLabel}`}>Unit discount</div>
+      <div className={`w-28 px-2 text-right ${headerLabel}`}>Line total</div>
+      <div className="w-10" />
+    </div>
+  );
+}
+
+/**
+ * One line-item row. The variable cells (product picker, qty, unit price) are
+ * slotted because they differ (the admin edits them; the customer sees
+ * read-only catalog pricing); the column layout, the computed unit-discount +
+ * line-total cells, and the remove button are shared. Render `LineItemsHeader`
+ * above a list of these. Edit this and both surfaces change together.
  */
 export function LineItemRow({
   product,
@@ -38,40 +52,25 @@ export function LineItemRow({
   removeDisabled?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-end gap-2">
-      <div className="min-w-[200px] flex-1">
-        <label className={lineRowLabel}>Product</label>
-        {product}
+    <div className="flex items-center gap-2">
+      <div className="min-w-[200px] flex-1">{product}</div>
+      <div className="w-20">{qty}</div>
+      <div className="w-28">{unitPrice}</div>
+      <div className="flex h-10 w-24 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-500">
+        {unitDiscountCents == null ? (
+          <span className="text-zinc-300">—</span>
+        ) : unitDiscountCents === 0 ? (
+          <span className="text-zinc-300">$0.00</span>
+        ) : (
+          `−${fmtMoney(unitDiscountCents)}`
+        )}
       </div>
-      <div>
-        <label className={lineRowLabel}>QTY</label>
-        {qty}
-      </div>
-      <div>
-        <label className={lineRowLabel}>Unit price</label>
-        {unitPrice}
-      </div>
-      <div>
-        <label className={lineRowLabel}>Unit discount</label>
-        <div className="flex h-10 w-24 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-500">
-          {unitDiscountCents == null ? (
-            <span className="text-zinc-300">—</span>
-          ) : unitDiscountCents === 0 ? (
-            <span className="text-zinc-300">$0.00</span>
-          ) : (
-            `−${fmtMoney(unitDiscountCents)}`
-          )}
-        </div>
-      </div>
-      <div>
-        <label className={lineRowLabel}>Line total</label>
-        <div className="flex h-10 w-28 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-700">
-          {lineTotalCents == null ? (
-            <span className="text-zinc-300">—</span>
-          ) : (
-            fmtMoney(lineTotalCents)
-          )}
-        </div>
+      <div className="flex h-10 w-28 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-700">
+        {lineTotalCents == null ? (
+          <span className="text-zinc-300">—</span>
+        ) : (
+          fmtMoney(lineTotalCents)
+        )}
       </div>
       <Button
         type="button"
