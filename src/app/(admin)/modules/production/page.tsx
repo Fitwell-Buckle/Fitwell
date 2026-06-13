@@ -32,6 +32,7 @@ import {
 } from "@/lib/production/timeline-segments";
 import {
   aggregateIncoming,
+  distinctFinalEtas,
   type IncomingLine,
   type IncomingPoRow,
 } from "@/lib/production/inventory";
@@ -286,6 +287,7 @@ export default async function ProductionPage({
       etasMissing: po.lineItems.filter(
         (li) => !li.shopifyReceivedAt && !li.expectedCompletionDate,
       ).length,
+      finalEtas: distinctFinalEtas(po.lineItems.filter((li) => !li.shopifyReceivedAt)),
       status: po.status,
       incomingQty,
       byStage,
@@ -483,6 +485,7 @@ export default async function ProductionPage({
       customer: master.company?.name ?? "—",
       // ownedLines are already unreceived; flag the ones without a Final ETA.
       etasMissing: ownedLines.filter((li) => !li.expectedCompletionDate).length,
+      finalEtas: distinctFinalEtas(ownedLines),
       status: master.status,
       incomingQty,
       byStage,

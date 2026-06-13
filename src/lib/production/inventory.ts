@@ -62,10 +62,29 @@ export interface IncomingPoRow {
   /** Count of in-flight line items still missing an explicit Final ETA
    *  (`expected_completion_date`). Drives the "N not set" flag in the list. */
   etasMissing?: number;
+  /** Distinct entered Final ETAs across the PO's in-flight lines, sorted
+   *  ascending. One date when the lines agree, several when they differ —
+   *  drives the list's "Final ETAs" column. */
+  finalEtas?: string[];
   status: string;
   incomingQty: number;
   byStage: Partial<Record<ProductionStage, number>>;
   nearestEta: string | null;
+}
+
+/**
+ * The distinct entered Final ETAs (expected completion dates) across a set of
+ * line items, sorted ascending. Empty when none are set. Dates are stored as
+ * `YYYY-MM-DD` strings, so a plain sort orders them chronologically.
+ */
+export function distinctFinalEtas(
+  lines: readonly { expectedCompletionDate: string | null }[],
+): string[] {
+  return [
+    ...new Set(
+      lines.map((li) => li.expectedCompletionDate).filter((d): d is string => Boolean(d)),
+    ),
+  ].sort();
 }
 
 /**

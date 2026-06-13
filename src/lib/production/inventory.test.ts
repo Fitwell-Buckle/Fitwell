@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   aggregateIncoming,
   aggregateIncomingByPo,
+  distinctFinalEtas,
   type IncomingLine,
   type IncomingPoLine,
 } from "@/lib/production/inventory";
@@ -147,5 +148,42 @@ describe("aggregateIncomingByPo", () => {
       today,
     );
     expect(rows[0].nearestEta).toBe("2026-05-25");
+  });
+});
+
+describe("distinctFinalEtas", () => {
+  it("returns one date when every line shares the same entered ETA", () => {
+    expect(
+      distinctFinalEtas([
+        { expectedCompletionDate: "2026-06-22" },
+        { expectedCompletionDate: "2026-06-22" },
+      ]),
+    ).toEqual(["2026-06-22"]);
+  });
+
+  it("lists distinct ETAs sorted ascending when they differ", () => {
+    expect(
+      distinctFinalEtas([
+        { expectedCompletionDate: "2026-06-28" },
+        { expectedCompletionDate: "2026-06-22" },
+        { expectedCompletionDate: "2026-06-28" },
+      ]),
+    ).toEqual(["2026-06-22", "2026-06-28"]);
+  });
+
+  it("ignores lines with no entered ETA", () => {
+    expect(
+      distinctFinalEtas([
+        { expectedCompletionDate: null },
+        { expectedCompletionDate: "2026-06-22" },
+        { expectedCompletionDate: null },
+      ]),
+    ).toEqual(["2026-06-22"]);
+  });
+
+  it("is empty when no line has an ETA", () => {
+    expect(
+      distinctFinalEtas([{ expectedCompletionDate: null }, { expectedCompletionDate: null }]),
+    ).toEqual([]);
   });
 });

@@ -62,7 +62,7 @@ export function PoExpandableList({
         <div className="w-32 shrink-0">Customer</div>
         <div className="w-16 shrink-0 text-right">Items</div>
         <div className="min-w-0 flex-1">Stage</div>
-        <div className="w-24 shrink-0 text-right">Final ETA</div>
+        <div className="w-24 shrink-0 text-right">Final ETAs</div>
         {/* Placeholder matching the row's chevron (h-4 w-4 + ml-1) */}
         <div className="ml-1 h-4 w-4 shrink-0" aria-hidden />
       </div>
@@ -166,9 +166,20 @@ export function PoExpandableList({
                     </span>
                   ))}
                 </div>
-                {/* Final ETA (+ a flag when some line ETAs aren't set yet) */}
+                {/* Final ETAs — the distinct entered line ETAs (one when they
+                    agree, several when they differ) + a flag for unset ones. */}
                 <div className={cn("w-24 shrink-0 text-right text-sm", isSelected ? "text-zinc-300" : "text-zinc-500")}>
-                  {fmtDate(r.nearestEta)}
+                  {(r.finalEtas?.length ?? 0) > 0 ? (
+                    <div className="space-y-0.5">
+                      {r.finalEtas!.map((d) => (
+                        <div key={d} className="tabular-nums">
+                          {fmtDate(d)}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-zinc-300">—</span>
+                  )}
                   {(r.etasMissing ?? 0) > 0 && (
                     <div
                       className={cn(
