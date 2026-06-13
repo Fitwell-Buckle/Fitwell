@@ -51,8 +51,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/attribution` | UTM attribution analysis |
 | `/funnel` | Funnel visualization (sessions → users → orders, operational end-state view) |
 | `/funnel/strategy` | Strategic / diagnostic funnel — 6-stage acquisition, 5-stage retention loop, channel breakdown, first-order discount split (360 W5 §6 C1 measurement; classification in `src/lib/discount-codes.ts`). Aligned with `specs/strategy/funnel.md`, `retention-loop.md`, `personas.md`. |
-| `/creators` | Unified creator database (735-prospect import) — sortable/filterable list (platform, status, search, fit/reach/ER/last-post sort, URL-state), burned hidden by default. Replaces the influencer pages once the gifting flow is re-pointed (creator-program.md decision 2026-06-12) |
-| `/creators/[id]` | Creator detail — per-platform stats cards (followers, ER, watch/fit scores), posts feed, gifting orders (via `creator_id` links), emails, discount codes, status + notes editor |
+| `/creators` | Unified creator database (735-prospect import) — sortable/filterable list (platform, status, search, fit/reach/ER/last-post sort, URL-state), burned hidden by default. **Default landing IS the to-vet queue** (unreviewed only); approve/reject both empty it (approved → "Approved" pill). "⚠ Mismatch N" pill + per-row ⚠ flag surface possible bad cross-platform merges. Replaces the influencer pages once the gifting flow is re-pointed (creator-program.md decision 2026-06-12) |
+| `/creators/[id]` | Creator detail — header Approve/Reject vetting buttons + bad-merge banner; per-platform stats cards each with an **Edit / fix** control (edit handle/platform/url/bio/verified, **Split off** onto a new creator, **Reassign** to another, Delete); posts feed, gifting orders (via `creator_id` links); editable emails (add/remove/kind/portal); discount codes; full editor (name, primary platform, status, rank boost, country, notes) |
 | `/influencers` | Influencer list (CRUD) — handle/platform, assigned collections, portal-login allowlist. **Retiring into `/creators`** (unification in progress) |
 | `/influencer-tracking` | Gifting orders + content-deadline tracking (approaching / missed / hit); inline-edit deadline, mark published, affiliate link |
 | `/influencer-tracking/new` | Create a gifting order (100% off draft order; product picker limited to the influencer's assigned collections; content due date + affiliate link) |
@@ -212,7 +212,12 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/admin/creators` | Manually add a creator (auto-approved vetting; 409 if handle already tracked, incl. rejected) |
-| PATCH | `/api/admin/creators/[id]` | Update a creator (status/vettingStatus/scoreBoost/notes; status→burned sets a 12-month `burned_until_date`) |
+| PATCH | `/api/admin/creators/[id]` | Update a creator (name/primaryPlatform/status/vettingStatus/scoreBoost/country/notes; status→burned sets a 12-month `burned_until_date`) |
+| GET | `/api/admin/creators/search?q=&exclude=` | Typeahead (name or handle) for the reassign-platform picker; returns id/name/platforms |
+| PATCH/DELETE | `/api/admin/creators/[id]/platforms/[platformId]` | Edit a platform (handle/platform/url/bio/verified — uniqueness-guarded, recomputes rollups on platform change) / delete it (cascades stats+posts, recomputes rollups) |
+| POST | `/api/admin/creators/[id]/platforms/[platformId]/move` | Move a platform: omit `targetCreatorId` → **split** onto a new creator; provide one → **reassign**. Recomputes cross_platform_fit + primary on both sides |
+| POST | `/api/admin/creators/[id]/emails` | Add an email (auto-classifies kind; 409 if already on the creator) |
+| PATCH/DELETE | `/api/admin/creators/[id]/emails/[emailId]` | Edit (kind/portalAccess/email) / remove an email |
 | POST | `/api/admin/creators/[id]/promote` | Ensure a linked `influencer` row exists (idempotent) so the gifting flow can serve this creator; prospect/contacted → committed |
 | POST | `/api/admin/creators/[id]/discount-code` | Create a Shopify discount code (default 15%, once-per-customer) via `discountCodeBasicCreate` + register in `creator_discount_code`. Graceful 502 until `write_discounts` is granted |
 | POST | `/api/admin/creators/[id]/posts` | Manually log a creator post (TikTok / missed by polling); auto mention-detection; 409 on duplicate URL |

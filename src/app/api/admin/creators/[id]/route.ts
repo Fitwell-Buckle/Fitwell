@@ -9,6 +9,8 @@ import { CREATOR_STATUSES, VETTING_STATUSES } from "@/lib/creators/list";
 
 const patchSchema = z
   .object({
+    name: z.string().min(1).max(200).optional(),
+    primaryPlatform: z.enum(["ig", "yt", "tt"]).nullable().optional(),
     status: z.enum(CREATOR_STATUSES).optional(),
     vettingStatus: z.enum(VETTING_STATUSES).optional(),
     scoreBoost: z.number().min(-100).max(100).optional(),
@@ -35,6 +37,9 @@ export async function PATCH(
   }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
+  if (parsed.data.primaryPlatform !== undefined)
+    updates.primaryPlatform = parsed.data.primaryPlatform;
   if (parsed.data.status !== undefined) updates.status = parsed.data.status;
   if (parsed.data.vettingStatus !== undefined)
     updates.vettingStatus = parsed.data.vettingStatus;

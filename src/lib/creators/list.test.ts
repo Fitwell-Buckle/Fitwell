@@ -14,6 +14,7 @@ function row(partial: Partial<CreatorListRow> & { id: string }): CreatorListRow 
     scoreBoost: 0,
     country: null,
     outOfMarket: false,
+    possibleMismatch: false,
     stage: "prospect",
     primaryPlatform: "ig",
     crossPlatformFit: 50,
@@ -115,11 +116,29 @@ describe("vetting", () => {
     row({ id: "boosted", crossPlatformFit: 40, scoreBoost: 30 }),
   ];
 
-  it("hides rejected by default", () => {
+  it("default landing is the to-vet queue: only unreviewed (approved + rejected hidden)", () => {
+    // "ok" is approved → moves to the Approved pill; "no" is rejected.
     expect(filterCreators(VET_ROWS, {}).map((r) => r.id)).toEqual([
       "u",
-      "ok",
       "boosted",
+    ]);
+  });
+
+  it("vetting=approved shows the approved (accepted) creators", () => {
+    expect(filterCreators(VET_ROWS, { vetting: "approved" }).map((r) => r.id)).toEqual(
+      ["ok"],
+    );
+  });
+
+  it("a status/stage filter shows approved + unreviewed (still hides rejected)", () => {
+    const rows = [
+      row({ id: "u2", status: "active", vettingStatus: "unreviewed" }),
+      row({ id: "ok2", status: "active", vettingStatus: "approved" }),
+      row({ id: "no2", status: "active", vettingStatus: "rejected" }),
+    ];
+    expect(filterCreators(rows, { status: "active" }).map((r) => r.id)).toEqual([
+      "u2",
+      "ok2",
     ]);
   });
 
@@ -165,6 +184,21 @@ describe("vetting", () => {
     expect(filterCreators(rows, {}).map((r) => r.id)).toEqual(["us"]);
     expect(filterCreators(rows, { market: "out" }).map((r) => r.id)).toEqual(["in"]);
     expect(filterCreators(rows, { all: "1" })).toHaveLength(2);
+  });
+
+  it("mismatch=1 shows only flagged bad merges, across vet states", () => {
+    const rows = [
+      row({ id: "clean", possibleMismatch: false }),
+      row({ id: "merged-u", possibleMismatch: true, vettingStatus: "unreviewed" }),
+      row({ id: "merged-ok", possibleMismatch: true, vettingStatus: "approved" }),
+      row({ id: "merged-no", possibleMismatch: true, vettingStatus: "rejected" }),
+    ];
+    // Rejected stays hidden; the rest of the flagged set surfaces regardless
+    // of the to-vet default.
+    expect(filterCreators(rows, { mismatch: "1" }).map((r) => r.id)).toEqual([
+      "merged-u",
+      "merged-ok",
+    ]);
   });
 
   it("score boost moves a creator up the fit sort", () => {

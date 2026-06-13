@@ -71,6 +71,29 @@ as the Production module. Deadline logic is pure + unit-tested in
 | `influencer-tracking/tracking-table` | Client — gifting-order list with urgency chips; inline-edit content deadline, mark published, add/edit affiliate link |
 | `influencer-tracking/new/order-form` | Client — create a gifting order (100% off); product picker restricted to the influencer's assigned collections; content due date + affiliate link |
 
+## Creators (`app/(admin)/creators/`)
+
+Same server-fetch / client-mutate-then-`router.refresh()` shape. Pure logic
+is unit-tested: list filter/sort in `lib/creators/list.ts`, scoring in
+`lib/creators/scoring.ts`, and edit/rescore helpers (rollup recompute after a
+platform moves, plus the bad-merge heuristic) in `lib/creators/edit.ts`.
+Server-side rollup persistence + handle-uniqueness checks live in
+`lib/creators/rescore.ts`. The list's default landing IS the to-vet queue
+(unreviewed only — see `routes.md`).
+
+| Component | Usage |
+|-----------|-------|
+| `creators/add-creator` | Client — inline add form (auto-approved; 409 on duplicate handle) |
+| `creators/vet-actions` | Client — inline list-row ✓ approve / ✗ reject / ↺ reset / ▲▼ boost |
+| `creators/[id]/vet-buttons` | Client — detail-page Approve / Reject / Reset (header) |
+| `creators/[id]/creator-editor` | Client — name, primary platform, status, rank boost (±10), country, notes |
+| `creators/[id]/platform-editor` | Client — per-platform Edit / fix: edit handle/platform/url/bio/verified, **Split off** (→ new creator), **Reassign** (typeahead picker → another creator), Delete |
+| `creators/[id]/emails-editor` | Client — add / remove emails, edit kind + portal-access toggle |
+| `creators/[id]/creator-actions` | Client — Send sample (→ gifting flow), Generate code (15%) |
+| `creators/[id]/outreach-panel` | Client — outreach threads + event logging |
+| `creators/[id]/assets-panel` | Client — deliverable capture + rights tier/expiry |
+| `creators/[id]/stats-chart` | Client — 90-day followers + ER trend per platform |
+
 ## Tracking (`components/tracking/`)
 
 | Component | Usage |

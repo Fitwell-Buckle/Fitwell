@@ -17,11 +17,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 import { rightsStatus, type RightsTier } from "@/lib/creators/assets";
+import { flagPossibleMismatch } from "@/lib/creators/edit";
 import { AssetsPanel } from "./assets-panel";
 import { CreatorActions } from "./creator-actions";
 import { CreatorEditor } from "./creator-editor";
+import { EmailsEditor } from "./emails-editor";
 import { OutreachPanel } from "./outreach-panel";
+import { PlatformEditor } from "./platform-editor";
 import { StatsChart } from "./stats-chart";
+import { VetButtons } from "./vet-buttons";
 
 export const metadata: Metadata = {
   title: "Creator | Fitwell Admin",
@@ -75,6 +79,11 @@ export default async function CreatorDetailPage({
   if (!record) notFound();
 
   const platformIds = record.platforms.map((p) => p.id);
+
+  const possibleMismatch = flagPossibleMismatch(
+    record.name,
+    record.platforms.map((p) => ({ platform: p.platform, handle: p.handle })),
+  );
 
   const codeStrings = record.discountCodes.map((c) => c.code);
 
@@ -187,6 +196,19 @@ export default async function CreatorDetailPage({
       <div className="flex items-center justify-between">
         <PageHeader title={record.name} />
         <div className="flex items-center gap-2">
+          <Badge
+            className={
+              record.vettingStatus === "approved"
+                ? "bg-emerald-100 text-emerald-700"
+                : record.vettingStatus === "rejected"
+                  ? "bg-red-100 text-red-700"
+                  : "bg-amber-100 text-amber-700"
+            }
+          >
+            {record.vettingStatus === "unreviewed"
+              ? "to vet"
+              : record.vettingStatus}
+          </Badge>
           <Badge>{record.status}</Badge>
           {record.crossPlatformFit != null && (
             <Badge className="bg-zinc-900 text-white">
@@ -199,7 +221,20 @@ export default async function CreatorDetailPage({
         </div>
       </div>
 
-      <div className="mb-4">
+      {possibleMismatch && (
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          ⚠ <span className="font-medium">Possible bad merge.</span> These
+          platforms may be different people/brands that the import linked
+          together. Use <span className="font-medium">Edit / fix → Split off</span>{" "}
+          on the wrong platform below to give it its own creator record.
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <VetButtons
+          creatorId={record.id}
+          vettingStatus={record.vettingStatus}
+        />
         <CreatorActions creatorId={record.id} />
       </div>
 
@@ -273,6 +308,21 @@ export default async function CreatorDetailPage({
                     {p.bio}
                   </p>
                 )}
+                <div className="mt-3">
+                  <PlatformEditor
+                    creatorId={record.id}
+                    creatorName={record.name}
+                    platform={{
+                      id: p.id,
+                      platform: p.platform,
+                      handle: p.handle,
+                      profileUrl: p.profileUrl,
+                      bio: p.bio,
+                      isVerified: p.isVerified,
+                    }}
+                    isOnlyPlatform={record.platforms.length === 1}
+                  />
+                </div>
                 <div className="mt-3">
                   <StatsChart
                     label={PLATFORM_NAMES[p.platform] ?? p.platform}
@@ -428,25 +478,15 @@ export default async function CreatorDetailPage({
 
           {/* Contact */}
           <DataTable className="p-4">
-            <div className="mb-2 font-medium">Contact</div>
-            {record.emails.length === 0 ? (
-              <Muted>No emails on file.</Muted>
-            ) : (
-              <ul className="space-y-1.5">
-                {record.emails.map((e) => (
-                  <li key={e.id} className="flex items-center gap-2 text-sm">
-                    <a
-                      href={`mailto:${e.email}`}
-                      className="font-mono text-zinc-700 underline-offset-2 hover:underline"
-                    >
-                      {e.email}
-                    </a>
-                    {e.kind && <Badge>{e.kind}</Badge>}
-                    {e.portalAccess && <Badge>portal</Badge>}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <EmailsEditor
+              creatorId={record.id}
+              emails={record.emails.map((e) => ({
+                id: e.id,
+                email: e.email,
+                kind: e.kind,
+                portalAccess: e.portalAccess,
+              }))}
+            />
           </DataTable>
 
           {/* Discount codes */}
@@ -508,11 +548,14 @@ export default async function CreatorDetailPage({
             />
           </DataTable>
 
-          {/* Status + notes */}
+          {/* Edit: name, primary, status, boost, country, notes */}
           <DataTable className="p-4">
             <CreatorEditor
               creatorId={record.id}
+              name={record.name}
+              primaryPlatform={record.primaryPlatform}
               status={record.status}
+              scoreBoost={record.scoreBoost}
               notes={record.notes}
               country={record.country}
             />

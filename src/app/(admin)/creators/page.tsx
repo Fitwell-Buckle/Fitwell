@@ -23,6 +23,7 @@ import {
   type CreatorListRow,
 } from "@/lib/creators/list";
 import { getActiveMarkets, isOutOfMarket } from "@/lib/creators/markets";
+import { flagPossibleMismatch } from "@/lib/creators/edit";
 import { AddCreator } from "./add-creator";
 import { VetActions } from "./vet-actions";
 import { PageHeader } from "@/components/ui/page-header";
@@ -168,6 +169,10 @@ export default async function CreatorsPage({
       scoreBoost: c.scoreBoost,
       country: c.country,
       outOfMarket: isOutOfMarket(c.country, activeMarkets),
+      possibleMismatch: flagPossibleMismatch(
+        c.name,
+        c.platforms.map((p) => ({ platform: p.platform, handle: p.handle })),
+      ),
       stage: pipelineStage({
         status: c.status,
         hasOutreach: outreachSet.has(c.id),
@@ -191,6 +196,21 @@ export default async function CreatorsPage({
   });
 
   const visible = applyCreatorListParams(rows, params);
+
+  // The plain landing view IS the to-vet queue (list.ts applies the
+  // unreviewed default under these same conditions) — highlight "To vet".
+  const isToVetDefault =
+    !params.vetting &&
+    !params.status &&
+    !params.stage &&
+    params.market !== "out" &&
+    params.mismatch !== "1" &&
+    params.all !== "1";
+
+  // Count of fixable bad-merge suspects (in-market, not dumped).
+  const mismatchCount = rows.filter(
+    (r) => r.possibleMismatch && !r.outOfMarket && r.vettingStatus !== "rejected",
+  ).length;
 
   // Pill-link helper preserving other params.
   const pillHref = (key: string, value: string | null) => {
@@ -269,12 +289,24 @@ export default async function CreatorsPage({
         {pill("YT", "platform", "yt", params.platform === "yt")}
         {pill("Multi", "platform", "multi", params.platform === "multi")}
         <span className="mx-1 h-4 w-px bg-zinc-200" />
-        {pill("To vet", "vetting", "unreviewed", params.vetting === "unreviewed")}
+        {pill(
+          "To vet",
+          "vetting",
+          "unreviewed",
+          params.vetting === "unreviewed" || isToVetDefault,
+        )}
         {pill("Approved", "vetting", "approved", params.vetting === "approved")}
         {pill("Rejected", "vetting", "rejected", params.vetting === "rejected")}
         {pill("Out of market", "market", "out", params.market === "out")}
+        {mismatchCount > 0 &&
+          pill(
+            `⚠ Mismatch ${mismatchCount}`,
+            "mismatch",
+            "1",
+            params.mismatch === "1",
+          )}
         <span className="mx-1 h-4 w-px bg-zinc-200" />
-        {pill("Active pipeline", "status", null, !params.status && params.all !== "1")}
+        {pill("All statuses", "status", null, !params.status && params.all !== "1")}
         {CREATOR_STATUSES.map((s) =>
           pill(s, "status", s, params.status === s),
         )}
@@ -349,6 +381,14 @@ export default async function CreatorsPage({
                     {r.country && (
                       <span className="ml-1.5 font-mono text-[10px] text-zinc-400">
                         {r.country}
+                      </span>
+                    )}
+                    {r.possibleMismatch && (
+                      <span
+                        title="Platforms may be different entities merged by import — open to verify/split."
+                        className="ml-1.5 text-amber-500"
+                      >
+                        ⚠
                       </span>
                     )}
                   </TableCell>

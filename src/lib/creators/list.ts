@@ -30,6 +30,8 @@ export interface CreatorListRow {
   outOfMarket: boolean;
   /** Derived lifecycle stage (lifecycle.ts); null for burned/archived. */
   stage: PipelineStage | null;
+  /** Heuristic: platforms look like two different entities merged (edit.ts). */
+  possibleMismatch: boolean;
   primaryPlatform: string | null;
   crossPlatformFit: number | null;
   platforms: {
@@ -52,6 +54,8 @@ export interface CreatorListParams {
   vetting?: string;
   /** "out" shows ONLY out-of-market creators (the parked bench) */
   market?: string;
+  /** "1" shows ONLY creators flagged as possible bad cross-platform merges */
+  mismatch?: string;
   /** Pipeline stage filter (clicked from the pipeline bar). */
   stage?: string;
   /** substring match on name or any handle */
@@ -97,6 +101,22 @@ export function filterCreators(
   }
   if (params.vetting) {
     out = out.filter((r) => r.vettingStatus === params.vetting);
+  } else if (
+    // To-vet default: the plain landing view is the vetting queue —
+    // approving (or rejecting) a creator empties it from here, the same
+    // way rejecting always has. Approved creators live under the
+    // "Approved" pill and remain visible in pipeline/stage/market/mismatch
+    // views (which explicitly opt out of this default).
+    params.all !== "1" &&
+    !params.status &&
+    !params.stage &&
+    params.market !== "out" &&
+    params.mismatch !== "1"
+  ) {
+    out = out.filter((r) => r.vettingStatus === "unreviewed");
+  }
+  if (params.mismatch === "1") {
+    out = out.filter((r) => r.possibleMismatch);
   }
   if (params.platform === "multi") {
     out = out.filter((r) => r.platforms.length > 1);
