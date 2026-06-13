@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +12,9 @@ import {
   type CatalogVariant,
   type CatalogCollection,
 } from "@/components/catalog/product-combobox";
-import { computeInvoiceTotals } from "@/lib/invoicing/invoicing";
+import { computeInvoiceTotals, netLineDisplays } from "@/lib/invoicing/invoicing";
 import { fmtMoney } from "@/lib/production/display";
+import { LineItemRow, LineItemsTotal } from "@/components/invoicing/line-item-row";
 import type { CompanyAddress } from "@/lib/portal/addresses";
 
 function addressOptionLabel(a: CompanyAddress): string {
@@ -108,11 +108,6 @@ export function PortalOrder({
 
   const inCart = new Set(cart.map((l) => l.variant.shopifyVariantId));
 
-  // The customer's discounted unit price (the tier % off retail). Shown beside
-  // the standard price so they can see what they actually pay.
-  const discountedUnit = (priceCents: number) =>
-    Math.round((priceCents * (100 - discountPercent)) / 100);
-
   function add(v: CatalogVariant) {
     setError(null);
     setCart((c) =>
@@ -145,6 +140,13 @@ export function PortalOrder({
   const totals = computeInvoiceTotals(
     cart.map((l) => ({ quantity: Math.max(0, l.quantity || 0), unitPriceCents: l.variant.priceCents })),
     discountPercent,
+  );
+  // Per-line net unit + line total (after the tier discount) — the SAME helper
+  // the admin invoice form uses, so the columns reconcile to the total identically.
+  const netLines = netLineDisplays(
+    cart.map((l) => ({ quantity: Math.max(0, l.quantity || 0), unitPriceCents: l.variant.priceCents })),
+    discountPercent,
+    totals.totalCents,
   );
 
   async function send(action: Action) {
@@ -263,71 +265,45 @@ export function PortalOrder({
         {cart.length === 0 ? (
           <p className="text-sm text-zinc-400">Your cart is empty. Search and add products above.</p>
         ) : (
-          <div className="space-y-2">
-            {cart.map((l) => (
-              <div
+          <div className="space-y-3">
+            {cart.map((l, i) => (
+              <LineItemRow
                 key={l.variant.shopifyVariantId}
-                className="flex flex-wrap items-center gap-3 rounded-md border border-zinc-100 px-3 py-2"
-              >
-                <span className="min-w-[200px] flex-1 text-sm text-zinc-800">
-                  {variantLabel(l.variant)}
-                </span>
-                <span className="text-sm text-zinc-500">
-                  {discountPercent > 0 ? (
-                    <>
-                      <span className="text-zinc-400 line-through">
-                        {fmtMoney(l.variant.priceCents)}
-                      </span>{" "}
-                      <span className="font-medium text-emerald-700">
-                        {fmtMoney(discountedUnit(l.variant.priceCents))} ea
-                      </span>
-                    </>
-                  ) : (
-                    <>{fmtMoney(l.variant.priceCents)} ea</>
-                  )}
-                </span>
-                <Input
-                  className="w-20"
-                  type="number"
-                  min="1"
-                  value={String(l.quantity)}
-                  onChange={(e) =>
-                    setQty(l.variant.shopifyVariantId, Math.max(1, Math.floor(Number(e.target.value) || 1)))
-                  }
-                />
-                <span className="w-24 text-right text-sm font-medium text-zinc-900">
-                  {fmtMoney(l.variant.priceCents * l.quantity)}
-                </span>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label="Remove"
-                  onClick={() => remove(l.variant.shopifyVariantId)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+                product={
+                  <div className="flex h-10 items-center text-sm text-zinc-800">
+                    {variantLabel(l.variant)}
+                  </div>
+                }
+                qty={
+                  <Input
+                    className="w-20"
+                    type="number"
+                    min="1"
+                    value={String(l.quantity)}
+                    onChange={(e) =>
+                      setQty(
+                        l.variant.shopifyVariantId,
+                        Math.max(1, Math.floor(Number(e.target.value) || 1)),
+                      )
+                    }
+                  />
+                }
+                unitPrice={
+                  <div className="flex h-10 w-28 items-center justify-end px-2 text-sm tabular-nums text-zinc-700">
+                    {fmtMoney(l.variant.priceCents)}
+                  </div>
+                }
+                unitDiscountCents={l.variant.priceCents - netLines[i].netUnitPriceCents}
+                lineTotalCents={netLines[i].netLineTotalCents}
+                onRemove={() => remove(l.variant.shopifyVariantId)}
+              />
             ))}
           </div>
         )}
       </div>
 
       {cart.length > 0 && (
-        <div className="mt-4 space-y-1 border-t border-zinc-100 pt-3 text-sm">
-          <div className="flex justify-end gap-6 text-zinc-500">
-            <span>Subtotal</span>
-            <span className="w-28 text-right text-zinc-700">{fmtMoney(totals.subtotalCents)}</span>
-          </div>
-          <div className="flex justify-end gap-6 text-zinc-500">
-            <span>Your discount ({discountPercent}%)</span>
-            <span className="w-28 text-right text-zinc-700">−{fmtMoney(totals.discountCents)}</span>
-          </div>
-          <div className="flex justify-end gap-6 text-base font-semibold text-zinc-900">
-            <span>Total</span>
-            <span className="w-28 text-right">{fmtMoney(totals.totalCents)}</span>
-          </div>
-        </div>
+        <LineItemsTotal discountPercent={discountPercent} totalCents={totals.totalCents} />
       )}
 
       {addresses.length > 0 && (

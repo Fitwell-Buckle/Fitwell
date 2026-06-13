@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { fmtMoney } from "@/lib/production/display";
 import {
   computeInvoiceTotals,
   netLineDisplays,
@@ -15,6 +14,7 @@ import {
 } from "@/lib/invoicing/invoicing";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
+import { LineItemRow, LineItemsTotal } from "@/components/invoicing/line-item-row";
 import {
   CompanyForm,
   emptyCompanyDraft,
@@ -75,7 +75,6 @@ interface Row {
 }
 
 const fieldLabel = "mb-1 block text-xs font-medium text-zinc-500";
-const rowLabel = "mb-1 block text-[11px] font-medium uppercase tracking-wider text-zinc-400";
 
 function emptyRow(): Row {
   return { variantKey: "", shopifyProductId: "", sku: "", title: "", quantity: "1", unitPrice: "" };
@@ -539,10 +538,10 @@ export function InvoiceForm({
                 ? rowUnitCents - netUnitPriceCents(rowUnitCents, discount)
                 : null;
             return (
-              <div key={i} className="flex flex-wrap items-end gap-2">
-                <div className="min-w-[200px] flex-1">
-                  <label className={rowLabel}>Product</label>
-                  {catalogError ? (
+              <LineItemRow
+                key={i}
+                product={
+                  catalogError ? (
                     <div className="flex gap-2">
                       <Input
                         className="w-32"
@@ -578,10 +577,9 @@ export function InvoiceForm({
                       }
                       onSelectMany={(vs) => addManyAt(i, vs)}
                     />
-                  )}
-                </div>
-                <div>
-                  <label className={rowLabel}>QTY</label>
+                  )
+                }
+                qty={
                   <Input
                     className="w-20"
                     type="number"
@@ -591,9 +589,8 @@ export function InvoiceForm({
                     onFocus={(e) => e.currentTarget.select()}
                     onChange={(e) => updateRow(i, { quantity: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className={rowLabel}>Unit price</label>
+                }
+                unitPrice={
                   <Input
                     className="w-28"
                     type="number"
@@ -604,55 +601,17 @@ export function InvoiceForm({
                     onFocus={(e) => e.currentTarget.select()}
                     onChange={(e) => updateRow(i, { unitPrice: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className={rowLabel}>Unit discount</label>
-                  <div className="flex h-10 w-24 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-500">
-                    {unitDiscountCents == null ? (
-                      <span className="text-zinc-300">—</span>
-                    ) : unitDiscountCents === 0 ? (
-                      <span className="text-zinc-300">$0.00</span>
-                    ) : (
-                      `−${fmtMoney(unitDiscountCents)}`
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className={rowLabel}>Line total</label>
-                  <div className="flex h-10 w-28 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-700">
-                    {lineCents == null ? <span className="text-zinc-300">—</span> : fmtMoney(lineCents)}
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeRow(i)}
-                  disabled={rows.length === 1}
-                  aria-label="Remove line"
-                  className="shrink-0"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+                }
+                unitDiscountCents={unitDiscountCents}
+                lineTotalCents={lineCents}
+                onRemove={() => removeRow(i)}
+                removeDisabled={rows.length === 1}
+              />
             );
           })}
         </div>
 
-        {/* Mirrors the saved invoice view: line totals are already net, so we
-            show just the partner-pricing note + the final Total — no retail
-            Subtotal / Discount rows. */}
-        <div className="mt-4 space-y-1 border-t border-zinc-100 pt-3 text-sm">
-          {discount > 0 && (
-            <div className="flex justify-end gap-6 text-zinc-400">
-              <span>Includes {discount}% partner pricing</span>
-            </div>
-          )}
-          <div className="flex justify-end gap-6 font-semibold text-zinc-900">
-            <span>Total (USD)</span>
-            <span className="w-28 text-right">{fmtMoney(totals.totalCents)}</span>
-          </div>
-        </div>
+        <LineItemsTotal discountPercent={discount} totalCents={totals.totalCents} />
       </Card>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
