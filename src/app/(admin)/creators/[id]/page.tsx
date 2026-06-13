@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 import { rightsStatus, type RightsTier } from "@/lib/creators/assets";
 import { flagPossibleMismatch } from "@/lib/creators/edit";
+import { AddPlatform } from "./add-platform";
 import { AssetsPanel } from "./assets-panel";
 import { CreatorActions } from "./creator-actions";
 import { CreatorEditor } from "./creator-editor";
@@ -339,6 +340,8 @@ export default async function CreatorDetailPage({
               </DataTable>
             );
           })}
+
+          <AddPlatform creatorId={record.id} />
 
           {/* Posts */}
           <DataTable className="p-4">

@@ -214,6 +214,7 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | POST | `/api/admin/creators` | Manually add a creator (auto-approved vetting; 409 if handle already tracked, incl. rejected) |
 | PATCH | `/api/admin/creators/[id]` | Update a creator (name/primaryPlatform/status/vettingStatus/scoreBoost/country/notes; status→burned sets a 12-month `burned_until_date`) |
 | GET | `/api/admin/creators/search?q=&exclude=` | Typeahead (name or handle) for the reassign-platform picker; returns id/name/platforms |
+| POST | `/api/admin/creators/[id]/platforms` | Add a channel to a creator (409 if handle already tracked), then **auto-populate** it synchronously via `populatePlatform()` — pulls stats + recent posts + scores (YT via Data API, IG via Apify). Missing key / TikTok → row created, fills on the next cron |
 | PATCH/DELETE | `/api/admin/creators/[id]/platforms/[platformId]` | Edit a platform (handle/platform/url/bio/verified — uniqueness-guarded, recomputes rollups on platform change) / delete it (cascades stats+posts, recomputes rollups) |
 | POST | `/api/admin/creators/[id]/platforms/[platformId]/move` | Move a platform: omit `targetCreatorId` → **split** onto a new creator; provide one → **reassign**. Recomputes cross_platform_fit + primary on both sides |
 | POST | `/api/admin/creators/[id]/emails` | Add an email (auto-classifies kind; 409 if already on the creator) |

@@ -87,6 +87,7 @@ Server-side rollup persistence + handle-uniqueness checks live in
 | `creators/vet-actions` | Client — inline list-row ✓ approve / ✗ reject / ↺ reset / ▲▼ boost |
 | `creators/[id]/vet-buttons` | Client — detail-page Approve / Reject / Reset (header) |
 | `creators/[id]/creator-editor` | Client — name, primary platform, status, rank boost (±10), country, notes |
+| `creators/[id]/add-platform` | Client — add a channel to a creator; server auto-populates stats + posts via `lib/creators/populate.ts` `populatePlatform()` (defers to cron if the API key is unset) |
 | `creators/[id]/platform-editor` | Client — per-platform Edit / fix: edit handle/platform/url/bio/verified, **Split off** (→ new creator), **Reassign** (typeahead picker → another creator), Delete |
 | `creators/[id]/emails-editor` | Client — add / remove emails, edit kind + portal-access toggle |
 | `creators/[id]/creator-actions` | Client — Send sample (→ gifting flow), Generate code (15%) |
