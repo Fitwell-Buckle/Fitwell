@@ -20,7 +20,7 @@ self.addEventListener("push", (event) => {
     data = { body: event.data ? event.data.text() : "" };
   }
 
-  const title = data.title || "Fitwell Admin";
+  const title = data.title || "Fitwell Portal";
   const options = {
     body: data.body || "",
     icon: "/icon-192.png",

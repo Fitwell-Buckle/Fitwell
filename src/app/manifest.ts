@@ -5,8 +5,8 @@ import type { MetadataRoute } from "next";
 // only works once the PWA is added to the home screen.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Fitwell Admin",
-    short_name: "Fitwell",
+    name: "Fitwell Portal",
+    short_name: "Fitwell Portal",
     description:
       "Fitwell Buckle Co. ops portal — orders, leads, production, analytics.",
     // Land on the dashboard; unauthenticated installs redirect to login.

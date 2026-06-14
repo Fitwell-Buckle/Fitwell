@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   // Home-screen install (iOS): standalone chrome + status-bar style + icon.
   appleWebApp: {
     capable: true,
-    title: "Fitwell",
+    title: "Fitwell Portal",
     statusBarStyle: "black-translucent",
   },
   icons: {

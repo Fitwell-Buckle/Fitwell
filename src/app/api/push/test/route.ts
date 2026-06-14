@@ -23,7 +23,7 @@ export async function POST() {
   }
 
   const result = await sendWebPushToUser(session.user.id, {
-    title: "Fitwell Admin",
+    title: "Fitwell Portal",
     body: "🔔 Test notification — push is working on this device.",
     url: "/notifications",
     tag: "push-test",
