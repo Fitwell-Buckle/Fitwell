@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { supplier, supplierLead } from "@/lib/schema";
-import { SUPPLIER_LEAD_STATUSES, SUPPLIER_TYPES } from "./lead-constants";
+import { SUPPLIER_LEAD_STATUSES } from "./lead-constants";
+
+// Multi-select supplier personas. Free-form (any string the user adds via
+// "Other" is valid), deduped + emptiness-filtered at the service layer.
+const supplierTypesSchema = z.array(z.string().trim().min(1).max(200)).nullish();
 
 // Pure (db-free) validation + mapping for supplier leads. Kept out of
 // lead-service.ts — which imports the db client — so these can be unit-tested
@@ -26,7 +30,7 @@ export const createSupplierLeadSchema = z
     region: z.string().max(200).nullish(),
     postalCode: z.string().max(40).nullish(),
     country: z.string().max(120).nullish(),
-    supplierType: z.enum(SUPPLIER_TYPES).nullish(),
+    supplierTypes: supplierTypesSchema,
     notes: z.string().max(10_000).nullish(),
     cardImageUrl: z.string().url().max(2000).nullish(),
     cardRawText: z.string().max(10_000).nullish(),
@@ -60,7 +64,7 @@ export const updateSupplierLeadSchema = z.object({
   region: z.string().max(200).nullish(),
   postalCode: z.string().max(40).nullish(),
   country: z.string().max(120).nullish(),
-  supplierType: z.enum(SUPPLIER_TYPES).nullish(),
+  supplierTypes: supplierTypesSchema,
   notes: z.string().max(10_000).nullish(),
   status: z.enum(SUPPLIER_LEAD_STATUSES).optional(),
 });

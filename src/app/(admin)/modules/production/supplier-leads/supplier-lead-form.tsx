@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useDictation } from "@/components/ui/use-dictation";
-import { SUPPLIER_TYPES } from "@/lib/suppliers/lead-constants";
-import { supplierTypeLabel } from "@/lib/suppliers/lead-constants";
+import { SupplierTypeSelect } from "./supplier-type-select";
 
 const LIST_HREF = "/modules/production/supplier-leads";
 
@@ -26,7 +25,7 @@ export interface SupplierLeadFormInitial {
   region?: string | null;
   postalCode?: string | null;
   country?: string | null;
-  supplierType?: string | null;
+  supplierTypes?: string[] | null;
   notes?: string | null;
   cardImageUrl?: string | null;
   cardRawText?: string | null;
@@ -54,8 +53,6 @@ export interface SupplierLeadFormProps {
 }
 
 const LBL = "block text-xs font-medium text-zinc-500";
-const SEL =
-  "h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-950";
 
 function ConfidenceDot({ score }: { score: number | undefined }) {
   if (score === undefined) return null;
@@ -117,7 +114,9 @@ export function SupplierLeadForm({
   const [region, setRegion] = useState(initial?.region ?? "");
   const [postalCode, setPostalCode] = useState(initial?.postalCode ?? "");
   const [country, setCountry] = useState(initial?.country ?? "");
-  const [supplierType, setSupplierType] = useState(initial?.supplierType ?? "");
+  const [supplierTypes, setSupplierTypes] = useState<string[]>(
+    initial?.supplierTypes ?? [],
+  );
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const dictation = useDictation(setNotes, () => notes);
 
@@ -143,7 +142,7 @@ export function SupplierLeadForm({
         region: region || null,
         postalCode: postalCode || null,
         country: country || null,
-        supplierType: supplierType || null,
+        supplierTypes,
         notes: notes || null,
       };
       if (!leadId) {
@@ -183,23 +182,12 @@ export function SupplierLeadForm({
     void save();
   }
 
-  // Supplier type — the first thing you set when capturing a supplier card.
+  // Supplier persona(s) — the first thing you set when capturing a supplier
+  // card. Multi-select; "Other" lets you add a free-text persona that sticks.
   const supplierTypeField = (
     <div>
-      <FieldLabel htmlFor="supplierType">Supplier type</FieldLabel>
-      <select
-        id="supplierType"
-        className={SEL}
-        value={supplierType}
-        onChange={(e) => setSupplierType(e.target.value)}
-      >
-        <option value="">— pick a supplier type —</option>
-        {SUPPLIER_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {supplierTypeLabel(t)}
-          </option>
-        ))}
-      </select>
+      <FieldLabel htmlFor="supplierTypes">Supplier persona</FieldLabel>
+      <SupplierTypeSelect value={supplierTypes} onChange={setSupplierTypes} />
     </div>
   );
 

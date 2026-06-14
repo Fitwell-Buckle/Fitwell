@@ -3,7 +3,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { listSupplierLeads } from "@/lib/suppliers/lead-service";
-import { supplierTypeLabel } from "@/lib/suppliers/lead-constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -78,7 +77,7 @@ export default async function SupplierLeadsPage({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Company</TableHead>
-              <TableHead>Supplier type</TableHead>
+              <TableHead>Persona</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Captured</TableHead>
             </TableRow>
@@ -106,7 +105,7 @@ export default async function SupplierLeadsPage({
                   </TableCell>
                   <TableCell>{l.companyName ?? "—"}</TableCell>
                   <TableCell className="text-xs text-zinc-600">
-                    {l.supplierType ? supplierTypeLabel(l.supplierType) : "—"}
+                    {l.supplierTypes?.length ? l.supplierTypes.join(", ") : "—"}
                   </TableCell>
                   <TableCell>
                     <Badge

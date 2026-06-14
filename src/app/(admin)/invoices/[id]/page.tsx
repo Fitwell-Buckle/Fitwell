@@ -268,7 +268,7 @@ export default async function InvoiceDetailPage({
         <div className="mt-4 space-y-1 border-t border-zinc-100 pt-3 text-sm">
           {discountPercent > 0 && (
             <div className="flex justify-end gap-6 text-zinc-400">
-              <span>Includes {discountPercent}% partner pricing</span>
+              <span>Includes {discountPercent}% partner discount</span>
             </div>
           )}
           <div className="flex justify-end gap-6 text-base font-semibold text-zinc-900">

@@ -58,7 +58,7 @@ export default async function SupplierLeadPage({
             region: lead.region,
             postalCode: lead.postalCode,
             country: lead.country,
-            supplierType: lead.supplierType,
+            supplierTypes: lead.supplierTypes,
             notes: lead.notes,
             cardImageUrl: lead.cardImageUrl,
             cardRawText: lead.cardRawText,

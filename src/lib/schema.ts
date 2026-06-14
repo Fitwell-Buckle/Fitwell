@@ -2310,9 +2310,13 @@ export const supplierLead = pgTable(
     region: text("region"),
     postalCode: text("postal_code"),
     country: text("country"),
-    // Supplier specialty: metal_hardware | plating_finishing | springs_pins |
-    // leather_strap | packaging | tooling_machining | other.
-    supplierType: text("supplier_type"),
+    // Supplier personas (multi-select). Built-in presets "Rapid Prototyping" /
+    // "Full Production" plus any free-text "Other" value — stored as the
+    // display string. Array so a lead can carry several; the capture dropdown
+    // is seeded from the presets ∪ every distinct value already stored here, so
+    // a new "Other" entry shows up for everyone next time. Column kept as the
+    // original `supplier_type` name to avoid a rename migration.
+    supplierTypes: text("supplier_type").array(),
     notes: text("notes"),
     cardImageUrl: text("card_image_url"),
     // Claude's raw read of the card — kept so a desktop fixer can recover

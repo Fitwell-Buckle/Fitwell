@@ -1,12 +1,36 @@
-import { and, desc, eq, ilike, or, type SQL } from "drizzle-orm";
+import { and, arrayContains, desc, eq, ilike, or, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { supplier, supplierLead, supplierLeadCardImage } from "@/lib/schema";
 import { toNameCase } from "@/lib/crm/names";
+import {
+  SUPPLIER_PERSONA_PRESETS,
+  normalizeSupplierType,
+} from "./lead-constants";
 import {
   type CreateSupplierLeadInput,
   type UpdateSupplierLeadInput,
   supplierLeadToSupplierInput,
 } from "./lead-validation";
+
+// Clean a multi-select persona array for storage: normalize whitespace, drop
+// blanks, dedupe (case-insensitively, keeping first spelling). Returns null
+// when nothing's left so the column stays NULL rather than an empty array.
+function cleanSupplierTypes(
+  values: string[] | null | undefined,
+): string[] | null {
+  if (!values) return null;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of values) {
+    const norm = normalizeSupplierType(v);
+    if (!norm) continue;
+    const key = norm.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(norm);
+  }
+  return out.length ? out : null;
+}
 
 // ─── Supplier lead ──────────────────────────────────────────────────
 //
@@ -50,7 +74,7 @@ export async function createSupplierLead(
       region: input.region || null,
       postalCode: input.postalCode || null,
       country: input.country || null,
-      supplierType: input.supplierType || null,
+      supplierTypes: cleanSupplierTypes(input.supplierTypes),
       notes: input.notes || null,
       cardImageUrl: input.cardImageUrl || null,
       cardRawText: input.cardRawText || null,
@@ -92,8 +116,8 @@ export async function updateSupplierLead(
   if (input.postalCode !== undefined)
     patch.postalCode = input.postalCode || null;
   if (input.country !== undefined) patch.country = input.country || null;
-  if (input.supplierType !== undefined)
-    patch.supplierType = input.supplierType || null;
+  if (input.supplierTypes !== undefined)
+    patch.supplierTypes = cleanSupplierTypes(input.supplierTypes);
   if (input.notes !== undefined) patch.notes = input.notes || null;
   if (input.status !== undefined) patch.status = input.status;
 
@@ -136,7 +160,7 @@ export async function listSupplierLeads(
   conds.push(eq(supplierLead.status, filters.status ?? "active"));
 
   if (filters.supplierType)
-    conds.push(eq(supplierLead.supplierType, filters.supplierType));
+    conds.push(arrayContains(supplierLead.supplierTypes, [filters.supplierType]));
 
   if (filters.search) {
     const q = `%${filters.search}%`;
@@ -154,6 +178,29 @@ export async function listSupplierLeads(
     .from(supplierLead)
     .where(and(...conds))
     .orderBy(desc(supplierLead.capturedAt));
+}
+
+// Options for the persona multi-select: the built-in presets first, then every
+// other distinct persona ever saved on a supplier lead (alphabetical). This is
+// what makes an "Other" entry stick — once a lead is saved with a custom
+// persona it shows up here for everyone the next time the dropdown opens.
+export async function listSupplierTypeOptions(): Promise<string[]> {
+  const rows = await db
+    .select({ types: supplierLead.supplierTypes })
+    .from(supplierLead);
+  const presets: string[] = [...SUPPLIER_PERSONA_PRESETS];
+  const presetKeys = new Set(presets.map((p) => p.toLowerCase()));
+  const extras = new Map<string, string>(); // lowercase key → first spelling
+  for (const r of rows) {
+    for (const v of r.types ?? []) {
+      const norm = normalizeSupplierType(v);
+      if (!norm) continue;
+      const key = norm.toLowerCase();
+      if (presetKeys.has(key) || extras.has(key)) continue;
+      extras.set(key, norm);
+    }
+  }
+  return [...presets, ...[...extras.values()].sort((a, b) => a.localeCompare(b))];
 }
 
 export interface AddSupplierLeadCardImageInput {

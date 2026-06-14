@@ -144,7 +144,7 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
       <div className="mt-4 space-y-1 text-sm">
         {discountPercent > 0 && (
           <div className="flex justify-end gap-8 text-zinc-400">
-            <span>Includes {discountPercent}% partner pricing</span>
+            <span>Includes {discountPercent}% partner discount</span>
           </div>
         )}
         <div className="flex justify-end gap-8 text-base font-semibold text-zinc-900">

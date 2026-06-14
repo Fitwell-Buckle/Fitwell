@@ -19,10 +19,10 @@ describe("buildInvoiceEmailHtml", () => {
     payUrl: "https://pay.test/x",
   });
 
-  it("renders the invoice heading, partner pricing note, total and pay button", () => {
+  it("renders the invoice heading, partner discount note, total and pay button", () => {
     expect(html).toContain("Invoice INV-00100");
     expect(html).toContain("Billed to Acme Co");
-    expect(html).toContain("Includes 30% partner pricing");
+    expect(html).toContain("Includes 30% partner discount");
     expect(html).toContain("$350.00");
     expect(html).toContain("Pay online");
     expect(html).toContain("https://pay.test/x");

@@ -88,23 +88,32 @@ describe("supplierLeadToSupplierInput", () => {
 });
 
 describe("createSupplierLeadSchema", () => {
-  it("accepts a lead with at least one identity field", () => {
+  it("accepts a lead with at least one identity field + persona array", () => {
     const parsed = createSupplierLeadSchema.parse({
       companyName: "Acme Metals",
-      supplierType: "metal_hardware",
+      supplierTypes: ["Rapid Prototyping", "Anodizing"],
     });
     expect(parsed.companyName).toBe("Acme Metals");
+    expect(parsed.supplierTypes).toEqual(["Rapid Prototyping", "Anodizing"]);
+  });
+
+  it("accepts free-text personas (no closed enum)", () => {
+    const parsed = createSupplierLeadSchema.parse({
+      companyName: "Acme",
+      supplierTypes: ["Whatever The Card Says"],
+    });
+    expect(parsed.supplierTypes).toEqual(["Whatever The Card Says"]);
   });
 
   it("rejects a fully-empty payload", () => {
     expect(() => createSupplierLeadSchema.parse({})).toThrow();
   });
 
-  it("rejects an unknown supplier type", () => {
+  it("rejects a blank persona entry", () => {
     expect(() =>
       createSupplierLeadSchema.parse({
         companyName: "Acme",
-        supplierType: "not_a_type",
+        supplierTypes: ["  "],
       }),
     ).toThrow();
   });

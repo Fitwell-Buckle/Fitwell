@@ -174,6 +174,7 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | POST | `/api/supplier-leads/[id]/promote` | Promote a supplier lead → create a real `supplier` row from its fields, set the lead's `supplier_id` + `status='converted'`, return `{ supplierId }`. Already-linked leads return the existing supplier (no duplicate) |
 | POST | `/api/supplier-leads/[id]/cards` | Attach a card image (already on Blob) to a supplier lead — JSON `{ blobUrl }`. Records it in `supplier_lead_card_image` and bumps `supplier_lead.card_image_url` |
 | POST | `/api/supplier-leads/scan-card` | Supplier-card twin of `/api/leads/scan-card` (same multipart upload + Claude vision extraction); only the Blob path differs (`supplier-leads/cards/`). Does **not** persist a lead |
+| GET | `/api/supplier-leads/types` | Options for the supplier-persona multi-select: built-in presets (`Rapid Prototyping`, `Full Production`) + every distinct persona ever saved on a lead (so "Other" entries persist for next time). Admin-only |
 
 ### Invoicing API (B2B; each handler checks `auth()`; admin-only — suppliers 403)
 | Method | Path | Description |

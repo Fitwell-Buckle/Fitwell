@@ -1,0 +1,1 @@
+ALTER TABLE "supplier_lead" ALTER COLUMN "supplier_type" SET DATA TYPE text[] USING CASE WHEN "supplier_type" IS NULL THEN NULL ELSE ARRAY["supplier_type"] END;

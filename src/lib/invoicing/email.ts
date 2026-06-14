@@ -130,7 +130,7 @@ export function buildInvoiceEmailHtml(inv: InvoiceEmailData): string {
 
   const totals = `
     <div style="margin-top:16px;border-top:1px solid #e4e4e7;padding-top:12px;font-size:13px">
-      ${discountPercent > 0 ? `<div style="display:flex;justify-content:space-between;color:#a1a1aa"><span>Includes ${discountPercent}% partner pricing</span><span></span></div>` : ""}
+      ${discountPercent > 0 ? `<div style="display:flex;justify-content:space-between;color:#a1a1aa"><span>Includes ${discountPercent}% partner discount</span><span></span></div>` : ""}
       <div style="display:flex;justify-content:space-between;font-weight:600;font-size:15px;margin-top:4px"><span>Total (USD)</span><span>${fmtMoney(inv.totalCents)}</span></div>
     </div>`;
 
