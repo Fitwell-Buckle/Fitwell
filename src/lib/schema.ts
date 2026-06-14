@@ -2184,7 +2184,8 @@ export const lead = pgTable(
     // a booth scan alone isn't a `lead` until a named decision-maker is
     // captured and they engage post-show.
     stage: text("stage").notNull().default("prospect"),
-    // Coarse buyer type: watch_oem | strap_oem | retailer | distributor.
+    // Coarse buyer type: watch_oem | strap_oem | buckle_clasp_oem | retailer |
+    // distributor.
     personaTag: text("persona_tag"),
     // One of the 7 B2B entry channels from specs/strategy/b2b-pipeline.md.
     sourceChannel: text("source_channel").notNull(),
@@ -2272,6 +2273,119 @@ export const leadCardImageRelations = relations(leadCardImage, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+// ─── Supplier leads (potential new suppliers) ───────────────────────
+//
+// Mirrors the customer `lead` capture flow (same business-card OCR / QR /
+// manual entry → review → save), but feeds the supplier pipeline instead of
+// the B2B buyer pipeline. Deliberately leaner than `lead`: no stage /
+// source-channel / persona / follow-up / reply-detection machinery — a
+// supplier lead is just a captured contact that gets promoted into a real
+// `supplier` row. `supplier_type` is free `text` (validated at the API
+// layer against src/lib/suppliers/lead-constants.ts) so adding a specialty
+// doesn't need a migration.
+export const supplierLead = pgTable(
+  "supplier_lead",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    capturedAt: timestamp("captured_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    capturedByUserId: text("captured_by_user_id").references(() => user.id),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    email: text("email"),
+    phone: text("phone"),
+    title: text("title"),
+    // Free-text supplier/company name until promoted to a real `supplier` row.
+    companyName: text("company_name"),
+    website: text("website"),
+    // Mailing address. All free-text (no state/country enum) so foreign /
+    // international formats fit. Auto-filled from the card OCR when present.
+    addressLine1: text("address_line1"),
+    addressLine2: text("address_line2"),
+    city: text("city"),
+    region: text("region"),
+    postalCode: text("postal_code"),
+    country: text("country"),
+    // Supplier specialty: metal_hardware | plating_finishing | springs_pins |
+    // leather_strap | packaging | tooling_machining | other.
+    supplierType: text("supplier_type"),
+    notes: text("notes"),
+    cardImageUrl: text("card_image_url"),
+    // Claude's raw read of the card — kept so a desktop fixer can recover
+    // anything the structured extraction missed.
+    cardRawText: text("card_raw_text"),
+    // { firstName: 0..1, email: 0..1, ... } from the vision model.
+    ocrConfidence: jsonb("ocr_confidence"),
+    // Set when the supplier lead is promoted to a real `supplier` row.
+    supplierId: text("supplier_id").references(() => supplier.id),
+    // 'active' | 'converted' | 'dropped' (soft-delete uses 'dropped').
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("supplier_lead_email_idx").on(t.email),
+    index("supplier_lead_status_idx").on(t.status),
+    index("supplier_lead_supplier_id_idx").on(t.supplierId),
+    index("supplier_lead_captured_at_idx").on(t.capturedAt),
+  ],
+);
+
+// History of every business-card image scanned for a supplier lead. Mirrors
+// `lead_card_image`; the supplier lead's `cardImageUrl` mirrors the most
+// recent row's blobUrl for convenience. Multi-row so re-captures don't
+// overwrite.
+export const supplierLeadCardImage = pgTable(
+  "supplier_lead_card_image",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    supplierLeadId: text("supplier_lead_id")
+      .notNull()
+      .references(() => supplierLead.id, { onDelete: "cascade" }),
+    blobUrl: text("blob_url").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => user.id),
+    uploadedAt: timestamp("uploaded_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("supplier_lead_card_image_lead_id_idx").on(t.supplierLeadId),
+    index("supplier_lead_card_image_uploaded_at_idx").on(t.uploadedAt),
+  ],
+);
+
+export const supplierLeadRelations = relations(supplierLead, ({ one }) => ({
+  capturedBy: one(user, {
+    fields: [supplierLead.capturedByUserId],
+    references: [user.id],
+  }),
+  supplier: one(supplier, {
+    fields: [supplierLead.supplierId],
+    references: [supplier.id],
+  }),
+}));
+
+export const supplierLeadCardImageRelations = relations(
+  supplierLeadCardImage,
+  ({ one }) => ({
+    supplierLead: one(supplierLead, {
+      fields: [supplierLeadCardImage.supplierLeadId],
+      references: [supplierLead.id],
+    }),
+    uploadedBy: one(user, {
+      fields: [supplierLeadCardImage.uploadedByUserId],
+      references: [user.id],
+    }),
+  }),
+);
 
 // Free-text notes a team member adds to a lead over time. Distinct from
 // `lead.notes` (the single capture-time scratch field): these are timestamped,

@@ -50,6 +50,7 @@ export function sourceChannelLabel(channel: string): string {
 const PERSONA_LABELS: Record<LeadPersonaTag, string> = {
   watch_oem: "Watch OEM",
   strap_oem: "Strap OEM",
+  buckle_clasp_oem: "Buckle / Clasp OEM",
   retailer: "Retailer",
   distributor: "Distributor",
 };

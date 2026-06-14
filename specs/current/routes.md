@@ -65,6 +65,9 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/modules/production/po/[id]/edit` | Edit PO header + line items (add/update/remove) |
 | `/modules/production/po/[id]/send` | Printable PO preview; email it (HTML) to the supplier. The sending admin is auto-CC'd, and every `supplier_contact` row for the PO's supplier (other than the address in "To") is also auto-CC'd so the whole vendor team gets the PO — the list is surfaced in the form before send |
 | `/modules/production/kanban` | Kanban board — drag line items across stage columns |
+| `/modules/production/supplier-leads` | Supplier Leads list — captured supplier business cards (potential new suppliers): name/company/supplier-type/status/captured. "Capture supplier" button |
+| `/modules/production/supplier-leads/capture` | Mobile-first 3-mode supplier-card capture: photo (Claude vision OCR), live QR, or type manually → review → save. Mirrors `/leads/capture` (reuses its `CardCamera`/`QrScannerView`) but feeds the supplier pipeline |
+| `/modules/production/supplier-leads/[id]` | Supplier lead detail — editable fields + **Create supplier** (promote → real `supplier` row, `status='converted'`, redirects to the supplier) + drop (soft-delete) |
 | `/modules/production/suppliers` | Supplier CRUD |
 | `/settings` | Admin settings (nav bottom) — env/DB info **plus** the consolidated config: wire-transfer/billing details (moved from Orders), production-stage editor (moved from POs & Production), and B2B **price tiers** (moved from the B2B Customers page). Brands still pick a tier on the B2B customer form |
 
@@ -165,6 +168,11 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | PUT | `/api/supplier/po/[id]/stage-eta` | Supplier twin of the stage-eta route: same body, same writes via `setPoStageEta`. Allowed for the PO's primary supplier OR any supplier assigned to one of its stages (mirrors the eta-route access check) |
 | POST | `/api/supplier/stage-checkin/[id]` | Answer a positive-control stage check-in `{status: "on_track" \| "at_risk", note?}`. Resolves every still-pending threshold row for that stage instance at once. Scoped to the signed-in supplier's own check-ins (404 otherwise). Surfaced on the supplier PO page via the `stage-checkin-prompts` card |
 | PATCH | `/api/settings/production` | Update production settings — supplier ETA-reminder toggle/interval + stage-check-in toggle/thresholds (`production_settings`). Admin-only |
+| GET / POST | `/api/supplier-leads` | Supplier-lead pipeline (admin-only; suppliers/companies 403). GET lists with optional filters (status, supplierType, search; defaults `status='active'`, `capturedAt desc`). POST creates one — requires at least one of name/email/phone/company |
+| GET / PATCH / DELETE | `/api/supplier-leads/[id]` | GET detail; PATCH partial update (any subset); DELETE soft-deletes (`status='dropped'`) |
+| POST | `/api/supplier-leads/[id]/promote` | Promote a supplier lead → create a real `supplier` row from its fields, set the lead's `supplier_id` + `status='converted'`, return `{ supplierId }`. Already-linked leads return the existing supplier (no duplicate) |
+| POST | `/api/supplier-leads/[id]/cards` | Attach a card image (already on Blob) to a supplier lead — JSON `{ blobUrl }`. Records it in `supplier_lead_card_image` and bumps `supplier_lead.card_image_url` |
+| POST | `/api/supplier-leads/scan-card` | Supplier-card twin of `/api/leads/scan-card` (same multipart upload + Claude vision extraction); only the Blob path differs (`supplier-leads/cards/`). Does **not** persist a lead |
 
 ### Invoicing API (B2B; each handler checks `auth()`; admin-only — suppliers 403)
 | Method | Path | Description |

@@ -58,21 +58,21 @@ const navItems: NavItem[] = [
     label: "Customer",
     icon: Users,
     children: [
-      // Click target is the Leads list; active state also covers the Next
-      // Steps tab which lives at /messages.
-      { href: "/leads", label: "Leads", matchPrefixes: ["/leads", "/messages"] },
-      // Click target is the B2B list; active state covers /customers (Consumer
-      // list) and any /customers/* detail page too.
-      { href: "/customers/brands", label: "Customers", matchPrefixes: ["/customers"] },
-      // Click target is B2B (/invoices); active state also covers the
-      // Consumer tab (/orders) so switching between Orders tabs keeps the
-      // sidebar entry highlighted.
+      // Orders sits at the top of the Customer group. Click target is B2B
+      // (/invoices); active state also covers the Consumer tab (/orders) so
+      // switching between Orders tabs keeps the sidebar entry highlighted.
       {
         href: "/invoices",
         label: "Orders",
         icon: ShoppingBag,
         matchPrefixes: ["/invoices", "/orders"],
       },
+      // Click target is the Leads list; active state also covers the Next
+      // Steps tab which lives at /messages.
+      { href: "/leads", label: "Leads", matchPrefixes: ["/leads", "/messages"] },
+      // Click target is the B2B list; active state covers /customers (Consumer
+      // list) and any /customers/* detail page too.
+      { href: "/customers/brands", label: "Customers", matchPrefixes: ["/customers"] },
     ],
   },
   {
@@ -83,6 +83,8 @@ const navItems: NavItem[] = [
       // "Production Summary" entries — Master grouping covers the PO list,
       // Sub-PO / SKU views cover in-flight production tracking.
       { href: "/modules/production", label: "POs & Production", icon: ClipboardList },
+      // Captured supplier business cards → pipeline of potential new suppliers.
+      { href: "/modules/production/supplier-leads", label: "Supplier Leads" },
       { href: "/modules/production/suppliers", label: "Suppliers" },
       { href: "/products", label: "Products" },
     ],

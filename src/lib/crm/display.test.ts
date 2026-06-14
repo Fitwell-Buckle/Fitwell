@@ -53,6 +53,7 @@ describe("personaLabel", () => {
   it("returns a friendly label for each buyer-type tag", () => {
     expect(personaLabel("watch_oem")).toBe("Watch OEM");
     expect(personaLabel("strap_oem")).toBe("Strap OEM");
+    expect(personaLabel("buckle_clasp_oem")).toBe("Buckle / Clasp OEM");
     expect(personaLabel("retailer")).toBe("Retailer");
     expect(personaLabel("distributor")).toBe("Distributor");
   });

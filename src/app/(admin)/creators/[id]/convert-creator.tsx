@@ -11,6 +11,7 @@ const PERSONAS = [
   { value: "", label: "Persona (optional)" },
   { value: "strap_oem", label: "Strap OEM" },
   { value: "watch_oem", label: "Watch OEM" },
+  { value: "buckle_clasp_oem", label: "Buckle / Clasp OEM" },
   { value: "retailer", label: "Retailer" },
   { value: "distributor", label: "Distributor" },
 ];

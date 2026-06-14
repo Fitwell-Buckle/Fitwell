@@ -30,6 +30,7 @@ export type LeadSourceChannel = (typeof LEAD_SOURCE_CHANNELS)[number];
 export const LEAD_PERSONA_TAGS = [
   "watch_oem",
   "strap_oem",
+  "buckle_clasp_oem",
   "retailer",
   "distributor",
 ] as const;
