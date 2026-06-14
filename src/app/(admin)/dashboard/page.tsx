@@ -18,6 +18,11 @@ import {
   dateToBucketKey,
   generateBucketKeys,
 } from "@/lib/chart-utils";
+import {
+  REPEAT_WINDOWS,
+  computeRepeatWindows,
+  type RepeatTiming,
+} from "@/lib/analytics/repeat-windows";
 import { MetricCard } from "@/components/charts/metric-card";
 import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart";
 import { AdSpendRevenueChart } from "@/components/charts/ad-spend-revenue-chart";
@@ -258,28 +263,14 @@ export default async function DashboardPage({
   // priority: B2B (ever placed a draft order in range) > Trade Show (ever bought
   // in-person via POS) > D2C (purely online).
   //
-  // Repeat-purchase windows: for each customer we know their first and second
-  // order dates *within the range*. "Repeats within X" means the 2nd order
-  // landed within X days of the 1st. To avoid understating long windows, each
-  // window uses an ELIGIBLE COHORT — only customers whose first order is far
-  // enough before the range end to have had the full window to return in view.
-  // Rate = repeated within X ÷ eligible.
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  // Eligibility is measured against the END of the selected range, not wall-clock
-  // now — we only observe orders through `to`, so that's the horizon a customer
-  // has had to come back within view.
+  // Repeat-purchase windows use a SINGLE SHARED COHORT (see
+  // `computeRepeatWindows`): every column's denominator is the same set of
+  // customers — those observed long enough for the widest window the range
+  // supports — so the columns are directly comparable and only increase left to
+  // right. Eligibility is measured against the END of the selected range, not
+  // wall-clock now: we only observe orders through `to`.
   const observedThrough = to.getTime();
-  const REPEAT_WINDOWS = [
-    { key: "d30", label: "≤30d", days: 30 },
-    { key: "d90", label: "≤90d", days: 90 },
-    { key: "m6", label: "≤6mo", days: 182 },
-    { key: "y1", label: "≤1yr", days: 365 },
-  ] as const;
-  type WindowKey = (typeof REPEAT_WINDOWS)[number]["key"];
-  const emptyWindows = () =>
-    Object.fromEntries(
-      REPEAT_WINDOWS.map((w) => [w.key, { eligible: 0, repeated: 0 }]),
-    ) as Record<WindowKey, { eligible: number; repeated: number }>;
+  const rangeDays = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000);
 
   // In-range products bought per customer, keyed for merge onto the LTV rows.
   const productsByCustomer = new Map<string, number>();
@@ -287,57 +278,69 @@ export default async function DashboardPage({
     if (p.customerId) productsByCustomer.set(p.customerId, p.products ?? 0);
   }
 
-  // Tally per-customer rows in JS (small set).
+  // Tally per-customer rows in JS (small set). Repeat-window timings are
+  // collected per segment and handed to the shared-cohort helper afterward.
   const ltvAgg = {
-    d2c: { customers: 0, rev: 0, orders: 0, products: 0, windows: emptyWindows() },
-    tradeshow: { customers: 0, rev: 0, orders: 0, products: 0, windows: emptyWindows() },
-    b2b: { customers: 0, rev: 0, orders: 0, products: 0, windows: emptyWindows() },
+    d2c: { customers: 0, rev: 0, orders: 0, products: 0 },
+    tradeshow: { customers: 0, rev: 0, orders: 0, products: 0 },
+    b2b: { customers: 0, rev: 0, orders: 0, products: 0 },
+  };
+  const segTimings: Record<keyof typeof ltvAgg, RepeatTiming[]> = {
+    d2c: [],
+    tradeshow: [],
+    b2b: [],
   };
   for (const c of perCustomerLtv) {
-    const bucket = c.isB2b
-      ? ltvAgg.b2b
+    const seg: keyof typeof ltvAgg = c.isB2b
+      ? "b2b"
       : c.hasPos
-        ? ltvAgg.tradeshow
-        : ltvAgg.d2c;
+        ? "tradeshow"
+        : "d2c";
+    const bucket = ltvAgg[seg];
     bucket.customers += 1;
     bucket.rev += c.netRev ?? 0;
     bucket.orders += c.orders ?? 0;
     bucket.products += c.customerId
       ? (productsByCustomer.get(c.customerId) ?? 0)
       : 0;
-
-    if (!c.firstOrder) continue;
-    const first = new Date(c.firstOrder).getTime();
-    const ageDays = (observedThrough - first) / DAY_MS;
-    const gapDays = c.secondOrder
-      ? (new Date(c.secondOrder).getTime() - first) / DAY_MS
-      : Infinity;
-    for (const w of REPEAT_WINDOWS) {
-      if (ageDays < w.days) continue; // hasn't had the full window yet
-      bucket.windows[w.key].eligible += 1;
-      if (gapDays <= w.days) bucket.windows[w.key].repeated += 1;
-    }
+    segTimings[seg].push({
+      firstOrderMs: c.firstOrder ? new Date(c.firstOrder).getTime() : null,
+      secondOrderMs: c.secondOrder ? new Date(c.secondOrder).getTime() : null,
+    });
   }
-  const ltvRows = [
-    { label: "D2C (Online)", ...ltvAgg.d2c },
-    { label: "Trade Show", ...ltvAgg.tradeshow },
-    { label: "B2B (Wholesale)", ...ltvAgg.b2b },
-  ].map((s) => ({
-    label: s.label,
-    avgLtv: s.customers > 0 ? Math.round(s.rev / s.customers) : 0,
-    avgOrders: s.customers > 0 ? s.orders / s.customers : 0,
-    avgProducts: s.customers > 0 ? s.products / s.customers : 0,
-    customers: s.customers,
-    windows: REPEAT_WINDOWS.map((w) => {
-      const { eligible, repeated } = s.windows[w.key];
-      return {
-        key: w.key,
-        label: w.label,
-        eligible,
-        rate: eligible > 0 ? Math.round((repeated / eligible) * 100) : null,
-      };
-    }),
-  }));
+  const windowsBySeg = {
+    d2c: computeRepeatWindows(segTimings.d2c, observedThrough, rangeDays),
+    tradeshow: computeRepeatWindows(
+      segTimings.tradeshow,
+      observedThrough,
+      rangeDays,
+    ),
+    b2b: computeRepeatWindows(segTimings.b2b, observedThrough, rangeDays),
+  };
+  const ltvRows = (
+    [
+      { key: "d2c", label: "D2C (Online)" },
+      { key: "tradeshow", label: "Trade Show" },
+      { key: "b2b", label: "B2B (Wholesale)" },
+    ] as const
+  ).map(({ key, label }) => {
+    const s = ltvAgg[key];
+    const win = windowsBySeg[key];
+    return {
+      label,
+      avgLtv: s.customers > 0 ? Math.round(s.rev / s.customers) : 0,
+      avgOrders: s.customers > 0 ? s.orders / s.customers : 0,
+      avgProducts: s.customers > 0 ? s.products / s.customers : 0,
+      customers: s.customers,
+      windows: win.cells.map((c) => ({
+        key: c.key,
+        label: c.label,
+        supported: c.supported,
+        cohort: win.cohort,
+        rate: c.rate,
+      })),
+    };
+  });
 
   // ── Chart data: Revenue trend + Ad Spend vs Revenue ──────────────
   const [revenueByBucket, metaByBucket, googleByBucket, orderRevenueByBucket] =
@@ -548,11 +551,13 @@ export default async function DashboardPage({
             segment customer counts add up to the Customers card above. Avg
             revenue / customer is net revenue ÷ customers within the range (not
             true lifetime — widen the range to "All" for that). Repeat-window
-            rates are the share of customers who placed a 2nd order within the
-            given time of their first, counting only those whose first in-range
-            order is early enough to have had the full window before the range
-            ends. Customers are bucketed by priority: B2B (ever ordered wholesale)
-            → Trade Show (ever bought in-person) → D2C (purely online).
+            rates share a single cohort per segment — customers whose first
+            in-range order is old enough to have been observed for the widest
+            window the selected range supports — so the columns are directly
+            comparable and only rise left to right. Windows wider than the range
+            show "—"; widen the range for longer windows. Customers are bucketed
+            by priority: B2B (ever ordered wholesale) → Trade Show (ever bought
+            in-person) → D2C (purely online).
           </p>
           <Table>
             <TableHeader>
@@ -584,7 +589,11 @@ export default async function DashboardPage({
                     <TableCell
                       key={w.key}
                       className="text-right text-zinc-500"
-                      title={`${w.eligible.toLocaleString()} customers eligible`}
+                      title={
+                        w.supported
+                          ? `${w.cohort.toLocaleString()} customers in shared cohort`
+                          : "Selected range too short to observe this window"
+                      }
                     >
                       {w.rate === null ? "—" : `${w.rate}%`}
                     </TableCell>
@@ -620,12 +629,13 @@ export default async function DashboardPage({
             Same as the Customer Value table, but counting products bought (sum of
             line-item quantities) instead of orders. Everything reflects the{" "}
             <em>selected date range</em>. Avg revenue / customer is net revenue ÷
-            customers within the range. Repeat-window rates are the share of
-            customers who placed a 2nd order within the given time of their first,
-            counting only those whose first in-range order is early enough to have
-            had the full window before the range ends. Customers are bucketed by
-            priority: B2B (ever ordered wholesale) → Trade Show (ever bought
-            in-person) → D2C (purely online).
+            customers within the range. Repeat-window rates share a single cohort
+            per segment — customers whose first in-range order is old enough to
+            have been observed for the widest window the selected range supports —
+            so the columns are directly comparable and only rise left to right.
+            Windows wider than the range show "—"; widen the range for longer
+            windows. Customers are bucketed by priority: B2B (ever ordered
+            wholesale) → Trade Show (ever bought in-person) → D2C (purely online).
           </p>
           <Table>
             <TableHeader>
@@ -659,7 +669,11 @@ export default async function DashboardPage({
                     <TableCell
                       key={w.key}
                       className="text-right text-zinc-500"
-                      title={`${w.eligible.toLocaleString()} customers eligible`}
+                      title={
+                        w.supported
+                          ? `${w.cohort.toLocaleString()} customers in shared cohort`
+                          : "Selected range too short to observe this window"
+                      }
                     >
                       {w.rate === null ? "—" : `${w.rate}%`}
                     </TableCell>
