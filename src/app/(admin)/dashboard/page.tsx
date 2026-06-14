@@ -99,10 +99,18 @@ export default async function DashboardPage({
         .where(
           and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
+      // Distinct customers who actually ordered in the period — consistent with
+      // the Sales/Orders cards (both keyed off order.processedAt). The old query
+      // counted customer.createdAt, which is our *sync-into-DB* timestamp, so a
+      // bulk re-sync stamped ~every customer inside the window (the 14k bug).
       db
-        .select({ count: count() })
-        .from(customer)
-        .where(and(gte(customer.createdAt, from), lte(customer.createdAt, to))),
+        .select({
+          count: sql<number>`count(distinct ${order.customerId})`.mapWith(Number),
+        })
+        .from(order)
+        .where(
+          and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
+        ),
       db
         .select({
           id: order.id,

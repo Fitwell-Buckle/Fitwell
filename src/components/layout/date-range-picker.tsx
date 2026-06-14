@@ -21,12 +21,18 @@ const GRANULARITIES: { label: string; value: Granularity }[] = [
   { label: "Month", value: "month" },
 ];
 
+// "All" sets `from` to this fixed sentinel (well before the store existed)
+// through today, so it reads the full history. Deleting from/to instead would
+// fall through to parseDateRange's rolling 30-day default — i.e. "All" would
+// silently become "30d".
+const ALL_FROM = "2000-01-01";
+
 // All preset math anchors to "today" in the *store* timezone (see
 // src/lib/timezone.ts), not the viewer's UTC date. Otherwise an evening-Pacific
 // click of "Today" resolves to the next UTC day and reads $0.
-function getPresetRange(days: number): { from: string; to: string } | null {
+function getPresetRange(days: number): { from: string; to: string } {
   const to = storeToday();
-  if (days === 0) return null;
+  if (days === 0) return { from: ALL_FROM, to }; // All
   if (days === -2) return { from: to, to }; // Today
   if (days === -1) return { from: `${to.slice(0, 4)}-01-01`, to }; // YTD
   return { from: shiftDate(to, -days), to };
@@ -34,6 +40,7 @@ function getPresetRange(days: number): { from: string; to: string } | null {
 
 function getActiveDays(from: string | null, to: string | null): number | null {
   if (!from) return 30;
+  if (from === ALL_FROM) return 0; // All
   const today = storeToday();
   if (from === today && to === today) return -2; // Today
   if (from === `${today.slice(0, 4)}-01-01`) return -1; // YTD
@@ -101,13 +108,8 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
     (days: number) => {
       const params = new URLSearchParams(searchParams.toString());
       const range = getPresetRange(days);
-      if (range) {
-        params.set("from", range.from);
-        params.set("to", range.to);
-      } else {
-        params.delete("from");
-        params.delete("to");
-      }
+      params.set("from", range.from);
+      params.set("to", range.to);
       params.delete("page");
       // Reset granularity to default for the new range
       params.delete("g");
