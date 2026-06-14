@@ -71,10 +71,6 @@ export function SplitFulfillmentGrid({
 
   return (
     <div className="mt-4 border-t border-zinc-100 pt-4">
-      <p className="mb-2 text-xs font-medium text-zinc-500">
-        Split quantities by location — the last column fills in the balance automatically.
-      </p>
-
       {locations.length < 2 ? (
         <p className="text-sm text-zinc-500">
           Add a second location below to split this order across addresses.
