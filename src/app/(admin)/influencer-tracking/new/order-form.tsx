@@ -66,11 +66,18 @@ export function InfluencerOrderForm({
 }) {
   const router = useRouter();
 
+  // Local, appendable copy so a newly-added influencer shows + selects inline.
+  const [influencerList, setInfluencerList] = useState(influencers);
   const [influencerId, setInfluencerId] = useState(
     (defaultInfluencerId &&
       influencers.find((i) => i.id === defaultInfluencerId)?.id) ||
       (influencers[0]?.id ?? ""),
   );
+  // Inline "create a new influencer" panel (when the one you want isn't listed).
+  const [creatingInfluencer, setCreatingInfluencer] = useState(false);
+  const [newInf, setNewInf] = useState({ name: "", handle: "", platform: "", contactEmail: "" });
+  const [infBusy, setInfBusy] = useState(false);
+  const [infError, setInfError] = useState<string | null>(null);
   const [contentDueDate, setContentDueDate] = useState("");
   const [affiliateLink, setAffiliateLink] = useState("");
   const [notes, setNotes] = useState("");
@@ -99,7 +106,7 @@ export function InfluencerOrderForm({
     [variants],
   );
 
-  const selected = influencers.find((i) => i.id === influencerId);
+  const selected = influencerList.find((i) => i.id === influencerId);
   const assigned = selected?.assignedCollectionIds ?? [];
 
   // Restrict the picker to the influencer's assigned collections (all if none).
@@ -215,6 +222,53 @@ export function InfluencerOrderForm({
       copy.splice(i, 1, ...vs.map(rowFromVariant));
       return copy;
     });
+  }
+
+  // Create an influencer inline (when the one you need isn't in the list) and
+  // select it — mirrors the invoice form's "+ Add a new company…" flow.
+  async function createNewInfluencer() {
+    setInfError(null);
+    if (!newInf.name.trim()) return setInfError("Name is required.");
+    if (
+      newInf.contactEmail.trim() &&
+      !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newInf.contactEmail.trim())
+    ) {
+      return setInfError("Enter a valid contact email or leave it blank.");
+    }
+    setInfBusy(true);
+    try {
+      const res = await fetch("/api/influencers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newInf.name.trim(),
+          handle: newInf.handle.trim() || null,
+          platform: newInf.platform.trim() || null,
+          contactEmail: newInf.contactEmail.trim() || null,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setInfError(d.error || "Failed to create influencer.");
+        return;
+      }
+      const option: InfluencerOption = {
+        id: d.data.id as string,
+        name: newInf.name.trim(),
+        handle: newInf.handle.trim() || null,
+        assignedCollectionIds: [],
+      };
+      setInfluencerList((prev) =>
+        [...prev, option].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setInfluencerId(option.id);
+      setCreatingInfluencer(false);
+      setNewInf({ name: "", handle: "", platform: "", contactEmail: "" });
+    } catch {
+      setInfError("Network error — please try again.");
+    } finally {
+      setInfBusy(false);
+    }
   }
 
   function addStagedFiles(files: FileList | null) {
@@ -389,14 +443,22 @@ export function InfluencerOrderForm({
             <select
               className={inputBase}
               value={influencerId}
-              onChange={(e) => setInfluencerId(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value === "__new__") {
+                  setCreatingInfluencer(true);
+                  setInfError(null);
+                  return;
+                }
+                setInfluencerId(e.target.value);
+              }}
             >
-              {influencers.length === 0 && <option value="">No influencers yet</option>}
-              {influencers.map((i) => (
+              {influencerList.length === 0 && <option value="">No influencers yet</option>}
+              {influencerList.map((i) => (
                 <option key={i.id} value={i.id}>
                   {i.handle ? `${i.name} (${i.handle})` : i.name}
                 </option>
               ))}
+              <option value="__new__">+ Add a new influencer…</option>
             </select>
             <p className="mt-1 text-xs text-zinc-500">
               <Badge className="bg-emerald-50 text-emerald-700">Gifting — 100% off</Badge>
@@ -407,6 +469,59 @@ export function InfluencerOrderForm({
                 </span>
               )}
             </p>
+
+            {creatingInfluencer && (
+              <div className="mt-3 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+                <p className="text-xs font-medium text-zinc-600">New influencer</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Input
+                    placeholder="Name (required)"
+                    value={newInf.name}
+                    onChange={(e) => setNewInf((s) => ({ ...s, name: e.target.value }))}
+                  />
+                  <Input
+                    placeholder="Handle (@…)"
+                    value={newInf.handle}
+                    onChange={(e) => setNewInf((s) => ({ ...s, handle: e.target.value }))}
+                  />
+                  <select
+                    className={inputBase}
+                    value={newInf.platform}
+                    onChange={(e) => setNewInf((s) => ({ ...s, platform: e.target.value }))}
+                  >
+                    <option value="">Platform…</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="youtube">YouTube</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <Input
+                    type="email"
+                    placeholder="Contact email (optional)"
+                    value={newInf.contactEmail}
+                    onChange={(e) => setNewInf((s) => ({ ...s, contactEmail: e.target.value }))}
+                  />
+                </div>
+                {infError && <p className="text-sm text-red-600">{infError}</p>}
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" onClick={createNewInfluencer} disabled={infBusy}>
+                    {infBusy ? "Adding…" : "Add influencer"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={infBusy}
+                    onClick={() => {
+                      setCreatingInfluencer(false);
+                      setInfError(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -649,7 +764,7 @@ export function InfluencerOrderForm({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex justify-end">
-        <Button onClick={submit} disabled={submitting || influencers.length === 0}>
+        <Button onClick={submit} disabled={submitting || !influencerId}>
           {submitting ? "Creating…" : "Create gifting order"}
         </Button>
       </div>
