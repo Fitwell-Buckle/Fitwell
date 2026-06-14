@@ -40,6 +40,7 @@ import { enrichStories } from "./images";
 import { renderBrief } from "./generate";
 import { cleanHeadline } from "./text";
 import { saveBriefCache, loadBriefCache, type CachedBrief } from "./cache";
+import { printRunSummary } from "./run-summary";
 import type { BriefStory, RawStory, Segment, StoryType } from "./types";
 
 const SEEN_WINDOW_DAYS = 14;
@@ -107,6 +108,7 @@ interface RunStats {
   triaged: number;
   included: number;
 }
+
 
 async function persistArticles(
   sourceIds: Map<string, string>,
@@ -251,6 +253,14 @@ async function buildBrief(
   console.log(`${fresh.length} fresh after dedup (${duplicates.length} duplicates)`);
   if (fresh.length === 0) {
     console.log("nothing new — no brief today");
+    printRunSummary({
+      feedFailures: stats.feedFailures,
+      hardNews: 0,
+      releases: 0,
+      reviews: 0,
+      podcasts: 0,
+      produced: false,
+    });
     return null;
   }
 
@@ -328,6 +338,14 @@ async function buildBrief(
   }
   if (selected.length === 0) {
     console.log("triage dropped everything — no brief today");
+    printRunSummary({
+      feedFailures: stats.feedFailures,
+      hardNews: 0,
+      releases: 0,
+      reviews: 0,
+      podcasts: 0,
+      produced: false,
+    });
     return null;
   }
 
@@ -357,6 +375,14 @@ async function buildBrief(
   }
 
   reportDropped([...duplicates, ...triagedOut]);
+  printRunSummary({
+    feedFailures: stats.feedFailures,
+    hardNews: news.length,
+    releases: releases.length,
+    reviews: reviews.length,
+    podcasts: podcasts.length,
+    produced: true,
+  });
   return { brief, subject, preheader };
 }
 

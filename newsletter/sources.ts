@@ -96,7 +96,10 @@ export const SOURCES: SourceDef[] = [
     category: "editorial",
     feedUrl: "https://timeandtidewatches.com/feed/",
     scrapeUrl: "https://timeandtidewatches.com/",
-    fetchMode: "rss",
+    // Began 415-ing GitHub Actions' datacenter IP on 2026-06-14 (200 from a
+    // residential IP regardless of headers) → fetch via BrightData. Verified
+    // through the proxy: 30 items.
+    fetchMode: "rss-proxied",
     isActive: true,
   },
   {
@@ -123,7 +126,9 @@ export const SOURCES: SourceDef[] = [
     category: "editorial",
     feedUrl: "https://revolutionwatch.com/feed/",
     scrapeUrl: "https://revolutionwatch.com/",
-    fetchMode: "rss",
+    // Same 415-from-datacenter-IP block as Time + Tide, started 2026-06-14 →
+    // BrightData. Verified through the proxy: 6 items.
+    fetchMode: "rss-proxied",
     isActive: true,
   },
   {

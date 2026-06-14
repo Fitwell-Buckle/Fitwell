@@ -100,14 +100,22 @@ table.
 
 Each source declares a `fetchMode` (in `newsletter/sources.ts`):
 
-- **`rss` (11, direct):** Hodinkee, aBlogtoWatch, Worn & Wound, Fratello,
-  Monochrome, Time + Tide, Quill & Pad, SJX, Watches of Espionage
-  (`/blogs/woe-dispatch.atom`), Revolution, Watchonista.
-- **`rss-proxied` (1): WatchTime** — Cloudflare-walled (403s direct), but
-  its Atom feed is fresh, so it's fetched through BrightData. The working
-  feed is `/feed/atom` (`/feed/` and `/feed/rss` both fail). The feed
-  carries no images; enrichment resolves them via og:image scrape through
-  the proxy. Verified live 2026-06-10.
+- **`rss` (9, direct):** Hodinkee, aBlogtoWatch, Worn & Wound, Fratello,
+  Monochrome, Quill & Pad, SJX, Watches of Espionage
+  (`/blogs/woe-dispatch.atom`), Watchonista.
+- **`rss-proxied` (3): WatchTime, Time + Tide, Revolution.**
+  - **WatchTime** — Cloudflare-walled (403s direct), but its Atom feed is
+    fresh, so it's fetched through BrightData. The working feed is
+    `/feed/atom` (`/feed/` and `/feed/rss` both fail). The feed carries no
+    images; enrichment resolves them via og:image scrape through the proxy.
+    Verified live 2026-06-10.
+  - **Time + Tide & Revolution** — both plain `rss` until 2026-06-14, when
+    they started returning `415` to GitHub Actions' datacenter IP while
+    still serving `200` to a residential IP regardless of headers (a
+    CDN/WAF IP block, not a header bug). Two of the main *news* feeds
+    dropping at once shipped a 0-hard-news edition that day, so both were
+    moved to BrightData. Verified through the proxy (30 / 6 items). Their
+    feeds carry images, so no og:image fallback needed.
 - **`scrape-watchpro` (1): WatchPro** — Cloudflare-walled *and* its RSS
   feed is unusable (CDN serves a stale cached copy, `lastBuildDate`
   frozen days behind the live site — a WordPress full-page-cache bug).
@@ -238,6 +246,36 @@ Christie's, Sotheby's, Swatch Group IR, Richemont IR.
 | Zero fresh stories / triage drops all | Run exits cleanly, "no brief today" |
 | Klaviyo draft/send fails | **Nothing is persisted** — DB writes happen only after the Klaviyo action succeeds, so no story is marked seen-but-unsent. The Klaviyo draft may exist; a re-run re-drafts (idempotent by slug) and ships. Stories stay eligible for the next run. |
 | Campaign already sent for slug | The early guard in `run()` short-circuits to a clean no-op *before the pipeline runs* (no fetch, no triage, no DB writes). If a run races past the guard, `draftCampaign` throws `CampaignAlreadySentError` and `publishToKlaviyo` exits before any persist — same net effect. |
+
+### Run health verdict (`newsletter/run-summary.ts`)
+
+A brief can **send and still be degraded** — Klaviyo emails whatever it's
+handed and the workflow exits `0`, so a source-starved or news-less edition
+looks identical to a clean one at the process level. To stop that reading as
+success, every run ends with a machine-readable verdict block:
+
+```
+=== RUN SUMMARY ===
+sources: N failed — slug (error); ...
+brief: H hard-news + R releases + V reviews + P podcasts
+STATUS: OK | DEGRADED | NO_BRIEF — reasons
+```
+
+`classifyRun()` (pure, unit-tested) decides the STATUS:
+
+- **`DEGRADED`** — any source failed, *or* an edition shipped with **0
+  hard-news** stories. (The 2026-06-14 edition: 3 source failures, 0
+  hard-news — sent, but degraded.)
+- **`NO_BRIEF`** — nothing to send (nothing fresh / triage dropped all) **and**
+  every source fetched: a genuinely quiet day, not a fault.
+- **`OK`** — edition shipped, every source fetched, ≥1 hard-news story.
+
+The **"Newsletter run check"** cloud routine (daily 13:00 UTC, drafts a glance
+email to Tom) reads this `STATUS:` line and **leads** its subject + top line
+with it (`⚠️ DEGRADED` / `🔴 PROBLEM` / `✅ SENT` / `➖ NO BRIEF`) instead of a
+flat "SENT ✓". It keeps send-status (did "SENT to list" appear?) and
+edition-health (STATUS) as separate verdicts so a successful send can't mask a
+broken edition. Manage it via `/schedule` or claude.ai/code/routines.
 
 ## Idempotency & the dual trigger
 
