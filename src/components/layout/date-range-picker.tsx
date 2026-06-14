@@ -40,8 +40,12 @@ function getPresetRange(days: number): { from: string; to: string } {
 
 function getActiveDays(from: string | null, to: string | null): number | null {
   if (!from) return 30;
-  if (from === ALL_FROM) return 0; // All
   const today = storeToday();
+  // Every preset ends at "today". If the end date has been narrowed to anything
+  // else, it's a custom range — don't highlight a preset (especially not "All",
+  // which would otherwise stay lit while the cards silently exclude recent data).
+  if (to && to !== today) return null;
+  if (from === ALL_FROM) return 0; // All
   if (from === today && to === today) return -2; // Today
   if (from === `${today.slice(0, 4)}-01-01`) return -1; // YTD
   const diff = Math.round(

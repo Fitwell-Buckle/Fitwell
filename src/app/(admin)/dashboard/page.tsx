@@ -146,12 +146,13 @@ export default async function DashboardPage({
           and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
         )
         .groupBy(segmentExpr),
-      // Per-customer ALL-TIME aggregates (ignores the date filter) for LTV.
-      // One row per customer: whether they're B2B (ever placed a draft order),
-      // their net revenue to date, their order count, and the timestamps of
-      // their first and second orders (for the repeat-purchase-window cohorts).
-      // `secondOrder` is the 2nd element of the order-sorted timestamp array;
-      // it's null for one-and-done customers. No bound params.
+      // Per-customer aggregates for the LTV / retention table, scoped to the
+      // SELECTED date range (so the segment totals reconcile with the top cards).
+      // One row per customer: whether they're B2B (ever placed a draft order in
+      // range), their net revenue in range, their in-range order count, and the
+      // timestamps of their first and second orders in range (for the repeat
+      // windows). `secondOrder` is the 2nd element of the order-sorted timestamp
+      // array; it's null for one-and-done customers. No bound params in the CASE.
       db
         .select({
           customerId: order.customerId,
@@ -168,7 +169,8 @@ export default async function DashboardPage({
             notCancelled,
             notSample,
             sql`${order.customerId} IS NOT NULL`,
-            sql`${order.processedAt} IS NOT NULL`,
+            gte(order.processedAt, from),
+            lte(order.processedAt, to),
           ),
         )
         .groupBy(order.customerId),
@@ -183,7 +185,7 @@ export default async function DashboardPage({
         .where(
           and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
-      // Per-customer ALL-TIME product counts (sum of line-item quantities).
+      // Per-customer product counts (sum of line-item quantities) in range.
       // Keyed by customerId so it merges onto the perCustomerLtv rows — the
       // customer set (and therefore the Customers column) stays identical to the
       // orders table; customers with no line items simply contribute 0 products.
@@ -194,7 +196,15 @@ export default async function DashboardPage({
         })
         .from(order)
         .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
-        .where(and(notCancelled, notSample, sql`${order.customerId} IS NOT NULL`))
+        .where(
+          and(
+            notCancelled,
+            notSample,
+            sql`${order.customerId} IS NOT NULL`,
+            gte(order.processedAt, from),
+            lte(order.processedAt, to),
+          ),
+        )
         .groupBy(order.customerId),
     ]);
 
@@ -238,23 +248,27 @@ export default async function DashboardPage({
     },
   ];
 
-  // ── Customer Lifetime Value (historic, all-time) ─────────────────
-  // Historic CLV = net revenue per customer to date — the assumption-free
-  // industry-standard method (what Shopify reports as a customer's "lifetime
-  // value"). A predictive CLV (AOV × frequency × lifespan) is intentionally NOT
-  // used: it bakes in a churn/lifespan model we'd be guessing at, whereas the
-  // repeat-purchase windows below give the retention signal directly from the
-  // data. Customer segment by priority: B2B (ever placed a draft order) > Trade
-  // Show (ever bought in-person via POS) > D2C (purely online).
+  // ── Customer value & retention (scoped to the selected date range) ─────
+  // Net revenue per customer over orders in range — the assumption-free measure
+  // (same shape as Shopify's customer "lifetime value", but bounded to the
+  // selected window rather than all-time, so the segment totals reconcile with
+  // the top cards). A predictive CLV (AOV × frequency × lifespan) is NOT used: it
+  // bakes in a churn/lifespan model we'd be guessing at, whereas the repeat
+  // windows below give the retention signal directly. Customer segment by
+  // priority: B2B (ever placed a draft order in range) > Trade Show (ever bought
+  // in-person via POS) > D2C (purely online).
   //
   // Repeat-purchase windows: for each customer we know their first and second
-  // order dates. "Repeats within X" means the 2nd order landed within X days of
-  // the 1st. To avoid understating long windows for recently-acquired buyers,
-  // each window uses an ELIGIBLE COHORT — only customers whose first order is at
-  // least X days ago (they've had the full window to come back). So the rate is
-  // (eligible customers who repeated within X) ÷ (eligible customers).
+  // order dates *within the range*. "Repeats within X" means the 2nd order
+  // landed within X days of the 1st. To avoid understating long windows, each
+  // window uses an ELIGIBLE COHORT — only customers whose first order is far
+  // enough before the range end to have had the full window to return in view.
+  // Rate = repeated within X ÷ eligible.
   const DAY_MS = 24 * 60 * 60 * 1000;
-  const now = new Date();
+  // Eligibility is measured against the END of the selected range, not wall-clock
+  // now — we only observe orders through `to`, so that's the horizon a customer
+  // has had to come back within view.
+  const observedThrough = to.getTime();
   const REPEAT_WINDOWS = [
     { key: "d30", label: "≤30d", days: 30 },
     { key: "d90", label: "≤90d", days: 90 },
@@ -267,7 +281,7 @@ export default async function DashboardPage({
       REPEAT_WINDOWS.map((w) => [w.key, { eligible: 0, repeated: 0 }]),
     ) as Record<WindowKey, { eligible: number; repeated: number }>;
 
-  // All-time products bought per customer, keyed for merge onto the LTV rows.
+  // In-range products bought per customer, keyed for merge onto the LTV rows.
   const productsByCustomer = new Map<string, number>();
   for (const p of perCustomerProducts) {
     if (p.customerId) productsByCustomer.set(p.customerId, p.products ?? 0);
@@ -294,7 +308,7 @@ export default async function DashboardPage({
 
     if (!c.firstOrder) continue;
     const first = new Date(c.firstOrder).getTime();
-    const ageDays = (now.getTime() - first) / DAY_MS;
+    const ageDays = (observedThrough - first) / DAY_MS;
     const gapDays = c.secondOrder
       ? (new Date(c.secondOrder).getTime() - first) / DAY_MS
       : Infinity;
@@ -514,7 +528,7 @@ export default async function DashboardPage({
 
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle>Avg Lifetime Value (LTV)</CardTitle>
+          <CardTitle>Customer Value &amp; Retention</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-zinc-100 pb-3">
@@ -530,20 +544,21 @@ export default async function DashboardPage({
             </span>
           </div>
           <p className="mb-3 text-xs text-zinc-500">
-            Per-segment columns are <em>all-time</em> and do <em>not</em> change
-            with the date filter (the overall ratio above does). Avg LTV is
-            historic CLV — net revenue per customer to date. Repeat-window rates
-            are the share of customers who placed a 2nd order within the given
-            time of their first, counting only customers whose first order is old
-            enough to have had the full window. Customers are bucketed by
-            priority: B2B (ever ordered wholesale) → Trade Show (ever bought
-            in-person) → D2C (purely online).
+            Everything here reflects the <em>selected date range</em>, so the
+            segment customer counts add up to the Customers card above. Avg
+            revenue / customer is net revenue ÷ customers within the range (not
+            true lifetime — widen the range to "All" for that). Repeat-window
+            rates are the share of customers who placed a 2nd order within the
+            given time of their first, counting only those whose first in-range
+            order is early enough to have had the full window before the range
+            ends. Customers are bucketed by priority: B2B (ever ordered wholesale)
+            → Trade Show (ever bought in-person) → D2C (purely online).
           </p>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Segment</TableHead>
-                <TableHead className="text-right">Avg LTV</TableHead>
+                <TableHead className="text-right">Avg revenue / customer</TableHead>
                 <TableHead className="text-right">Avg orders / customer</TableHead>
                 {REPEAT_WINDOWS.map((w) => (
                   <TableHead key={w.key} className="text-right">
@@ -602,21 +617,21 @@ export default async function DashboardPage({
             </span>
           </div>
           <p className="mb-3 text-xs text-zinc-500">
-            Same as the LTV table, but counting products bought (sum of line-item
-            quantities) instead of orders. Per-segment columns are{" "}
-            <em>all-time</em> and do <em>not</em> change with the date filter (the
-            overall ratio above does). Avg LTV is historic CLV — net revenue per
-            customer to date. Repeat-window rates are the share of customers who
-            placed a 2nd order within the given time of their first, counting only
-            customers whose first order is old enough to have had the full window.
-            Customers are bucketed by priority: B2B (ever ordered wholesale) →
-            Trade Show (ever bought in-person) → D2C (purely online).
+            Same as the Customer Value table, but counting products bought (sum of
+            line-item quantities) instead of orders. Everything reflects the{" "}
+            <em>selected date range</em>. Avg revenue / customer is net revenue ÷
+            customers within the range. Repeat-window rates are the share of
+            customers who placed a 2nd order within the given time of their first,
+            counting only those whose first in-range order is early enough to have
+            had the full window before the range ends. Customers are bucketed by
+            priority: B2B (ever ordered wholesale) → Trade Show (ever bought
+            in-person) → D2C (purely online).
           </p>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Segment</TableHead>
-                <TableHead className="text-right">Avg LTV</TableHead>
+                <TableHead className="text-right">Avg revenue / customer</TableHead>
                 <TableHead className="text-right">
                   Avg products / customer
                 </TableHead>
