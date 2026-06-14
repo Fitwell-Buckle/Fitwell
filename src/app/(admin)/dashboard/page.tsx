@@ -137,16 +137,27 @@ export default async function DashboardPage({
         .groupBy(segmentExpr),
       // Per-customer ALL-TIME aggregates (ignores the date filter) for LTV.
       // One row per customer: whether they're B2B (ever placed a draft order),
-      // their net revenue to date, and their order count. No bound params.
+      // their net revenue to date, their order count, and the timestamps of
+      // their first and second orders (for the repeat-purchase-window cohorts).
+      // `secondOrder` is the 2nd element of the order-sorted timestamp array;
+      // it's null for one-and-done customers. No bound params.
       db
         .select({
           isB2b: sql<boolean>`bool_or(${order.sourceName} = 'shopify_draft_order')`,
           hasPos: sql<boolean>`bool_or(${order.sourceName} = 'pos')`,
           netRev: sql<number>`COALESCE(SUM(${order.totalPrice} - ${order.totalRefunded}), 0)`.mapWith(Number),
           orders: sql<number>`count(*)`.mapWith(Number),
+          firstOrder: sql<string | null>`min(${order.processedAt})`,
+          secondOrder: sql<string | null>`(array_agg(${order.processedAt} ORDER BY ${order.processedAt}))[2]`,
         })
         .from(order)
-        .where(and(notCancelled, sql`${order.customerId} IS NOT NULL`))
+        .where(
+          and(
+            notCancelled,
+            sql`${order.customerId} IS NOT NULL`,
+            sql`${order.processedAt} IS NOT NULL`,
+          ),
+        )
         .groupBy(order.customerId),
     ]);
 
@@ -154,6 +165,12 @@ export default async function DashboardPage({
   const totalOrders = orderCountResult[0]?.count ?? 0;
   const totalCustomers = customerCountResult[0]?.count ?? 0;
   const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+  // Avg orders per customer for the SELECTED period: orders ÷ distinct
+  // customers, both already scoped to the date filter. Widening the range pulls
+  // in more repeat orders from the same buyers, so this rises with the window
+  // (≈1.0 over a single day, the all-time figure over "All").
+  const avgOrdersPerCustomer =
+    totalCustomers > 0 ? totalOrders / totalCustomers : 0;
 
   // B2B vs Consumer split of Total sales (same definition as the headline).
   const segOf = (name: string) =>
@@ -182,14 +199,36 @@ export default async function DashboardPage({
   // Historic CLV = net revenue per customer to date — the assumption-free
   // industry-standard method (what Shopify reports as a customer's "lifetime
   // value"). A predictive CLV (AOV × frequency × lifespan) is intentionally NOT
-  // used: the store is only ~6 months old, so a customer-lifespan/churn estimate
-  // would be fabricated. Customer segment by priority: B2B (ever placed a draft
-  // order) > Trade Show (ever bought in-person via POS) > D2C (purely online).
+  // used: it bakes in a churn/lifespan model we'd be guessing at, whereas the
+  // repeat-purchase windows below give the retention signal directly from the
+  // data. Customer segment by priority: B2B (ever placed a draft order) > Trade
+  // Show (ever bought in-person via POS) > D2C (purely online).
+  //
+  // Repeat-purchase windows: for each customer we know their first and second
+  // order dates. "Repeats within X" means the 2nd order landed within X days of
+  // the 1st. To avoid understating long windows for recently-acquired buyers,
+  // each window uses an ELIGIBLE COHORT — only customers whose first order is at
+  // least X days ago (they've had the full window to come back). So the rate is
+  // (eligible customers who repeated within X) ÷ (eligible customers).
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const now = new Date();
+  const REPEAT_WINDOWS = [
+    { key: "d30", label: "≤30d", days: 30 },
+    { key: "d90", label: "≤90d", days: 90 },
+    { key: "m6", label: "≤6mo", days: 182 },
+    { key: "y1", label: "≤1yr", days: 365 },
+  ] as const;
+  type WindowKey = (typeof REPEAT_WINDOWS)[number]["key"];
+  const emptyWindows = () =>
+    Object.fromEntries(
+      REPEAT_WINDOWS.map((w) => [w.key, { eligible: 0, repeated: 0 }]),
+    ) as Record<WindowKey, { eligible: number; repeated: number }>;
+
   // Tally per-customer rows in JS (small set).
   const ltvAgg = {
-    d2c: { customers: 0, rev: 0, orders: 0, repeat: 0 },
-    tradeshow: { customers: 0, rev: 0, orders: 0, repeat: 0 },
-    b2b: { customers: 0, rev: 0, orders: 0, repeat: 0 },
+    d2c: { customers: 0, rev: 0, orders: 0, windows: emptyWindows() },
+    tradeshow: { customers: 0, rev: 0, orders: 0, windows: emptyWindows() },
+    b2b: { customers: 0, rev: 0, orders: 0, windows: emptyWindows() },
   };
   for (const c of perCustomerLtv) {
     const bucket = c.isB2b
@@ -200,7 +239,18 @@ export default async function DashboardPage({
     bucket.customers += 1;
     bucket.rev += c.netRev ?? 0;
     bucket.orders += c.orders ?? 0;
-    if ((c.orders ?? 0) > 1) bucket.repeat += 1;
+
+    if (!c.firstOrder) continue;
+    const first = new Date(c.firstOrder).getTime();
+    const ageDays = (now.getTime() - first) / DAY_MS;
+    const gapDays = c.secondOrder
+      ? (new Date(c.secondOrder).getTime() - first) / DAY_MS
+      : Infinity;
+    for (const w of REPEAT_WINDOWS) {
+      if (ageDays < w.days) continue; // hasn't had the full window yet
+      bucket.windows[w.key].eligible += 1;
+      if (gapDays <= w.days) bucket.windows[w.key].repeated += 1;
+    }
   }
   const ltvRows = [
     { label: "D2C (Online)", ...ltvAgg.d2c },
@@ -210,8 +260,16 @@ export default async function DashboardPage({
     label: s.label,
     avgLtv: s.customers > 0 ? Math.round(s.rev / s.customers) : 0,
     avgOrders: s.customers > 0 ? s.orders / s.customers : 0,
-    repeatRate: s.customers > 0 ? Math.round((s.repeat / s.customers) * 100) : 0,
     customers: s.customers,
+    windows: REPEAT_WINDOWS.map((w) => {
+      const { eligible, repeated } = s.windows[w.key];
+      return {
+        key: w.key,
+        label: w.label,
+        eligible,
+        rate: eligible > 0 ? Math.round((repeated / eligible) * 100) : null,
+      };
+    }),
   }));
 
   // ── Chart data: Revenue trend + Ad Spend vs Revenue ──────────────
@@ -406,11 +464,27 @@ export default async function DashboardPage({
           <CardTitle>Avg Lifetime Value (LTV)</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-zinc-100 pb-3">
+            <span className="text-sm font-medium text-zinc-900">
+              Avg orders / customer (selected period)
+            </span>
+            <span className="text-sm text-zinc-700">
+              <Mono>{avgOrdersPerCustomer.toFixed(2)}</Mono>
+              <span className="ml-2 text-xs text-zinc-400">
+                {totalOrders.toLocaleString()} orders ÷{" "}
+                {totalCustomers.toLocaleString()} customers
+              </span>
+            </span>
+          </div>
           <p className="mb-3 text-xs text-zinc-500">
-            Historic CLV — net revenue per customer to date. All-time, so this
-            does <em>not</em> change with the date filter above. Customers are
-            bucketed by priority: B2B (ever ordered wholesale) → Trade Show (ever
-            bought in-person) → D2C (purely online).
+            Per-segment columns are <em>all-time</em> and do <em>not</em> change
+            with the date filter (the overall ratio above does). Avg LTV is
+            historic CLV — net revenue per customer to date. Repeat-window rates
+            are the share of customers who placed a 2nd order within the given
+            time of their first, counting only customers whose first order is old
+            enough to have had the full window. Customers are bucketed by
+            priority: B2B (ever ordered wholesale) → Trade Show (ever bought
+            in-person) → D2C (purely online).
           </p>
           <Table>
             <TableHeader>
@@ -418,7 +492,11 @@ export default async function DashboardPage({
                 <TableHead>Segment</TableHead>
                 <TableHead className="text-right">Avg LTV</TableHead>
                 <TableHead className="text-right">Avg orders / customer</TableHead>
-                <TableHead className="text-right">Repeat rate</TableHead>
+                {REPEAT_WINDOWS.map((w) => (
+                  <TableHead key={w.key} className="text-right">
+                    Repeat {w.label}
+                  </TableHead>
+                ))}
                 <TableHead className="text-right">Customers</TableHead>
               </TableRow>
             </TableHeader>
@@ -434,9 +512,15 @@ export default async function DashboardPage({
                   <TableCell className="text-right">
                     {s.avgOrders.toFixed(2)}
                   </TableCell>
-                  <TableCell className="text-right text-zinc-500">
-                    {s.repeatRate}%
-                  </TableCell>
+                  {s.windows.map((w) => (
+                    <TableCell
+                      key={w.key}
+                      className="text-right text-zinc-500"
+                      title={`${w.eligible.toLocaleString()} customers eligible`}
+                    >
+                      {w.rate === null ? "—" : `${w.rate}%`}
+                    </TableCell>
+                  ))}
                   <TableCell className="text-right text-zinc-500">
                     {s.customers.toLocaleString()}
                   </TableCell>
