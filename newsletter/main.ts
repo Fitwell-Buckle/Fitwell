@@ -27,7 +27,7 @@ import {
 import { KlaviyoClient } from "../src/lib/klaviyo/client";
 import {
   draftCampaign,
-  CampaignAlreadySentError,
+  isCampaignAlreadySentError,
 } from "../src/lib/klaviyo/draft-campaign";
 import type { CampaignConfig } from "../src/lib/klaviyo/campaign-config";
 import { NEWSLETTER, buildSubject, campaignSlug } from "./config";
@@ -445,7 +445,7 @@ async function publishToKlaviyo({
     // duplicate cron fire, or a same-day re-run that raced past the guard).
     // Nothing has been persisted, so exit clean — the stories remain
     // eligible for tomorrow rather than being marked seen-but-unsent.
-    if (e instanceof CampaignAlreadySentError) {
+    if (isCampaignAlreadySentError(e)) {
       console.log(
         `campaign "${slug}" already sent — skipping (idempotent no-op).`,
       );

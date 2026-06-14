@@ -83,12 +83,20 @@ export async function proxiedFetch(
   if (!agent) return null;
   // Serialized against other proxied fetches (one zone session at a time).
   return runProxiedExclusive(async () => {
-    // Residential proxies fail a fraction of requests per hop (bad exit
-    // node, transient CF challenge, or concurrent-session throttling when
-    // several sources hit the zone at once). Retry WITH BACKOFF — immediate
-    // retries are useless against rate limits; a short wait lets the zone
-    // free a session. The cannabis engine's scraper had the same ladder.
+    // Residential proxies fail a fraction of requests per hop — a bad exit
+    // node, a transient CF challenge, or concurrent-session throttle when
+    // sources compete for the zone. Those ARE transient: a fresh hop on a
+    // later attempt clears them, so retry with jittered backoff.
+    //
+    // What retries CANNOT clear is a policy refusal: BrightData's unlocker
+    // honors robots.txt and returns `400 ... bad_endpoint ... in accordance
+    // with robots.txt` for disallowed paths (WatchTime's /feed/atom is
+    // robots-disallowed — homepage proxies fine, the feed doesn't). Retrying
+    // that just burns ~20s/run for nothing, so bail immediately and log the
+    // real cause. Fix is BrightData-side (disable robots.txt compliance on
+    // the zone) or scrape WatchTime's listing instead — see newsletter-engine.md.
     const MAX_ATTEMPTS = 4;
+    let lastDetail = "no response";
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         const res = await undiciFetch(url, {
@@ -102,14 +110,33 @@ export async function proxiedFetch(
           dispatcher: agent,
         });
         if (res.ok) return await res.text();
-        // 403/429/5xx → likely a bad exit node or throttle; a fresh hop may work
-      } catch {
+        const snippet = (await res.text().catch(() => ""))
+          .slice(0, 160)
+          .replace(/\s+/g, " ")
+          .trim();
+        lastDetail = `HTTP ${res.status}${snippet ? ` — ${snippet}` : ""}`;
+        // Permanent policy refusal — no fresh hop will satisfy robots.txt.
+        if (res.status === 400 && /bad_endpoint|robots\.txt/i.test(snippet)) {
+          console.warn(`proxiedFetch refused (not retrying): ${url} — ${lastDetail}`);
+          return null;
+        }
+        // else 403/429/5xx → bad hop or throttle; a fresh hop may work.
+      } catch (e) {
         // timeout / connection reset → retry
+        lastDetail = `fetch error: ${e instanceof Error ? e.message : String(e)}`;
       }
       if (attempt < MAX_ATTEMPTS) {
-        await new Promise((r) => setTimeout(r, attempt * 800));
+        // Backoff (0.8→3.2s) + jitter to de-sync retries from any zone-side
+        // rate cycle and give the throttle a moment to free a session.
+        const base = Math.min(3200, 800 * 2 ** (attempt - 1));
+        await new Promise((r) =>
+          setTimeout(r, base + Math.floor(Math.random() * 400)),
+        );
       }
     }
+    console.warn(
+      `proxiedFetch gave up after ${MAX_ATTEMPTS} attempts: ${url} — last: ${lastDetail}`,
+    );
     return null;
   });
 }

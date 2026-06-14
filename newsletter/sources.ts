@@ -155,13 +155,18 @@ export const SOURCES: SourceDef[] = [
     slug: "watchtime",
     name: "WatchTime",
     category: "editorial",
-    // Cloudflare-walled (403s direct), but its Atom feed is fresh — fetch
-    // it through BrightData. Note: the real feed is /feed/atom; /feed/ and
-    // /feed/rss both fail.
+    // Cloudflare-walled (403s direct from datacenter IPs). Worked through
+    // BrightData on 2026-06-10, but by 2026-06-14 the unlocker refuses the
+    // feed: `400 bad_endpoint ... in accordance with robots.txt` — the
+    // homepage proxies fine (200) but /feed/atom is robots-disallowed, so no
+    // retry/hop satisfies it. INACTIVE until the real fix: either disable
+    // robots.txt compliance on the BrightData zone (dashboard), or scrape the
+    // homepage/listing like WatchPro. Kept active it would flip every run to
+    // DEGRADED on a known issue and drown that signal. See newsletter-engine.md.
     feedUrl: "https://www.watchtime.com/feed/atom",
     scrapeUrl: "https://www.watchtime.com/",
     fetchMode: "rss-proxied",
-    isActive: true,
+    isActive: false,
   },
 
   // ── Industry / B2B ────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   draftCampaign,
   CampaignAlreadySentError,
+  isCampaignAlreadySentError,
 } from "./draft-campaign";
 import type { CampaignConfig } from "./campaign-config";
 import type { KlaviyoClient } from "./client";
@@ -148,5 +149,31 @@ describe("draftCampaign", () => {
         client,
       }),
     ).rejects.toThrow(/no campaign-message/);
+  });
+});
+
+describe("isCampaignAlreadySentError", () => {
+  it("matches a real CampaignAlreadySentError (instanceof path)", () => {
+    expect(
+      isCampaignAlreadySentError(new CampaignAlreadySentError("slug", "Sent")),
+    ).toBe(true);
+  });
+
+  it("matches a structurally-equivalent error from another module instance (name path)", () => {
+    // Simulates the cross-module/transpile case where `instanceof` fails but
+    // the thrown error is the same kind — the backstop must still no-op.
+    const lookalike = new Error("Refusing to overwrite campaign ...");
+    lookalike.name = "CampaignAlreadySentError";
+    expect(lookalike instanceof CampaignAlreadySentError).toBe(false);
+    expect(isCampaignAlreadySentError(lookalike)).toBe(true);
+  });
+
+  it("does not match unrelated errors or non-errors", () => {
+    expect(isCampaignAlreadySentError(new Error("network down"))).toBe(false);
+    expect(isCampaignAlreadySentError({ name: "CampaignAlreadySentError" })).toBe(
+      false,
+    );
+    expect(isCampaignAlreadySentError(null)).toBe(false);
+    expect(isCampaignAlreadySentError("CampaignAlreadySentError")).toBe(false);
   });
 });

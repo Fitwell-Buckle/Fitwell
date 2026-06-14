@@ -49,7 +49,27 @@ export class CampaignAlreadySentError extends Error {
         `If you want to iterate on a sent campaign, rename the slug.`,
     );
     this.name = "CampaignAlreadySentError";
+    // Preserve the prototype chain so `instanceof` survives transpilation
+    // (esbuild/tsx downleveling can otherwise sever it when extending Error).
+    Object.setPrototypeOf(this, CampaignAlreadySentError.prototype);
   }
+}
+
+/**
+ * Robust check for the already-sent abort — the dual-trigger backstop in the
+ * newsletter runner depends on it (newsletter/main.ts `publishToKlaviyo`). On
+ * a day the primary already sent, a fallback that races past the early guard
+ * MUST no-op here rather than exit non-zero; `instanceof` alone is fragile
+ * across module/transpile boundaries, so we also match by name. This is the
+ * last line before a fallback run goes red (it did, pre-guard, on 2026-06-12).
+ */
+export function isCampaignAlreadySentError(
+  e: unknown,
+): e is CampaignAlreadySentError {
+  return (
+    e instanceof CampaignAlreadySentError ||
+    (e instanceof Error && e.name === "CampaignAlreadySentError")
+  );
 }
 
 /**

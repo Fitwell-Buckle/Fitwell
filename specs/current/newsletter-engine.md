@@ -103,12 +103,7 @@ Each source declares a `fetchMode` (in `newsletter/sources.ts`):
 - **`rss` (9, direct):** Hodinkee, aBlogtoWatch, Worn & Wound, Fratello,
   Monochrome, Quill & Pad, SJX, Watches of Espionage
   (`/blogs/woe-dispatch.atom`), Watchonista.
-- **`rss-proxied` (3): WatchTime, Time + Tide, Revolution.**
-  - **WatchTime** — Cloudflare-walled (403s direct), but its Atom feed is
-    fresh, so it's fetched through BrightData. The working feed is
-    `/feed/atom` (`/feed/` and `/feed/rss` both fail). The feed carries no
-    images; enrichment resolves them via og:image scrape through the proxy.
-    Verified live 2026-06-10.
+- **`rss-proxied` (2 active): Time + Tide, Revolution.**
   - **Time + Tide & Revolution** — both plain `rss` until 2026-06-14, when
     they started returning `415` to GitHub Actions' datacenter IP while
     still serving `200` to a residential IP regardless of headers (a
@@ -116,6 +111,18 @@ Each source declares a `fetchMode` (in `newsletter/sources.ts`):
     dropping at once shipped a 0-hard-news edition that day, so both were
     moved to BrightData. Verified through the proxy (30 / 6 items). Their
     feeds carry images, so no og:image fallback needed.
+- **`rss-proxied` but INACTIVE: WatchTime.** Cloudflare-walled (403s direct
+  from datacenter IPs). Worked through BrightData on 2026-06-10, but by
+  2026-06-14 the unlocker refuses the feed: `400 ... bad_endpoint ... in
+  accordance with robots.txt`. The homepage proxies fine (`200`) but
+  `/feed/atom` is **robots-disallowed**, so no retry or fresh exit-node hop
+  satisfies it (`proxiedFetch` now detects this and bails immediately rather
+  than burning its retry budget). Deactivated so it doesn't flip every run to
+  `DEGRADED` on a known issue. **To re-activate, pick one:** (a) disable
+  robots.txt compliance on the BrightData zone (dashboard — Tom), then flip
+  `isActive` back; or (b) build a `scrape-watchtime` listing scraper like
+  WatchPro (the homepage/listing proxies fine). The feed itself is healthy
+  (`/feed/atom` returns `200` direct from a residential IP).
 - **`scrape-watchpro` (1): WatchPro** — Cloudflare-walled *and* its RSS
   feed is unusable (CDN serves a stale cached copy, `lastBuildDate`
   frozen days behind the live site — a WordPress full-page-cache bug).
@@ -295,7 +302,16 @@ be a complete no-op. Two layers enforce this:
   looks up the slug in Klaviyo; if its status is anything but `draft`, the
   run exits immediately — *before* fetch/triage/enrich. This is the normal
   path for the fallback on a day the primary already sent: no wasted Claude
-  / BrightData spend, and no DB writes.
+  / BrightData spend, and no DB writes. The guard fails *soft* — a transient
+  Klaviyo lookup error returns `false` (proceed) rather than blocking a
+  legitimate send — which is why the backstop below must be reliable.
+- **Robust backstop match (`isCampaignAlreadySentError`):** when the guard
+  fail-softs and a fallback reaches `draftCampaign` on an already-sent slug,
+  `publishToKlaviyo` must no-op, not exit non-zero. It matches the abort by
+  `instanceof` **or** by `error.name` — `instanceof` alone is fragile across
+  module/transpile boundaries, and this is the last line before a fallback
+  goes red (it did, pre-guard, on 2026-06-12). The error class also pins its
+  prototype (`Object.setPrototypeOf`) so `instanceof` survives downleveling.
 - **Persist-after-send ordering (`publishToKlaviyo`):** all DB writes
   (`newsletter_campaign` row + `persistArticles`) happen only *after* the
   Klaviyo draft/send succeeds. A story is therefore marked "seen" only once
