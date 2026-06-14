@@ -73,7 +73,7 @@ export default async function InfluencerOrderDetailPage({
 
       <InvoiceAttachments
         uploadUrl={`/api/influencer-orders/${order.id}/attachments`}
-        deleteUrl={(attachmentId) => `/api/influencer-orders/attachments/${attachmentId}`}
+        deleteUrlBase="/api/influencer-orders/attachments"
         attachments={order.attachments.map((a) => ({
           id: a.id,
           blobUrl: a.blobUrl,

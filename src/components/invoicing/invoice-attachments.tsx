@@ -26,13 +26,18 @@ function fmtSize(bytes: number | null): string {
  * (customer PO PDFs) and influencer gifting orders (gifting agreements, content
  * briefs). Upload streams to Vercel Blob via whichever route is wired up.
  *
- * Legacy `invoiceId` is still accepted — when given (and `uploadUrl`/`deleteUrl`
- * are not), the invoice routes are used, so existing call sites need no change.
+ * Legacy `invoiceId` is still accepted — when given (and `uploadUrl`/
+ * `deleteUrlBase` are not), the invoice routes are used, so existing call sites
+ * need no change.
+ *
+ * NOTE: props must be SERIALIZABLE — this is a Client Component often rendered
+ * by a Server Component (the detail pages), so the delete endpoint is a string
+ * base (`deleteUrlBase`), not a function. The final URL is `${base}/${id}`.
  */
 export function InvoiceAttachments({
   invoiceId,
   uploadUrl,
-  deleteUrl,
+  deleteUrlBase,
   attachments,
   title = "Customer documents",
   buttonLabel = "Attach PO",
@@ -42,8 +47,8 @@ export function InvoiceAttachments({
   invoiceId?: string;
   /** Explicit POST endpoint for uploads (preferred). */
   uploadUrl?: string;
-  /** Explicit DELETE endpoint builder for a given attachment id (preferred). */
-  deleteUrl?: (attachmentId: string) => string;
+  /** DELETE endpoint base; the attachment id is appended as `${base}/${id}`. */
+  deleteUrlBase?: string;
   attachments: InvoiceAttachmentItem[];
   title?: string;
   buttonLabel?: string;
@@ -56,8 +61,7 @@ export function InvoiceAttachments({
 
   const resolvedUploadUrl =
     uploadUrl ?? (invoiceId ? `/api/invoices/${invoiceId}/attachments` : null);
-  const resolvedDeleteUrl =
-    deleteUrl ?? ((id: string) => `/api/invoices/attachments/${id}`);
+  const resolvedDeleteBase = deleteUrlBase ?? "/api/invoices/attachments";
 
   async function upload(file: File) {
     if (!resolvedUploadUrl) return;
@@ -88,7 +92,7 @@ export function InvoiceAttachments({
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch(resolvedDeleteUrl(id), { method: "DELETE" });
+      const res = await fetch(`${resolvedDeleteBase}/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         setError(d.error || "Delete failed.");
