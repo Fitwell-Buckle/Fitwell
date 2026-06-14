@@ -327,10 +327,9 @@ export function PortalOrder({
                   }
                   unitPrice={
                     <div className="flex h-10 w-28 items-center justify-end px-2 text-sm tabular-nums text-zinc-700">
-                      {fmtMoney(l.variant.priceCents)}
+                      {fmtMoney(netLines[i].netUnitPriceCents)}
                     </div>
                   }
-                  unitDiscountCents={l.variant.priceCents - netLines[i].netUnitPriceCents}
                   lineTotalCents={netLines[i].netLineTotalCents}
                   onRemove={() => remove(l.variant.shopifyVariantId)}
                 />
@@ -371,11 +370,6 @@ export function PortalOrder({
             />
             Split fulfillment — ship some items to different addresses
           </label>
-          <p className="mt-1 text-xs text-zinc-400">
-            {split
-              ? "Add the locations below and enter how many of each item ships to each. One invoice and payment — we route each line at fulfillment."
-              : "Your saved Shopify addresses. We’ll ship this order here."}
-          </p>
           {split && cart.length > 0 && (
             <SplitFulfillmentGrid
               lines={cart.map((l) => ({

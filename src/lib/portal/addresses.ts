@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   company,
@@ -81,7 +81,11 @@ async function readAddressesForCustomerIds(ids: string[]): Promise<CompanyAddres
     orderBy: [desc(customerAddress.isDefault), asc(customerAddress.city)],
   });
   return rows.map((a) => ({
-    id: a.id,
+    // Identify by the STABLE Shopify address id, not the customer_address row
+    // id — address sync is delete-and-replace, so row ids change on every
+    // re-sync and would orphan a stored split. Fall back to the row id only
+    // when an address has no Shopify id.
+    id: a.shopifyAddressId ?? a.id,
     name: [a.firstName, a.lastName].filter(Boolean).join(" ") || null,
     company: a.company,
     address1: a.address1,
@@ -133,12 +137,17 @@ async function resolveShipToForCustomerIds(
   addressId: string,
 ): Promise<InvoiceShipTo | null> {
   if (ids.length === 0) return null;
+  // Match the stable Shopify address id first (what the picker now offers), but
+  // still accept a legacy row-id reference. Scope to the caller's customers.
   const a = await db.query.customerAddress.findFirst({
-    where: eq(customerAddress.id, addressId),
+    where: and(
+      inArray(customerAddress.customerId, ids),
+      or(eq(customerAddress.shopifyAddressId, addressId), eq(customerAddress.id, addressId)),
+    ),
   });
-  if (!a || !ids.includes(a.customerId)) return null;
+  if (!a) return null;
   return {
-    addressId: a.id,
+    addressId: a.shopifyAddressId ?? a.id,
     firstName: a.firstName,
     lastName: a.lastName,
     company: a.company,

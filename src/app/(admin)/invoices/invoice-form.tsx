@@ -7,11 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  computeInvoiceTotals,
-  netLineDisplays,
-  netUnitPriceCents,
-} from "@/lib/invoicing/invoicing";
+import { computeInvoiceTotals, netLineDisplays } from "@/lib/invoicing/invoicing";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { LineItemRow, LineItemsHeader, LineItemsTotal } from "@/components/invoicing/line-item-row";
@@ -706,13 +702,6 @@ export function InvoiceForm({
               rowPrice >= 0 &&
               r.unitPrice.trim() !== "";
             const lineCents = rowValid ? netLines[i].netLineTotalCents : null;
-            // Per-unit discount (retail unit − net unit), rounded the same
-            // way the net unit display is rounded so the math reconciles.
-            const rowUnitCents = rowValid ? Math.round(rowPrice * 100) : null;
-            const unitDiscountCents =
-              rowUnitCents != null
-                ? rowUnitCents - netUnitPriceCents(rowUnitCents, discount)
-                : null;
             return (
               <div key={i}>
                 <LineItemRow
@@ -778,7 +767,6 @@ export function InvoiceForm({
                     onChange={(e) => updateRow(i, { unitPrice: e.target.value })}
                   />
                 }
-                unitDiscountCents={unitDiscountCents}
                 lineTotalCents={lineCents}
                 onRemove={() => removeRow(i)}
                 removeDisabled={rows.length === 1}
@@ -815,11 +803,6 @@ export function InvoiceForm({
               />
               Split fulfillment — ship some lines to different addresses
             </label>
-            <p className="mt-1 text-xs text-zinc-400">
-              {split
-                ? "Add the locations below and enter how many of each item ships to each. One invoice — recorded on the Shopify order (per-line “Ship to” + an order note)."
-                : "The order's saved Shopify ship-to address. Synced to the Shopify draft order when the invoice is sent."}
-            </p>
             {split && splitLines.length > 0 && (
               <SplitFulfillmentGrid
                 lines={splitLines}

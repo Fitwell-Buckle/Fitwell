@@ -18,7 +18,6 @@ export function LineItemsHeader() {
       <div className={`min-w-[200px] flex-1 ${headerLabel}`}>Product</div>
       <div className={`w-20 ${headerLabel}`}>Qty</div>
       <div className={`w-28 ${headerLabel}`}>Unit price</div>
-      <div className={`w-24 px-2 text-right ${headerLabel}`}>Unit discount</div>
       <div className={`w-28 px-2 text-right ${headerLabel}`}>Line total</div>
       <div className="w-10" />
     </div>
@@ -36,16 +35,14 @@ export function LineItemRow({
   product,
   qty,
   unitPrice,
-  unitDiscountCents,
   lineTotalCents,
   onRemove,
   removeDisabled = false,
 }: {
   product: ReactNode;
   qty: ReactNode;
+  /** Unit price cell — net (discounted) price the customer pays. */
   unitPrice: ReactNode;
-  /** Per-unit discount (retail unit − net unit). null = not computable yet. */
-  unitDiscountCents: number | null;
   /** Net line total (after partner-tier discount). null = not computable yet. */
   lineTotalCents: number | null;
   onRemove: () => void;
@@ -56,15 +53,6 @@ export function LineItemRow({
       <div className="min-w-[200px] flex-1">{product}</div>
       <div className="w-20">{qty}</div>
       <div className="w-28">{unitPrice}</div>
-      <div className="flex h-10 w-24 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-500">
-        {unitDiscountCents == null ? (
-          <span className="text-zinc-300">—</span>
-        ) : unitDiscountCents === 0 ? (
-          <span className="text-zinc-300">$0.00</span>
-        ) : (
-          `−${fmtMoney(unitDiscountCents)}`
-        )}
-      </div>
       <div className="flex h-10 w-28 items-center justify-end px-2 text-sm font-medium tabular-nums text-zinc-700">
         {lineTotalCents == null ? (
           <span className="text-zinc-300">—</span>

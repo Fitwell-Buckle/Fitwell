@@ -103,7 +103,7 @@ export function SplitFulfillmentGrid({
                           </button>
                         )}
                         <span
-                          className="max-w-[160px] truncate normal-case text-zinc-600"
+                          className="max-w-[200px] whitespace-normal break-words text-right normal-case leading-tight text-zinc-600"
                           title={loc.label}
                         >
                           {loc.label}
@@ -139,14 +139,17 @@ export function SplitFulfillmentGrid({
                           <input
                             type="number"
                             min="0"
+                            // Cap each cell so the editable columns can't sum
+                            // past the SKU's total — the entry just stops at the
+                            // remaining quantity rather than over-allocating.
+                            max={l.total - (ed - colQty(alloc, l.shopifyVariantId, loc.addressId))}
                             value={String(colQty(alloc, l.shopifyVariantId, loc.addressId))}
-                            onChange={(e) =>
-                              onSetCell(
-                                l.shopifyVariantId,
-                                loc.addressId,
-                                Math.max(0, Math.floor(Number(e.target.value) || 0)),
-                              )
-                            }
+                            onChange={(e) => {
+                              const raw = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                              const otherCols = ed - colQty(alloc, l.shopifyVariantId, loc.addressId);
+                              const max = Math.max(0, l.total - otherCols);
+                              onSetCell(l.shopifyVariantId, loc.addressId, Math.min(raw, max));
+                            }}
                             className={`h-9 w-16 rounded-md border bg-white px-2 text-right text-sm tabular-nums focus-visible:outline-none focus-visible:ring-1 ${
                               over
                                 ? "border-red-300 focus-visible:ring-red-300"
