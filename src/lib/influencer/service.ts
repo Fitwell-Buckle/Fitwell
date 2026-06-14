@@ -102,13 +102,22 @@ export const orderLineInputSchema = z.object({
   shopifyVariantId: z.string().max(200).nullish(),
 });
 
+/** A line plus an optional split-fulfillment ship-to id (a saved address). The
+ *  route resolves the id to a stable snapshot before persisting. Shared by the
+ *  create form and the edit form so both carry per-line ship-to identically. */
+export const editOrderLineSchema = orderLineInputSchema.extend({
+  addressId: z.string().max(200).nullish(),
+});
+
 export const createOrderSchema = z.object({
   influencerId: z.string().min(1),
   issuedDate: dateString.optional(),
   contentDueDate: dateString.nullish(),
   affiliateLink: z.string().url().max(2000).nullish().or(z.literal("")),
   notes: z.string().max(5000).nullish(),
-  lineItems: z.array(orderLineInputSchema).min(1, "add at least one product"),
+  // Order-level default ship-to address id (a saved address). null = none.
+  addressId: z.string().max(200).nullish(),
+  lineItems: z.array(editOrderLineSchema).min(1, "add at least one product"),
 });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
@@ -119,7 +128,10 @@ export type CreateOrderInput = z.infer<typeof createOrderSchema>;
  */
 export async function recordInfluencerOrder(params: {
   influencerId: string;
-  lineItems: CreateOrderInput["lineItems"];
+  /** Lines with resolved per-line ship-to snapshots (split fulfillment). */
+  lineItems: SaveInfluencerLine[];
+  /** Resolved order-level default ship-to snapshot. */
+  shipTo?: InvoiceShipTo | null;
   contentDueDate?: string | null;
   affiliateLink?: string | null;
   notes?: string | null;
@@ -149,6 +161,7 @@ export async function recordInfluencerOrder(params: {
       contentDueDate: params.contentDueDate ?? null,
       affiliateLink: params.affiliateLink || null,
       notes: params.notes ?? null,
+      shipTo: params.shipTo ?? null,
       discountPercent: GIFT_DISCOUNT_PERCENT,
       shopifyDraftOrderId: params.shopifyDraftOrderId ?? null,
       shopifyInvoiceUrl: params.shopifyInvoiceUrl ?? null,
@@ -166,6 +179,7 @@ export async function recordInfluencerOrder(params: {
       unitPriceCents: l.unitPriceCents,
       shopifyProductId: l.shopifyProductId ?? null,
       shopifyVariantId: l.shopifyVariantId ?? null,
+      shipTo: l.shipTo ?? null,
     })),
   );
 
@@ -221,4 +235,188 @@ export async function updateInfluencerOrder(
     .where(eq(influencerOrder.id, id))
     .returning({ id: influencerOrder.id });
   return row ?? null;
+}
+
+// ─── Order detail (host for the edit page) ──────────────────────────
+
+/**
+ * Full gifting-order detail: the order + its influencer (and linked Shopify
+ * customer), line items, attachments, and the addresses available to gift to
+ * (the linked customer's, via the shared address pipeline). Mirrors
+ * `getInvoiceDetail` so the influencer edit page reads like the invoice one.
+ * Returns `undefined` when the order doesn't exist.
+ */
+export async function getInfluencerOrderDetail(id: string) {
+  const ord = await db.query.influencerOrder.findFirst({
+    where: eq(influencerOrder.id, id),
+    with: {
+      influencer: {
+        columns: {
+          id: true,
+          name: true,
+          handle: true,
+          contactEmail: true,
+          customerId: true,
+          assignedCollectionIds: true,
+        },
+        with: { customer: { columns: { id: true, shopifyId: true } } },
+      },
+      lineItems: true,
+      attachments: {
+        columns: {
+          id: true,
+          blobUrl: true,
+          filename: true,
+          contentType: true,
+          sizeBytes: true,
+          uploadedAt: true,
+        },
+        orderBy: (a, { desc }) => desc(a.uploadedAt),
+      },
+    },
+  });
+  if (!ord) return ord;
+  const addresses = ord.influencerId
+    ? await getInfluencerAddresses(ord.influencerId)
+    : [];
+  return { ...ord, addresses };
+}
+
+/** Record a document (gifting agreement, content brief) on a gifting order. */
+export async function addInfluencerOrderAttachment(input: {
+  orderId: string;
+  blobUrl: string;
+  filename: string;
+  contentType: string | null;
+  sizeBytes: number;
+  uploadedByUserId?: string | null;
+}): Promise<{ id: string }> {
+  const [row] = await db
+    .insert(influencerOrderAttachment)
+    .values({
+      orderId: input.orderId,
+      blobUrl: input.blobUrl,
+      filename: input.filename,
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+      uploadedByUserId: input.uploadedByUserId ?? null,
+    })
+    .returning({ id: influencerOrderAttachment.id });
+  return row;
+}
+
+// ─── Line editing (full-parity edit page) ───────────────────────────
+
+/** Edit payload: the full replacement line set + an order-level ship-to id. */
+export const saveOrderLinesSchema = z.object({
+  lineItems: z.array(editOrderLineSchema).min(1, "add at least one product"),
+  addressId: z.string().max(200).nullish(),
+});
+export type SaveOrderLinesInput = z.infer<typeof saveOrderLinesSchema>;
+
+/** One resolved line ready to persist (ship-to id already → snapshot). */
+export type SaveInfluencerLine = {
+  sku: string;
+  title: string;
+  quantity: number;
+  unitPriceCents: number;
+  shopifyProductId?: string | null;
+  shopifyVariantId?: string | null;
+  shipTo?: InvoiceShipTo | null;
+};
+
+export type SaveLinesResult =
+  | { ok: true }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Replace a gifting order's line items (with per-line split ship-to) and the
+ * order-level default ship-to, recomputing gift totals. Mirrors
+ * `updateInvoice`'s line replacement. `shipTo === undefined` leaves the
+ * order-level address unchanged; `null` clears it; an object sets it.
+ */
+export async function saveInfluencerOrderLines(
+  id: string,
+  input: { lineItems: SaveInfluencerLine[]; shipTo?: InvoiceShipTo | null },
+): Promise<SaveLinesResult> {
+  const ord = await db.query.influencerOrder.findFirst({
+    where: eq(influencerOrder.id, id),
+    columns: { id: true, status: true },
+  });
+  if (!ord) return { ok: false, status: 404, error: "Not found" };
+  if (ord.status === "cancelled") {
+    return { ok: false, status: 409, error: "Can't edit a cancelled order." };
+  }
+
+  const totals = computeGiftTotals(input.lineItems);
+  await db
+    .update(influencerOrder)
+    .set({
+      ...(input.shipTo !== undefined ? { shipTo: input.shipTo } : {}),
+      updatedAt: new Date(),
+      ...totals,
+    })
+    .where(eq(influencerOrder.id, id));
+
+  await db
+    .delete(influencerOrderLineItem)
+    .where(eq(influencerOrderLineItem.orderId, id));
+  await db.insert(influencerOrderLineItem).values(
+    input.lineItems.map((l) => ({
+      orderId: id,
+      sku: l.sku,
+      title: l.title,
+      quantity: l.quantity,
+      unitPriceCents: l.unitPriceCents,
+      shopifyProductId: l.shopifyProductId ?? null,
+      shopifyVariantId: l.shopifyVariantId ?? null,
+      shipTo: l.shipTo ?? null,
+    })),
+  );
+  return { ok: true };
+}
+
+// ─── Shopify gifting draft order (shared by create + send) ──────────
+
+/**
+ * Build the Shopify draft order at 100% off (gifting) for an order's lines.
+ * Resolves each line's variant against the catalog for the live Shopify link
+ * (unknown variants fall back to a custom line), and applies split-fulfillment
+ * "Ship to" attributes + the order-level shipping address the same way the B2B
+ * invoice send does. Single source of truth so create + send never diverge.
+ * Throws on Shopify failure — callers decide whether to warn or block.
+ */
+export async function buildGiftDraftOrder(params: {
+  email: string | null;
+  shopifyCustomerId: string | null;
+  influencerName: string;
+  lineItems: SaveInfluencerLine[];
+  shipTo?: InvoiceShipTo | null;
+}): Promise<{ draftOrderId: string; invoiceUrl: string | null }> {
+  const catalog = await getCatalogCached();
+  const byVariant = new Map(catalog.map((v) => [v.shopifyVariantId, v]));
+  const resolved = params.lineItems.map((l) => ({
+    sku: l.sku,
+    title: l.title,
+    quantity: l.quantity,
+    unitPriceCents: l.unitPriceCents,
+    shopifyVariantId:
+      l.shopifyVariantId && byVariant.has(l.shopifyVariantId)
+        ? l.shopifyVariantId
+        : null,
+    shipTo: l.shipTo ?? null,
+  }));
+  const { productLines, splitNote } = buildSplitShipping(
+    resolved,
+    params.shipTo ?? null,
+  );
+  return getShopifyClient().createDraftOrderInvoice({
+    email: params.email,
+    shopifyCustomerId: params.shopifyCustomerId,
+    shippingAddress: params.shipTo ? shipToToShopify(params.shipTo) : undefined,
+    discountPercent: GIFT_DISCOUNT_PERCENT,
+    discountTitle: "Influencer gifting",
+    note: `Influencer gifting — ${params.influencerName}` + splitNote,
+    lines: productLines,
+  });
 }

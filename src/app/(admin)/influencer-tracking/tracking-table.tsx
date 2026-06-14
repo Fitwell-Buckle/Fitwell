@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -188,7 +189,12 @@ function Row({ row, today }: { row: TrackingRow; today: string }) {
   return (
     <TableRow>
       <TableCell>
-        <Mono>{row.orderNumber}</Mono>
+        <Link
+          href={`/influencer-tracking/${row.id}`}
+          className="underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-500"
+        >
+          <Mono>{row.orderNumber}</Mono>
+        </Link>
       </TableCell>
       <TableCell className="text-zinc-700">
         {row.influencerName}

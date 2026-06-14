@@ -4,13 +4,12 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { influencer } from "@/lib/schema";
-import { getCatalogCached } from "@/lib/catalog/load";
-import { getShopifyClient } from "@/lib/shopify/client";
 import {
   createOrderSchema,
   recordInfluencerOrder,
+  buildGiftDraftOrder,
 } from "@/lib/influencer/service";
-import { GIFT_DISCOUNT_PERCENT } from "@/lib/influencer/influencer";
+import { resolveInfluencerOrderShipTos } from "@/lib/portal/addresses";
 
 function isScopeError(msg: string): boolean {
   const m = msg.toLowerCase();
@@ -53,28 +52,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Influencer not found" }, { status: 404 });
   }
 
-  // Try to create the Shopify draft order at 100% off (gifting). Resolve each
-  // line's variant against the catalog for the live Shopify variant link.
+  // Resolve the chosen saved-address ids (order-level + per-line split) into
+  // stable snapshots against the influencer's linked Shopify customer.
+  const { orderShipTo, lineShipTos } = await resolveInfluencerOrderShipTos(
+    input.influencerId,
+    input.addressId ?? undefined,
+    input.lineItems.map((l) => l.addressId ?? undefined),
+  );
+  const resolvedLines = input.lineItems.map((l, i) => ({
+    sku: l.sku,
+    title: l.title,
+    quantity: l.quantity,
+    unitPriceCents: l.unitPriceCents,
+    shopifyProductId: l.shopifyProductId ?? null,
+    shopifyVariantId: l.shopifyVariantId ?? null,
+    shipTo: lineShipTos[i],
+  }));
+
+  // Try to create the Shopify draft order at 100% off (gifting) via the shared
+  // helper, so create + send build the gifting draft identically.
   let draft: { draftOrderId: string; invoiceUrl: string | null } | null = null;
   let warning: string | undefined;
   try {
-    const catalog = await getCatalogCached();
-    const byVariant = new Map(catalog.map((v) => [v.shopifyVariantId, v]));
-    draft = await getShopifyClient().createDraftOrderInvoice({
+    draft = await buildGiftDraftOrder({
       email: inf.contactEmail ?? null,
       shopifyCustomerId: inf.customer?.shopifyId ?? null,
-      discountPercent: GIFT_DISCOUNT_PERCENT,
-      discountTitle: "Influencer gifting",
-      note: `Influencer gifting — ${inf.name}`,
-      lines: input.lineItems.map((l) => ({
-        variantId:
-          l.shopifyVariantId && byVariant.has(l.shopifyVariantId)
-            ? l.shopifyVariantId
-            : null,
-        title: l.title,
-        quantity: l.quantity,
-        unitPriceCents: l.unitPriceCents,
-      })),
+      influencerName: inf.name,
+      lineItems: resolvedLines,
+      shipTo: orderShipTo ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
@@ -90,7 +95,8 @@ export async function POST(req: Request) {
   try {
     const order = await recordInfluencerOrder({
       influencerId: input.influencerId,
-      lineItems: input.lineItems,
+      lineItems: resolvedLines,
+      shipTo: orderShipTo ?? null,
       contentDueDate: input.contentDueDate ?? null,
       affiliateLink: input.affiliateLink || null,
       notes: input.notes ?? null,

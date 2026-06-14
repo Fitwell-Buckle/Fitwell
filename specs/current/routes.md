@@ -55,7 +55,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/creators/[id]` | Creator detail — header Approve/Reject vetting buttons + bad-merge banner; per-platform stats cards each with an **Edit / fix** control (edit handle/platform/url/bio/verified, **Split off** onto a new creator, **Reassign** to another, Delete); posts feed, gifting orders (via `creator_id` links); editable emails (add/remove/kind/portal); discount codes; full editor (name, primary platform, status, rank boost, country, notes) |
 | `/influencers` | Influencer list (CRUD) — handle/platform, assigned collections, portal-login allowlist. **Retiring into `/creators`** (unification in progress) |
 | `/influencer-tracking` | Gifting orders + content-deadline tracking (approaching / missed / hit); inline-edit deadline, mark published, affiliate link |
-| `/influencer-tracking/new` | Create a gifting order (100% off draft order; product picker limited to the influencer's assigned collections; content due date + affiliate link) |
+| `/influencer-tracking/new` | Create a gifting order (100% off draft order; product picker limited to the influencer's assigned collections; content due date + affiliate link). **Full parity with the detail page**: shared `LineItemRow` line UI, split-fulfillment grid (addresses fetched for the chosen influencer), and document attachments staged in the form then uploaded once the order is created → lands on the detail page |
+| `/influencer-tracking/[id]` | Gifting-order detail/edit — full-parity edit form (line items via the shared `LineItemRow`, split-fulfillment grid sourced from the influencer's linked Shopify customer addresses, deadline / published / affiliate / status / platform), document attachments, and **Save & send gift** (pushes the gifting draft + emails the creator). Reuses the same shared modules as the B2B invoice edit form |
 | `/products` | Product performance breakdown (+ incoming production qty per SKU) |
 | `/inventory` | Incoming inventory — per-SKU units in production, stage breakdown, projected ETA |
 | `/modules` | Modules hub (Production; Marketing coming soon) |
@@ -239,11 +240,15 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | POST/DELETE | `/api/admin/creators/[id]/assets` | Log / remove a deliverable (storage URL pointer, asset type, rights tier — expiry computed server-side) |
 | POST | `/api/influencers` | Create an influencer |
 | PATCH | `/api/influencers/[id]` | Update an influencer (incl. assigned collections) |
+| GET | `/api/influencers/[id]/addresses` | The influencer's saved Shopify addresses (from their linked customer) for the gifting order form's ship-to / split picker; self-heals from Shopify. Mirrors the company addresses route |
 | POST | `/api/influencers/[id]/contacts` | Add an influencer portal-login email (future portal allowlist) |
 | DELETE | `/api/influencer-contacts/[id]` | Remove an influencer portal-login email |
-| POST | `/api/influencer-orders` | Create a gifting order — push a Shopify draft order at 100% off (`write_draft_orders`), record content due date + affiliate link; still records as `draft` (with a warning) if the Shopify push fails |
-| PATCH | `/api/influencer-orders/[id]` | Edit content deadline / published date / affiliate link / status |
+| POST | `/api/influencer-orders` | Create a gifting order — push a Shopify draft order at 100% off (`write_draft_orders`) with split-fulfillment "Ship to" attributes, record content due date + affiliate link + order/per-line ship-to (address ids resolved to snapshots against the linked customer); still records as `draft` (with a warning) if the Shopify push fails |
+| PATCH | `/api/influencer-orders/[id]` | Edit content deadline / published date / affiliate link / status / platform (tracking-table inline edits) AND, from the detail page, a full line-item replacement with split-fulfillment ship-to ids (resolved against the influencer's linked Shopify customer). Both parts optional |
 | DELETE | `/api/influencer-orders/[id]` | Hard-delete a gifting order + line items via FK cascade; admin-only; per-row icon button on the tracking table. Shopify gifting draft order is NOT auto-revoked |
+| POST | `/api/influencer-orders/[id]/send` | Push the Shopify gifting draft at 100% off (with split-fulfillment "Ship to" attributes) + email the creator the gift confirmation (Resend); marks "sent". **Blocks the send** if the draft can't be created — 409 missing scope, 502 other Shopify failure. No payment/deposit/wire (gifting is free) |
+| POST | `/api/influencer-orders/[id]/attachments` | Upload a document (gifting agreement, content brief) to a gifting order — Vercel Blob, multipart. Graceful 503 when `BLOB_READ_WRITE_TOKEN` isn't set. Shares the attachments UI with invoices |
+| DELETE | `/api/influencer-orders/attachments/[id]` | Remove a gifting-order document (best-effort blob delete + DB row) |
 
 ### Gmail API (admin-only)
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Upload, FileText, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import {
 } from "@/components/invoicing/split-fulfillment-grid";
 import {
   expandAlloc,
+  reconstructAlloc,
   anyOverAllocated,
   type Alloc,
   type SplitLocation,
@@ -27,11 +28,25 @@ import {
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 
-export interface InfluencerOption {
-  id: string;
-  name: string;
-  handle: string | null;
-  assignedCollectionIds: string[];
+export interface EditOrderLine {
+  sku: string;
+  title: string;
+  quantity: number;
+  unitPriceCents: number;
+  shopifyProductId: string | null;
+  shopifyVariantId: string | null;
+  /** Per-line split ship-to address id (from the stored snapshot). */
+  addressId: string | null;
+}
+
+export interface EditOrderInitial {
+  lineItems: EditOrderLine[];
+  shipToAddressId: string | null;
+  contentDueDate: string | null;
+  publishedAt: string | null;
+  affiliateLink: string | null;
+  status: "draft" | "sent" | "cancelled";
+  expectedPlatform: "ig" | "yt" | "tt" | "other" | null;
 }
 
 interface Row {
@@ -51,46 +66,82 @@ function emptyRow(): Row {
   return { variantKey: "", shopifyProductId: "", sku: "", title: "", quantity: "1", unitPrice: "" };
 }
 
-function fmtSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+// Consolidate stored lines (one per split destination) into one editable row per
+// variant, summing quantities — the grid below re-splits them by location.
+function seedRows(initial: EditOrderInitial): Row[] {
+  const byKey = new Map<string, Row>();
+  for (const l of initial.lineItems) {
+    const key = l.shopifyVariantId || l.sku;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.quantity = String(Number(existing.quantity) + l.quantity);
+    } else {
+      byKey.set(key, {
+        variantKey: l.shopifyVariantId ?? "",
+        shopifyProductId: l.shopifyProductId ?? "",
+        sku: l.sku,
+        title: l.title,
+        quantity: String(l.quantity),
+        unitPrice: (l.unitPriceCents / 100).toString(),
+      });
+    }
+  }
+  return byKey.size > 0 ? [...byKey.values()] : [emptyRow()];
 }
 
-export function InfluencerOrderForm({
-  influencers,
-  defaultInfluencerId,
+// Seed the split grid from the stored per-line ship-to address ids.
+function seedSplit(initial: EditOrderInitial, defaultAddressId: string | undefined) {
+  const lines = initial.lineItems.map((l) => ({
+    shopifyVariantId: l.shopifyVariantId,
+    quantity: l.quantity,
+    shipTo: l.addressId ? { addressId: l.addressId } : null,
+  }));
+  const isSplit = lines.some((l) => l.shipTo != null);
+  const { locationIds, alloc } = reconstructAlloc(lines, defaultAddressId);
+  return { isSplit, locationIds, alloc };
+}
+
+export function InfluencerOrderEditForm({
+  orderId,
+  orderNumber,
+  influencerName,
+  assignedCollectionIds,
+  addresses,
+  initial,
 }: {
-  influencers: InfluencerOption[];
-  defaultInfluencerId?: string;
+  orderId: string;
+  orderNumber: string;
+  influencerName: string;
+  assignedCollectionIds: string[];
+  addresses: AddressOption[];
+  initial: EditOrderInitial;
 }) {
   const router = useRouter();
 
-  const [influencerId, setInfluencerId] = useState(
-    (defaultInfluencerId &&
-      influencers.find((i) => i.id === defaultInfluencerId)?.id) ||
-      (influencers[0]?.id ?? ""),
+  const [rows, setRows] = useState<Row[]>(() => seedRows(initial));
+  const [contentDueDate, setContentDueDate] = useState(initial.contentDueDate ?? "");
+  const [publishedAt, setPublishedAt] = useState(initial.publishedAt ?? "");
+  const [affiliateLink, setAffiliateLink] = useState(initial.affiliateLink ?? "");
+  const [status, setStatus] = useState(initial.status);
+  const [expectedPlatform, setExpectedPlatform] = useState(initial.expectedPlatform ?? "");
+
+  const splitSeed = seedSplit(initial, initial.shipToAddressId || undefined);
+  const [orderAddressId, setOrderAddressId] = useState(
+    initial.shipToAddressId || splitSeed.locationIds[0] || "",
   );
-  const [contentDueDate, setContentDueDate] = useState("");
-  const [affiliateLink, setAffiliateLink] = useState("");
-  const [notes, setNotes] = useState("");
-  const [rows, setRows] = useState<Row[]>([emptyRow()]);
-
-  // Ship-to / split fulfillment — addresses load async for the chosen influencer.
-  const [addresses, setAddresses] = useState<AddressOption[]>([]);
-  const [addrLoaded, setAddrLoaded] = useState(false);
-  const [orderAddressId, setOrderAddressId] = useState("");
-  const [split, setSplit] = useState(false);
-  const [extraIds, setExtraIds] = useState<string[]>([]);
-  const [alloc, setAlloc] = useState<Alloc>({});
-
-  // Staged documents — uploaded to the order right after it's created.
-  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [split, setSplit] = useState<boolean>(splitSeed.isSplit);
+  const [extraIds, setExtraIds] = useState<string[]>(
+    splitSeed.locationIds.filter(
+      (id) => id && id !== (initial.shipToAddressId || splitSeed.locationIds[0]),
+    ),
+  );
+  const [alloc, setAlloc] = useState<Alloc>(splitSeed.alloc);
 
   const [lastCollectionId, setLastCollectionId] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const { variants, collections, loading: catalogLoading, error: catalogError } =
     useCatalog();
@@ -99,56 +150,22 @@ export function InfluencerOrderForm({
     [variants],
   );
 
-  const selected = influencers.find((i) => i.id === influencerId);
-  const assigned = selected?.assignedCollectionIds ?? [];
-
   // Restrict the picker to the influencer's assigned collections (all if none).
   const allowedCollections = useMemo(
-    () => (assigned.length === 0 ? collections : collections.filter((c) => assigned.includes(c.id))),
-    [assigned, collections],
+    () =>
+      assignedCollectionIds.length === 0
+        ? collections
+        : collections.filter((c) => assignedCollectionIds.includes(c.id)),
+    [assignedCollectionIds, collections],
   );
   const allowedVariants = useMemo(() => {
-    if (assigned.length === 0) return variants;
+    if (assignedCollectionIds.length === 0) return variants;
     const allowed = new Set<string>();
     for (const c of allowedCollections) for (const vid of c.variantIds) allowed.add(vid);
     return variants.filter((v) => allowed.has(v.shopifyVariantId));
-  }, [assigned, allowedCollections, variants]);
-  // If we can't resolve any collection membership (e.g. flat catalog fallback),
-  // don't hide everything — fall back to the full catalog.
+  }, [assignedCollectionIds, allowedCollections, variants]);
   const pickerVariants =
-    assigned.length > 0 && allowedVariants.length > 0 ? allowedVariants : variants;
-  const restricted = assigned.length > 0 && allowedVariants.length > 0;
-
-  // Load the chosen influencer's saved addresses (from their linked Shopify
-  // customer) for the ship-to / split picker; reset split state on change.
-  useEffect(() => {
-    setOrderAddressId("");
-    setExtraIds([]);
-    setSplit(false);
-    setAlloc({});
-    if (!influencerId) {
-      setAddresses([]);
-      setAddrLoaded(true);
-      return;
-    }
-    let cancelled = false;
-    setAddrLoaded(false);
-    fetch(`/api/influencers/${influencerId}/addresses`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (cancelled) return;
-        setAddresses((d?.data as AddressOption[]) ?? []);
-        setAddrLoaded(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setAddresses([]);
-        setAddrLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [influencerId]);
+    assignedCollectionIds.length > 0 && allowedVariants.length > 0 ? allowedVariants : variants;
 
   const totals = computeGiftTotals(
     rows.map((r) => ({
@@ -207,7 +224,6 @@ export function InfluencerOrderForm({
       unitPrice: (v.priceCents / 100).toString(),
     };
   }
-  // Batch add: fill the current row with the first pick, insert the rest after.
   function addManyAt(i: number, vs: CatalogVariant[]) {
     if (vs.length === 0) return;
     setRows((rs) => {
@@ -215,14 +231,6 @@ export function InfluencerOrderForm({
       copy.splice(i, 1, ...vs.map(rowFromVariant));
       return copy;
     });
-  }
-
-  function addStagedFiles(files: FileList | null) {
-    if (!files) return;
-    setStagedFiles((prev) => [...prev, ...Array.from(files)]);
-  }
-  function removeStagedFile(i: number) {
-    setStagedFiles((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   // Build the line-item payload (with per-line addressId when split), validating
@@ -303,139 +311,128 @@ export function InfluencerOrderForm({
     return out;
   }
 
-  // Upload staged documents to the freshly-created order. Best-effort: returns
-  // the names that failed so the caller can warn without losing the order.
-  async function uploadStaged(orderId: string): Promise<string[]> {
-    const failures: string[] = [];
-    for (const f of stagedFiles) {
-      try {
-        const fd = new FormData();
-        fd.append("file", f);
-        const res = await fetch(`/api/influencer-orders/${orderId}/attachments`, {
-          method: "POST",
-          body: fd,
-        });
-        if (!res.ok) failures.push(f.name);
-      } catch {
-        failures.push(f.name);
-      }
-    }
-    return failures;
-  }
-
-  async function submit() {
+  async function save(): Promise<boolean> {
     setError(null);
-    setWarning(null);
-    if (!influencerId) return setError("Select an influencer.");
+    setNotice(null);
     if (affiliateLink.trim() && !/^https?:\/\//i.test(affiliateLink.trim())) {
-      return setError("Affiliate link must be a URL starting with http:// or https://");
+      setError("Affiliate link must be a URL starting with http:// or https://");
+      return false;
     }
     if (overAllocated) {
-      return setError("Some items have more allocated across locations than ordered.");
+      setError("Some items have more allocated across locations than ordered.");
+      return false;
     }
     const lineItems = buildLineItems();
-    if (!lineItems) return;
+    if (!lineItems) return false;
 
-    setSubmitting(true);
+    setSaving(true);
     try {
-      const res = await fetch("/api/influencer-orders", {
-        method: "POST",
+      const res = await fetch(`/api/influencer-orders/${orderId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          influencerId,
-          contentDueDate: contentDueDate || null,
-          affiliateLink: affiliateLink.trim() || null,
-          notes: notes.trim() || null,
-          addressId: orderAddressId || null,
           lineItems,
+          addressId: orderAddressId || null,
+          contentDueDate: contentDueDate || null,
+          publishedAt: publishedAt || null,
+          affiliateLink: affiliateLink.trim() || null,
+          status,
+          expectedPlatform: expectedPlatform || null,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || "Failed to create order.");
-        setSubmitting(false);
+        setError(data.error || "Failed to save.");
+        return false;
+      }
+      router.refresh();
+      return true;
+    } catch {
+      setError("Network error — please try again.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function send() {
+    // Save first so the gifting draft + email reflect the latest lines/ship-to.
+    const ok = await save();
+    if (!ok) return;
+    setSending(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/influencer-orders/${orderId}/send`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Failed to send.");
         return;
       }
-
-      const orderId: string = data.data.id;
-      const warnings: string[] = [];
-      if (data.warning) warnings.push(data.warning);
-      if (stagedFiles.length > 0) {
-        const failed = await uploadStaged(orderId);
-        if (failed.length > 0) {
-          warnings.push(`Couldn't upload: ${failed.join(", ")}. Re-attach on the order page.`);
-        }
-      }
-
-      // Land on the new order's detail page (where attachments + send live).
-      if (warnings.length > 0) {
-        // Surface, then continue to the detail page after a beat so it's seen.
-        setWarning(warnings.join(" "));
-      }
-      router.push(`/influencer-tracking/${orderId}`);
+      setNotice(data.message || "Sent.");
       router.refresh();
     } catch {
       setError("Network error — please try again.");
-      setSubmitting(false);
+    } finally {
+      setSending(false);
     }
   }
 
   return (
     <div className="mt-6 space-y-5">
       <Card className="p-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="flex items-center justify-between">
           <div>
-            <label className={fieldLabel}>Influencer</label>
-            <select
-              className={inputBase}
-              value={influencerId}
-              onChange={(e) => setInfluencerId(e.target.value)}
-            >
-              {influencers.length === 0 && <option value="">No influencers yet</option>}
-              {influencers.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.handle ? `${i.name} (${i.handle})` : i.name}
-                </option>
-              ))}
-            </select>
+            <h2 className="text-sm font-semibold text-zinc-900">{orderNumber}</h2>
             <p className="mt-1 text-xs text-zinc-500">
               <Badge className="bg-emerald-50 text-emerald-700">Gifting — 100% off</Badge>
-              {restricted && (
-                <span className="ml-2">
-                  Limited to {allowedCollections.length} assigned collection
-                  {allowedCollections.length === 1 ? "" : "s"}.
-                </span>
-              )}
+              <span className="ml-2">For {influencerName}</span>
             </p>
           </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={fieldLabel}>Content due date</label>
-              <Input
-                type="date"
-                value={contentDueDate}
-                onChange={(e) => setContentDueDate(e.target.value)}
-              />
+              <Input type="date" value={contentDueDate} onChange={(e) => setContentDueDate(e.target.value)} />
             </div>
             <div>
-              <label className={fieldLabel}>Affiliate link (optional)</label>
-              <Input
-                type="url"
-                placeholder="https://…"
-                value={affiliateLink}
-                onChange={(e) => setAffiliateLink(e.target.value)}
-              />
+              <label className={fieldLabel}>Published date</label>
+              <Input type="date" value={publishedAt} onChange={(e) => setPublishedAt(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={fieldLabel}>Status</label>
+              <select
+                className={inputBase}
+                value={status}
+                onChange={(e) => setStatus(e.target.value as EditOrderInitial["status"])}
+              >
+                <option value="draft">Draft</option>
+                <option value="sent">Sent</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div>
+              <label className={fieldLabel}>Expected platform</label>
+              <select
+                className={inputBase}
+                value={expectedPlatform}
+                onChange={(e) => setExpectedPlatform(e.target.value)}
+              >
+                <option value="">—</option>
+                <option value="ig">Instagram</option>
+                <option value="yt">YouTube</option>
+                <option value="tt">TikTok</option>
+                <option value="other">Other</option>
+              </select>
             </div>
           </div>
         </div>
         <div className="mt-4">
-          <label className={fieldLabel}>Notes (optional)</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
-          />
+          <label className={fieldLabel}>Affiliate link (optional)</label>
+          <Input type="url" placeholder="https://…" value={affiliateLink} onChange={(e) => setAffiliateLink(e.target.value)} />
         </div>
       </Card>
 
@@ -583,74 +580,22 @@ export function InfluencerOrderForm({
             )}
           </div>
         ) : (
-          addrLoaded && (
-            <p className="mt-4 border-t border-zinc-100 pt-4 text-xs text-zinc-500">
-              No saved addresses for this influencer. Link them to a Shopify customer to enable a
-              delivery address + split fulfillment.
-            </p>
-          )
+          <p className="mt-4 border-t border-zinc-100 pt-4 text-xs text-zinc-500">
+            No saved addresses for this influencer. Link them to a Shopify customer to enable a
+            delivery address + split fulfillment.
+          </p>
         )}
       </Card>
 
-      <Card className="p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-900">Documents</h2>
-          <label className="cursor-pointer">
-            <span className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
-              <Upload className="h-4 w-4" /> Attach file
-            </span>
-            <input
-              type="file"
-              accept=".pdf,application/pdf,image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                addStagedFiles(e.target.files);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
-        </div>
-        <p className="mt-1 text-xs text-zinc-500">
-          Attach the gifting agreement, content brief, or related documents (PDF/image). Uploaded
-          when the order is created. Max 10MB each.
-        </p>
-        <div className="mt-3 space-y-2">
-          {stagedFiles.length === 0 ? (
-            <p className="text-sm text-zinc-400">No documents staged.</p>
-          ) : (
-            stagedFiles.map((f, i) => (
-              <div
-                key={`${f.name}-${i}`}
-                className="flex items-center justify-between gap-3 rounded-md border border-zinc-100 px-3 py-2"
-              >
-                <span className="flex min-w-0 items-center gap-2 text-sm text-zinc-700">
-                  <FileText className="h-4 w-4 shrink-0 text-zinc-400" />
-                  <span className="truncate">{f.name}</span>
-                  <span className="shrink-0 text-xs text-zinc-400">{fmtSize(f.size)}</span>
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Remove document"
-                  onClick={() => removeStagedFile(i)}
-                  className="shrink-0"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
-
-      {warning && <p className="text-sm text-amber-600">{warning}</p>}
+      {notice && <p className="text-sm text-emerald-600">{notice}</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="flex justify-end">
-        <Button onClick={submit} disabled={submitting || influencers.length === 0}>
-          {submitting ? "Creating…" : "Create gifting order"}
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={save} disabled={saving || sending}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+        <Button onClick={send} disabled={saving || sending}>
+          {sending ? "Sending…" : "Save & send gift"}
         </Button>
       </div>
     </div>
