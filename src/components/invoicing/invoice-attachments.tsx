@@ -21,28 +21,52 @@ function fmtSize(bytes: number | null): string {
 }
 
 /**
- * Attach / view / remove customer documents on an invoice (e.g. the customer's
- * own PDF purchase order). Upload goes to Vercel Blob via the invoice route.
+ * Attach / view / remove documents on an order. Entity-agnostic: the endpoints
+ * and copy are parameterized so the SAME component drives both B2B invoices
+ * (customer PO PDFs) and influencer gifting orders (gifting agreements, content
+ * briefs). Upload streams to Vercel Blob via whichever route is wired up.
+ *
+ * Legacy `invoiceId` is still accepted — when given (and `uploadUrl`/`deleteUrl`
+ * are not), the invoice routes are used, so existing call sites need no change.
  */
 export function InvoiceAttachments({
   invoiceId,
+  uploadUrl,
+  deleteUrl,
   attachments,
+  title = "Customer documents",
+  buttonLabel = "Attach PO",
+  hint = "Attach the customer's purchase order (PDF) or related documents. Max 10MB.",
 }: {
-  invoiceId: string;
+  /** Legacy convenience: derives the invoice upload/delete routes. */
+  invoiceId?: string;
+  /** Explicit POST endpoint for uploads (preferred). */
+  uploadUrl?: string;
+  /** Explicit DELETE endpoint builder for a given attachment id (preferred). */
+  deleteUrl?: (attachmentId: string) => string;
   attachments: InvoiceAttachmentItem[];
+  title?: string;
+  buttonLabel?: string;
+  hint?: string;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const resolvedUploadUrl =
+    uploadUrl ?? (invoiceId ? `/api/invoices/${invoiceId}/attachments` : null);
+  const resolvedDeleteUrl =
+    deleteUrl ?? ((id: string) => `/api/invoices/attachments/${id}`);
+
   async function upload(file: File) {
+    if (!resolvedUploadUrl) return;
     setError(null);
     setBusy(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch(`/api/invoices/${invoiceId}/attachments`, {
+      const res = await fetch(resolvedUploadUrl, {
         method: "POST",
         body: fd,
       });
@@ -64,7 +88,7 @@ export function InvoiceAttachments({
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch(`/api/invoices/attachments/${id}`, { method: "DELETE" });
+      const res = await fetch(resolvedDeleteUrl(id), { method: "DELETE" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         setError(d.error || "Delete failed.");
@@ -81,7 +105,7 @@ export function InvoiceAttachments({
   return (
     <Card className="mt-5 p-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-900">Customer documents</h2>
+        <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
         <Button
           type="button"
           variant="outline"
@@ -89,7 +113,7 @@ export function InvoiceAttachments({
           disabled={busy}
           onClick={() => inputRef.current?.click()}
         >
-          <Upload className="h-4 w-4" /> {busy ? "Uploading…" : "Attach PO"}
+          <Upload className="h-4 w-4" /> {busy ? "Uploading…" : buttonLabel}
         </Button>
       </div>
       <input
@@ -102,9 +126,7 @@ export function InvoiceAttachments({
           if (f) upload(f);
         }}
       />
-      <p className="mt-1 text-xs text-zinc-500">
-        Attach the customer&apos;s purchase order (PDF) or related documents. Max 10MB.
-      </p>
+      <p className="mt-1 text-xs text-zinc-500">{hint}</p>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       <div className="mt-3 space-y-2">
         {attachments.length === 0 ? (

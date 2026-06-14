@@ -1,6 +1,12 @@
 import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { company, customer, customerAddress, type InvoiceShipTo } from "@/lib/schema";
+import {
+  company,
+  customer,
+  customerAddress,
+  influencer,
+  type InvoiceShipTo,
+} from "@/lib/schema";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { upsertCustomer } from "@/lib/shopify/sync";
 
@@ -39,30 +45,19 @@ async function linkedCustomerIds(companyId: string): Promise<string[]> {
 }
 
 /**
- * Self-heal: when a company has no synced `customer_address` rows, re-fetch its
- * linked Shopify customers and upsert them (delete-and-replaces their
- * addresses) — so the portal ship-to / split-fulfillment picker works even if
- * the customer sync hasn't populated addresses yet. Same effect as the admin
- * "Sync from Shopify" button. Best-effort, never throws.
+ * Self-heal core: re-fetch the given Shopify customers and upsert them
+ * (delete-and-replaces their addresses) — so the ship-to / split-fulfillment
+ * picker works even if the customer sync hasn't populated addresses yet. Same
+ * effect as the admin "Sync from Shopify" button. Best-effort, never throws.
+ * Keyed by customer id so both the company and influencer pickers reuse it.
  */
-async function syncCompanyAddressesFromShopify(companyId: string): Promise<void> {
-  const co = await db.query.company.findFirst({
-    where: eq(company.id, companyId),
-    columns: { customerId: true },
-  });
-  // Every Shopify-linked customer for this company: its primary link + People.
+async function syncAddressesFromShopifyForCustomerIds(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
   const rows = await db
-    .select({ id: customer.id, shopifyId: customer.shopifyId })
+    .select({ shopifyId: customer.shopifyId })
     .from(customer)
-    .where(and(isNotNull(customer.shopifyId), eq(customer.companyId, companyId)));
+    .where(and(isNotNull(customer.shopifyId), inArray(customer.id, ids)));
   const shopifyIds = new Set(rows.map((r) => r.shopifyId).filter((x): x is string => Boolean(x)));
-  if (co?.customerId) {
-    const [primary] = await db
-      .select({ shopifyId: customer.shopifyId })
-      .from(customer)
-      .where(eq(customer.id, co.customerId));
-    if (primary?.shopifyId) shopifyIds.add(primary.shopifyId);
-  }
   if (shopifyIds.size === 0) return;
 
   const client = getShopifyClient();
@@ -70,18 +65,16 @@ async function syncCompanyAddressesFromShopify(companyId: string): Promise<void>
     try {
       await upsertCustomer(await client.getCustomer(sid));
     } catch (err) {
-      console.error(`portal address self-heal failed for shopify customer ${sid}:`, err);
+      console.error(`address self-heal failed for shopify customer ${sid}:`, err);
     }
   }
 }
 
 /**
- * The company's saved Shopify addresses (across all its linked customers),
- * default first. Same source the admin B2B page uses; surfaced in the portal
- * so the buyer can pick a ship-to for their order.
+ * Saved Shopify addresses across a set of customers, default first. The shared
+ * core both the company picker and the influencer picker build on.
  */
-async function readSyncedAddresses(companyId: string): Promise<CompanyAddress[]> {
-  const ids = await linkedCustomerIds(companyId);
+async function readAddressesForCustomerIds(ids: string[]): Promise<CompanyAddress[]> {
   if (ids.length === 0) return [];
   const rows = await db.query.customerAddress.findMany({
     where: inArray(customerAddress.customerId, ids),
@@ -103,31 +96,42 @@ async function readSyncedAddresses(companyId: string): Promise<CompanyAddress[]>
   }));
 }
 
-export async function getCompanyAddresses(companyId: string): Promise<CompanyAddress[]> {
-  let rows = await readSyncedAddresses(companyId);
-  // Self-heal from Shopify if nothing is synced yet, so the ship-to / split
-  // picker isn't silently empty for a company whose addresses haven't synced.
-  if (rows.length === 0) {
+/**
+ * Read addresses for a set of customers, self-healing from Shopify once if the
+ * local cache is empty (so the picker isn't silently empty pre-sync).
+ */
+async function getAddressesForCustomerIds(ids: string[]): Promise<CompanyAddress[]> {
+  let rows = await readAddressesForCustomerIds(ids);
+  if (rows.length === 0 && ids.length > 0) {
     try {
-      await syncCompanyAddressesFromShopify(companyId);
-      rows = await readSyncedAddresses(companyId);
+      await syncAddressesFromShopifyForCustomerIds(ids);
+      rows = await readAddressesForCustomerIds(ids);
     } catch (err) {
-      console.error("getCompanyAddresses self-heal failed:", err);
+      console.error("address self-heal failed:", err);
     }
   }
   return rows;
 }
 
 /**
- * Resolve a chosen address id to a stable ship-to SNAPSHOT to store on the
- * invoice + drive the Shopify draft order. Returns null if the id isn't one of
- * the company's addresses (defense in depth — the portal only offers its own).
+ * The company's saved Shopify addresses (across all its linked customers),
+ * default first. Same source the admin B2B page uses; surfaced in the portal
+ * so the buyer can pick a ship-to for their order.
  */
-export async function resolveShipTo(
-  companyId: string,
+export async function getCompanyAddresses(companyId: string): Promise<CompanyAddress[]> {
+  return getAddressesForCustomerIds(await linkedCustomerIds(companyId));
+}
+
+/**
+ * Resolve a chosen address id to a stable ship-to SNAPSHOT against a set of
+ * customers. Returns null if the id isn't one of theirs (defense in depth — a
+ * caller only offers its own addresses). The shared core under both the company
+ * and influencer resolvers.
+ */
+async function resolveShipToForCustomerIds(
+  ids: string[],
   addressId: string,
 ): Promise<InvoiceShipTo | null> {
-  const ids = await linkedCustomerIds(companyId);
   if (ids.length === 0) return null;
   const a = await db.query.customerAddress.findFirst({
     where: eq(customerAddress.id, addressId),
@@ -150,13 +154,13 @@ export async function resolveShipTo(
 }
 
 /**
- * Resolve an order's ship-to choices — the order-level address + each line's
- * (split-fulfillment) address — into validated snapshots, de-duplicating the
- * lookups. `orderShipTo` is `undefined` when no order-level address was sent
- * (leave unchanged), `null` when explicitly cleared.
+ * Resolve an order's ship-to choices (order-level + per-line split addresses)
+ * into validated snapshots against a set of customers, de-duplicating lookups.
+ * `orderShipTo` is `undefined` when no order-level address was sent (leave
+ * unchanged), `null` when explicitly cleared. Shared core for both order types.
  */
-export async function resolveOrderShipTos(
-  companyId: string,
+async function resolveOrderShipTosForCustomerIds(
+  ids: string[],
   orderAddressId: string | undefined,
   lineAddressIds: (string | undefined)[],
 ): Promise<{
@@ -169,7 +173,7 @@ export async function resolveOrderShipTos(
     ),
   ];
   const snaps = new Map<string, InvoiceShipTo | null>();
-  for (const id of uniqueIds) snaps.set(id, await resolveShipTo(companyId, id));
+  for (const id of uniqueIds) snaps.set(id, await resolveShipToForCustomerIds(ids, id));
 
   const orderShipTo =
     orderAddressId === undefined
@@ -179,6 +183,71 @@ export async function resolveOrderShipTos(
         : null;
   const lineShipTos = lineAddressIds.map((id) => (id ? snaps.get(id) ?? null : null));
   return { orderShipTo, lineShipTos };
+}
+
+/**
+ * Resolve a chosen address id to a stable ship-to SNAPSHOT to store on the
+ * invoice + drive the Shopify draft order. Returns null if the id isn't one of
+ * the company's addresses (defense in depth — the portal only offers its own).
+ */
+export async function resolveShipTo(
+  companyId: string,
+  addressId: string,
+): Promise<InvoiceShipTo | null> {
+  return resolveShipToForCustomerIds(await linkedCustomerIds(companyId), addressId);
+}
+
+/**
+ * Resolve an order's ship-to choices — the order-level address + each line's
+ * (split-fulfillment) address — into validated snapshots, de-duplicating the
+ * lookups. `orderShipTo` is `undefined` when no order-level address was sent
+ * (leave unchanged), `null` when explicitly cleared.
+ */
+export async function resolveOrderShipTos(
+  companyId: string,
+  orderAddressId: string | undefined,
+  lineAddressIds: (string | undefined)[],
+): ReturnType<typeof resolveOrderShipTosForCustomerIds> {
+  return resolveOrderShipTosForCustomerIds(
+    await linkedCustomerIds(companyId),
+    orderAddressId,
+    lineAddressIds,
+  );
+}
+
+// ─── Influencer gifting orders ──────────────────────────────────────
+// Influencers have no company; they optionally link to a single synced Shopify
+// customer (`influencer.customer_id`). The gifting order's ship-to picker reuses
+// the exact same address machinery, keyed by that customer. Empty when the
+// influencer isn't customer-linked (the grid shows its "add a location" hint).
+
+/** The linked Shopify customer for an influencer, as a (0- or 1-element) id list. */
+async function influencerCustomerIds(influencerId: string): Promise<string[]> {
+  const inf = await db.query.influencer.findFirst({
+    where: eq(influencer.id, influencerId),
+    columns: { customerId: true },
+  });
+  return inf?.customerId ? [inf.customerId] : [];
+}
+
+/** Saved addresses available to gift to, sourced from the linked Shopify customer. */
+export async function getInfluencerAddresses(
+  influencerId: string,
+): Promise<CompanyAddress[]> {
+  return getAddressesForCustomerIds(await influencerCustomerIds(influencerId));
+}
+
+/** Influencer-order equivalent of `resolveOrderShipTos`. */
+export async function resolveInfluencerOrderShipTos(
+  influencerId: string,
+  orderAddressId: string | undefined,
+  lineAddressIds: (string | undefined)[],
+): ReturnType<typeof resolveOrderShipTosForCustomerIds> {
+  return resolveOrderShipTosForCustomerIds(
+    await influencerCustomerIds(influencerId),
+    orderAddressId,
+    lineAddressIds,
+  );
 }
 
 /** A stored ship-to snapshot as the Shopify draft order's shipping address. */

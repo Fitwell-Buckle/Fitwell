@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 // addresses.ts imports db + schema at module load; mock them so the pure
 // helpers can be imported without a DB connection.
 vi.mock("@/lib/db", () => ({ db: {} }));
-vi.mock("@/lib/schema", () => ({ company: {}, customer: {}, customerAddress: {} }));
+vi.mock("@/lib/schema", () => ({ company: {}, customer: {}, customerAddress: {}, influencer: {} }));
 
 import {
   shipToLabel,

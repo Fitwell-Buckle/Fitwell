@@ -1,6 +1,5 @@
 "use client";
 
-import type { CompanyAddress } from "@/lib/portal/addresses";
 import {
   colQty,
   editableSum,
@@ -10,8 +9,25 @@ import {
   type Alloc,
 } from "@/lib/invoicing/split-alloc";
 
-/** One-line label for a saved company address (shared by both order forms). */
-export function addressOptionLabel(a: CompanyAddress): string {
+/**
+ * Minimal saved-address shape the grid needs — just an id + the label fields.
+ * Kept local (not tied to the DB `CompanyAddress`) so this UI component is
+ * entity-agnostic: B2B passes company addresses, the influencer side passes a
+ * linked Shopify customer's addresses. Both are structurally assignable.
+ */
+export interface AddressOption {
+  id: string;
+  name?: string | null;
+  company?: string | null;
+  address1?: string | null;
+  city?: string | null;
+  province?: string | null;
+  provinceCode?: string | null;
+  zip?: string | null;
+}
+
+/** One-line label for a saved address (shared by every order form). */
+export function addressOptionLabel(a: AddressOption): string {
   return [a.name || a.company, a.address1, a.city, a.provinceCode ?? a.province, a.zip]
     .filter(Boolean)
     .join(", ");
@@ -42,7 +58,7 @@ export function SplitFulfillmentGrid({
   onRemoveLocation,
 }: {
   lines: SplitGridLine[];
-  addresses: CompanyAddress[];
+  addresses: AddressOption[];
   locations: SplitLocation[];
   alloc: Alloc;
   onSetCell: (variantId: string, addressId: string, qty: number) => void;

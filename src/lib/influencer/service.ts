@@ -5,7 +5,16 @@ import {
   influencer,
   influencerOrder,
   influencerOrderLineItem,
+  influencerOrderAttachment,
+  type InvoiceShipTo,
 } from "@/lib/schema";
+import { getCatalogCached } from "@/lib/catalog/load";
+import { getShopifyClient } from "@/lib/shopify/client";
+import {
+  buildSplitShipping,
+  shipToToShopify,
+  getInfluencerAddresses,
+} from "@/lib/portal/addresses";
 import {
   computeGiftTotals,
   formatInfluencerOrderNumber,

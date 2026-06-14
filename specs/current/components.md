@@ -148,7 +148,9 @@ surface.
 | `invoices/[id]/invoice-actions` | The "Collect Payment" card. For drafts, renders a separate "Payment preview" block showing the projected deposit/balance breakdown (using `invoice.deposit_percent ?? company.deposit_percent`) — no buttons. For sent/partial: deposit row + balance row with mark-paid buttons. **2026-05-28** |
 | `invoices/[id]/invoice-document` | The shared printable document (used by `/print` and `/send`). Includes a deposit terms paragraph in the Payment block when an effective deposit applies (so the customer reads it on the document, not just on the screen). **2026-05-28** |
 | `invoices/[id]/invoice-status-select` | Status dropdown on the detail page header |
-| `components/invoicing/invoice-attachments` | Customer-document upload UI (Vercel Blob). Self-wraps in a `<Card>` so it composes uniformly inside `<DetailTabs>` |
+| `components/invoicing/invoice-attachments` | Document upload UI (Vercel Blob). Self-wraps in a `<Card>`. **Entity-agnostic** — pass `uploadUrl` + `deleteUrl(id)` (and optional `title`/`buttonLabel`/`hint`) to drive any order type; the legacy `invoiceId` prop still derives the invoice routes. Shared by invoices + influencer gifting orders. |
+| `components/invoicing/split-fulfillment-grid` | Split-fulfillment grid (SKU rows × location columns, auto-balanced last column). **Entity-agnostic** — `addresses` takes a structural `AddressOption[]` (id + label fields), not the DB `CompanyAddress`, so B2B (company addresses) and influencer (linked-customer addresses) both use it. Pure logic in `lib/invoicing/split-alloc`. |
+| `components/invoicing/line-item-row` | `LineItemsHeader` / `LineItemRow` / `LineItemsTotal` — shared, slotted line-item table UI used by the invoice form, B2B portal order form, and influencer order form. Edit once, all three change. |
 
 ## SEO (`components/seo/`)
 
