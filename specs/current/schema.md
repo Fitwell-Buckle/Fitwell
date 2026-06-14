@@ -103,10 +103,14 @@ Synced from Shopify. One row per Shopify order.
 | `referring_site` | text | External referrer |
 | `processed_at` | timestamptz | Shopify `processed_at` (falls back to `created_at`) |
 | `cancelled_at` | timestamptz | Shopify cancellation time; null otherwise. Excluded from "Total sales" |
+| `is_sample` | boolean | Default false. Set from the Shopify `sample` tag on every sync (`hasSampleTag` in `lib/shopify/order-tags.ts`) — re-derived each sync, so removing the tag re-includes the order. Tagged $0 orders (B2B samples + influencer gifts) are **excluded from all revenue/customer/attribution reporting**. Migration `0055`. |
+| `lead_id` | text | Nullable FK → `lead`. Links a B2B sample order to the lead it was shipped to. Migration `0055`. |
 | `created_at` | timestamptz | Our insert time |
 | `updated_at` | timestamptz | |
 
-**"Total sales" (dashboard headline)** = `SUM(total_price - total_refunded)` over **non-cancelled** orders in range (includes pending orders, subtracts returns), bucketed in the **store timezone** (`America/Los_Angeles`, see `src/lib/timezone.ts`). This is what reconciles with Shopify's "Total sales" report — unlike the former paid-only "Revenue", which excluded pending/wholesale orders and ignored returns.
+**"Total sales" (dashboard headline)** = `SUM(total_price - total_refunded)` over **non-cancelled, non-sample** orders in range (includes pending orders, subtracts returns), bucketed in the **store timezone** (`America/Los_Angeles`, see `src/lib/timezone.ts`). This is what reconciles with Shopify's "Total sales" report — unlike the former paid-only "Revenue", which excluded pending/wholesale orders and ignored returns.
+
+**Sample/gift exclusion:** orders tagged `sample` in Shopify (B2B samples and influencer gifts — gifts also carry `influencer-gift`) set `order.is_sample = true` on sync, and are filtered out (`not(order.is_sample)`) of the dashboard sales/customer metrics, `lib/analytics/attribution.ts`, and `api/admin/funnel`. The `sample` tag is the single source of truth — see `specs/work-plans/todo/b2b-samples-system.md`. Ops/fulfillment queries deliberately keep samples in.
 
 ### `order_line_item`
 

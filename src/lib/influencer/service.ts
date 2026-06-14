@@ -10,6 +10,7 @@ import {
 } from "@/lib/schema";
 import { getCatalogCached } from "@/lib/catalog/load";
 import { getShopifyClient } from "@/lib/shopify/client";
+import { GIFT_ORDER_TAGS } from "@/lib/shopify/order-tags";
 import {
   buildSplitShipping,
   shipToToShopify,
@@ -416,6 +417,9 @@ export async function buildGiftDraftOrder(params: {
     shippingAddress: params.shipTo ? shipToToShopify(params.shipTo) : undefined,
     discountPercent: GIFT_DISCOUNT_PERCENT,
     discountTitle: "Influencer gifting",
+    // `sample` keeps the $0 order out of revenue/attribution once it syncs back
+    // (see order-tags.ts / upsertOrder); `influencer-gift` identifies the flow.
+    tags: [...GIFT_ORDER_TAGS],
     note: `Influencer gifting — ${params.influencerName}` + splitNote,
     lines: productLines,
   });

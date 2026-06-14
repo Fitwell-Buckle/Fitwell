@@ -19,11 +19,19 @@ it like any other order, (b) records it in our `order` table with
 `is_sample = true` and a `lead_id` FK, (c) auto-advances the lead's stage,
 and (d) excludes the row from every revenue/attribution query we run.
 
-**Out of scope:** influencer gifting. That flow exists (`/api/influencer-orders`,
-`influencer_order` table) and is conceptually separate — creators earn posts in
-exchange for product; B2B samples are evaluating product for wholesale
-adoption. Two workflows, two destinations (marketing system vs. sales pipeline),
-no shared UI surface.
+**Out of scope:** influencer gifting *as a UI/pipeline flow*. That flow exists
+(`/api/influencer-orders`, `influencer_order` table) and is conceptually
+separate — creators earn posts in exchange for product; B2B samples are
+evaluating product for wholesale adoption. Two workflows, two destinations
+(marketing system vs. sales pipeline), no shared UI surface.
+
+> **Update 2026-06-14:** the *revenue-exclusion half* of this plan (Phases 2 & 6)
+> was implemented early and **extended to influencer gifting** (Oliver's call):
+> gifting drafts are now created with the `sample` + `influencer-gift` tags, the
+> sync sets `order.is_sample`, and the sales/customer/attribution queries filter
+> `not(is_sample)`. So influencer gifts are now excluded from revenue too — they
+> share the tag mechanism, just not the `/samples` UI or the lead pipeline. The
+> B2B `/samples` surface (Phases 3–5) is still TODO.
 
 ## Decisions (confirmed with Oliver, 2026-06-09)
 
@@ -190,19 +198,18 @@ no shared UI surface.
     completion succeeds under current scopes; only if Shopify returns an
     access-denied is a scope change needed (→ `specs/current/shopify-app-config.md`).
 
-### Phase 2: Sync hook + tag-driven flag
+### Phase 2: Sync hook + tag-driven flag ✅ (done 2026-06-14)
 
-- [ ] In `src/lib/shopify/sync.ts` `upsertOrder()` (around line 188), parse
-  `shopifyOrder.tags` (Shopify returns either a comma-separated string or
-  an array depending on API surface — handle both) into a normalized,
-  lowercased, trimmed set. Set `isSample = tags.has("sample")`.
-- [ ] Verify on `onConflictDoUpdate` path — re-syncing an order whose tag
-  has been removed must clear the flag (re-include in revenue).
-- [ ] Unit test the tag parser: empty, single, comma-separated, array,
-  mixed-case, whitespace, "samples" (plural — should NOT match).
-- [ ] One-shot backfill script: scan existing orders with `sample` tag and
-  set the flag. Probably zero rows today, but the script is cheap and
-  documents the rule.
+- [x] Pure tag helpers in `src/lib/shopify/order-tags.ts` (`normalizeOrderTags`,
+  `hasSampleTag`) — handle comma-string or array, case, whitespace; exact
+  `sample` match (plural "samples" does NOT match).
+- [x] `upsertOrder()` sets `isSample = hasSampleTag(shopifyOrder.tags)` on insert
+  AND in the `onConflictDoUpdate` set, so removing the tag re-includes the order.
+- [x] Unit-tested the parser (`order-tags.test.ts`): empty/null, single,
+  comma-separated, array, mixed-case, whitespace, plural, lookalike.
+- [ ] One-shot backfill script for pre-existing tagged orders. **Not needed yet:**
+  no completed sample/gift orders exist in prod (gifting orders are still open
+  drafts). Revisit if samples are tagged in Shopify Admin before the cron runs.
 
 ### Phase 3: API route — create sample
 
@@ -271,20 +278,21 @@ no shared UI surface.
 - [ ] If the lead is already in `sample` stage, show days-in-stage
   prominently (it's the metric we're trying to track per b2b-pipeline.md).
 
-### Phase 6: Attribution + analytics filters
+### Phase 6: Attribution + analytics filters ✅ (revenue surfaces done 2026-06-14)
 
-- [ ] `src/lib/analytics/attribution.ts:82` (`getChannelPerformance`) —
-  add `and(not(order.isSample))` to the where clause.
-- [ ] `src/lib/analytics/attribution.ts:139`
-  (`getPixelAttributedChannelPerformance`) — same.
-- [ ] `src/app/api/admin/funnel/route.ts:20` — same.
-- [ ] Repo-wide audit: `grep -rn 'from(order)' src/` and triage each call
-  site. For each, decide: revenue-shaped (filter samples out), fulfillment
-  /ops-shaped (keep samples in), or sample-specific (filter to samples
-  only). Document the call in the file.
-- [ ] Sanity test: insert a sample order via the new flow; verify it
-  doesn't show in `/dashboard` revenue, doesn't appear in `/attribution`
-  channel breakdown, but does show in `/samples` and on the lead detail.
+- [x] `getChannelPerformance` + `getPixelAttributedChannelPerformance` in
+  `src/lib/analytics/attribution.ts` — `not(order.isSample)` added.
+- [x] `src/app/api/admin/funnel/route.ts` — revenue, order-count, recent-orders,
+  and revenue-by-day queries all filter `not(order.isSample)`.
+- [x] `src/app/(admin)/dashboard/page.tsx` — the headline "Total sales", order
+  count, distinct-customer count, segment split, per-customer LTV, and product
+  counts all filter a shared `notSample` predicate.
+- [ ] Repo-wide audit of the *remaining* `from(order)` call sites (ops/
+  fulfillment/shipping dashboards) — triage keep-vs-exclude per query. The
+  revenue/customer surfaces above are done; the rest are mostly ops-shaped
+  (should keep samples) but haven't been individually confirmed.
+- [ ] Sanity test once a sample/gift order actually completes in Shopify:
+  verify it's absent from `/dashboard` revenue + `/attribution`.
 
 ### Phase 7: Spec doc updates
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { order, customer } from "@/lib/schema";
-import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
+import { sql, eq, gte, desc, count, sum, and, not } from "drizzle-orm";
 import { STORE_TZ } from "@/lib/timezone";
 
 export async function GET() {
@@ -16,14 +16,14 @@ export async function GET() {
 
   const [revenueResult, orderCountResult, customerCountResult, recentOrders, revenueByDay] =
     await Promise.all([
-      // Total revenue from paid orders
+      // Total revenue from paid orders (samples/gifts excluded)
       db
         .select({ total: sum(order.totalPrice) })
         .from(order)
-        .where(eq(order.financialStatus, "paid")),
+        .where(and(eq(order.financialStatus, "paid"), not(order.isSample))),
 
-      // Total orders
-      db.select({ count: count() }).from(order),
+      // Total orders (samples/gifts excluded)
+      db.select({ count: count() }).from(order).where(not(order.isSample)),
 
       // Total customers
       db.select({ count: count() }).from(customer),
@@ -43,6 +43,7 @@ export async function GET() {
         })
         .from(order)
         .leftJoin(customer, eq(order.customerId, customer.id))
+        .where(not(order.isSample))
         .orderBy(desc(order.processedAt))
         .limit(10),
 
@@ -54,7 +55,7 @@ export async function GET() {
           orders: count(),
         })
         .from(order)
-        .where(gte(order.processedAt, thirtyDaysAgo))
+        .where(and(gte(order.processedAt, thirtyDaysAgo), not(order.isSample)))
         .groupBy(sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`)
         .orderBy(sql`date_trunc('day', (${order.processedAt} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`),
     ]);

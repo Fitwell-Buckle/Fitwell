@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { customer, order, utmAttribution } from "@/lib/schema";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, not, sql } from "drizzle-orm";
 
 export type Channel =
   | "organic_search"
@@ -92,7 +92,9 @@ export async function getChannelPerformance(
     })
     .from(order)
     .leftJoin(customer, eq(order.customerId, customer.id))
-    .where(and(gte(order.processedAt, from), lte(order.processedAt, to)))
+    .where(
+      and(gte(order.processedAt, from), lte(order.processedAt, to), not(order.isSample)),
+    )
     .groupBy(customer.utmSource, customer.utmMedium);
 
   const byChannel = new Map<Channel, { orders: number; revenue: number }>();
@@ -166,6 +168,7 @@ export async function getPixelAttributedChannelPerformance(
         gte(order.processedAt, from),
         lte(order.processedAt, to),
         eq(order.linkMethod, "pixel"),
+        not(order.isSample),
       ),
     )
     .groupBy(utmAttribution.source, utmAttribution.medium);

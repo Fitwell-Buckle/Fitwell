@@ -8,6 +8,7 @@ import {
   utmAttribution,
 } from "@/lib/schema";
 import { getShopifyClient, toCents } from "./client";
+import { hasSampleTag } from "./order-tags";
 import { eq, sql } from "drizzle-orm";
 import { linkOrderToAttribution } from "@/lib/analytics/order-attribution";
 import type {
@@ -225,6 +226,11 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
     cancelledAt: shopifyOrder.cancelled_at
       ? new Date(shopifyOrder.cancelled_at)
       : null,
+    // Tag-driven: a $0 sample/influencer-gift order carries the `sample` tag,
+    // which keeps it out of revenue/attribution. Re-derived on every sync, so
+    // removing the tag in Shopify re-includes the order. See order-tags.ts +
+    // b2b-samples-system.md.
+    isSample: hasSampleTag(shopifyOrder.tags),
     updatedAt: new Date(),
   };
 
@@ -250,6 +256,7 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
         referringSite: orderValues.referringSite,
         processedAt: orderValues.processedAt,
         cancelledAt: orderValues.cancelledAt,
+        isSample: orderValues.isSample,
         updatedAt: orderValues.updatedAt,
       },
     })

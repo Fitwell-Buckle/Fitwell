@@ -3,7 +3,13 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { order, customer, metaAdsDaily, googleAdsDaily } from "@/lib/schema";
+import {
+  order,
+  orderLineItem,
+  customer,
+  metaAdsDaily,
+  googleAdsDaily,
+} from "@/lib/schema";
 import { sql, eq, desc, count, sum, gte, lte, and } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
 import { STORE_TZ } from "@/lib/timezone";
@@ -68,6 +74,9 @@ export default async function DashboardPage({
   // exactly as Shopify counts them — unlike the old paid-only "Revenue".
   const netSales = sql`COALESCE(SUM(${order.totalPrice} - ${order.totalRefunded}), 0)`.mapWith(Number);
   const notCancelled = sql`${order.cancelledAt} IS NULL`;
+  // Exclude $0 sample/influencer-gift orders (tagged `sample` in Shopify →
+  // order.is_sample) from every sales/customer metric. See b2b-samples-system.md.
+  const notSample = sql`${order.isSample} = false`;
 
   // Segment by order source (no B2B customer tags exist in the data, so
   // `source_name` is the signal): B2B = wholesale draft orders, Trade Show =
@@ -86,18 +95,20 @@ export default async function DashboardPage({
     recentOrders,
     segmentResult,
     perCustomerLtv,
+    productsResult,
+    perCustomerProducts,
   ] = await Promise.all([
       db
         .select({ total: netSales })
         .from(order)
         .where(
-          and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({ count: count() })
         .from(order)
         .where(
-          and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       // Distinct customers who actually ordered in the period — consistent with
       // the Sales/Orders cards (both keyed off order.processedAt). The old query
@@ -109,7 +120,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .where(
-          and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({
@@ -125,14 +136,14 @@ export default async function DashboardPage({
         })
         .from(order)
         .leftJoin(customer, eq(order.customerId, customer.id))
-        .where(and(gte(order.processedAt, from), lte(order.processedAt, to)))
+        .where(and(notSample, gte(order.processedAt, from), lte(order.processedAt, to)))
         .orderBy(desc(order.processedAt))
         .limit(10),
       db
         .select({ segment: segmentExpr, sales: netSales, orders: count() })
         .from(order)
         .where(
-          and(notCancelled, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
         )
         .groupBy(segmentExpr),
       // Per-customer ALL-TIME aggregates (ignores the date filter) for LTV.
@@ -143,6 +154,7 @@ export default async function DashboardPage({
       // it's null for one-and-done customers. No bound params.
       db
         .select({
+          customerId: order.customerId,
           isB2b: sql<boolean>`bool_or(${order.sourceName} = 'shopify_draft_order')`,
           hasPos: sql<boolean>`bool_or(${order.sourceName} = 'pos')`,
           netRev: sql<number>`COALESCE(SUM(${order.totalPrice} - ${order.totalRefunded}), 0)`.mapWith(Number),
@@ -154,10 +166,35 @@ export default async function DashboardPage({
         .where(
           and(
             notCancelled,
+            notSample,
             sql`${order.customerId} IS NOT NULL`,
             sql`${order.processedAt} IS NOT NULL`,
           ),
         )
+        .groupBy(order.customerId),
+      // Total products purchased (sum of line-item quantities) in the SELECTED
+      // period — numerator for the period-scoped "avg products / customer".
+      db
+        .select({
+          total: sql<number>`COALESCE(SUM(${orderLineItem.quantity}), 0)`.mapWith(Number),
+        })
+        .from(order)
+        .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
+        .where(
+          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
+        ),
+      // Per-customer ALL-TIME product counts (sum of line-item quantities).
+      // Keyed by customerId so it merges onto the perCustomerLtv rows — the
+      // customer set (and therefore the Customers column) stays identical to the
+      // orders table; customers with no line items simply contribute 0 products.
+      db
+        .select({
+          customerId: order.customerId,
+          products: sql<number>`COALESCE(SUM(${orderLineItem.quantity}), 0)`.mapWith(Number),
+        })
+        .from(order)
+        .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
+        .where(and(notCancelled, notSample, sql`${order.customerId} IS NOT NULL`))
         .groupBy(order.customerId),
     ]);
 
@@ -171,6 +208,12 @@ export default async function DashboardPage({
   // (≈1.0 over a single day, the all-time figure over "All").
   const avgOrdersPerCustomer =
     totalCustomers > 0 ? totalOrders / totalCustomers : 0;
+  // Same idea, but counting products bought (sum of line-item quantities)
+  // instead of orders. Numerator is period-scoped; denominator is the same
+  // distinct-customer count as above.
+  const totalProducts = Number(productsResult[0]?.total ?? 0);
+  const avgProductsPerCustomer =
+    totalCustomers > 0 ? totalProducts / totalCustomers : 0;
 
   // B2B vs Consumer split of Total sales (same definition as the headline).
   const segOf = (name: string) =>
@@ -224,11 +267,17 @@ export default async function DashboardPage({
       REPEAT_WINDOWS.map((w) => [w.key, { eligible: 0, repeated: 0 }]),
     ) as Record<WindowKey, { eligible: number; repeated: number }>;
 
+  // All-time products bought per customer, keyed for merge onto the LTV rows.
+  const productsByCustomer = new Map<string, number>();
+  for (const p of perCustomerProducts) {
+    if (p.customerId) productsByCustomer.set(p.customerId, p.products ?? 0);
+  }
+
   // Tally per-customer rows in JS (small set).
   const ltvAgg = {
-    d2c: { customers: 0, rev: 0, orders: 0, windows: emptyWindows() },
-    tradeshow: { customers: 0, rev: 0, orders: 0, windows: emptyWindows() },
-    b2b: { customers: 0, rev: 0, orders: 0, windows: emptyWindows() },
+    d2c: { customers: 0, rev: 0, orders: 0, products: 0, windows: emptyWindows() },
+    tradeshow: { customers: 0, rev: 0, orders: 0, products: 0, windows: emptyWindows() },
+    b2b: { customers: 0, rev: 0, orders: 0, products: 0, windows: emptyWindows() },
   };
   for (const c of perCustomerLtv) {
     const bucket = c.isB2b
@@ -239,6 +288,9 @@ export default async function DashboardPage({
     bucket.customers += 1;
     bucket.rev += c.netRev ?? 0;
     bucket.orders += c.orders ?? 0;
+    bucket.products += c.customerId
+      ? (productsByCustomer.get(c.customerId) ?? 0)
+      : 0;
 
     if (!c.firstOrder) continue;
     const first = new Date(c.firstOrder).getTime();
@@ -260,6 +312,7 @@ export default async function DashboardPage({
     label: s.label,
     avgLtv: s.customers > 0 ? Math.round(s.rev / s.customers) : 0,
     avgOrders: s.customers > 0 ? s.orders / s.customers : 0,
+    avgProducts: s.customers > 0 ? s.products / s.customers : 0,
     customers: s.customers,
     windows: REPEAT_WINDOWS.map((w) => {
       const { eligible, repeated } = s.windows[w.key];
@@ -511,6 +564,81 @@ export default async function DashboardPage({
                   </TableCell>
                   <TableCell className="text-right">
                     {s.avgOrders.toFixed(2)}
+                  </TableCell>
+                  {s.windows.map((w) => (
+                    <TableCell
+                      key={w.key}
+                      className="text-right text-zinc-500"
+                      title={`${w.eligible.toLocaleString()} customers eligible`}
+                    >
+                      {w.rate === null ? "—" : `${w.rate}%`}
+                    </TableCell>
+                  ))}
+                  <TableCell className="text-right text-zinc-500">
+                    {s.customers.toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Avg Products per Customer</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-zinc-100 pb-3">
+            <span className="text-sm font-medium text-zinc-900">
+              Avg products / customer (selected period)
+            </span>
+            <span className="text-sm text-zinc-700">
+              <Mono>{avgProductsPerCustomer.toFixed(2)}</Mono>
+              <span className="ml-2 text-xs text-zinc-400">
+                {totalProducts.toLocaleString()} products ÷{" "}
+                {totalCustomers.toLocaleString()} customers
+              </span>
+            </span>
+          </div>
+          <p className="mb-3 text-xs text-zinc-500">
+            Same as the LTV table, but counting products bought (sum of line-item
+            quantities) instead of orders. Per-segment columns are{" "}
+            <em>all-time</em> and do <em>not</em> change with the date filter (the
+            overall ratio above does). Avg LTV is historic CLV — net revenue per
+            customer to date. Repeat-window rates are the share of customers who
+            placed a 2nd order within the given time of their first, counting only
+            customers whose first order is old enough to have had the full window.
+            Customers are bucketed by priority: B2B (ever ordered wholesale) →
+            Trade Show (ever bought in-person) → D2C (purely online).
+          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Segment</TableHead>
+                <TableHead className="text-right">Avg LTV</TableHead>
+                <TableHead className="text-right">
+                  Avg products / customer
+                </TableHead>
+                {REPEAT_WINDOWS.map((w) => (
+                  <TableHead key={w.key} className="text-right">
+                    Repeat {w.label}
+                  </TableHead>
+                ))}
+                <TableHead className="text-right">Customers</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ltvRows.map((s) => (
+                <TableRow key={s.label}>
+                  <TableCell className="font-medium text-zinc-900">
+                    {s.label}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Mono>{fmt(s.avgLtv)}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {s.avgProducts.toFixed(2)}
                   </TableCell>
                   {s.windows.map((w) => (
                     <TableCell
