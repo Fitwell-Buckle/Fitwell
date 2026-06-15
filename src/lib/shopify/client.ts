@@ -107,7 +107,11 @@ export function buildDraftOrderInput(
       : base;
   });
 
-  const input: Record<string, unknown> = { lineItems };
+  // Always charge in USD. Our prices are USD cents throughout, and the store is
+  // USD-based — without this, a draft order for a customer tied to a non-US
+  // market would present (and convert) in that market's currency, mispricing the
+  // order. Forcing the presentment currency keeps every draft order in USD.
+  const input: Record<string, unknown> = { lineItems, presentmentCurrencyCode: "USD" };
   if (params.email) input.email = params.email;
   if (params.note) input.note = params.note;
   if (params.tags && params.tags.length > 0) input.tags = params.tags;

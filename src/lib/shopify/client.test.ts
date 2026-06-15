@@ -56,6 +56,10 @@ describe("buildDraftOrderInput", () => {
     ]);
   });
 
+  it("always presents the draft order in USD", () => {
+    expect(buildDraftOrderInput(sampleParams()).presentmentCurrencyCode).toBe("USD");
+  });
+
   it("accepts a bare numeric variant id and normalizes it to a GID", () => {
     const input = buildDraftOrderInput(
       sampleParams({
