@@ -2,25 +2,22 @@
  * Repeat-purchase window math for the dashboard "Customer Value & Retention"
  * table.
  *
- * The metric answers: of a segment's customers, what share placed a 2nd order
- * within N days of their first? We report several windows (30d / 90d / 6mo /
- * 1yr) side by side.
+ * Definition (chosen 2026-06-15): we measure the repeat behaviour of customers
+ * NEWLY ACQUIRED in the selected period — those whose first-ever order falls
+ * inside the date range (a customer who ordered before the range and again
+ * inside it does NOT count; their first purchase wasn't in the window). Of that
+ * cohort, each window column reports the share who placed a 2nd order within X
+ * days of their first, where that 2nd order is also inside the period.
  *
- * The trap (and the reason this lives in a tested helper): if each window uses
- * its own eligible cohort — "customers observed long enough for *that* window"
- * — the columns rest on DIFFERENT, shrinking denominators. A wider window can
- * then show a *lower* rate than a narrower one (it dropped the younger, often
- * more-active customers), and a window barely covered by the selected range
- * rests on a tiny, unrepresentative sliver. That produces the "fewer repeats at
- * 6mo than 90d" and "0% at 1yr" anomalies.
+ * All columns share ONE denominator — the newly-acquired cohort — so the rates
+ * are directly comparable and only rise left to right (repeated-within-30d ⊆
+ * within-90d ⊆ …). The cohort is fixed (no per-window eligibility shrinking),
+ * which is what makes the columns honest against each other.
  *
- * Fix: a single SHARED denominator. We pick one eligibility horizon — the
- * widest window the selected range can actually support (`anchorWindowDays`) —
- * and every column is computed over the same cohort: customers whose first
- * in-range order is old enough to have been observed for that full horizon.
- * Because the cohort is fixed and "repeated within 30d" ⊆ "within 90d" ⊆ … ,
- * the rates are guaranteed to be non-decreasing left to right and are directly
- * comparable. Windows wider than the range (no shared observation) report null.
+ * A window wider than the selected range would just duplicate the
+ * "repeated anytime in the period" total (a 2nd in-period order can't be more
+ * than the range span away from the first), so we show columns only up to the
+ * narrowest window that covers the range; wider ones render as "—".
  */
 
 export const REPEAT_WINDOWS = [
@@ -35,9 +32,14 @@ export type RepeatWindowKey = (typeof REPEAT_WINDOWS)[number]["key"];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface RepeatTiming {
-  /** First in-range order timestamp (ms). Customers with null are skipped. */
+  /**
+   * True when this customer's first-ever order falls inside the selected range
+   * (i.e. they had no order before the range start). Only these count.
+   */
+  newlyAcquired: boolean;
+  /** First in-range order timestamp (ms) — equals the first-ever order for the cohort. */
   firstOrderMs: number | null;
-  /** Second in-range order timestamp (ms), or null for one-and-done. */
+  /** Second in-range order timestamp (ms), or null for one-and-done in the period. */
   secondOrderMs: number | null;
 }
 
@@ -45,50 +47,41 @@ export interface RepeatWindowCell {
   key: RepeatWindowKey;
   label: string;
   days: number;
-  /** Whether the selected range is wide enough to observe this window. */
+  /** Whether the selected range is wide enough for this window to be distinct. */
   supported: boolean;
   /**
-   * Repeat rate (0–100) over the shared cohort, or null when the window is
-   * unsupported by the range or the cohort is empty.
+   * Repeat rate (0–100) over the newly-acquired cohort, or null when the window
+   * is wider than the range or the cohort is empty.
    */
   rate: number | null;
 }
 
 export interface RepeatWindowSummary {
-  /** Shared denominator: customers observed for the full anchor horizon. */
+  /** Shared denominator: customers newly acquired in the period. */
   cohort: number;
-  /** The eligibility horizon (days) every column shares; 0 = none supported. */
-  anchorDays: number;
   cells: RepeatWindowCell[];
 }
 
 /**
- * The widest repeat window whose horizon fits inside the selected range — the
- * single eligibility horizon all columns share. Returns 0 when the range is
- * shorter than even the narrowest window (nothing measurable).
+ * Index of the narrowest window that fully covers the range (its days ≥ the
+ * range span). Columns past it would duplicate the period total. -1 when no
+ * window covers the range (range longer than the widest window) — then every
+ * column is distinct and all are shown.
  */
-export function anchorWindowDays(rangeDays: number): number {
-  let anchor = 0;
-  for (const w of REPEAT_WINDOWS) {
-    if (w.days <= rangeDays) anchor = Math.max(anchor, w.days);
-  }
-  return anchor;
+function coveringWindowIndex(rangeDays: number): number {
+  return REPEAT_WINDOWS.findIndex((w) => w.days >= rangeDays);
 }
 
 /**
- * Compute repeat-window rates for one segment over a single shared cohort.
+ * Compute repeat-window rates for one segment over the newly-acquired cohort.
  *
- * @param timings           one entry per customer in the segment
- * @param observedThroughMs end of the selected range (ms) — the horizon a
- *                          customer has had to come back within view
- * @param rangeDays         width of the selected range in days
+ * @param timings   one entry per customer who ordered in the segment in range
+ * @param rangeDays width of the selected range in days
  */
 export function computeRepeatWindows(
   timings: RepeatTiming[],
-  observedThroughMs: number,
   rangeDays: number,
 ): RepeatWindowSummary {
-  const anchorDays = anchorWindowDays(rangeDays);
   let cohort = 0;
   const repeated: Record<RepeatWindowKey, number> = {
     d30: 0,
@@ -97,26 +90,19 @@ export function computeRepeatWindows(
     y1: 0,
   };
 
-  if (anchorDays > 0) {
-    for (const t of timings) {
-      if (t.firstOrderMs == null) continue;
-      const ageDays = (observedThroughMs - t.firstOrderMs) / DAY_MS;
-      // Shared cohort: only customers observed for the full anchor horizon.
-      if (ageDays < anchorDays) continue;
-      cohort += 1;
-      const gapDays =
-        t.secondOrderMs == null
-          ? Infinity
-          : (t.secondOrderMs - t.firstOrderMs) / DAY_MS;
-      for (const w of REPEAT_WINDOWS) {
-        if (w.days > anchorDays) continue; // not observable for this range
-        if (gapDays <= w.days) repeated[w.key] += 1;
-      }
+  for (const t of timings) {
+    if (!t.newlyAcquired || t.firstOrderMs == null) continue;
+    cohort += 1;
+    if (t.secondOrderMs == null) continue; // one-and-done in the period
+    const gapDays = (t.secondOrderMs - t.firstOrderMs) / DAY_MS;
+    for (const w of REPEAT_WINDOWS) {
+      if (gapDays <= w.days) repeated[w.key] += 1;
     }
   }
 
-  const cells: RepeatWindowCell[] = REPEAT_WINDOWS.map((w) => {
-    const supported = anchorDays > 0 && w.days <= anchorDays;
+  const coveringIdx = coveringWindowIndex(rangeDays);
+  const cells: RepeatWindowCell[] = REPEAT_WINDOWS.map((w, idx) => {
+    const supported = coveringIdx === -1 ? true : idx <= coveringIdx;
     return {
       key: w.key,
       label: w.label,
@@ -129,5 +115,5 @@ export function computeRepeatWindows(
     };
   });
 
-  return { cohort, anchorDays, cells };
+  return { cohort, cells };
 }

@@ -10,7 +10,7 @@ import {
   metaAdsDaily,
   googleAdsDaily,
 } from "@/lib/schema";
-import { sql, eq, desc, count, sum, gte, lte, and } from "drizzle-orm";
+import { sql, eq, desc, count, sum, gte, lte, lt, and } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
 import { STORE_TZ } from "@/lib/timezone";
 import {
@@ -103,6 +103,7 @@ export default async function DashboardPage({
     perCustomerLtv,
     productsResult,
     perCustomerProducts,
+    preRangeCustomerRows,
   ] = await Promise.all([
       db
         .select({ total: netSales })
@@ -212,6 +213,22 @@ export default async function DashboardPage({
           ),
         )
         .groupBy(order.customerId),
+      // Customers who placed an order BEFORE the range start — i.e. they were
+      // already customers, not newly acquired in the period. Used to restrict the
+      // repeat-window cohort to first-time buyers acquired in range (a customer
+      // who bought before the window and again inside it must NOT count as a
+      // repeat). Same notSample/notCancelled filters as everything else.
+      db
+        .selectDistinct({ customerId: order.customerId })
+        .from(order)
+        .where(
+          and(
+            notCancelled,
+            notSample,
+            sql`${order.customerId} IS NOT NULL`,
+            lt(order.processedAt, from),
+          ),
+        ),
     ]);
 
   const totalRevenue = Number(revenueResult[0]?.total ?? 0);
@@ -264,14 +281,18 @@ export default async function DashboardPage({
   // priority: B2B (ever placed a draft order in range) > Trade Show (ever bought
   // in-person via POS) > D2C (purely online).
   //
-  // Repeat-purchase windows use a SINGLE SHARED COHORT (see
-  // `computeRepeatWindows`): every column's denominator is the same set of
-  // customers — those observed long enough for the widest window the range
-  // supports — so the columns are directly comparable and only increase left to
-  // right. Eligibility is measured against the END of the selected range, not
-  // wall-clock now: we only observe orders through `to`.
-  const observedThrough = to.getTime();
+  // Repeat-purchase windows measure customers NEWLY ACQUIRED in the period —
+  // those whose first-ever order falls in range (no order before `from`). Of
+  // that cohort, each window is the share who placed a 2nd in-period order
+  // within X days of their first. One shared denominator (the cohort) across
+  // all columns ⇒ directly comparable, monotonic. See `computeRepeatWindows`.
   const rangeDays = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000);
+  // Customers who already existed before the range — excluded from the cohort.
+  const preRangeCustomers = new Set(
+    preRangeCustomerRows
+      .map((r) => r.customerId)
+      .filter((id): id is string => id != null),
+  );
 
   // In-range products bought per customer, keyed for merge onto the LTV rows.
   const productsByCustomer = new Map<string, number>();
@@ -305,18 +326,17 @@ export default async function DashboardPage({
       ? (productsByCustomer.get(c.customerId) ?? 0)
       : 0;
     segTimings[seg].push({
+      // Newly acquired in period: had no order before the range start. (For such
+      // a customer the first in-range order IS their first-ever order.)
+      newlyAcquired: c.customerId != null && !preRangeCustomers.has(c.customerId),
       firstOrderMs: c.firstOrder ? new Date(c.firstOrder).getTime() : null,
       secondOrderMs: c.secondOrder ? new Date(c.secondOrder).getTime() : null,
     });
   }
   const windowsBySeg = {
-    d2c: computeRepeatWindows(segTimings.d2c, observedThrough, rangeDays),
-    tradeshow: computeRepeatWindows(
-      segTimings.tradeshow,
-      observedThrough,
-      rangeDays,
-    ),
-    b2b: computeRepeatWindows(segTimings.b2b, observedThrough, rangeDays),
+    d2c: computeRepeatWindows(segTimings.d2c, rangeDays),
+    tradeshow: computeRepeatWindows(segTimings.tradeshow, rangeDays),
+    b2b: computeRepeatWindows(segTimings.b2b, rangeDays),
   };
   const ltvRows = (
     [
@@ -539,13 +559,15 @@ export default async function DashboardPage({
               segment customer counts add up to the Customers card above. Avg
               revenue / customer is net revenue ÷ customers within the range (not
               true lifetime — widen the range to "All" for that). Repeat-window
-              rates share a single cohort per segment — customers whose first
-              in-range order is old enough to have been observed for the widest
-              window the selected range supports — so the columns are directly
+              rates look only at customers <em>newly acquired in this period</em>
+              {" "}(first-ever order in range — anyone who ordered before the
+              range is excluded): of those, the share who placed a 2nd order
+              within X days of their first, with that 2nd order also in the
+              period. All four columns share that one cohort, so they're directly
               comparable and only rise left to right. Windows wider than the
-              range show "—"; widen the range for longer windows. Customers are
-              bucketed by priority: B2B (ever ordered wholesale) → Trade Show
-              (ever bought in-person) → D2C (purely online).
+              range show "—". Customers are bucketed by priority: B2B (ever
+              ordered wholesale) → Trade Show (ever bought in-person) → D2C
+              (purely online).
             </InfoTooltip>
           </CardTitle>
         </CardHeader>
@@ -594,8 +616,8 @@ export default async function DashboardPage({
                       className="text-right text-zinc-500"
                       title={
                         w.supported
-                          ? `${w.cohort.toLocaleString()} customers in shared cohort`
-                          : "Selected range too short to observe this window"
+                          ? `${w.cohort.toLocaleString()} customers newly acquired in period`
+                          : "Window wider than the selected range — would duplicate the period total"
                       }
                     >
                       {w.rate === null ? "—" : `${w.rate}%`}
@@ -619,14 +641,15 @@ export default async function DashboardPage({
               Same as the Customer Value table, but counting products bought (sum
               of line-item quantities) instead of orders. Everything reflects the{" "}
               <em>selected date range</em>. Avg revenue / customer is net revenue ÷
-              customers within the range. Repeat-window rates share a single
-              cohort per segment — customers whose first in-range order is old
-              enough to have been observed for the widest window the selected
-              range supports — so the columns are directly comparable and only
-              rise left to right. Windows wider than the range show "—"; widen the
-              range for longer windows. Customers are bucketed by priority: B2B
-              (ever ordered wholesale) → Trade Show (ever bought in-person) → D2C
-              (purely online).
+              customers within the range. Repeat-window rates look only at
+              customers <em>newly acquired in this period</em> (first-ever order in
+              range — anyone who ordered before the range is excluded): of those,
+              the share who placed a 2nd order within X days of their first, with
+              that 2nd order also in the period. All four columns share that one
+              cohort, so they're directly comparable and only rise left to right.
+              Windows wider than the range show "—". Customers are bucketed by
+              priority: B2B (ever ordered wholesale) → Trade Show (ever bought
+              in-person) → D2C (purely online).
             </InfoTooltip>
           </CardTitle>
         </CardHeader>
@@ -677,8 +700,8 @@ export default async function DashboardPage({
                       className="text-right text-zinc-500"
                       title={
                         w.supported
-                          ? `${w.cohort.toLocaleString()} customers in shared cohort`
-                          : "Selected range too short to observe this window"
+                          ? `${w.cohort.toLocaleString()} customers newly acquired in period`
+                          : "Window wider than the selected range — would duplicate the period total"
                       }
                     >
                       {w.rate === null ? "—" : `${w.rate}%`}

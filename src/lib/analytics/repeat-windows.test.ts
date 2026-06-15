@@ -1,119 +1,106 @@
 import { describe, it, expect } from "vitest";
 import {
-  anchorWindowDays,
   computeRepeatWindows,
   REPEAT_WINDOWS,
   type RepeatTiming,
 } from "./repeat-windows";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-// Fixed "end of range" so tests are deterministic.
-const TO = new Date("2026-06-14T00:00:00Z").getTime();
+// Arbitrary fixed "first order" anchor so gaps are deterministic.
+const FIRST = new Date("2026-01-01T00:00:00Z").getTime();
 
-/** A customer whose first order was `ageDays` before TO, repeating after `gapDays` (or never). */
-function customer(ageDays: number, gapDays: number | null): RepeatTiming {
-  const firstOrderMs = TO - ageDays * DAY_MS;
+/** A newly-acquired customer whose 2nd in-period order is `gapDays` later (or none). */
+function acquired(gapDays: number | null): RepeatTiming {
   return {
-    firstOrderMs,
-    secondOrderMs: gapDays == null ? null : firstOrderMs + gapDays * DAY_MS,
+    newlyAcquired: true,
+    firstOrderMs: FIRST,
+    secondOrderMs: gapDays == null ? null : FIRST + gapDays * DAY_MS,
   };
+}
+
+/** A pre-existing customer (first-ever order predates the range) — must be excluded. */
+function preExisting(gapDays: number | null): RepeatTiming {
+  return { ...acquired(gapDays), newlyAcquired: false };
 }
 
 const rate = (s: ReturnType<typeof computeRepeatWindows>, key: string) =>
   s.cells.find((c) => c.key === key)!.rate;
 
-describe("anchorWindowDays", () => {
-  it("picks the widest window that fits inside the range", () => {
-    expect(anchorWindowDays(378)).toBe(365); // >1yr range → 1yr anchor
-    expect(anchorWindowDays(200)).toBe(182); // ~6.5mo → 6mo anchor
-    expect(anchorWindowDays(100)).toBe(90);
-    expect(anchorWindowDays(45)).toBe(30);
+describe("computeRepeatWindows — newly-acquired cohort", () => {
+  it("denominator counts only newly-acquired customers", () => {
+    const s = computeRepeatWindows(
+      [acquired(10), acquired(null), preExisting(5), preExisting(null)],
+      400,
+    );
+    expect(s.cohort).toBe(2); // both pre-existing customers excluded
   });
 
-  it("returns 0 when the range is shorter than the narrowest window", () => {
-    expect(anchorWindowDays(20)).toBe(0);
+  it("excludes a customer who bought before the window and again within it", () => {
+    // The headline case from the spec: pre-window first purchase ⇒ doesn't count,
+    // even though they repeated inside the period.
+    const s = computeRepeatWindows([preExisting(20)], 400);
+    expect(s.cohort).toBe(0);
+    expect(rate(s, "d30")).toBeNull(); // empty cohort
   });
-});
 
-describe("computeRepeatWindows — shared denominator", () => {
-  it("uses one cohort for every supported column (same eligible count)", () => {
-    // Range > 1yr → anchor 365. Only customers observed ≥365d are in cohort.
+  it("rates are the share of the cohort, monotonically non-decreasing", () => {
     const customers = [
-      customer(400, 20), // in cohort, repeats fast
-      customer(400, 200), // in cohort, repeats at ~6mo
-      customer(370, null), // in cohort, never repeats
-      customer(100, 10), // observed <365d → excluded from the shared cohort
+      acquired(15),
+      acquired(80),
+      acquired(150),
+      acquired(300),
+      acquired(null),
     ];
-    const s = computeRepeatWindows(customers, TO, 378);
-    expect(s.anchorDays).toBe(365);
-    expect(s.cohort).toBe(3); // the <365d customer is excluded everywhere
-  });
-
-  it("rates are monotonically non-decreasing across columns", () => {
-    const customers = [
-      customer(400, 15),
-      customer(400, 80),
-      customer(400, 150),
-      customer(400, 300),
-      customer(400, null),
-      customer(380, 40),
-    ];
-    const s = computeRepeatWindows(customers, TO, 378);
+    const s = computeRepeatWindows(customers, 400);
+    expect(s.cohort).toBe(5);
+    expect(rate(s, "d30")).toBe(20); // 1/5
+    expect(rate(s, "d90")).toBe(40); // 2/5
+    expect(rate(s, "m6")).toBe(60); // 3/5 (≤182d)
+    expect(rate(s, "y1")).toBe(80); // 4/5 (≤365d)
     const rates = REPEAT_WINDOWS.map((w) => rate(s, w.key) ?? 0);
     for (let i = 1; i < rates.length; i++) {
       expect(rates[i]).toBeGreaterThanOrEqual(rates[i - 1]);
     }
   });
 
-  it("fixes the anomaly: shared cohort cannot show fewer repeats at 6mo than 90d", () => {
-    // The old per-window scheme would put the fast repeater in the 90d cohort
-    // but a different (older) set in the 6mo cohort, allowing 6mo < 90d. With a
-    // shared cohort, the 90d repeater is also counted in 6mo by construction.
-    const customers = [
-      customer(400, 60), // repeats within 90d → also within 6mo and 1yr
-      customer(400, null), // never repeats
-    ];
-    const s = computeRepeatWindows(customers, TO, 378);
-    expect(rate(s, "d90")).toBe(50);
-    expect(rate(s, "m6")).toBeGreaterThanOrEqual(rate(s, "d90")!);
-    expect(rate(s, "m6")).toBe(50);
-    expect(rate(s, "y1")).toBe(50);
+  it("a one-and-done newly-acquired customer is in the denominator but never a repeat", () => {
+    const s = computeRepeatWindows([acquired(null)], 400);
+    expect(s.cohort).toBe(1);
+    expect(rate(s, "y1")).toBe(0);
+  });
+
+  it("counts a repeat exactly on the window boundary", () => {
+    const s = computeRepeatWindows([acquired(90)], 400);
+    expect(rate(s, "d90")).toBe(100);
+    expect(rate(s, "d30")).toBe(0);
   });
 });
 
-describe("computeRepeatWindows — windows wider than the range", () => {
-  it("reports null (—) for windows the range can't observe", () => {
-    // ~100d range → anchor 90. 6mo and 1yr are unsupported.
-    const s = computeRepeatWindows([customer(95, 20)], TO, 100);
-    expect(s.anchorDays).toBe(90);
-    expect(rate(s, "d30")).not.toBeNull();
-    expect(rate(s, "d90")).not.toBeNull();
-    expect(s.cells.find((c) => c.key === "m6")!.supported).toBe(false);
-    expect(rate(s, "m6")).toBeNull();
+describe("computeRepeatWindows — windows wider than the range collapse", () => {
+  it("shows columns only up to the window that covers the range", () => {
+    // ~100-day range → ≤6mo (182d) is the narrowest window covering it, so it
+    // carries the period total; ≤1yr would just duplicate it, so renders —.
+    const s = computeRepeatWindows([acquired(20), acquired(95)], 100);
+    expect(s.cells.find((c) => c.key === "d30")!.supported).toBe(true);
+    expect(s.cells.find((c) => c.key === "d90")!.supported).toBe(true);
+    expect(s.cells.find((c) => c.key === "m6")!.supported).toBe(true);
+    expect(s.cells.find((c) => c.key === "y1")!.supported).toBe(false);
+    expect(rate(s, "m6")).toBe(100); // both customers repeated in period
     expect(rate(s, "y1")).toBeNull();
   });
 
-  it("returns an all-null table when the range is too short for any window", () => {
-    const s = computeRepeatWindows([customer(10, 5)], TO, 20);
-    expect(s.anchorDays).toBe(0);
-    expect(s.cohort).toBe(0);
-    expect(s.cells.every((c) => c.rate === null && !c.supported)).toBe(true);
-  });
-});
-
-describe("computeRepeatWindows — edge cases", () => {
-  it("skips customers with no first order and empty cohorts yield null rates", () => {
-    const s = computeRepeatWindows(
-      [{ firstOrderMs: null, secondOrderMs: null }],
-      TO,
-      378,
-    );
-    expect(s.cohort).toBe(0);
-    expect(s.cells.every((c) => c.rate === null)).toBe(true);
+  it("the covering window carries the full period-repeat total", () => {
+    // 60-day range: ≤90d is the covering window and equals 'repeated in period'.
+    const s = computeRepeatWindows([acquired(45), acquired(null)], 60);
+    expect(s.cells.find((c) => c.key === "d90")!.supported).toBe(true);
+    expect(rate(s, "d90")).toBe(50); // 1 of 2 repeated in period
+    expect(rate(s, "m6")).toBeNull();
   });
 
-  it("counts a repeat exactly on the window boundary as repeated", () => {
-    const s = computeRepeatWindows([customer(400, 90)], TO, 378);
-    expect(rate(s, "d90")).toBe(100);
+  it("shows all four windows when the range exceeds the widest window", () => {
+    const s = computeRepeatWindows([acquired(400)], 500);
+    expect(s.cells.every((c) => c.supported)).toBe(true);
+    // gap 400d is beyond ≤1yr, so even ≤1yr is 0 here.
+    expect(rate(s, "y1")).toBe(0);
   });
 });
