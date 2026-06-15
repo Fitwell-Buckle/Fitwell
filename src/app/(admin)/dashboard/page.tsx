@@ -101,7 +101,6 @@ export default async function DashboardPage({
     recentOrders,
     segmentResult,
     perCustomerLtv,
-    productsResult,
     perCustomerProducts,
     preRangeCustomerRows,
   ] = await Promise.all([
@@ -181,17 +180,6 @@ export default async function DashboardPage({
           ),
         )
         .groupBy(order.customerId),
-      // Total products purchased (sum of line-item quantities) in the SELECTED
-      // period — numerator for the period-scoped "avg products / customer".
-      db
-        .select({
-          total: sql<number>`COALESCE(SUM(${orderLineItem.quantity}), 0)`.mapWith(Number),
-        })
-        .from(order)
-        .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
-        .where(
-          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
-        ),
       // Per-customer product counts (sum of line-item quantities) in range.
       // Keyed by customerId so it merges onto the perCustomerLtv rows — the
       // customer set (and therefore the Customers column) stays identical to the
@@ -241,12 +229,6 @@ export default async function DashboardPage({
   // (≈1.0 over a single day, the all-time figure over "All").
   const avgOrdersPerCustomer =
     totalCustomers > 0 ? totalOrders / totalCustomers : 0;
-  // Same idea, but counting products bought (sum of line-item quantities)
-  // instead of orders. Numerator is period-scoped; denominator is the same
-  // distinct-customer count as above.
-  const totalProducts = Number(productsResult[0]?.total ?? 0);
-  const avgProductsPerCustomer =
-    totalCustomers > 0 ? totalProducts / totalCustomers : 0;
 
   // B2B vs Consumer split of Total sales (same definition as the headline).
   const segOf = (name: string) =>
@@ -558,7 +540,9 @@ export default async function DashboardPage({
               Everything here reflects the <em>selected date range</em>, so the
               segment customer counts add up to the Customers card above. Avg
               revenue / customer is net revenue ÷ customers within the range (not
-              true lifetime — widen the range to "All" for that). Repeat-window
+              true lifetime — widen the range to "All" for that). Avg orders and
+              avg products per customer are in-range orders / line-item
+              quantities ÷ customers. Repeat-window
               rates look only at customers <em>newly acquired in this period</em>
               {" "}(first-ever order in range — anyone who ordered before the
               range is excluded): of those, the share who placed a 2nd order
@@ -590,6 +574,7 @@ export default async function DashboardPage({
                 <TableHead>Segment</TableHead>
                 <TableHead className="text-right">Avg revenue / customer</TableHead>
                 <TableHead className="text-right">Avg orders / customer</TableHead>
+                <TableHead className="text-right">Avg products / customer</TableHead>
                 {REPEAT_WINDOWS.map((w) => (
                   <TableHead key={w.key} className="text-right">
                     Repeat {w.label}
@@ -609,87 +594,6 @@ export default async function DashboardPage({
                   </TableCell>
                   <TableCell className="text-right">
                     {s.avgOrders.toFixed(2)}
-                  </TableCell>
-                  {s.windows.map((w) => (
-                    <TableCell
-                      key={w.key}
-                      className="text-right text-zinc-500"
-                      title={
-                        w.supported
-                          ? `${w.cohort.toLocaleString()} customers newly acquired in period`
-                          : "Window wider than the selected range — would duplicate the period total"
-                      }
-                    >
-                      {w.rate === null ? "—" : `${w.rate}%`}
-                    </TableCell>
-                  ))}
-                  <TableCell className="text-right text-zinc-500">
-                    {s.customers.toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-1.5">
-            Avg Products per Customer
-            <InfoTooltip>
-              Same as the Customer Value table, but counting products bought (sum
-              of line-item quantities) instead of orders. Everything reflects the{" "}
-              <em>selected date range</em>. Avg revenue / customer is net revenue ÷
-              customers within the range. Repeat-window rates look only at
-              customers <em>newly acquired in this period</em> (first-ever order in
-              range — anyone who ordered before the range is excluded): of those,
-              the share who placed a 2nd order within X days of their first, with
-              that 2nd order also in the period. All four columns share that one
-              cohort, so they're directly comparable and only rise left to right.
-              Windows wider than the range show "—". Customers are bucketed by
-              priority: B2B (ever ordered wholesale) → Trade Show (ever bought
-              in-person) → D2C (purely online).
-            </InfoTooltip>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-zinc-100 pb-3">
-            <span className="text-sm font-medium text-zinc-900">
-              Avg products / customer (selected period)
-            </span>
-            <span className="text-sm text-zinc-700">
-              <Mono>{avgProductsPerCustomer.toFixed(2)}</Mono>
-              <span className="ml-2 text-xs text-zinc-400">
-                {totalProducts.toLocaleString()} products ÷{" "}
-                {totalCustomers.toLocaleString()} customers
-              </span>
-            </span>
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Segment</TableHead>
-                <TableHead className="text-right">Avg revenue / customer</TableHead>
-                <TableHead className="text-right">
-                  Avg products / customer
-                </TableHead>
-                {REPEAT_WINDOWS.map((w) => (
-                  <TableHead key={w.key} className="text-right">
-                    Repeat {w.label}
-                  </TableHead>
-                ))}
-                <TableHead className="text-right">Customers</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ltvRows.map((s) => (
-                <TableRow key={s.label}>
-                  <TableCell className="font-medium text-zinc-900">
-                    {s.label}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{fmt(s.avgLtv)}</Mono>
                   </TableCell>
                   <TableCell className="text-right">
                     {s.avgProducts.toFixed(2)}
