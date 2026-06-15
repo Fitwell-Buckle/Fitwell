@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { company, priceTier } from "@/lib/schema";
 import { getInvoiceDetail } from "@/lib/invoicing/service";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Button } from "@/components/ui/button";
 import { InvoiceForm, type InvoiceFormInitial } from "../../invoice-form";
 
@@ -102,14 +103,16 @@ export default async function EditInvoicePage({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title={`Edit ${inv.invoiceNumber}`} />
+        <div className="flex items-center gap-1.5">
+          <PageHeader title={`Edit ${inv.invoiceNumber}`} />
+          <InfoTooltip label="About editing this invoice">
+            The bill-to company and its tier discount are fixed; edit dates, notes, and lines.
+          </InfoTooltip>
+        </div>
         <Button variant="ghost" size="sm" asChild>
           <Link href={`/invoices/${inv.id}`}>Cancel</Link>
         </Button>
       </div>
-      <p className="mt-2 text-sm text-zinc-500">
-        The bill-to company and its tier discount are fixed; edit dates, notes, and lines.
-      </p>
       <InvoiceForm
         companies={companyOptions}
         priceTiers={tiers}

@@ -6,6 +6,7 @@ import { toSVG } from "bwip-js/node";
 import { auth } from "@/lib/auth";
 import { getCatalogCached } from "@/lib/catalog/load";
 import { Button } from "@/components/ui/button";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { DownloadButtons } from "./download-buttons";
 import { formatLabelTitle } from "./format";
 
@@ -53,13 +54,13 @@ export default async function PackagingLabelPage({
           capture target is the inner #fitwell-label node only. */}
       <div className="mb-6 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900">
+          <h1 className="flex items-center gap-1.5 text-xl font-semibold text-zinc-900">
             Packaging label
+            <InfoTooltip>
+              Sized for a 4 × 5 inch label. Download as PNG, JPEG, or PDF — the
+              file matches this preview exactly.
+            </InfoTooltip>
           </h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Sized for a 4 × 5 inch label. Download as PNG, JPEG, or PDF — the
-            file matches this preview exactly.
-          </p>
         </div>
         <DownloadButtons sku={variant.sku} targetId={LABEL_DOM_ID} />
       </div>

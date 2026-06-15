@@ -15,6 +15,7 @@ import { buildInvoiceHistory } from "@/lib/invoicing/history";
 import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { formatPoNumber } from "@/lib/production/sub-po";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -280,11 +281,14 @@ export default async function InvoiceDetailPage({
 
       {shipPlan && (
         <Card className="mt-5 p-6">
-          <h2 className="text-sm font-semibold text-zinc-900">Ship plan</h2>
-          <p className="mt-1 text-xs text-zinc-400">
-            Split fulfillment — one order, shipped to {shipPlan.length} addresses. Also recorded on
-            the Shopify order (per-line “Ship to” + order note).
-          </p>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+            Ship plan
+            <InfoTooltip>
+              Split fulfillment — one order, shipped to {shipPlan.length}{" "}
+              addresses. Also recorded on the Shopify order (per-line “Ship to” +
+              order note).
+            </InfoTooltip>
+          </h2>
           <div className="mt-4 space-y-4">
             {shipPlan.map((g, i) => (
               <div key={i} className="rounded-md border border-zinc-100 p-3">

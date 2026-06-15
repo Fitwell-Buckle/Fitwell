@@ -11,6 +11,7 @@ import {
 } from "@/lib/schema";
 import { sql, sum, count, and, eq, gte, isNull, lte, ne } from "drizzle-orm";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getCatalogCached } from "@/lib/catalog/load";
@@ -146,13 +147,13 @@ export default async function ProductDetailPage({
       <Card className="mt-5 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-900">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
               Packaging label
+              <InfoTooltip>
+                Print-ready 4 × 5″ artwork with the SKU, title, and Code 128
+                barcode.
+              </InfoTooltip>
             </h2>
-            <p className="mt-1 text-xs text-zinc-500">
-              Print-ready 4 × 5″ artwork with the SKU, title, and Code 128
-              barcode.
-            </p>
           </div>
           <Button asChild size="sm">
             <Link

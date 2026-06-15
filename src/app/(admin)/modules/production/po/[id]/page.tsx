@@ -13,6 +13,7 @@ import {
 } from "@/lib/production/service";
 import { invoiceForPo } from "@/lib/invoicing/service";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { SetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -391,11 +392,13 @@ export default async function PoDetailPage({
 
       {isMaster && (
         <Card className="mt-5 p-6">
-          <h2 className="text-sm font-semibold text-zinc-900">Sub-POs</h2>
-          <p className="mt-1 text-xs text-zinc-500">
-            One PO per supplier — each supplier advances their own stages on their
-            sub-PO. Receiving and invoicing stay on this master.
-          </p>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+            Sub-POs
+            <InfoTooltip>
+              One PO per supplier — each supplier advances their own stages on
+              their sub-PO. Receiving and invoicing stay on this master.
+            </InfoTooltip>
+          </h2>
           <div className="mt-3 divide-y divide-zinc-100">
             {orderedSubPos.map((s) => (
               <div key={s.id} className="flex items-center justify-between gap-3 py-2.5">

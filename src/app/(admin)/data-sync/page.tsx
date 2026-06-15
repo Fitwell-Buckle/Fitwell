@@ -14,6 +14,7 @@ import {
 import { max } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Badge } from "@/components/ui/badge";
 import { SyncJobRunner } from "./sync-job-runner";
 
@@ -169,14 +170,15 @@ export default async function DataSyncPage() {
 
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Background Jobs</CardTitle>
+          <CardTitle className="flex items-center gap-1.5">
+            Background Jobs
+            <InfoTooltip label="About background jobs">
+              These jobs run automatically on Vercel in production. Use the
+              Run button to trigger them manually against your local database.
+            </InfoTooltip>
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="mb-6 text-sm text-zinc-500">
-            These jobs run automatically on Vercel in production. Use the
-            Run button to trigger them manually against your local database.
-          </p>
-
           <div className="space-y-4">
             {jobs.map((job) => (
               <div

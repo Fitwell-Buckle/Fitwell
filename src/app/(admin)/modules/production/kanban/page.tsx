@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { productionPo } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Button } from "@/components/ui/button";
 import { supplierForStage } from "@/lib/production/stage-owners";
 import { getStageOrder } from "@/lib/production/stage-labels";
@@ -104,7 +105,13 @@ export default async function KanbanPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <PageHeader title="Production Board" />
+        <div className="flex items-center gap-1.5">
+          <PageHeader title="Production Board" />
+          <InfoTooltip label="How this board works">
+            In-progress POs only. Drag a card to any stage. Cards on a locked PO
+            move the whole PO together.
+          </InfoTooltip>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <Link href="/modules/production">List</Link>
@@ -114,11 +121,6 @@ export default async function KanbanPage() {
           </Button>
         </div>
       </div>
-
-      <p className="mt-2 text-sm text-zinc-500">
-        In-progress POs only. Drag a card to any stage. Cards on a locked PO move
-        the whole PO together.
-      </p>
 
       <div className="mt-6">
         {cards.length === 0 ? (

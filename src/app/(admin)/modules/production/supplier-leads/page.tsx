@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   Table,
   TableBody,
@@ -58,18 +59,19 @@ export default async function SupplierLeadsPage({
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
-        <PageHeader title="Supplier Leads" />
+        <div className="flex items-center gap-1.5">
+          <PageHeader title="Supplier Leads" />
+          <InfoTooltip label="About supplier leads">
+            Captured supplier business cards — potential new suppliers. Promote
+            one to create a real supplier record.
+          </InfoTooltip>
+        </div>
         <Button asChild size="sm">
           <Link href="/modules/production/supplier-leads/capture">
             Capture supplier
           </Link>
         </Button>
       </div>
-
-      <p className="mt-1 text-sm text-zinc-500">
-        Captured supplier business cards — potential new suppliers. Promote one
-        to create a real supplier record.
-      </p>
 
       <DataTable className="mt-6">
         <Table>

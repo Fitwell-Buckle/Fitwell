@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { countDraftMessages, listOutboundMessages } from "@/lib/crm/messages";
 import { leadDisplayName } from "@/lib/crm/display";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { LEADS_TABS } from "@/lib/nav-tabs";
 import { MessagesList } from "./messages-list";
@@ -62,13 +63,15 @@ export default async function MessagesPage() {
 
   return (
     <div>
-      <PageHeader title="Leads" />
+      <div className="flex items-center gap-1.5">
+        <PageHeader title="Leads" />
+        <InfoTooltip label="About Next Steps">
+          Follow-ups to review — auto-drafted after a lead is captured, and when an
+          email you sent (to a lead, customer, or supplier) goes unanswered. Edit,
+          then send from your Gmail.
+        </InfoTooltip>
+      </div>
       <SectionTabs tabs={tabs} />
-      <p className="mt-4 text-sm text-zinc-500">
-        Follow-ups to review — auto-drafted after a lead is captured, and when an
-        email you sent (to a lead, customer, or supplier) goes unanswered. Edit,
-        then send from your Gmail.
-      </p>
       <MessagesList messages={messages} />
     </div>
   );
