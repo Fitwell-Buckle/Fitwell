@@ -47,12 +47,9 @@ describe("source registry", () => {
     expect(SOURCES.find((s) => s.slug === "europastar")).toBeUndefined();
   });
 
-  it("WatchTime is proxied but INACTIVE (BrightData refuses its feed per robots.txt)", () => {
+  it("WatchTime is active and proxied via its Atom feed (robots.txt lifted by KYC 2026-06-15)", () => {
     const wt = SOURCES.find((s) => s.slug === "watchtime")!;
-    // Deactivated 2026-06-14: the unlocker 400s /feed/atom "in accordance
-    // with robots.txt"; re-activate once the BrightData zone allows it or we
-    // scrape the listing instead. See newsletter-engine.md.
-    expect(wt.isActive).toBe(false);
+    expect(wt.isActive).toBe(true);
     expect(wt.fetchMode).toBe("rss-proxied");
     // the real feed is /feed/atom — /feed/ and /feed/rss both fail
     expect(wt.feedUrl).toBe("https://www.watchtime.com/feed/atom");

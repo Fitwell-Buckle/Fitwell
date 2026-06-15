@@ -103,7 +103,7 @@ Each source declares a `fetchMode` (in `newsletter/sources.ts`):
 - **`rss` (9, direct):** Hodinkee, aBlogtoWatch, Worn & Wound, Fratello,
   Monochrome, Quill & Pad, SJX, Watches of Espionage
   (`/blogs/woe-dispatch.atom`), Watchonista.
-- **`rss-proxied` (2 active): Time + Tide, Revolution.**
+- **`rss-proxied` (3): WatchTime, Time + Tide, Revolution.**
   - **Time + Tide & Revolution** — both plain `rss` until 2026-06-14, when
     they started returning `415` to GitHub Actions' datacenter IP while
     still serving `200` to a residential IP regardless of headers (a
@@ -111,18 +111,17 @@ Each source declares a `fetchMode` (in `newsletter/sources.ts`):
     dropping at once shipped a 0-hard-news edition that day, so both were
     moved to BrightData. Verified through the proxy (30 / 6 items). Their
     feeds carry images, so no og:image fallback needed.
-- **`rss-proxied` but INACTIVE: WatchTime.** Cloudflare-walled (403s direct
-  from datacenter IPs). Worked through BrightData on 2026-06-10, but by
-  2026-06-14 the unlocker refuses the feed: `400 ... bad_endpoint ... in
-  accordance with robots.txt`. The homepage proxies fine (`200`) but
-  `/feed/atom` is **robots-disallowed**, so no retry or fresh exit-node hop
-  satisfies it (`proxiedFetch` now detects this and bails immediately rather
-  than burning its retry budget). Deactivated so it doesn't flip every run to
-  `DEGRADED` on a known issue. **To re-activate, pick one:** (a) disable
-  robots.txt compliance on the BrightData zone (dashboard — Tom), then flip
-  `isActive` back; or (b) build a `scrape-watchtime` listing scraper like
-  WatchPro (the homepage/listing proxies fine). The feed itself is healthy
-  (`/feed/atom` returns `200` direct from a residential IP).
+  - **WatchTime** — Cloudflare-walled (403s direct from datacenter IPs),
+    fetched through BrightData; real feed is `/feed/atom` (`/feed/` and
+    `/feed/rss` both fail), no images so enrichment resolves them via
+    og:image. The unlocker honors robots.txt and `/feed/atom` is
+    robots-disallowed, so on 2026-06-14 it `400`'d (`bad_endpoint ... in
+    accordance with robots.txt`) and was briefly deactivated.
+    **Re-activated 2026-06-15** after BrightData **KYC**
+    (`brightdata.com/cp/kyc`) lifted robots.txt enforcement account-wide;
+    verified 5/5 through the proxy (50 items). `proxiedFetch` still
+    fast-fails (no retry) on a `bad_endpoint`/robots.txt 400 so a future
+    policy change surfaces fast rather than burning the retry budget.
 - **`scrape-watchpro` (1): WatchPro** — Cloudflare-walled *and* its RSS
   feed is unusable (CDN serves a stale cached copy, `lastBuildDate`
   frozen days behind the live site — a WordPress full-page-cache bug).
