@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { PoForm, type PoFormInitial } from "../../modules/production/po/new/po-form";
 import { isSplitOrder, buildShipPlan } from "@/lib/portal/addresses";
+import { ShipPlanCards } from "@/components/invoicing/ship-plan";
 import { InvoiceActions } from "./invoice-actions";
 import { InvoiceStatusSelect } from "./invoice-status-select";
 import { InvoiceAttachments } from "@/components/invoicing/invoice-attachments";
@@ -289,27 +290,7 @@ export default async function InvoiceDetailPage({
               order note).
             </InfoTooltip>
           </h2>
-          <div className="mt-4 space-y-4">
-            {shipPlan.map((g, i) => (
-              <div key={i} className="rounded-md border border-zinc-100 p-3">
-                <div className="text-sm font-medium text-zinc-900">
-                  {g.label}
-                  {g.isDefault && (
-                    <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
-                      default
-                    </span>
-                  )}
-                </div>
-                <ul className="mt-2 space-y-1 text-sm text-zinc-600">
-                  {g.lines.map((l, j) => (
-                    <li key={j}>
-                      {l.quantity}× <span className="font-mono text-xs">{l.sku}</span> {l.title}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+          <ShipPlanCards groups={shipPlan} />
         </Card>
       )}
 

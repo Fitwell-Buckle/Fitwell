@@ -10,6 +10,7 @@ import { fmtDate, fmtMoney } from "@/lib/production/display";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { isSplitOrder, buildShipPlan } from "@/lib/portal/addresses";
+import { ShipPlanCards } from "@/components/invoicing/ship-plan";
 import type { getInvoiceDetail } from "@/lib/invoicing/service";
 
 type Invoice = NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>;
@@ -160,20 +161,7 @@ export async function InvoiceDocument({ inv }: { inv: Invoice }) {
           <div className="text-xs uppercase tracking-wider text-zinc-400">
             Split fulfillment — shipped to {shipPlan.length} addresses
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {shipPlan.map((g, i) => (
-              <div key={i} className="rounded-md border border-zinc-100 p-3 text-sm">
-                <div className="font-medium text-zinc-800">{g.label}</div>
-                <ul className="mt-1 space-y-0.5 text-zinc-600">
-                  {g.lines.map((l, j) => (
-                    <li key={j}>
-                      {l.quantity}× <span className="font-mono text-xs">{l.sku}</span> {l.title}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+          <ShipPlanCards groups={shipPlan} />
         </div>
       )}
 
