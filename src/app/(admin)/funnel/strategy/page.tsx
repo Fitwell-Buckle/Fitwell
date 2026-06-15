@@ -24,6 +24,7 @@ import { RETENTION_STAGE_META } from "@/lib/funnel/classify";
 import { getKlaviyoOverview, type KlaviyoOverview } from "@/lib/klaviyo/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Mono } from "@/components/ui/data-table";
 import { cn } from "@/lib/utils";
 
@@ -732,21 +733,21 @@ export default async function FunnelStrategyPage({
 
   return (
     <div className="space-y-10 pb-12">
-      <div>
+      <div className="flex items-center gap-1.5">
         <PageHeader title="Strategic Funnel" />
-        <p className="mt-1.5 max-w-3xl text-sm text-zinc-500">
+        <InfoTooltip label="About this view">
           Diagnostic view aligned with{" "}
           <Mono>specs/strategy/funnel.md</Mono>,{" "}
           <Mono>specs/strategy/retention-loop.md</Mono>, and{" "}
           <Mono>specs/strategy/personas.md</Mono>. The acquisition funnel
-          windows to the selected date range; the retention loop and
-          channel breakdown are full-customer-base views (LTV requires
-          full history). Stages marked{" "}
+          windows to the selected date range; the retention loop and channel
+          breakdown are full-customer-base views (LTV requires full history).
+          Stages marked{" "}
           <span className="rounded-full border border-zinc-200 bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
             needs instrumentation
           </span>{" "}
-          require new data sources before they're measurable.
-        </p>
+          require new data sources before they&apos;re measurable.
+        </InfoTooltip>
       </div>
 
       <section>

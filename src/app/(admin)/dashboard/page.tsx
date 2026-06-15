@@ -27,6 +27,7 @@ import { MetricCard } from "@/components/charts/metric-card";
 import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart";
 import { AdSpendRevenueChart } from "@/components/charts/ad-spend-revenue-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   Table,
   TableHeader,
@@ -531,7 +532,22 @@ export default async function DashboardPage({
 
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle>Customer Value &amp; Retention</CardTitle>
+          <CardTitle className="flex items-center gap-1.5">
+            Customer Value &amp; Retention
+            <InfoTooltip>
+              Everything here reflects the <em>selected date range</em>, so the
+              segment customer counts add up to the Customers card above. Avg
+              revenue / customer is net revenue ÷ customers within the range (not
+              true lifetime — widen the range to "All" for that). Repeat-window
+              rates share a single cohort per segment — customers whose first
+              in-range order is old enough to have been observed for the widest
+              window the selected range supports — so the columns are directly
+              comparable and only rise left to right. Windows wider than the
+              range show "—"; widen the range for longer windows. Customers are
+              bucketed by priority: B2B (ever ordered wholesale) → Trade Show
+              (ever bought in-person) → D2C (purely online).
+            </InfoTooltip>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-zinc-100 pb-3">
@@ -546,19 +562,6 @@ export default async function DashboardPage({
               </span>
             </span>
           </div>
-          <p className="mb-3 text-xs text-zinc-500">
-            Everything here reflects the <em>selected date range</em>, so the
-            segment customer counts add up to the Customers card above. Avg
-            revenue / customer is net revenue ÷ customers within the range (not
-            true lifetime — widen the range to "All" for that). Repeat-window
-            rates share a single cohort per segment — customers whose first
-            in-range order is old enough to have been observed for the widest
-            window the selected range supports — so the columns are directly
-            comparable and only rise left to right. Windows wider than the range
-            show "—"; widen the range for longer windows. Customers are bucketed
-            by priority: B2B (ever ordered wholesale) → Trade Show (ever bought
-            in-person) → D2C (purely online).
-          </p>
           <Table>
             <TableHeader>
               <TableRow>
@@ -610,7 +613,22 @@ export default async function DashboardPage({
 
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle>Avg Products per Customer</CardTitle>
+          <CardTitle className="flex items-center gap-1.5">
+            Avg Products per Customer
+            <InfoTooltip>
+              Same as the Customer Value table, but counting products bought (sum
+              of line-item quantities) instead of orders. Everything reflects the{" "}
+              <em>selected date range</em>. Avg revenue / customer is net revenue ÷
+              customers within the range. Repeat-window rates share a single
+              cohort per segment — customers whose first in-range order is old
+              enough to have been observed for the widest window the selected
+              range supports — so the columns are directly comparable and only
+              rise left to right. Windows wider than the range show "—"; widen the
+              range for longer windows. Customers are bucketed by priority: B2B
+              (ever ordered wholesale) → Trade Show (ever bought in-person) → D2C
+              (purely online).
+            </InfoTooltip>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-zinc-100 pb-3">
@@ -625,18 +643,6 @@ export default async function DashboardPage({
               </span>
             </span>
           </div>
-          <p className="mb-3 text-xs text-zinc-500">
-            Same as the Customer Value table, but counting products bought (sum of
-            line-item quantities) instead of orders. Everything reflects the{" "}
-            <em>selected date range</em>. Avg revenue / customer is net revenue ÷
-            customers within the range. Repeat-window rates share a single cohort
-            per segment — customers whose first in-range order is old enough to
-            have been observed for the widest window the selected range supports —
-            so the columns are directly comparable and only rise left to right.
-            Windows wider than the range show "—"; widen the range for longer
-            windows. Customers are bucketed by priority: B2B (ever ordered
-            wholesale) → Trade Show (ever bought in-person) → D2C (purely online).
-          </p>
           <Table>
             <TableHeader>
               <TableRow>

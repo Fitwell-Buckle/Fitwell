@@ -22,6 +22,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   getChannelPerformance,
   getLinkConfidence,
@@ -158,17 +159,19 @@ export default async function AttributionPage({
 
   return (
     <div>
-      <PageHeader title="Attribution" />
-      <p className="mt-1.5 max-w-3xl text-xs text-zinc-500">
-        Data sources: Shopify <code>order.landing_site</code> /{" "}
-        <code>referring_site</code> (top three cards) and{" "}
-        <code>customer.utm_source/medium</code> (the legacy first-touch
-        card); the storefront PostHog snippet&apos;s{" "}
-        <code>utm_attribution</code> table joined via{" "}
-        <code>order.fw_distinct_id</code> (the pixel-attributed card);{" "}
-        <code>order.link_method</code> (the pixel/email-match/unattributed
-        confidence split). No GA4 — that lives on the Campaigns page.
-      </p>
+      <div className="flex items-center gap-1.5">
+        <PageHeader title="Attribution" />
+        <InfoTooltip label="Data sources">
+          Data sources: Shopify <code>order.landing_site</code> /{" "}
+          <code>referring_site</code> (top three cards) and{" "}
+          <code>customer.utm_source/medium</code> (the legacy first-touch
+          card); the storefront PostHog snippet&apos;s{" "}
+          <code>utm_attribution</code> table joined via{" "}
+          <code>order.fw_distinct_id</code> (the pixel-attributed card);{" "}
+          <code>order.link_method</code> (the pixel/email-match/unattributed
+          confidence split). No GA4 — that lives on the Campaigns page.
+        </InfoTooltip>
+      </div>
 
       <Card className="mt-6">
         <CardHeader>

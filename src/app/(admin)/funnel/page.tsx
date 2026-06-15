@@ -14,6 +14,7 @@ import {
 import { ConversionTrendChart } from "@/components/charts/conversion-trend-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { MetricCard } from "@/components/charts/metric-card";
 import { Mono } from "@/components/ui/data-table";
 import { getFunnelData, getLandingPageBreakdown } from "@/lib/admin/funnel";
@@ -252,13 +253,15 @@ export default async function FunnelPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>PostHog Event Funnel — Last 30 Days</CardTitle>
-            <p className="mt-1 text-xs text-zinc-400">
-              Cohort progression via HogQL <Mono>windowFunnel</Mono>: each
-              count is the number of unique persons who reached at least
-              this step within a 30-day window, in time order. Route-agnostic
-              — entry can be any page.
-            </p>
+            <CardTitle className="flex items-center gap-1.5">
+              PostHog Event Funnel — Last 30 Days
+              <InfoTooltip>
+                Cohort progression via HogQL <Mono>windowFunnel</Mono>: each
+                count is the number of unique persons who reached at least this
+                step within a 30-day window, in time order. Route-agnostic —
+                entry can be any page.
+              </InfoTooltip>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {posthogStages[0].count === 0 ? (
