@@ -1142,6 +1142,34 @@ class ShopifyClient {
     }
   }
 
+  /**
+   * Append tags to any taggable Shopify resource (order, draft order, …) via
+   * `tagsAdd`. Append-only and idempotent — re-adding an existing tag is a
+   * no-op, so this is safe to run repeatedly (e.g. a backfill). `gid` must be a
+   * full Shopify GID.
+   */
+  async addTags(gid: string, tags: string[]): Promise<void> {
+    if (tags.length === 0) return;
+    const res = await this.graphql<{
+      tagsAdd: {
+        node: { id: string } | null;
+        userErrors: { field: string[] | null; message: string }[];
+      };
+    }>(
+      `mutation FitwellTagsAdd($id: ID!, $tags: [String!]!) {
+        tagsAdd(id: $id, tags: $tags) {
+          node { id }
+          userErrors { field message }
+        }
+      }`,
+      { id: gid, tags },
+    );
+    const errs = res.tagsAdd.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(`tagsAdd failed: ${errs.map((e) => e.message).join("; ")}`);
+    }
+  }
+
   // ── Generic paginator ─────────────────────────────────────────────
 
   /**
