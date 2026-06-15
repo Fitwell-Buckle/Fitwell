@@ -1,8 +1,14 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
-import { order } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { order, invoice } from "@/lib/schema";
+import { eq, or } from "drizzle-orm";
+import { markDepositPaid, markBalancePaid } from "@/lib/invoicing/service";
+import { notifyB2bPayment } from "@/lib/invoicing/order-notifications";
+import {
+  classifyDraftPayment,
+  paymentAmountCents,
+} from "@/lib/invoicing/payment-reconcile";
 import { upsertOrder, upsertCustomer } from "./sync";
 import { syncProductBarcodes } from "./sku-barcode-sync";
 import { syncGiftOrderLogistics } from "@/lib/creators/gift-logistics";
@@ -119,7 +125,66 @@ export async function handleWebhookTopic(
       break;
     }
 
+    // A portal pay-link is a Shopify draft-order invoice; when it's paid the
+    // draft order's status flips to "completed". Reconcile that back to the B2B
+    // invoice: auto-mark it paid (deposit / balance / full) and notify admins.
+    case "draft_orders/update": {
+      const status = payload.status as string | undefined;
+      const draftId = shopifyId != null ? String(shopifyId) : null;
+      if (status === "completed" && draftId) {
+        try {
+          await reconcileDraftPaid(draftId);
+        } catch (e) {
+          console.error(`Draft-paid reconcile failed for draft ${draftId}:`, e);
+        }
+      }
+      console.log(
+        `Webhook ${topic}: draft ${shopifyId} status=${status} in ${Date.now() - start}ms`,
+      );
+      break;
+    }
+
     default:
       console.log(`Unhandled webhook topic: ${topic}`);
   }
+}
+
+/**
+ * Match a completed draft order to its B2B invoice and record the payment:
+ * auto-mark deposit/balance/full paid and notify admins. Idempotent — the mark
+ * helpers 409 on a double-mark, so a redelivered webhook neither re-flips the
+ * status nor re-notifies (we only notify when the mark returns ok).
+ */
+async function reconcileDraftPaid(draftOrderId: string): Promise<void> {
+  const inv = await db.query.invoice.findFirst({
+    where: or(
+      eq(invoice.shopifyDraftOrderId, draftOrderId),
+      eq(invoice.shopifyBalanceDraftOrderId, draftOrderId),
+    ),
+    columns: {
+      id: true,
+      invoiceNumber: true,
+      totalCents: true,
+      depositCents: true,
+      depositPaidAt: true,
+      shopifyDraftOrderId: true,
+      shopifyBalanceDraftOrderId: true,
+    },
+    with: { company: { columns: { name: true } } },
+  });
+  if (!inv) return;
+
+  const kind = classifyDraftPayment(inv, draftOrderId);
+  if (!kind) return;
+
+  const result = kind === "deposit" ? await markDepositPaid(inv.id) : await markBalancePaid(inv.id);
+  if (!result.ok) return; // already paid → no duplicate notification
+
+  await notifyB2bPayment({
+    invoiceId: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    companyName: inv.company?.name ?? "—",
+    amountCents: paymentAmountCents(inv.totalCents, inv.depositCents, kind),
+    kind,
+  });
 }

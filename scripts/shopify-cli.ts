@@ -354,6 +354,9 @@ async function cmdWebhooks(): Promise<void> {
 const WEBHOOK_TOPICS = [
   "orders/create",
   "orders/updated",
+  // Portal pay-link payments: a paid draft-order invoice flips to "completed";
+  // the handler reconciles it to the B2B invoice (auto-mark paid + notify).
+  "draft_orders/update",
   "customers/create",
   "customers/update",
   "refunds/create",

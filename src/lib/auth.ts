@@ -14,6 +14,7 @@ import {
 import { isAllowedAdmin } from "./admin-access";
 import { canMagicLinkSignIn } from "./supplier-access";
 import { sendMagicLinkEmail } from "./email/magic-link";
+import { maybeNotifyPortalLogin } from "./portal/login-notify";
 
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "").split(",").filter(Boolean);
 
@@ -201,6 +202,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   events: {
+    // Notify admins when a B2B company contact signs in to the portal (in-app +
+    // push + email). Resolves the company by email so first-time logins count
+    // too; admins/suppliers resolve to nothing → no-op. Never blocks sign-in.
+    async signIn({ user }) {
+      try {
+        await maybeNotifyPortalLogin(user.email);
+      } catch (err) {
+        console.error("portal login notify failed:", err);
+      }
+    },
     // The signIn callback can't stamp the role on a brand-new contact's FIRST
     // magic-link sign-in: the user row doesn't exist yet at that point (the
     // adapter creates it AFTER signIn returns), so its `user.id` guard skips

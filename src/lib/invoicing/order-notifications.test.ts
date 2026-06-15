@@ -13,7 +13,12 @@ vi.mock("@/lib/db", () => ({ db: { insert: dbInsert } }));
 vi.mock("@/lib/schema", () => ({ adminNotification: { type: "type", readAt: "readAt" } }));
 vi.mock("@/lib/email/resend", () => ({ sendEmail }));
 
-import { notifyNewB2bOrder } from "./order-notifications";
+import {
+  notifyNewB2bOrder,
+  notifyB2bPayment,
+  notifyB2bDraft,
+  notifyB2bLogin,
+} from "./order-notifications";
 
 const order = {
   invoiceId: "inv1",
@@ -64,5 +69,54 @@ describe("notifyNewB2bOrder", () => {
     await notifyNewB2bOrder(order);
     expect(dbInsert).toHaveBeenCalled();
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe("notifyB2bPayment", () => {
+  it("records a b2b_payment notification with the kind label + emails admins", async () => {
+    await notifyB2bPayment({
+      invoiceId: "inv1",
+      invoiceNumber: "INV-00100",
+      companyName: "Acme",
+      amountCents: 2000,
+      kind: "deposit",
+    });
+    const row = dbValues.mock.calls[0][0];
+    expect(row.type).toBe("b2b_payment");
+    expect(row.href).toBe("/invoices/inv1");
+    expect(row.title).toContain("Deposit");
+    expect(row.title).toContain("INV-00100");
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels a full payment without 'deposit'/'balance'", async () => {
+    await notifyB2bPayment({
+      invoiceId: "inv1",
+      invoiceNumber: "INV-00100",
+      companyName: "Acme",
+      amountCents: 6000,
+      kind: "full",
+    });
+    expect(dbValues.mock.calls[0][0].title).toContain("Payment received");
+  });
+});
+
+describe("notifyB2bDraft", () => {
+  it("records a b2b_draft notification linking to the invoice", async () => {
+    await notifyB2bDraft({ invoiceId: "inv1", invoiceNumber: "INV-00100", companyName: "Acme" });
+    const row = dbValues.mock.calls[0][0];
+    expect(row.type).toBe("b2b_draft");
+    expect(row.href).toBe("/invoices/inv1");
+    expect(row.title).toContain("Acme");
+  });
+});
+
+describe("notifyB2bLogin", () => {
+  it("records a b2b_login notification linking to the customer page", async () => {
+    await notifyB2bLogin({ companyId: "co1", companyName: "Acme", email: "buyer@acme.co" });
+    const row = dbValues.mock.calls[0][0];
+    expect(row.type).toBe("b2b_login");
+    expect(row.href).toBe("/customers/brands/co1");
+    expect(row.body).toContain("buyer@acme.co");
   });
 });

@@ -11,7 +11,7 @@ import {
 } from "@/lib/catalog/load";
 import { getShopifyClient } from "@/lib/shopify/client";
 import { createInvoice, snapshotInvoiceDeposit } from "./service";
-import { notifyNewB2bOrder } from "./order-notifications";
+import { notifyNewB2bOrder, notifyB2bDraft } from "./order-notifications";
 import { computeInvoiceTotals, computeDeposit } from "./invoicing";
 import { getBillingSettings } from "./billing-settings";
 import type { CompanyScope } from "@/lib/portal/company-session";
@@ -167,6 +167,14 @@ export async function createPortalDraft(
   if (shipTo) {
     await db.update(invoice).set({ shipTo, updatedAt: new Date() }).where(eq(invoice.id, created.id));
   }
+
+  // Notify admins a buyer started a draft (blue dot + email). Best-effort.
+  await notifyB2bDraft({
+    invoiceId: created.id,
+    invoiceNumber: created.invoiceNumber,
+    companyName: r.comp.name,
+  });
+
   return { ok: true, invoiceId: created.id, invoiceNumber: created.invoiceNumber };
 }
 
