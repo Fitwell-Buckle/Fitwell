@@ -2,6 +2,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import { createAdminNotification } from "@/lib/notifications/admin-notify";
+import { looksLikeWireClaim, maybeNotifyWireClaim } from "@/lib/invoicing/wire-claim";
 import {
   company,
   companyContact,
@@ -153,6 +154,21 @@ export async function scanCustomerMessages(): Promise<{
         mailboxLabel: mb.label,
         mailboxEmail: mb.email,
       });
+
+      // A B2B customer emailing what reads like a bank-wire payment claim gets a
+      // separate "verify the wire" alert (only when they have an open wire
+      // order). It never marks anything paid — an admin confirms with the bank.
+      if (
+        match.audience === "b2b" &&
+        match.companyId &&
+        looksLikeWireClaim(m.subject, m.snippet)
+      ) {
+        try {
+          await maybeNotifyWireClaim(match.companyId, match.email);
+        } catch (err) {
+          console.error("wire-claim notify failed:", err);
+        }
+      }
     }
   }
   return { scanned, inserted };

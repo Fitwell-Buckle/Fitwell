@@ -135,6 +135,31 @@ export async function notifyB2bPayment(params: {
   });
 }
 
+/**
+ * Fire when a customer emails to say they've sent a bank wire. Unlike a card
+ * payment this is an unverified CLAIM, so it never auto-marks paid — the alert
+ * prompts an admin to confirm with the bank first, then mark it paid manually.
+ */
+export async function notifyB2bWireClaim(params: {
+  companyId: string;
+  companyName: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  fromEmail: string;
+}): Promise<void> {
+  const ref = params.invoiceNumber ? ` for ${params.invoiceNumber}` : "";
+  await notifyB2bEvent({
+    type: B2B_PAYMENT_TYPE,
+    title: `Wire payment claimed${ref} — ${params.companyName}`,
+    body: `${params.fromEmail} emailed to say they sent a bank wire${ref}. Verify with the bank before marking it paid.`,
+    href: params.invoiceId
+      ? `/invoices/${params.invoiceId}`
+      : `/customers/brands/${params.companyId}`,
+    emailSubject: `Verify wire payment${ref} — ${params.companyName}`,
+    emailCtaLabel: params.invoiceId ? "View order" : "View customer",
+  });
+}
+
 /** Fire when a buyer saves a NEW draft order in the portal. */
 export async function notifyB2bDraft(params: {
   invoiceId: string;
