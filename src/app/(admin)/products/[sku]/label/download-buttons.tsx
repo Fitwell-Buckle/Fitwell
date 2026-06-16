@@ -73,14 +73,26 @@ export function DownloadButtons({
       const filename = `label-${sku}`;
 
       if (format === "pdf") {
-        // PDF route: capture as PNG, embed in a single 4×5-inch PDF page.
+        // PDF route: capture as PNG, embed in a single PDF page sized to a
+        // 4-inch print width with the height derived from the capture's real
+        // aspect ratio. The label node is 4in wide but its height is
+        // content-driven (not a fixed 5in), so hard-coding a 4×5 page and
+        // stretching the image to fill it squished the artwork vertically.
         const pngDataUrl = await toPng(node, baseOpts);
         const pngBytes = dataUrlToBytes(pngDataUrl);
         const pdf = await PDFDocument.create();
         const image = await pdf.embedPng(pngBytes);
-        // 1 inch = 72 PDF points. 4×5 inches → 288×360 pt.
-        const page = pdf.addPage([288, 360]);
-        page.drawImage(image, { x: 0, y: 0, width: 288, height: 360 });
+        // 1 inch = 72 PDF points. Width fixed at 4in (288pt); height follows
+        // the captured pixel aspect ratio so nothing is stretched.
+        const pageWidth = 288;
+        const pageHeight = pageWidth * (image.height / image.width);
+        const page = pdf.addPage([pageWidth, pageHeight]);
+        page.drawImage(image, {
+          x: 0,
+          y: 0,
+          width: pageWidth,
+          height: pageHeight,
+        });
         const pdfBytes = await pdf.save();
         triggerDownload(
           new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" }),
