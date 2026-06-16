@@ -70,6 +70,9 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/modules/production/supplier-leads/capture` | Mobile-first 3-mode supplier-card capture: photo (Claude vision OCR), live QR, or type manually → review → save. Mirrors `/leads/capture` (reuses its `CardCamera`/`QrScannerView`) but feeds the supplier pipeline |
 | `/modules/production/supplier-leads/[id]` | Supplier lead detail — editable fields + **Create supplier** (promote → real `supplier` row, `status='converted'`, redirects to the supplier) + drop (soft-delete) |
 | `/modules/production/suppliers` | Supplier CRUD |
+| `/trade-shows` | Trade Shows list (top-level nav) — show cards with a visited-progress bar |
+| `/trade-shows/[id]` | Vendor worklist for one show. Mobile-first: progress bar, search + side (supplier/customer) / visited / priority filters (client-side), tap-to-toggle visited checkbox per row, indicators for card scanned / pipeline-linked / follow-up status. Rows link to the vendor detail |
+| `/trade-shows/[id]/vendors/[vendorId]` | Vendor detail capture surface — mark visited, scan business card (Claude vision OCR, fills empty contact fields), edit contact + booth notes (with push-to-dictate), record **voice notes** (MediaRecorder → Blob + live Web Speech transcript), set follow-up status + next steps, and **Convert** to a Supplier Lead and/or Customer Lead (shows a link once promoted) |
 | `/settings` | Admin settings (nav bottom) — env/DB info **plus** the consolidated config: wire-transfer/billing details (moved from Orders), production-stage editor (moved from POs & Production), and B2B **price tiers** (moved from the B2B Customers page). Brands still pick a tier on the B2B customer form |
 
 ## supplier — Supplier Portal
@@ -219,6 +222,16 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | POST | `/api/compose/draft` | AI-draft a reply to an inbound email — JSON `{ contactName?, theirSubject?, theirMessage?, threadId?, relationship? }` → `{ subject, body }`. When `threadId` is given, the full prior Gmail thread (your token) is read and fed to the prompt so the draft is grounded in the real back-and-forth. 503 if `ANTHROPIC_API_KEY` unset |
 | POST | `/api/compose/send` | Send a composed reply from the signed-in admin's Gmail — JSON `{ to, subject, body, cc?, bcc?, threadId?, inReplyTo? }` (`cc`/`bcc` comma-separated email lists, validated). Embeds an open-tracking pixel and logs the send as a `sent` outbound_message so opens are tracked. Same `gmail.send`/API-enabled 409s as the messages send route |
 | GET | `/api/track/open/[token].gif` | **Public, no auth.** Open-tracking pixel — returns a 1×1 transparent GIF and records the open (`open_count`++, `first/last_opened_at`) on the matching `outbound_message`. `.gif` suffix is stripped. Best-effort: always returns the image; no-cache headers. Opens are approximate (proxy pre-load / image-blocking) |
+
+### Trade Shows API (each handler checks `auth()`; admin-only — suppliers/companies 403)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/trade-shows` | List shows (default `status='active'`, newest first) |
+| GET | `/api/trade-shows/[id]` | The show + its filtered vendor list in one call. Query: `side` (supplier/customer — includes `both`), `visited`/`priority` (true/false), `followUpStatus`, `search`. Returns `{ show, vendors }` (priority booths first, then by booth) |
+| GET / PATCH | `/api/trade-shows/[id]/vendors/[vendorId]` | GET vendor detail (with show, voice notes, linked lead/supplier-lead); PATCH partial update (any subset — visited [stamps `visited_at`/`visited_by` on first visit], follow-up, contact fields, card fields) |
+| POST | `/api/trade-shows/[id]/vendors/[vendorId]/scan-card` | Vendor twin of `/api/leads/scan-card` — multipart image upload (10 MB cap) → Vercel Blob (`trade-show-vendors/[id]/cards/`) + Claude vision extraction. Returns fields + `cardImageUrl`; does **not** persist (client PATCHes the vendor). 503 if `BLOB_READ_WRITE_TOKEN`/`ANTHROPIC_API_KEY` unset |
+| GET / POST | `/api/trade-shows/[id]/vendors/[vendorId]/voice-notes` | GET lists notes (newest first). POST uploads a recorded memo — multipart `file` (audio/*, 25 MB cap) → Blob, plus optional `transcript` (on-device Web Speech dictation) + `durationSec`. Records a `trade_show_vendor_voice_note` row. 503 if Blob unset |
+| POST | `/api/trade-shows/[id]/vendors/[vendorId]/promote` | Promote the vendor into a pipeline — JSON `{ target: 'supplier' \| 'customer' }`. Creates a `supplier_lead` or `lead` from the vendor (card data + booth context → notes; show's `source_channel` onto customer leads), links it back (`supplier_lead_id`/`lead_id`), returns `{ supplierLeadId }` or `{ leadId }`. Idempotent per side (already-linked returns the existing id) |
 
 ### Influencer API (each handler checks `auth()`; admin-only — suppliers/companies 403)
 | Method | Path | Description |

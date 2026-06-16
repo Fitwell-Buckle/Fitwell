@@ -1,6 +1,21 @@
 # Priorities
 
-Last updated: 2026-06-13
+Last updated: 2026-06-16
+
+## 🆕 Shipped 2026-06-16 — Trade Shows section (EPHJ Geneva)
+
+New top-level **Trade Shows** admin section for booth-walking at EPHJ Geneva
+2026 (Tom is there now). Seeded the 59-vendor worklist from the prospecting
+sheet (`scripts/seed-ephj-vendors.ts`, `npm run seed:ephj`). On the floor:
+mark visited, scan business cards (Claude vision OCR), record voice notes
+(audio → Blob + on-device dictation transcript), capture follow-up steps, and
+**Convert** a vendor into the existing Supplier Leads or Customer Leads
+pipeline (vendor's `side` tag = supplier/customer/both drives which). New
+tables `trade_show` / `trade_show_vendor` / `trade_show_vendor_voice_note`
+(migration **0076**). **Not yet applied to prod / not pushed** — migration +
+seed must run against prod before deploy (`npm run db:migrate:prod`, then
+`npm run seed:ephj` with the prod env). See `specs/current/schema.md` →
+*Trade Shows* and `routes.md` → *Trade Shows API*.
 
 ## 🎯 Active sprint (2026-06-12 → 2026-06-22) — Fable 5 sprint
 

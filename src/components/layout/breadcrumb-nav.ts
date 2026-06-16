@@ -14,6 +14,8 @@ export const NON_NAVIGABLE: ReadonlySet<string> = new Set([
   // Docs sub-sections are containers with only [slug] children (no index page).
   "/docs/invariants",
   "/docs/strategy",
+  // A vendor lives under a show; there is no /trade-shows/[id]/vendors index.
+  "/trade-shows/[id]/vendors",
 ]);
 
 export interface BreadcrumbCrumb {

@@ -2861,3 +2861,191 @@ export const newsletterArticle = pgTable(
     index("newsletter_article_created_at_idx").on(t.createdAt),
   ],
 );
+
+// ─── Trade shows ────────────────────────────────────────────────────
+//
+// A trade show (e.g. EPHJ Geneva 2026) and the booth-walking vendor worklist
+// that hangs off it. The vendor list is the *floor capture surface*: at each
+// booth you mark "visited", scan/enter a business card, leave a voice note,
+// and jot follow-up steps. When a conversation is worth pursuing you promote
+// the vendor into one of the existing CRM pipelines — a `supplier_lead`
+// (manufacturers we'd buy from) and/or a `lead` (B2B customers we'd sell to) —
+// carrying the card data over. The vendor row stays linked to whatever it
+// created. Pre-show seed data (booth, company, category, side, flagged) comes
+// from the show's prospecting spreadsheet.
+
+export const tradeShow = pgTable(
+  "trade_show",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    // Free-text venue/city/country so any show format fits.
+    location: text("location"),
+    city: text("city"),
+    country: text("country"),
+    startsOn: date("starts_on"),
+    endsOn: date("ends_on"),
+    // The B2B entry channel this show maps to, mirroring
+    // specs/strategy/b2b-pipeline.md (e.g. b2b_trade_shows_industry). Carried
+    // onto any customer `lead` promoted from one of its vendors.
+    sourceChannel: text("source_channel")
+      .notNull()
+      .default("b2b_trade_shows_industry"),
+    notes: text("notes"),
+    // 'active' | 'archived'.
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trade_show_status_idx").on(t.status),
+    index("trade_show_starts_on_idx").on(t.startsOn),
+  ],
+);
+
+export const tradeShowVendor = pgTable(
+  "trade_show_vendor",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    tradeShowId: text("trade_show_id")
+      .notNull()
+      .references(() => tradeShow.id, { onDelete: "cascade" }),
+    booth: text("booth"),
+    companyName: text("company_name").notNull(),
+    // Free-text category off the floor plan (e.g. "Straps", "Clasps / Buckles",
+    // "EDM"). No enum — the show's own taxonomy is messy and not worth policing.
+    category: text("category"),
+    // Which pipeline this vendor feeds: 'supplier' (a manufacturer we'd buy
+    // from), 'customer' (a brand/strap maker we'd sell buckles to), or 'both'.
+    // Drives the available "Convert to …" actions and the list filters.
+    side: text("side").notNull().default("both"),
+    // Priority booth (the "Flag" column from the seed sheet) — worth a stop.
+    priority: boolean("priority").notNull().default(false),
+    // Best-known contact off the seed sheet / card scan. Stays free-text until
+    // promoted into a real lead/supplier-lead row.
+    contactName: text("contact_name"),
+    email: text("email"),
+    phone: text("phone"),
+    title: text("title"),
+    website: text("website"),
+    addressLine1: text("address_line1"),
+    addressLine2: text("address_line2"),
+    city: text("city"),
+    region: text("region"),
+    postalCode: text("postal_code"),
+    country: text("country"),
+    // Raw pre-show context copied from the prospecting sheet — kept separate
+    // from the on-floor `notes` so the seed intel isn't overwritten.
+    seedNotes: text("seed_notes"),
+    // Raw response / meeting-status strings from the sheet (e.g. "y",
+    // "wed 2pm", "stop by say hi"). Free-text; informational only.
+    responseRaw: text("response_raw"),
+    meetingRaw: text("meeting_raw"),
+    // ── On-floor capture ──
+    visited: boolean("visited").notNull().default(false),
+    visitedAt: timestamp("visited_at", { mode: "date" }),
+    visitedByUserId: text("visited_by_user_id").references(() => user.id),
+    // Working notes the rep types/dictates at the booth.
+    notes: text("notes"),
+    // Business-card scan (reuses the same Claude-vision OCR as the lead/
+    // supplier-lead capture). `cardImageUrl` mirrors the latest scan.
+    cardImageUrl: text("card_image_url"),
+    cardRawText: text("card_raw_text"),
+    ocrConfidence: jsonb("ocr_confidence"),
+    // ── Follow-up ──
+    // 'none' | 'todo' | 'scheduled' | 'done' | 'skip'.
+    followUpStatus: text("follow_up_status").notNull().default("none"),
+    nextSteps: text("next_steps"),
+    // ── Pipeline links (set on promote) ──
+    leadId: text("lead_id").references(() => lead.id),
+    supplierLeadId: text("supplier_lead_id").references(() => supplierLead.id),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trade_show_vendor_show_id_idx").on(t.tradeShowId),
+    index("trade_show_vendor_visited_idx").on(t.visited),
+    index("trade_show_vendor_side_idx").on(t.side),
+    index("trade_show_vendor_lead_id_idx").on(t.leadId),
+    index("trade_show_vendor_supplier_lead_id_idx").on(t.supplierLeadId),
+    // One row per (show, company) — the seed upsert dedups on this. Booth
+    // alone isn't unique (some booths host two companies in the seed data).
+    uniqueIndex("trade_show_vendor_show_company_uniq").on(
+      t.tradeShowId,
+      t.companyName,
+    ),
+  ],
+);
+
+// A voice memo recorded at a booth. The audio lives in Vercel Blob (so it can
+// be replayed); `transcript` holds the on-device Web Speech dictation captured
+// while recording (no external STT service). Mirrors the card-image history
+// pattern — multi-row so several notes can hang off one vendor.
+export const tradeShowVendorVoiceNote = pgTable(
+  "trade_show_vendor_voice_note",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    vendorId: text("vendor_id")
+      .notNull()
+      .references(() => tradeShowVendor.id, { onDelete: "cascade" }),
+    blobUrl: text("blob_url").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    durationSec: real("duration_sec"),
+    // Browser Web Speech API transcript, when available (best-effort).
+    transcript: text("transcript"),
+    recordedByUserId: text("recorded_by_user_id").references(() => user.id),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trade_show_vendor_voice_note_vendor_id_idx").on(t.vendorId),
+    index("trade_show_vendor_voice_note_created_at_idx").on(t.createdAt),
+  ],
+);
+
+export const tradeShowRelations = relations(tradeShow, ({ many }) => ({
+  vendors: many(tradeShowVendor),
+}));
+
+export const tradeShowVendorRelations = relations(
+  tradeShowVendor,
+  ({ one, many }) => ({
+    tradeShow: one(tradeShow, {
+      fields: [tradeShowVendor.tradeShowId],
+      references: [tradeShow.id],
+    }),
+    visitedBy: one(user, {
+      fields: [tradeShowVendor.visitedByUserId],
+      references: [user.id],
+    }),
+    lead: one(lead, {
+      fields: [tradeShowVendor.leadId],
+      references: [lead.id],
+    }),
+    supplierLead: one(supplierLead, {
+      fields: [tradeShowVendor.supplierLeadId],
+      references: [supplierLead.id],
+    }),
+    voiceNotes: many(tradeShowVendorVoiceNote),
+  }),
+);
+
+export const tradeShowVendorVoiceNoteRelations = relations(
+  tradeShowVendorVoiceNote,
+  ({ one }) => ({
+    vendor: one(tradeShowVendor, {
+      fields: [tradeShowVendorVoiceNote.vendorId],
+      references: [tradeShowVendor.id],
+    }),
+    recordedBy: one(user, {
+      fields: [tradeShowVendorVoiceNote.recordedByUserId],
+      references: [user.id],
+    }),
+  }),
+);

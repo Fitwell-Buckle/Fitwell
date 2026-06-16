@@ -29,6 +29,7 @@
     "shopify": "node --env-file=.env.local --import tsx/esm scripts/shopify-cli.ts",
     "backfill:shopify": "node --env-file=.env.local --import tsx/esm scripts/backfill-shopify.ts",
     "sync:sku-to-barcode": "node --env-file=.env.local --import tsx/esm scripts/sync-sku-to-barcode.ts",
+    "seed:ephj": "node --env-file=.env.local --import tsx/esm scripts/seed-ephj-vendors.ts",
     "backfill:posthog": "node --env-file=.env.local --import tsx/esm scripts/backfill-posthog.ts",
     "klaviyo:campaign:draft": "node --env-file=.env.local --import tsx/esm scripts/klaviyo-draft-campaign.ts",
     "klaviyo:flow:spike": "node --env-file=.env.local --import tsx/esm scripts/klaviyo-flow-spike.ts",

@@ -19,6 +19,7 @@ import {
   ShoppingBag,
   ClipboardList,
   Gift,
+  Tent,
   type LucideIcon,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
@@ -89,6 +90,9 @@ const navItems: NavItem[] = [
       { href: "/products", label: "Products" },
     ],
   },
+  // Top-level: a booth-walking worklist that feeds both the Customer (Leads)
+  // and Product (Supplier Leads) pipelines, so it doesn't belong under either.
+  { href: "/trade-shows", label: "Trade Shows", icon: Tent },
   {
     label: "Marketing",
     icon: Megaphone,
