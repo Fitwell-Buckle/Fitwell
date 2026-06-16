@@ -42,6 +42,8 @@ COVER HEAVY (these lead the brief): brand financials and earnings; M&A and credi
 
 DROP (include=false) ONLY: "top N watches under $X" / buyer's-guide listicles; pure wrist-shot / "what I wore this week" filler with no subject of substance; sponsored or advertorial content; a publication's OWN self-promotion (its magazine issues, its awards-show plugs, its own anniversary-party recaps); and content that is not about watches or the watch industry (e.g. a car feature). Everything else gets a home below.
 
+JEWELRY stories are NOT watch content by default — DROP them unless they are DIRECTLY relevant to the watch industry. "Watches are jewelry" is NOT relevance and is never a reason to keep a jewelry story. A story about rings, necklaces, earrings, diamonds, gemstones, or the jewelry trade earns a place ONLY when the watch angle is the actual subject or a concrete, named link, such as: a conglomerate's results or strategy read specifically for its WATCH division (e.g. the watch line within an LVMH/Richemont "Watches & Jewelry" segment); a jeweler moving into or expanding watchmaking; gem, gold, or precious-metal / supply-chain news that materially affects watch production or pricing; or M&A involving a group that owns watch brands. A pure jewelry-collection launch, a diamond- or gem-market trend piece, or a jeweler profile with no watch tie → DROP (include=false), even if it ran in a watch publication.
+
 TYPE ROUTING (exactly one Type per included story):
 - "business" — hard business/industry news AND business/market analysis or opinion (earnings, M&A, executive moves, retail, supply chain, price changes, plus commentary on any of these).
 - "auction" — auction results, previews, and vintage-market movements.

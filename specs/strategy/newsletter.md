@@ -97,6 +97,19 @@ profiles and culture features go in **Community & Culture**.
 - Sponsored / advertorial content
 - An outlet's own self-promotion (its magazine issues, awards plugs, anniversary-party recaps)
 - Content that isn't about watches or the trade (e.g. car features)
+- **Jewelry stories with no direct watch-industry relevance.** Jewelry is
+  not watch content by default. *"Watches are jewelry" is not relevance* —
+  it's the loophole, not the bridge. A jewelry story earns a place ONLY
+  when the watch angle is the actual subject or a concrete, named link:
+  a conglomerate's results/strategy read for its **watch** division (the
+  watch line inside an LVMH/Richemont "Watches & Jewelry" segment — note
+  the cover-heavy "brand financials" bullet means the *watch* read of
+  these, not the jewelry side), a jeweler moving into watchmaking,
+  gem/gold/precious-metal supply-chain news that materially affects watch
+  production or pricing, or M&A involving a group that owns watch brands.
+  A pure jewelry-collection launch, diamond/gem-market trend piece, or
+  jeweler profile with no watch tie → drop, even if it ran in a watch
+  publication.
 
 ## Classification axis
 
