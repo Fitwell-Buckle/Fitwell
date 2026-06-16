@@ -34,6 +34,7 @@ export default async function TradeShowPage({
         side: v.side,
         priority: v.priority,
         visited: v.visited,
+        sampleGiven: v.sampleGiven,
         followUpStatus: v.followUpStatus,
         hasCard: Boolean(v.cardImageUrl),
         leadId: v.leadId,

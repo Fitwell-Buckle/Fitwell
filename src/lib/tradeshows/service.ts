@@ -117,6 +117,18 @@ export async function updateVendor(
       }
     }
   }
+  if (input.sampleGiven !== undefined) {
+    patch.sampleGiven = input.sampleGiven;
+    // Stamp the first time we record a sample given; leave it on subsequent
+    // toggles so the original date survives.
+    if (input.sampleGiven) {
+      const existing = await db.query.tradeShowVendor.findFirst({
+        where: eq(tradeShowVendor.id, id),
+        columns: { sampleGivenAt: true },
+      });
+      if (existing && !existing.sampleGivenAt) patch.sampleGivenAt = new Date();
+    }
+  }
   if (input.followUpStatus !== undefined)
     patch.followUpStatus = input.followUpStatus;
   if (input.nextSteps !== undefined) patch.nextSteps = input.nextSteps || null;
@@ -148,6 +160,19 @@ export async function updateVendor(
   const [row] = await db
     .update(tradeShowVendor)
     .set(patch)
+    .where(eq(tradeShowVendor.id, id))
+    .returning({ id: tradeShowVendor.id });
+  return row ?? null;
+}
+
+// Hard-delete a vendor we don't want to track (not a lead in either
+// direction). Cascades its voice notes via the FK. Any lead/supplier-lead
+// already promoted from it is left intact — only the worklist row goes.
+export async function deleteVendor(
+  id: string,
+): Promise<{ id: string } | null> {
+  const [row] = await db
+    .delete(tradeShowVendor)
     .where(eq(tradeShowVendor.id, id))
     .returning({ id: tradeShowVendor.id });
   return row ?? null;

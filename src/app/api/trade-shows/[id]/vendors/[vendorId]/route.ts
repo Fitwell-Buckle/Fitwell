@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { getVendor, updateVendor } from "@/lib/tradeshows/service";
+import {
+  deleteVendor,
+  getVendor,
+  updateVendor,
+} from "@/lib/tradeshows/service";
 import { updateVendorSchema } from "@/lib/tradeshows/validation";
 
 function adminOnly(role?: string | null): NextResponse | null {
@@ -68,6 +72,33 @@ export async function PATCH(
     return NextResponse.json({ data: { id: updated.id } });
   } catch (err) {
     console.error("Update vendor failed:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+// Hard-delete a vendor (not a lead in either direction). Removes the worklist
+// row + its voice notes; any already-promoted lead/supplier-lead is untouched.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string; vendorId: string }> },
+) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const denied = adminOnly(session.user.role);
+  if (denied) return denied;
+
+  const { vendorId } = await params;
+
+  try {
+    const result = await deleteVendor(vendorId);
+    if (!result) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json({ data: { id: result.id } });
+  } catch (err) {
+    console.error("Delete vendor failed:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

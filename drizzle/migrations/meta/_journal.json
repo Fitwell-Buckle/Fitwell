@@ -540,6 +540,13 @@
       "when": 1781599225032,
       "tag": "0076_many_the_fallen",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1781635456424,
+      "tag": "0077_yielding_captain_america",
+      "breakpoints": true
     }
   ]
 }

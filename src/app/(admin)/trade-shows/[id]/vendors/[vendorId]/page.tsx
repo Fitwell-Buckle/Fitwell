@@ -32,6 +32,7 @@ export default async function VendorDetailPage({
         side: vendor.side,
         priority: vendor.priority,
         visited: vendor.visited,
+        sampleGiven: vendor.sampleGiven,
         contactName: vendor.contactName,
         title: vendor.title,
         email: vendor.email,

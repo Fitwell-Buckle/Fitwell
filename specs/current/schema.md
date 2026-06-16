@@ -862,7 +862,11 @@ lead/supplier-lead capture), records voice notes, and jots follow-up steps.
 The vendor list is a *capture surface that feeds the existing CRM pipelines* —
 a "Convert" action promotes a vendor into a `supplier_lead` (manufacturers) or
 a `lead` (B2B customers), carrying the card data + booth context over and
-linking the two. Seeded by `scripts/seed-ephj-vendors.ts` (idempotent on
+linking the two. **Both** Convert actions are always offered regardless of the
+vendor's `side` tag — many booths are a fit in both directions (`side` is an
+editable hint that drives the list filter/badge, not a restriction). A vendor
+that's a dead end either way can be hard-deleted (`DELETE` — cascades its voice
+notes; any already-promoted lead/supplier-lead is left intact). Seeded by `scripts/seed-ephj-vendors.ts` (idempotent on
 `(trade_show_id, company_name)`; refreshes seed fields, never touches on-floor
 capture). Unlike the dropped `tradeshow` table (migration 0026), this models
 the floor worklist, not a lead source tag — leads carry the show's channel via
@@ -871,7 +875,7 @@ the floor worklist, not a lead source tag — leads carry the show's channel via
 | Table | Key columns |
 |-------|-------------|
 | `trade_show` | `name`, `location?`, `city?`, `country?`, `starts_on?` / `ends_on?` (date), `source_channel` (default `b2b_trade_shows_industry` — carried onto promoted customer leads), `notes?`, `status` (`active`/`archived`), `created_at`/`updated_at`. Indexes: `status`, `starts_on` |
-| `trade_show_vendor` | `trade_show_id` (FK → trade_show, cascade), `booth?`, `company_name` (required), `category?` (free-text floor-plan category), `side` (`supplier`/`customer`/`both` — which pipeline(s) the vendor feeds; drives the Convert actions + list filters), `priority` (bool — the seed sheet's "Flag"), seed contact (`contact_name?`, `email?`, `phone?`, `title?`, `website?`, six free-text address fields), `seed_notes?` + `response_raw?` + `meeting_raw?` (raw pre-show intel, kept separate from on-floor `notes`), **on-floor capture:** `visited` (bool) + `visited_at?` + `visited_by_user_id?` (FK → user; stamped on first visit), `notes?`, `card_image_url?` + `card_raw_text?` + `ocr_confidence?` (jsonb), **follow-up:** `follow_up_status` (`none`/`todo`/`scheduled`/`done`/`skip`), `next_steps?`, **pipeline links:** `lead_id?` (FK → lead) + `supplier_lead_id?` (FK → supplier_lead, set on promote). Unique `(trade_show_id, company_name)` (the seed dedup key — booth alone isn't unique). Indexes: `trade_show_id`, `visited`, `side`, `lead_id`, `supplier_lead_id` |
+| `trade_show_vendor` | `trade_show_id` (FK → trade_show, cascade), `booth?`, `company_name` (required), `category?` (free-text floor-plan category), `side` (`supplier`/`customer`/`both` — which pipeline(s) the vendor feeds; drives the Convert actions + list filters), `priority` (bool — the seed sheet's "Flag"), seed contact (`contact_name?`, `email?`, `phone?`, `title?`, `website?`, six free-text address fields), `seed_notes?` + `response_raw?` + `meeting_raw?` (raw pre-show intel, kept separate from on-floor `notes`), **on-floor capture:** `visited` (bool) + `visited_at?` + `visited_by_user_id?` (FK → user; stamped on first visit), `notes?`, `card_image_url?` + `card_raw_text?` + `ocr_confidence?` (jsonb), `sample_given` (bool, default false) + `sample_given_at?` (stamped on first yes — did we hand them a sample at the booth, either direction), **follow-up:** `follow_up_status` (`none`/`todo`/`scheduled`/`done`/`skip`), `next_steps?`, **pipeline links:** `lead_id?` (FK → lead) + `supplier_lead_id?` (FK → supplier_lead, set on promote). Unique `(trade_show_id, company_name)` (the seed dedup key — booth alone isn't unique). Indexes: `trade_show_id`, `visited`, `side`, `lead_id`, `supplier_lead_id` |
 | `trade_show_vendor_voice_note` | `vendor_id` (FK → trade_show_vendor, cascade), `blob_url` (audio in Vercel Blob), `content_type?`, `size_bytes?`, `duration_sec?` (real), `transcript?` (on-device Web Speech API dictation captured while recording — no external STT service), `recorded_by_user_id?` (FK → user), `created_at`. Multi-row so several memos hang off one vendor. Indexes: `vendor_id`, `created_at` |
 
 ## PWA / Push Notifications

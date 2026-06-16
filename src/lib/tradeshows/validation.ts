@@ -9,6 +9,7 @@ import { FOLLOW_UP_STATUSES, VENDOR_SIDES } from "./constants";
 // special-cased in the service (stamps visitedAt / visitedByUserId).
 export const updateVendorSchema = z.object({
   visited: z.boolean().optional(),
+  sampleGiven: z.boolean().optional(),
   followUpStatus: z.enum(FOLLOW_UP_STATUSES).optional(),
   nextSteps: z.string().nullish(),
   notes: z.string().nullish(),

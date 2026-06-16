@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Check,
@@ -11,6 +12,8 @@ import {
   Loader2,
   Play,
   ExternalLink,
+  Gift,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -18,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useDictation } from "@/components/ui/use-dictation";
 import {
+  VENDOR_SIDES,
   VENDOR_SIDE_LABELS,
   FOLLOW_UP_STATUSES,
   FOLLOW_UP_STATUS_LABELS,
@@ -34,6 +38,7 @@ interface VendorData {
   side: string;
   priority: boolean;
   visited: boolean;
+  sampleGiven: boolean;
   contactName: string | null;
   title: string | null;
   email: string | null;
@@ -50,12 +55,6 @@ interface VendorData {
   supplierLeadId: string | null;
 }
 
-const SIDE_BADGE: Record<string, string> = {
-  supplier: "bg-amber-50 text-amber-700",
-  customer: "bg-sky-50 text-sky-700",
-  both: "bg-violet-50 text-violet-700",
-};
-
 export function VendorDetail({
   showId,
   showName,
@@ -67,11 +66,13 @@ export function VendorDetail({
   vendor: VendorData;
   voiceNotes: NewVoiceNote[];
 }) {
+  const router = useRouter();
   const [vendor, setVendor] = useState(initial);
   const [notes, setVoiceNotes] = useState(initialNotes);
   const [savingContact, setSavingContact] = useState(false);
   const [savingFollowUp, setSavingFollowUp] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [promoting, setPromoting] = useState<"supplier" | "customer" | null>(
     null,
   );
@@ -98,6 +99,43 @@ export function VendorDetail({
     if (!(await patch({ visited: next }))) {
       set("visited", !next);
       toast.error("Couldn't update");
+    }
+  }
+
+  async function toggleSample() {
+    const next = !vendor.sampleGiven;
+    set("sampleGiven", next);
+    if (!(await patch({ sampleGiven: next }))) {
+      set("sampleGiven", !next);
+      toast.error("Couldn't update");
+    }
+  }
+
+  async function changeSide(next: VendorSide) {
+    const prev = vendor.side;
+    set("side", next);
+    if (!(await patch({ side: next }))) {
+      set("side", prev);
+      toast.error("Couldn't update");
+    }
+  }
+
+  async function remove() {
+    if (
+      !window.confirm(
+        `Delete ${vendor.companyName} from this show? This can't be undone.`,
+      )
+    )
+      return;
+    setDeleting(true);
+    try {
+      const res = await fetch(base, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast.success("Vendor deleted");
+      router.push(`/trade-shows/${showId}`);
+    } catch {
+      setDeleting(false);
+      toast.error("Couldn't delete");
     }
   }
 
@@ -200,9 +238,6 @@ export function VendorDetail({
     }
   }
 
-  const showSupplierAction = vendor.side === "supplier" || vendor.side === "both";
-  const showCustomerAction = vendor.side === "customer" || vendor.side === "both";
-
   return (
     <div className="mx-auto max-w-2xl pb-24">
       <Link
@@ -230,21 +265,30 @@ export function VendorDetail({
               </span>
             )}
             {vendor.category && <span>{vendor.category}</span>}
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                SIDE_BADGE[vendor.side] ?? "bg-zinc-100 text-zinc-600",
-              )}
-            >
-              {VENDOR_SIDE_LABELS[vendor.side as VendorSide] ?? vendor.side}
-            </span>
           </div>
         </div>
         <button
           type="button"
+          onClick={remove}
+          disabled={deleting}
+          aria-label="Delete vendor"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-sm text-zinc-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+        >
+          {deleting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+
+      {/* Quick capture: visited / sample / side */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
           onClick={toggleVisited}
           className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
             vendor.visited
               ? "border-emerald-500 bg-emerald-500 text-white"
               : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
@@ -253,6 +297,39 @@ export function VendorDetail({
           <Check className="h-4 w-4" />
           {vendor.visited ? "Visited" : "Mark visited"}
         </button>
+        <button
+          type="button"
+          onClick={toggleSample}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+            vendor.sampleGiven
+              ? "border-violet-500 bg-violet-500 text-white"
+              : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
+          )}
+        >
+          <Gift className="h-4 w-4" />
+          {vendor.sampleGiven ? "Sample given" : "Gave a sample?"}
+        </button>
+        <div className="ml-auto inline-flex items-center gap-1.5">
+          <span className="text-xs text-zinc-400">Type</span>
+          <div className="inline-flex rounded-md border border-zinc-200 bg-white p-0.5">
+            {VENDOR_SIDES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => changeSide(s)}
+                className={cn(
+                  "rounded px-2 py-1 text-xs transition-colors",
+                  vendor.side === s
+                    ? "bg-brand text-white"
+                    : "text-zinc-600 hover:bg-zinc-50",
+                )}
+              >
+                {VENDOR_SIDE_LABELS[s]}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Seed intel */}
@@ -440,31 +517,28 @@ export function VendorDetail({
         </Button>
       </Section>
 
-      {/* Promote into pipelines */}
+      {/* Promote into pipelines — both options are always available; many
+          booths are a fit for both directions. */}
       <Section title="Add to pipeline">
         <div className="space-y-3">
-          {showSupplierAction && (
-            <PipelineRow
-              label="Supplier Leads"
-              hint="A manufacturer we'd buy from"
-              linkedHref={
-                vendor.supplierLeadId
-                  ? `/modules/production/supplier-leads/${vendor.supplierLeadId}`
-                  : null
-              }
-              busy={promoting === "supplier"}
-              onPromote={() => promote("supplier")}
-            />
-          )}
-          {showCustomerAction && (
-            <PipelineRow
-              label="Customer Leads"
-              hint="A brand we'd sell buckles to"
-              linkedHref={vendor.leadId ? `/leads/${vendor.leadId}` : null}
-              busy={promoting === "customer"}
-              onPromote={() => promote("customer")}
-            />
-          )}
+          <PipelineRow
+            label="Supplier Leads"
+            hint="A manufacturer we'd buy from"
+            linkedHref={
+              vendor.supplierLeadId
+                ? `/modules/production/supplier-leads/${vendor.supplierLeadId}`
+                : null
+            }
+            busy={promoting === "supplier"}
+            onPromote={() => promote("supplier")}
+          />
+          <PipelineRow
+            label="Customer Leads"
+            hint="A brand we'd sell buckles to"
+            linkedHref={vendor.leadId ? `/leads/${vendor.leadId}` : null}
+            busy={promoting === "customer"}
+            onPromote={() => promote("customer")}
+          />
         </div>
       </Section>
     </div>

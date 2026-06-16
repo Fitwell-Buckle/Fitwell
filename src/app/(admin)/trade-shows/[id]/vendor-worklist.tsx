@@ -9,6 +9,7 @@ import {
   Search,
   ChevronRight,
   Link2,
+  Gift,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ export interface WorklistVendor {
   side: string;
   priority: boolean;
   visited: boolean;
+  sampleGiven: boolean;
   followUpStatus: string;
   hasCard: boolean;
   leadId: string | null;
@@ -231,6 +233,9 @@ export function VendorWorklist({
                 <div className="flex shrink-0 items-center gap-1.5">
                   {(v.leadId || v.supplierLeadId) && (
                     <Link2 className="h-3.5 w-3.5 text-emerald-600" />
+                  )}
+                  {v.sampleGiven && (
+                    <Gift className="h-3.5 w-3.5 text-violet-500" />
                   )}
                   {v.hasCard && (
                     <CreditCard className="h-3.5 w-3.5 text-zinc-400" />

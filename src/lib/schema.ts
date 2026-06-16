@@ -2956,6 +2956,11 @@ export const tradeShowVendor = pgTable(
     cardImageUrl: text("card_image_url"),
     cardRawText: text("card_raw_text"),
     ocrConfidence: jsonb("ocr_confidence"),
+    // Did we hand them a sample at the booth? Tracked for either side — a
+    // potential customer evaluating our buckle, or a supplier prototyping
+    // against it. `sampleGivenAt` is stamped on the first yes.
+    sampleGiven: boolean("sample_given").notNull().default(false),
+    sampleGivenAt: timestamp("sample_given_at", { mode: "date" }),
     // ── Follow-up ──
     // 'none' | 'todo' | 'scheduled' | 'done' | 'skip'.
     followUpStatus: text("follow_up_status").notNull().default("none"),
