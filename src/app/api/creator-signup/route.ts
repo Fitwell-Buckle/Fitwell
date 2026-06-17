@@ -6,6 +6,7 @@ import {
   creatorSignupSchema,
   normalizeSignupProfiles,
 } from "@/lib/creators/signup";
+import { notifyNewCreatorSignup } from "@/lib/creators/notifications";
 
 // PUBLIC endpoint — intentionally no auth. Influencers POST here from the
 // /creator-signup page (outside the middleware matcher, so it stays open).
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
         status: "prospect",
         vettingStatus: "unreviewed",
         source: "self_registration",
+        phone: parsed.data.phone?.trim() || null,
         notes: parsed.data.notes?.trim() || null,
       })
       .returning({ id: creator.id });
@@ -76,6 +78,14 @@ export async function POST(req: Request) {
         })
         .onConflictDoNothing();
     }
+
+    // Best-effort team alert (notification + email) — never blocks the signup.
+    await notifyNewCreatorSignup({
+      name: parsed.data.name.trim(),
+      profiles: profiles.map((p) => ({ platform: p.platform, handle: p.handle })),
+      email,
+      phone: parsed.data.phone?.trim() || null,
+    });
 
     return NextResponse.json({ data: { id: row.id } }, { status: 201 });
   } catch (err) {

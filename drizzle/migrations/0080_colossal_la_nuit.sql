@@ -1,0 +1,1 @@
+ALTER TABLE "creator" ADD COLUMN "phone" text;

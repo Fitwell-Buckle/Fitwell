@@ -16,6 +16,7 @@ export function CreatorEditor({
   scoreBoost,
   notes,
   country,
+  phone,
 }: {
   creatorId: string;
   name: string;
@@ -24,11 +25,13 @@ export function CreatorEditor({
   scoreBoost: number;
   notes: string | null;
   country: string | null;
+  phone: string | null;
 }) {
   const router = useRouter();
   const [nameDraft, setNameDraft] = useState(name);
   const [noteDraft, setNoteDraft] = useState(notes ?? "");
   const [countryDraft, setCountryDraft] = useState(country ?? "");
+  const [phoneDraft, setPhoneDraft] = useState(phone ?? "");
   const [saving, setSaving] = useState(false);
 
   async function patch(body: Record<string, unknown>) {
@@ -160,6 +163,23 @@ export function CreatorEditor({
         <span className="text-[11px] text-zinc-400">
           Outside active Shopify Markets → parked under &ldquo;Out of market&rdquo;
         </span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <label className="text-xs font-medium text-zinc-500">Phone / WhatsApp</label>
+        <input
+          value={phoneDraft}
+          onChange={(e) => setPhoneDraft(e.target.value)}
+          placeholder="—"
+          className={`${inputCls} flex-1`}
+        />
+        <button
+          onClick={() => patch({ phone: phoneDraft.trim() || null })}
+          disabled={saving || phoneDraft.trim() === (phone ?? "")}
+          className="rounded-lg bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700 disabled:opacity-40"
+        >
+          Save
+        </button>
       </div>
 
       <div>

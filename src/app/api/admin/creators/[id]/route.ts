@@ -19,6 +19,7 @@ const patchSchema = z
       .regex(/^[A-Za-z]{2}$/, "expected a 2-letter country code")
       .nullable()
       .optional(),
+    phone: z.string().max(50).nullable().optional(),
     notes: z.string().max(10_000).nullable().optional(),
   })
   .refine((b) => Object.keys(b).length > 0, { message: "Empty patch" });
@@ -47,6 +48,8 @@ export async function PATCH(
     updates.scoreBoost = parsed.data.scoreBoost;
   if (parsed.data.country !== undefined)
     updates.country = parsed.data.country?.toUpperCase() ?? null;
+  if (parsed.data.phone !== undefined)
+    updates.phone = parsed.data.phone?.trim() || null;
   if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
 
   // Burned creators get a 12-month cool-off (creator-program.md Phase 3 rule).

@@ -160,6 +160,7 @@ function SidebarContent({
   const [supplierMsgs, setSupplierMsgs] = useState(0);
   const [influencerMsgs, setInfluencerMsgs] = useState(0);
   const [newOrders, setNewOrders] = useState(0);
+  const [signupCreators, setSignupCreators] = useState(0);
 
   // Unread admin-notification badge. Stays in sync three ways: on navigation,
   // when a notification is marked read elsewhere (the notifications page
@@ -243,6 +244,26 @@ function SidebarContent({
     };
   }, [pathname]);
 
+  // Unreviewed self-registered creators (public /creator-signup form) → blue
+  // dot on Creators. Clears when the team approves/rejects each signup.
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      fetch("/api/creators/signup-count")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (active && d) setSignupCreators(d.count ?? 0);
+        })
+        .catch(() => {});
+    };
+    load();
+    const poll = setInterval(load, 60_000);
+    return () => {
+      active = false;
+      clearInterval(poll);
+    };
+  }, [pathname]);
+
   // Nav hrefs that should show a blue dot.
   const dotHrefs = new Set<string>();
   if (pendingDrafts > 0) dotHrefs.add("/leads");
@@ -250,6 +271,7 @@ function SidebarContent({
   if (supplierMsgs > 0) dotHrefs.add("/modules/production/suppliers");
   if (influencerMsgs > 0) dotHrefs.add("/influencers");
   if (newOrders > 0) dotHrefs.add("/invoices");
+  if (signupCreators > 0) dotHrefs.add("/creators");
 
   function toggle(label: string, fallback: boolean) {
     setOpen((o) => ({ ...o, [label]: !(o[label] ?? fallback) }));

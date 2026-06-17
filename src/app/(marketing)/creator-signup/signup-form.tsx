@@ -8,14 +8,22 @@ const inputCls =
 
 interface ProfileRow {
   platform: string;
+  platformName: string; // only used when platform === "other"
+  platformDomain: string; // only used when platform === "other"
   handle: string;
 }
 
-const emptyRow = (): ProfileRow => ({ platform: "ig", handle: "" });
+const emptyRow = (): ProfileRow => ({
+  platform: "ig",
+  platformName: "",
+  platformDomain: "",
+  handle: "",
+});
 
 export function SignupForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [website, setWebsite] = useState(""); // honeypot
   const [profiles, setProfiles] = useState<ProfileRow[]>([emptyRow()]);
@@ -43,8 +51,22 @@ export function SignupForm() {
     if (filled.length === 0) {
       return setError("Add at least one social profile.");
     }
+    if (
+      filled.some(
+        (p) =>
+          p.platform === "other" &&
+          (!p.platformName.trim() || !p.platformDomain.trim()),
+      )
+    ) {
+      return setError(
+        "For any “Other” profile, enter both the platform name and its domain.",
+      );
+    }
     if (email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
       return setError("Enter a valid email or leave it blank.");
+    }
+    if (!email.trim() && !phone.trim()) {
+      return setError("Enter an email or a phone / WhatsApp number so we can reach you.");
     }
 
     setBusy(true);
@@ -55,10 +77,14 @@ export function SignupForm() {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim() || null,
+          phone: phone.trim() || null,
           notes: notes.trim() || null,
           website, // honeypot
           profiles: filled.map((p) => ({
             platform: p.platform,
+            platformName: p.platform === "other" ? p.platformName.trim() : null,
+            platformDomain:
+              p.platform === "other" ? p.platformDomain.trim() : null,
             handle: p.handle.trim(),
           })),
         }),
@@ -106,16 +132,30 @@ export function SignupForm() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-zinc-700">
-          Email <span className="text-zinc-400">(optional)</span>
-        </label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          className={`${inputCls} mt-1`}
-        />
+        <div className="flex items-baseline justify-between">
+          <label className="block text-sm font-medium text-zinc-700">
+            How can we reach you? <span className="text-red-500">*</span>
+          </label>
+          <span className="text-xs text-zinc-400">Email or phone — at least one</span>
+        </div>
+        <div className="mt-1 grid gap-2 sm:grid-cols-2">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            aria-label="Email"
+            className={inputCls}
+          />
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="Phone / WhatsApp"
+            aria-label="Phone or WhatsApp"
+            className={inputCls}
+          />
+        </div>
       </div>
 
       <div>
@@ -129,33 +169,61 @@ export function SignupForm() {
         </div>
         <div className="mt-2 space-y-2">
           {profiles.map((p, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <select
-                value={p.platform}
-                onChange={(e) => updateProfile(i, { platform: e.target.value })}
-                className="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm outline-none focus:border-zinc-500"
-              >
-                {SIGNUP_PLATFORMS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={p.handle}
-                onChange={(e) => updateProfile(i, { handle: e.target.value })}
-                placeholder="@handle or profile URL"
-                className={inputCls}
-              />
-              {profiles.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeProfile(i)}
-                  aria-label="Remove profile"
-                  className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-2 text-sm text-zinc-500 hover:bg-zinc-50"
+            <div key={i} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <select
+                  value={p.platform}
+                  onChange={(e) => updateProfile(i, { platform: e.target.value })}
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm outline-none focus:border-zinc-500"
                 >
-                  ✕
-                </button>
+                  {SIGNUP_PLATFORMS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={p.handle}
+                  onChange={(e) => updateProfile(i, { handle: e.target.value })}
+                  placeholder={
+                    p.platform === "other"
+                      ? "@handle or username"
+                      : "@handle or profile URL"
+                  }
+                  className={inputCls}
+                />
+                {profiles.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeProfile(i)}
+                    aria-label="Remove profile"
+                    className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-2 text-sm text-zinc-500 hover:bg-zinc-50"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {p.platform === "other" && (
+                <div className="flex items-center gap-2 pl-1">
+                  <input
+                    value={p.platformName}
+                    onChange={(e) =>
+                      updateProfile(i, { platformName: e.target.value })
+                    }
+                    placeholder="Platform name (e.g. Twitch)"
+                    aria-label="Platform name"
+                    className={inputCls}
+                  />
+                  <input
+                    value={p.platformDomain}
+                    onChange={(e) =>
+                      updateProfile(i, { platformDomain: e.target.value })
+                    }
+                    placeholder="Domain (e.g. twitch.tv)"
+                    aria-label="Platform domain"
+                    className={inputCls}
+                  />
+                </div>
               )}
             </div>
           ))}

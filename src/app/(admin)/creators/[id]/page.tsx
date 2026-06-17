@@ -633,6 +633,7 @@ export default async function CreatorDetailPage({
               scoreBoost={record.scoreBoost}
               notes={record.notes}
               country={record.country}
+              phone={record.phone}
             />
           </DataTable>
         </div>

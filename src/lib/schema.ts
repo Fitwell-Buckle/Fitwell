@@ -1710,6 +1710,9 @@ export const creator = pgTable(
     // NULL = legacy/import. Self-registrations land here as unreviewed for the
     // /creators vetting queue (filterable via the "Self-registered" pill).
     source: text("source"),
+    // Contact phone / WhatsApp (free-form). Self-registration requires an
+    // email OR a phone; emails live in creator_email, the phone lives here.
+    phone: text("phone"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
