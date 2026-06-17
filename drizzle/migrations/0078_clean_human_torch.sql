@@ -1,0 +1,1 @@
+ALTER TABLE "production_po" ADD COLUMN "origin" text DEFAULT 'native' NOT NULL;

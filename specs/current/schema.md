@@ -555,6 +555,7 @@ A master PO tracked against Shopify's built-in PO feature (no Shopify PO API).
 | `expected_delivery_date` | date | Nullable |
 | `lock_stages_together` | boolean | Default true; false = items advance independently |
 | `status` | text | `active` \| `on_hold` \| `complete` \| `cancelled` |
+| `origin` | text | `native` (default; created in this system) \| `shopify_pdf` (one-time backfill of historical Shopify POs parsed from PDF exports — see `scripts/import-shopify-pos.ts`). Lets the importer re-run idempotently against only its own rows |
 | `shopify_received_at` | timestamp | Set manually when received in Shopify (Phase 4) |
 | `company_id` | text | Default B2B company (FK → company); line items can override |
 | `shopify_location_id` / `location_name` | text | Default receiving warehouse (Shopify location; needs `read_locations`); line items can override |

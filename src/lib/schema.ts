@@ -729,6 +729,11 @@ export const productionPo = pgTable(
     // moves independently and the PO's displayed stage is "mixed".
     lockStagesTogether: boolean("lock_stages_together").notNull().default(true),
     status: text("status").notNull().default("active"), // active | on_hold | complete | cancelled
+    // Provenance: 'native' = created in this system; 'shopify_pdf' = one-time
+    // backfill of historical Shopify purchase orders parsed from PDF exports
+    // (scripts/import-shopify-pos.ts). Lets the importer target only its own
+    // rows on re-run and keeps imported history distinguishable in reporting.
+    origin: text("origin").notNull().default("native"),
     // Set manually when the user confirms they marked the PO received in Shopify.
     shopifyReceivedAt: timestamp("shopify_received_at", { mode: "date" }),
     // When the PO was sent to the supplier. Emailing it auto-stamps this;

@@ -1,0 +1,1074 @@
+{
+  "_README": "Historical Shopify purchase orders, parsed from PDF exports and reconciled (qty*unitCost==lineTotal per line; sum(lineTotal)==subtotal; line count==declared). Faithful to the printed PDFs. The importer (scripts/import-shopify-pos.ts) prorates discountCents into unit costs and EXCLUDES toolingCents from per-unit cost. Money in integer cents USD.",
+  "purchaseOrders": [
+    {
+      "po": "PO3",
+      "issuedDate": "2024-02-26",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 7,
+      "subtotalCents": 12001,
+      "discountCents": 0,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWB001-BL-20",
+          "qty": 7,
+          "unitCostCents": 171,
+          "lineTotalCents": 1197
+        },
+        {
+          "sku": "FWB001-SS-16",
+          "qty": 12,
+          "unitCostCents": 200,
+          "lineTotalCents": 2400
+        },
+        {
+          "sku": "FWB001-SS-18",
+          "qty": 12,
+          "unitCostCents": 200,
+          "lineTotalCents": 2400
+        },
+        {
+          "sku": "FWB001-SS-20",
+          "qty": 12,
+          "unitCostCents": 200,
+          "lineTotalCents": 2400
+        },
+        {
+          "sku": "FWB001-TI-20",
+          "qty": 8,
+          "unitCostCents": 150,
+          "lineTotalCents": 1200
+        },
+        {
+          "sku": "FWB001-BL-18",
+          "qty": 7,
+          "unitCostCents": 172,
+          "lineTotalCents": 1204
+        },
+        {
+          "sku": "FWB001-TI-18",
+          "qty": 8,
+          "unitCostCents": 150,
+          "lineTotalCents": 1200
+        }
+      ]
+    },
+    {
+      "po": "PO4",
+      "issuedDate": "2024-05-11",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 14,
+      "subtotalCents": 112070,
+      "discountCents": 0,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWB001-SS-16",
+          "qty": 30,
+          "unitCostCents": 295,
+          "lineTotalCents": 8850
+        },
+        {
+          "sku": "FWB001-SS-18",
+          "qty": 30,
+          "unitCostCents": 295,
+          "lineTotalCents": 8850
+        },
+        {
+          "sku": "FWB001-SS-20",
+          "qty": 20,
+          "unitCostCents": 316,
+          "lineTotalCents": 6320
+        },
+        {
+          "sku": "FWB001-BL-16",
+          "qty": 10,
+          "unitCostCents": 471,
+          "lineTotalCents": 4710
+        },
+        {
+          "sku": "FWB001-BL-18",
+          "qty": 10,
+          "unitCostCents": 471,
+          "lineTotalCents": 4710
+        },
+        {
+          "sku": "FWB001-BL-20",
+          "qty": 10,
+          "unitCostCents": 471,
+          "lineTotalCents": 4710
+        },
+        {
+          "sku": "FWBA001SB-16",
+          "qty": 1000,
+          "unitCostCents": 11,
+          "lineTotalCents": 11000
+        },
+        {
+          "sku": "FWBA001SB-18",
+          "qty": 1000,
+          "unitCostCents": 11,
+          "lineTotalCents": 11000
+        },
+        {
+          "sku": "FWBA001SB-20",
+          "qty": 1000,
+          "unitCostCents": 11,
+          "lineTotalCents": 11000
+        },
+        {
+          "sku": "FWB001-TI-16",
+          "qty": 10,
+          "unitCostCents": 1050,
+          "lineTotalCents": 10500
+        },
+        {
+          "sku": "FWB001-TI-18",
+          "qty": 10,
+          "unitCostCents": 1050,
+          "lineTotalCents": 10500
+        },
+        {
+          "sku": "FWB001-TI-20",
+          "qty": 10,
+          "unitCostCents": 1050,
+          "lineTotalCents": 10500
+        },
+        {
+          "sku": "FWB001-RG-16",
+          "qty": 10,
+          "unitCostCents": 471,
+          "lineTotalCents": 4710
+        },
+        {
+          "sku": "FWB001-YG-16",
+          "qty": 10,
+          "unitCostCents": 471,
+          "lineTotalCents": 4710
+        }
+      ]
+    },
+    {
+      "po": "PO6",
+      "issuedDate": "2024-08-09",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 26,
+      "subtotalCents": 407825,
+      "discountCents": 40783,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWB001-SB-16",
+          "qty": 10,
+          "unitCostCents": 2011,
+          "lineTotalCents": 20110
+        },
+        {
+          "sku": "FWB001-SB-18",
+          "qty": 10,
+          "unitCostCents": 1352,
+          "lineTotalCents": 13520
+        },
+        {
+          "sku": "FWB001-SB-20",
+          "qty": 10,
+          "unitCostCents": 1351,
+          "lineTotalCents": 13510
+        },
+        {
+          "sku": "FWB001-TB-16",
+          "qty": 10,
+          "unitCostCents": 2099,
+          "lineTotalCents": 20990
+        },
+        {
+          "sku": "FWB001-TB-18",
+          "qty": 10,
+          "unitCostCents": 1440,
+          "lineTotalCents": 14400
+        },
+        {
+          "sku": "FWB001-TB-20",
+          "qty": 10,
+          "unitCostCents": 1439,
+          "lineTotalCents": 14390
+        },
+        {
+          "sku": "FWB001-BL-16",
+          "qty": 30,
+          "unitCostCents": 681,
+          "lineTotalCents": 20430
+        },
+        {
+          "sku": "FWB001-BL-18",
+          "qty": 30,
+          "unitCostCents": 461,
+          "lineTotalCents": 13830
+        },
+        {
+          "sku": "FWB001-BL-20",
+          "qty": 30,
+          "unitCostCents": 460,
+          "lineTotalCents": 13800
+        },
+        {
+          "sku": "FWB001-RG-16",
+          "qty": 30,
+          "unitCostCents": 681,
+          "lineTotalCents": 20430
+        },
+        {
+          "sku": "FWB001-RG-18",
+          "qty": 30,
+          "unitCostCents": 461,
+          "lineTotalCents": 13830
+        },
+        {
+          "sku": "FWB001-RG-20",
+          "qty": 30,
+          "unitCostCents": 460,
+          "lineTotalCents": 13800
+        },
+        {
+          "sku": "FWB001-SS-16",
+          "qty": 105,
+          "unitCostCents": 295,
+          "lineTotalCents": 30975
+        },
+        {
+          "sku": "FWB001-SS-18",
+          "qty": 105,
+          "unitCostCents": 295,
+          "lineTotalCents": 30975
+        },
+        {
+          "sku": "FWB001-SS-20",
+          "qty": 105,
+          "unitCostCents": 294,
+          "lineTotalCents": 30870
+        },
+        {
+          "sku": "FWB001-TI-16",
+          "qty": 55,
+          "unitCostCents": 421,
+          "lineTotalCents": 23155
+        },
+        {
+          "sku": "FWB001-TI-18",
+          "qty": 55,
+          "unitCostCents": 421,
+          "lineTotalCents": 23155
+        },
+        {
+          "sku": "FWB001-TI-20",
+          "qty": 55,
+          "unitCostCents": 421,
+          "lineTotalCents": 23155
+        },
+        {
+          "sku": "FWB001-YG-16",
+          "qty": 30,
+          "unitCostCents": 680,
+          "lineTotalCents": 20400
+        },
+        {
+          "sku": "FWB001-YG-18",
+          "qty": 30,
+          "unitCostCents": 461,
+          "lineTotalCents": 13830
+        },
+        {
+          "sku": "FWB001-YG-20",
+          "qty": 30,
+          "unitCostCents": 461,
+          "lineTotalCents": 13830
+        },
+        {
+          "sku": "FWBA-T225-SS",
+          "qty": 30,
+          "unitCostCents": 26,
+          "lineTotalCents": 780
+        },
+        {
+          "sku": "FWBA-T225-TI",
+          "qty": 30,
+          "unitCostCents": 44,
+          "lineTotalCents": 1320
+        },
+        {
+          "sku": "FWBA-T225-BL",
+          "qty": 30,
+          "unitCostCents": 44,
+          "lineTotalCents": 1320
+        },
+        {
+          "sku": "FWBA-T225-SB",
+          "qty": 15,
+          "unitCostCents": 25,
+          "lineTotalCents": 375
+        },
+        {
+          "sku": "FWBA-T225-TB",
+          "qty": 15,
+          "unitCostCents": 43,
+          "lineTotalCents": 645
+        }
+      ]
+    },
+    {
+      "po": "PO7",
+      "issuedDate": "2024-12-03",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 9,
+      "subtotalCents": 244175,
+      "discountCents": 0,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWB001-BL-16",
+          "qty": 25,
+          "unitCostCents": 553,
+          "lineTotalCents": 13825
+        },
+        {
+          "sku": "FWB001-RG-16",
+          "qty": 50,
+          "unitCostCents": 576,
+          "lineTotalCents": 28800
+        },
+        {
+          "sku": "FWB001-SS-16",
+          "qty": 200,
+          "unitCostCents": 316,
+          "lineTotalCents": 63200
+        },
+        {
+          "sku": "FWB001-SS-18",
+          "qty": 100,
+          "unitCostCents": 341,
+          "lineTotalCents": 34100
+        },
+        {
+          "sku": "FWB001-TI-16",
+          "qty": 100,
+          "unitCostCents": 403,
+          "lineTotalCents": 40300
+        },
+        {
+          "sku": "FWB001-TI-18",
+          "qty": 50,
+          "unitCostCents": 453,
+          "lineTotalCents": 22650
+        },
+        {
+          "sku": "FWB001-YG-16",
+          "qty": 50,
+          "unitCostCents": 576,
+          "lineTotalCents": 28800
+        },
+        {
+          "sku": "FWBA001SB-16",
+          "qty": 900,
+          "unitCostCents": 10,
+          "lineTotalCents": 9000
+        },
+        {
+          "sku": "FWBA001SB-18",
+          "qty": 350,
+          "unitCostCents": 10,
+          "lineTotalCents": 3500
+        }
+      ]
+    },
+    {
+      "po": "PO8",
+      "issuedDate": "2024-12-10",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 15,
+      "subtotalCents": 121425,
+      "discountCents": 0,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWB001-SS-16",
+          "qty": 75,
+          "unitCostCents": 316,
+          "lineTotalCents": 23700
+        },
+        {
+          "sku": "FWB001-SS-18",
+          "qty": 75,
+          "unitCostCents": 341,
+          "lineTotalCents": 25575
+        },
+        {
+          "sku": "FWB001-TI-16",
+          "qty": 25,
+          "unitCostCents": 403,
+          "lineTotalCents": 10075
+        },
+        {
+          "sku": "FWB001-TI-18",
+          "qty": 25,
+          "unitCostCents": 453,
+          "lineTotalCents": 11325
+        },
+        {
+          "sku": "FWB001-RG-16",
+          "qty": 10,
+          "unitCostCents": 576,
+          "lineTotalCents": 5760
+        },
+        {
+          "sku": "FWB001-YG-16",
+          "qty": 10,
+          "unitCostCents": 576,
+          "lineTotalCents": 5760
+        },
+        {
+          "sku": "FWB001-TI-20",
+          "qty": 20,
+          "unitCostCents": 421,
+          "lineTotalCents": 8420
+        },
+        {
+          "sku": "FWB001-RG-18",
+          "qty": 10,
+          "unitCostCents": 461,
+          "lineTotalCents": 4610
+        },
+        {
+          "sku": "FWB001-RG-20",
+          "qty": 10,
+          "unitCostCents": 460,
+          "lineTotalCents": 4600
+        },
+        {
+          "sku": "FWB001-SS-20",
+          "qty": 20,
+          "unitCostCents": 294,
+          "lineTotalCents": 5880
+        },
+        {
+          "sku": "FWB001-YG-18",
+          "qty": 10,
+          "unitCostCents": 461,
+          "lineTotalCents": 4610
+        },
+        {
+          "sku": "FWB001-YG-20",
+          "qty": 10,
+          "unitCostCents": 461,
+          "lineTotalCents": 4610
+        },
+        {
+          "sku": "FWBA001SB-16",
+          "qty": 250,
+          "unitCostCents": 10,
+          "lineTotalCents": 2500
+        },
+        {
+          "sku": "FWBA001SB-18",
+          "qty": 250,
+          "unitCostCents": 10,
+          "lineTotalCents": 2500
+        },
+        {
+          "sku": "FWBA001SB-20",
+          "qty": 150,
+          "unitCostCents": 10,
+          "lineTotalCents": 1500
+        }
+      ]
+    },
+    {
+      "po": "PO10",
+      "issuedDate": "2025-05-07",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 1,
+      "subtotalCents": 98700,
+      "discountCents": 0,
+      "toolingCents": 41000,
+      "lineItems": [
+        {
+          "sku": "FWOE-SHERPA-16",
+          "qty": 300,
+          "unitCostCents": 329,
+          "lineTotalCents": 98700,
+          "note": "OEM Sherpa buckle \u2014 no SKU on PO; synthetic SKU assigned"
+        }
+      ]
+    },
+    {
+      "po": "PO11",
+      "issuedDate": "2025-05-19",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 13,
+      "subtotalCents": 520550,
+      "discountCents": 0,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWB001-TB-16",
+          "qty": 100,
+          "unitCostCents": 443,
+          "lineTotalCents": 44300
+        },
+        {
+          "sku": "FWB001-TB-18",
+          "qty": 100,
+          "unitCostCents": 443,
+          "lineTotalCents": 44300
+        },
+        {
+          "sku": "FWB001-TB-20",
+          "qty": 50,
+          "unitCostCents": 493,
+          "lineTotalCents": 24650
+        },
+        {
+          "sku": "FWB001-BL-16",
+          "qty": 100,
+          "unitCostCents": 392,
+          "lineTotalCents": 39200
+        },
+        {
+          "sku": "FWB001-BL-18",
+          "qty": 100,
+          "unitCostCents": 392,
+          "lineTotalCents": 39200
+        },
+        {
+          "sku": "FWB001-RG-16",
+          "qty": 100,
+          "unitCostCents": 545,
+          "lineTotalCents": 54500
+        },
+        {
+          "sku": "FWB001-RG-18",
+          "qty": 50,
+          "unitCostCents": 545,
+          "lineTotalCents": 27250
+        },
+        {
+          "sku": "FWB001-SS-16",
+          "qty": 200,
+          "unitCostCents": 337,
+          "lineTotalCents": 67400
+        },
+        {
+          "sku": "FWB001-SS-18",
+          "qty": 150,
+          "unitCostCents": 337,
+          "lineTotalCents": 50550
+        },
+        {
+          "sku": "FWB001-TI-16",
+          "qty": 50,
+          "unitCostCents": 473,
+          "lineTotalCents": 23650
+        },
+        {
+          "sku": "FWB001-TI-18",
+          "qty": 50,
+          "unitCostCents": 473,
+          "lineTotalCents": 23650
+        },
+        {
+          "sku": "FWB001-YG-16",
+          "qty": 100,
+          "unitCostCents": 546,
+          "lineTotalCents": 54600
+        },
+        {
+          "sku": "FWB001-YG-18",
+          "qty": 50,
+          "unitCostCents": 546,
+          "lineTotalCents": 27300
+        }
+      ]
+    },
+    {
+      "po": "PO14",
+      "issuedDate": "2025-08-27",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 22,
+      "subtotalCents": 700650,
+      "discountCents": 0,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWOE002-M1-SS-16",
+          "qty": 100,
+          "unitCostCents": 313,
+          "lineTotalCents": 31300
+        },
+        {
+          "sku": "FWOE002-M1-SS-18",
+          "qty": 100,
+          "unitCostCents": 313,
+          "lineTotalCents": 31300
+        },
+        {
+          "sku": "FWOE003-M1-SSP-16",
+          "qty": 100,
+          "unitCostCents": 313,
+          "lineTotalCents": 31300
+        },
+        {
+          "sku": "FWOE003-M1-RGP-16",
+          "qty": 100,
+          "unitCostCents": 430,
+          "lineTotalCents": 43000
+        },
+        {
+          "sku": "FWOE003-M1-YGP-16",
+          "qty": 100,
+          "unitCostCents": 430,
+          "lineTotalCents": 43000
+        },
+        {
+          "sku": "FWOE002-M1-SS-18",
+          "qty": 150,
+          "unitCostCents": 388,
+          "lineTotalCents": 58200
+        },
+        {
+          "sku": "FWOE002-M1-SS-20",
+          "qty": 50,
+          "unitCostCents": 388,
+          "lineTotalCents": 19400
+        },
+        {
+          "sku": "FWOE002-M1-TI-18",
+          "qty": 20,
+          "unitCostCents": 486,
+          "lineTotalCents": 9720
+        },
+        {
+          "sku": "FWOE002-M1-TI-20",
+          "qty": 10,
+          "unitCostCents": 486,
+          "lineTotalCents": 4860
+        },
+        {
+          "sku": "FWB001-BL-16",
+          "qty": 25,
+          "unitCostCents": 426,
+          "lineTotalCents": 10650
+        },
+        {
+          "sku": "FWB001-BL-18",
+          "qty": 25,
+          "unitCostCents": 426,
+          "lineTotalCents": 10650
+        },
+        {
+          "sku": "FWB001-BL-20",
+          "qty": 75,
+          "unitCostCents": 426,
+          "lineTotalCents": 31950
+        },
+        {
+          "sku": "FWB001-SS-16",
+          "qty": 350,
+          "unitCostCents": 310,
+          "lineTotalCents": 108500
+        },
+        {
+          "sku": "FWB001-SS-18",
+          "qty": 170,
+          "unitCostCents": 310,
+          "lineTotalCents": 52700
+        },
+        {
+          "sku": "FWB001-SS-20",
+          "qty": 100,
+          "unitCostCents": 310,
+          "lineTotalCents": 31000
+        },
+        {
+          "sku": "FWB001-RG-18",
+          "qty": 50,
+          "unitCostCents": 426,
+          "lineTotalCents": 21300
+        },
+        {
+          "sku": "FWB001-TI-16",
+          "qty": 165,
+          "unitCostCents": 473,
+          "lineTotalCents": 78045
+        },
+        {
+          "sku": "FWB001-TI-18",
+          "qty": 75,
+          "unitCostCents": 473,
+          "lineTotalCents": 35475
+        },
+        {
+          "sku": "FWB001-RG-20",
+          "qty": 50,
+          "unitCostCents": 426,
+          "lineTotalCents": 21300
+        },
+        {
+          "sku": "FWBA001SB-16",
+          "qty": 1000,
+          "unitCostCents": 9,
+          "lineTotalCents": 9000
+        },
+        {
+          "sku": "FWBA001SB-18",
+          "qty": 1000,
+          "unitCostCents": 9,
+          "lineTotalCents": 9000
+        },
+        {
+          "sku": "FWBA001SB-20",
+          "qty": 1000,
+          "unitCostCents": 9,
+          "lineTotalCents": 9000
+        }
+      ]
+    },
+    {
+      "po": "PO15",
+      "issuedDate": "2025-10-29",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 8,
+      "subtotalCents": 496050,
+      "discountCents": 0,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWB001-TB-16",
+          "qty": 50,
+          "unitCostCents": 443,
+          "lineTotalCents": 22150
+        },
+        {
+          "sku": "FWB001-TB-18",
+          "qty": 50,
+          "unitCostCents": 443,
+          "lineTotalCents": 22150
+        },
+        {
+          "sku": "FWB001-SS-16",
+          "qty": 500,
+          "unitCostCents": 310,
+          "lineTotalCents": 155000
+        },
+        {
+          "sku": "FWB001-SS-18",
+          "qty": 500,
+          "unitCostCents": 310,
+          "lineTotalCents": 155000
+        },
+        {
+          "sku": "FWB001-SS-20",
+          "qty": 100,
+          "unitCostCents": 310,
+          "lineTotalCents": 31000
+        },
+        {
+          "sku": "FWB001-TI-16",
+          "qty": 100,
+          "unitCostCents": 443,
+          "lineTotalCents": 44300
+        },
+        {
+          "sku": "FWB001-TI-18",
+          "qty": 100,
+          "unitCostCents": 443,
+          "lineTotalCents": 44300
+        },
+        {
+          "sku": "FWB001-TI-20",
+          "qty": 50,
+          "unitCostCents": 443,
+          "lineTotalCents": 22150
+        }
+      ]
+    },
+    {
+      "po": "PO16",
+      "issuedDate": "2025-10-31",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 5,
+      "subtotalCents": 38229,
+      "discountCents": 0,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWOE004-M1-TI-18",
+          "qty": 65,
+          "unitCostCents": 471,
+          "lineTotalCents": 30615
+        },
+        {
+          "sku": "FWBA-T225-SS",
+          "qty": 50,
+          "unitCostCents": 25,
+          "lineTotalCents": 1250
+        },
+        {
+          "sku": "FWBA-T225-TI",
+          "qty": 50,
+          "unitCostCents": 43,
+          "lineTotalCents": 2150
+        },
+        {
+          "sku": "FWBA-T225-BL",
+          "qty": 50,
+          "unitCostCents": 43,
+          "lineTotalCents": 2150
+        },
+        {
+          "sku": "FWBA-T225-TB",
+          "qty": 48,
+          "unitCostCents": 43,
+          "lineTotalCents": 2064
+        }
+      ]
+    },
+    {
+      "po": "PO18",
+      "issuedDate": "2025-12-01",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 16,
+      "subtotalCents": 524228,
+      "discountCents": 0,
+      "toolingCents": 163265,
+      "lineItems": [
+        {
+          "sku": "FWB004-BL-16",
+          "qty": 100,
+          "unitCostCents": 332,
+          "lineTotalCents": 33200
+        },
+        {
+          "sku": "FWB004-BL-18",
+          "qty": 100,
+          "unitCostCents": 332,
+          "lineTotalCents": 33200
+        },
+        {
+          "sku": "FWB004-BL-20",
+          "qty": 100,
+          "unitCostCents": 332,
+          "lineTotalCents": 33200
+        },
+        {
+          "sku": "FWB004-BL-22",
+          "qty": 99,
+          "unitCostCents": 332,
+          "lineTotalCents": 32868
+        },
+        {
+          "sku": "FWB004-RG-16",
+          "qty": 10,
+          "unitCostCents": 332,
+          "lineTotalCents": 3320
+        },
+        {
+          "sku": "FWB004-RG-18",
+          "qty": 10,
+          "unitCostCents": 332,
+          "lineTotalCents": 3320
+        },
+        {
+          "sku": "FWB004-RG-20",
+          "qty": 10,
+          "unitCostCents": 332,
+          "lineTotalCents": 3320
+        },
+        {
+          "sku": "FWB004-RG-22",
+          "qty": 10,
+          "unitCostCents": 332,
+          "lineTotalCents": 3320
+        },
+        {
+          "sku": "FWB004-SS-16",
+          "qty": 400,
+          "unitCostCents": 332,
+          "lineTotalCents": 132800
+        },
+        {
+          "sku": "FWB004-SS-18",
+          "qty": 400,
+          "unitCostCents": 332,
+          "lineTotalCents": 132800
+        },
+        {
+          "sku": "FWB004-SS-20",
+          "qty": 150,
+          "unitCostCents": 332,
+          "lineTotalCents": 49800
+        },
+        {
+          "sku": "FWB004-SS-22",
+          "qty": 150,
+          "unitCostCents": 332,
+          "lineTotalCents": 49800
+        },
+        {
+          "sku": "FWB004-YG-16",
+          "qty": 10,
+          "unitCostCents": 332,
+          "lineTotalCents": 3320
+        },
+        {
+          "sku": "FWB004-YG-18",
+          "qty": 10,
+          "unitCostCents": 332,
+          "lineTotalCents": 3320
+        },
+        {
+          "sku": "FWB004-YG-20",
+          "qty": 10,
+          "unitCostCents": 332,
+          "lineTotalCents": 3320
+        },
+        {
+          "sku": "FWB004-YG-22",
+          "qty": 10,
+          "unitCostCents": 332,
+          "lineTotalCents": 3320
+        }
+      ]
+    },
+    {
+      "po": "PO19",
+      "issuedDate": "2025-12-19",
+      "currency": "USD",
+      "supplier": "EPower",
+      "declaredItems": 18,
+      "subtotalCents": 633125,
+      "discountCents": 0,
+      "toolingCents": 0,
+      "lineItems": [
+        {
+          "sku": "FWB001-TB-16",
+          "qty": 25,
+          "unitCostCents": 443,
+          "lineTotalCents": 11075
+        },
+        {
+          "sku": "FWB001-TB-18",
+          "qty": 70,
+          "unitCostCents": 443,
+          "lineTotalCents": 31010
+        },
+        {
+          "sku": "FWB001-TB-20",
+          "qty": 30,
+          "unitCostCents": 443,
+          "lineTotalCents": 13290
+        },
+        {
+          "sku": "FWB001-BL-16",
+          "qty": 50,
+          "unitCostCents": 426,
+          "lineTotalCents": 21300
+        },
+        {
+          "sku": "FWB001-BL-18",
+          "qty": 50,
+          "unitCostCents": 426,
+          "lineTotalCents": 21300
+        },
+        {
+          "sku": "FWB001-BL-20",
+          "qty": 90,
+          "unitCostCents": 426,
+          "lineTotalCents": 38340
+        },
+        {
+          "sku": "FWB001-RG-16",
+          "qty": 60,
+          "unitCostCents": 426,
+          "lineTotalCents": 25560
+        },
+        {
+          "sku": "FWB001-RG-18",
+          "qty": 90,
+          "unitCostCents": 426,
+          "lineTotalCents": 38340
+        },
+        {
+          "sku": "FWB001-RG-20",
+          "qty": 70,
+          "unitCostCents": 426,
+          "lineTotalCents": 29820
+        },
+        {
+          "sku": "FWB001-SS-16",
+          "qty": 300,
+          "unitCostCents": 310,
+          "lineTotalCents": 93000
+        },
+        {
+          "sku": "FWB001-SS-18",
+          "qty": 50,
+          "unitCostCents": 310,
+          "lineTotalCents": 15500
+        },
+        {
+          "sku": "FWB001-SS-20",
+          "qty": 160,
+          "unitCostCents": 310,
+          "lineTotalCents": 49600
+        },
+        {
+          "sku": "FWB001-TI-16",
+          "qty": 200,
+          "unitCostCents": 473,
+          "lineTotalCents": 94600
+        },
+        {
+          "sku": "FWB001-TI-18",
+          "qty": 100,
+          "unitCostCents": 473,
+          "lineTotalCents": 47300
+        },
+        {
+          "sku": "FWB001-TI-20",
+          "qty": 50,
+          "unitCostCents": 443,
+          "lineTotalCents": 22150
+        },
+        {
+          "sku": "FWB001-YG-16",
+          "qty": 80,
+          "unitCostCents": 426,
+          "lineTotalCents": 34080
+        },
+        {
+          "sku": "FWB001-YG-18",
+          "qty": 80,
+          "unitCostCents": 426,
+          "lineTotalCents": 34080
+        },
+        {
+          "sku": "FWB001-YG-20",
+          "qty": 30,
+          "unitCostCents": 426,
+          "lineTotalCents": 12780
+        }
+      ]
+    }
+  ]
+}

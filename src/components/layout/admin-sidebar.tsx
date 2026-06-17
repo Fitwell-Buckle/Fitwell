@@ -88,6 +88,7 @@ const navItems: NavItem[] = [
       { href: "/modules/production/supplier-leads", label: "Supplier Leads" },
       { href: "/modules/production/suppliers", label: "Suppliers" },
       { href: "/products", label: "Products" },
+      { href: "/cogs", label: "COGS" },
     ],
   },
   // Top-level: a booth-walking worklist that feeds both the Customer (Leads)
