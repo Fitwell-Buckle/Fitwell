@@ -554,6 +554,13 @@
       "when": 1781728916616,
       "tag": "0078_clean_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1781729980850,
+      "tag": "0079_faulty_infant_terrible",
+      "breakpoints": true
     }
   ]
 }

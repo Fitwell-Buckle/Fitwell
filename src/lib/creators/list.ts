@@ -34,6 +34,8 @@ export interface CreatorListRow {
   possibleMismatch: boolean;
   primaryPlatform: string | null;
   crossPlatformFit: number | null;
+  /** How the creator entered the system (creator.source); null = legacy/import. */
+  source: string | null;
   platforms: {
     platform: string;
     handle: string;
@@ -58,6 +60,8 @@ export interface CreatorListParams {
   mismatch?: string;
   /** Pipeline stage filter (clicked from the pipeline bar). */
   stage?: string;
+  /** Provenance filter, e.g. "self_registration" for the signup review queue. */
+  source?: string;
   /** substring match on name or any handle */
   q?: string;
   /** fit | followers | er | lastpost | name */
@@ -110,6 +114,7 @@ export function filterCreators(
     params.all !== "1" &&
     !params.status &&
     !params.stage &&
+    !params.source &&
     params.market !== "out" &&
     params.mismatch !== "1"
   ) {
@@ -117,6 +122,9 @@ export function filterCreators(
   }
   if (params.mismatch === "1") {
     out = out.filter((r) => r.possibleMismatch);
+  }
+  if (params.source) {
+    out = out.filter((r) => r.source === params.source);
   }
   if (params.platform === "multi") {
     out = out.filter((r) => r.platforms.length > 1);

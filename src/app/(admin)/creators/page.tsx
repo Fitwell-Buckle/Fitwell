@@ -182,6 +182,7 @@ export default async function CreatorsPage({
       }),
       primaryPlatform: c.primaryPlatform,
       crossPlatformFit: c.crossPlatformFit,
+      source: c.source,
       platforms: c.platforms.map((p) => ({
         platform: p.platform,
         handle: p.handle,
@@ -203,9 +204,15 @@ export default async function CreatorsPage({
     !params.vetting &&
     !params.status &&
     !params.stage &&
+    !params.source &&
     params.market !== "out" &&
     params.mismatch !== "1" &&
     params.all !== "1";
+
+  // Self-registered creators awaiting review (public signup form).
+  const signupCount = rows.filter(
+    (r) => r.source === "self_registration" && r.vettingStatus === "unreviewed",
+  ).length;
 
   // Count of fixable bad-merge suspects (in-market, not dumped).
   const mismatchCount = rows.filter(
@@ -331,6 +338,13 @@ export default async function CreatorsPage({
         )}
         {pill("Approved", "vetting", "approved", params.vetting === "approved")}
         {pill("Rejected", "vetting", "rejected", params.vetting === "rejected")}
+        {signupCount > 0 &&
+          pill(
+            `Self-registered ${signupCount}`,
+            "source",
+            "self_registration",
+            params.source === "self_registration",
+          )}
         {pill("Out of market", "market", "out", params.market === "out")}
         {mismatchCount > 0 &&
           pill(

@@ -18,6 +18,7 @@ function row(partial: Partial<CreatorListRow> & { id: string }): CreatorListRow 
     stage: "prospect",
     primaryPlatform: "ig",
     crossPlatformFit: 50,
+    source: null,
     platforms: [{ platform: "ig", handle: partial.id, fitScore: 50, watchConfidence: "medium" }],
     followersTotal: 10_000,
     bestErPct: 2,

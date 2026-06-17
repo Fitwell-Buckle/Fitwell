@@ -1705,12 +1705,18 @@ export const creator = pgTable(
     // Shopify collection ids this creator may order from. Empty = all.
     // (Carried over from influencer for the self-serve portal phase.)
     assignedCollectionIds: text("assigned_collection_ids").array(),
+    // How this creator entered the system: import (CSV research dataset) |
+    // manual (admin "Add creator") | self_registration (public signup form).
+    // NULL = legacy/import. Self-registrations land here as unreviewed for the
+    // /creators vetting queue (filterable via the "Self-registered" pill).
+    source: text("source"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },
   (t) => [
     index("creator_status_idx").on(t.status),
+    index("creator_source_idx").on(t.source),
     index("creator_vetting_status_idx").on(t.vettingStatus),
     index("creator_cross_platform_fit_idx").on(t.crossPlatformFit),
     index("creator_customer_id_idx").on(t.customerId),
