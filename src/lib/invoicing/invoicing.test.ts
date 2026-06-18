@@ -5,10 +5,23 @@ import {
   consolidateLinesBySku,
   groupByCompany,
   computeDeposit,
+  draftDiscountPercent,
   netUnitPriceCents,
   netLineDisplays,
   shippingAddressLines,
 } from "@/lib/invoicing/invoicing";
+
+describe("draftDiscountPercent", () => {
+  it("0 on the deposit path — the deposit line carries the price", () => {
+    expect(draftDiscountPercent({ totalCents: 5000, hasDeposit: true, tierPercent: 62 })).toBe(0);
+  });
+  it("100% for a no-charge invoice so the Shopify draft is $0 too", () => {
+    expect(draftDiscountPercent({ totalCents: 0, hasDeposit: false, tierPercent: 0 })).toBe(100);
+  });
+  it("the brand tier for a normal priced order", () => {
+    expect(draftDiscountPercent({ totalCents: 5000, hasDeposit: false, tierPercent: 62 })).toBe(62);
+  });
+});
 
 describe("shippingAddressLines", () => {
   it("returns [] for null", () => {

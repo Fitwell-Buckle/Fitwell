@@ -6,6 +6,7 @@ const {
   updateInvoiceStatus,
   snapshotInvoiceDeposit,
   computeDeposit,
+  draftDiscountPercent,
   buildInvoiceEmailHtml,
   getBillingSettings,
   sendEmail,
@@ -19,6 +20,7 @@ const {
     .fn()
     .mockResolvedValue({ depositCents: 0, balanceCents: 0 }),
   computeDeposit: vi.fn(() => ({ depositCents: 0, balanceCents: 0 })),
+  draftDiscountPercent: vi.fn(() => 0),
   buildInvoiceEmailHtml: vi.fn(() => "<html></html>"),
   getBillingSettings: vi.fn().mockResolvedValue({ instructions: null }),
   sendEmail: vi.fn().mockResolvedValue(undefined),
@@ -36,7 +38,7 @@ vi.mock("@/lib/invoicing/service", () => ({
   updateInvoiceStatus,
   snapshotInvoiceDeposit,
 }));
-vi.mock("@/lib/invoicing/invoicing", () => ({ computeDeposit }));
+vi.mock("@/lib/invoicing/invoicing", () => ({ computeDeposit, draftDiscountPercent }));
 vi.mock("@/lib/invoicing/email", () => ({ buildInvoiceEmailHtml }));
 vi.mock("@/lib/invoicing/billing-settings", () => ({ getBillingSettings }));
 vi.mock("@/lib/email/resend", () => ({ sendEmail }));

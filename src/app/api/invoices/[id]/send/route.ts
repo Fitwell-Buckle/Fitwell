@@ -9,7 +9,7 @@ import {
   updateInvoiceStatus,
   snapshotInvoiceDeposit,
 } from "@/lib/invoicing/service";
-import { computeDeposit } from "@/lib/invoicing/invoicing";
+import { computeDeposit, draftDiscountPercent } from "@/lib/invoicing/invoicing";
 import { buildInvoiceEmailHtml } from "@/lib/invoicing/email";
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { sendEmail } from "@/lib/email/resend";
@@ -106,7 +106,11 @@ export async function POST(
         email: primary,
         shopifyCustomerId,
         shippingAddress: inv.shipTo ? shipToToShopify(inv.shipTo) : undefined,
-        discountPercent: hasDeposit ? 0 : inv.discountPercent ?? 0,
+        discountPercent: draftDiscountPercent({
+          totalCents: inv.totalCents,
+          hasDeposit,
+          tierPercent: inv.discountPercent ?? 0,
+        }),
         note:
           (hasDeposit
             ? `Deposit (${depositPercent}%) for invoice ${inv.invoiceNumber}`

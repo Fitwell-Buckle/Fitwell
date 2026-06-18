@@ -12,7 +12,7 @@ import {
 import { getShopifyClient } from "@/lib/shopify/client";
 import { createInvoice, snapshotInvoiceDeposit } from "./service";
 import { notifyNewB2bOrder, notifyB2bDraft } from "./order-notifications";
-import { computeInvoiceTotals, computeDeposit } from "./invoicing";
+import { computeInvoiceTotals, computeDeposit, draftDiscountPercent } from "./invoicing";
 import { getBillingSettings } from "./billing-settings";
 import type { CompanyScope } from "@/lib/portal/company-session";
 
@@ -326,7 +326,11 @@ export async function submitPortalOrder(
       email: scope.email ?? inv.company.contactEmail ?? null,
       shopifyCustomerId: inv.company.customer?.shopifyId ?? null,
       shippingAddress: inv.shipTo ? shipToToShopify(inv.shipTo) : undefined,
-      discountPercent: hasDeposit ? 0 : discountPercent,
+      discountPercent: draftDiscountPercent({
+        totalCents: totals.totalCents,
+        hasDeposit,
+        tierPercent: discountPercent,
+      }),
       note:
         (hasDeposit
           ? `Portal order deposit (${depositPercent}%) — ${inv.company.name}`
