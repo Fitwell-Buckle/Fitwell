@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { influencer } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
-import { InfluencerOrderForm } from "./order-form";
+import { NewOrderModes } from "./new-order-modes";
 
 export const metadata: Metadata = {
   title: "New gifting order | Fitwell Admin",
@@ -29,7 +29,7 @@ export default async function NewInfluencerOrderPage({
   return (
     <div>
       <PageHeader title="New gifting order" />
-      <InfluencerOrderForm
+      <NewOrderModes
         defaultInfluencerId={influencerId}
         influencers={influencers.map((i) => ({
           id: i.id,

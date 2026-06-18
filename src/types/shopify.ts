@@ -88,6 +88,20 @@ export interface ShopifyOrder {
   note: string | null;
   note_attributes: Array<{ name: string; value: string }>;
   tags: string;
+  /** Display name, e.g. "#1234" (REST returns this alongside order_number). */
+  name?: string;
+  /** Fulfillment records — carrier tracking + shipped/delivered signals. */
+  fulfillments?: Array<{
+    id: number;
+    created_at?: string;
+    updated_at?: string;
+    status?: string | null;
+    shipment_status?: string | null;
+    tracking_number?: string | null;
+    tracking_numbers?: string[];
+    tracking_url?: string | null;
+    tracking_urls?: string[];
+  }>;
 }
 
 export interface ShopifyVariant {

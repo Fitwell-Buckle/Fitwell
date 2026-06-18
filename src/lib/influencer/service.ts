@@ -139,10 +139,20 @@ export async function recordInfluencerOrder(params: {
   issuedDate?: string;
   shopifyDraftOrderId?: string | null;
   shopifyInvoiceUrl?: string | null;
+  // Recording an order that ALREADY exists in Shopify (the "record existing
+  // order" flow): the real order id + its fulfillment facts. Presence of
+  // shopifyOrderId marks the gift as already sent.
+  shopifyOrderId?: string | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  shippedAt?: Date | null;
+  deliveredAt?: Date | null;
 }): Promise<{ id: string; orderNumber: string }> {
   const totals = computeGiftTotals(params.lineItems);
   const orderNumber = await nextOrderNumber();
   const hasDraft = !!params.shopifyDraftOrderId;
+  const hasRealOrder = !!params.shopifyOrderId;
+  const sent = hasDraft || hasRealOrder;
 
   // Unified creator system: carry the influencer's creator link onto the
   // order so /creators/[id] can list gifting orders directly.
@@ -157,7 +167,7 @@ export async function recordInfluencerOrder(params: {
       orderNumber,
       influencerId: params.influencerId,
       creatorId: inf?.creatorId ?? null,
-      status: hasDraft ? "sent" : "draft",
+      status: sent ? "sent" : "draft",
       issuedDate: params.issuedDate ?? today(),
       contentDueDate: params.contentDueDate ?? null,
       affiliateLink: params.affiliateLink || null,
@@ -166,7 +176,12 @@ export async function recordInfluencerOrder(params: {
       discountPercent: GIFT_DISCOUNT_PERCENT,
       shopifyDraftOrderId: params.shopifyDraftOrderId ?? null,
       shopifyInvoiceUrl: params.shopifyInvoiceUrl ?? null,
-      sentAt: hasDraft ? new Date() : null,
+      shopifyOrderId: params.shopifyOrderId ?? null,
+      trackingNumber: params.trackingNumber ?? null,
+      trackingUrl: params.trackingUrl ?? null,
+      shippedAt: params.shippedAt ?? null,
+      deliveredAt: params.deliveredAt ?? null,
+      sentAt: sent ? new Date() : null,
       ...totals,
     })
     .returning({ id: influencerOrder.id });

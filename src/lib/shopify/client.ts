@@ -386,6 +386,31 @@ class ShopifyClient {
     return result.order;
   }
 
+  /**
+   * Find an order by its display number (e.g. "1234" or "#1234"), across all
+   * statuses (open/closed/cancelled). Returns the full order incl. line items
+   * + fulfillments, or null if no order matches. Used to record an existing
+   * Shopify order as a gifting order. The `#` is normalized in.
+   */
+  async findOrderByName(name: string): Promise<ShopifyOrder | null> {
+    const trimmed = name.trim().replace(/^#/, "");
+    if (!trimmed) return null;
+    const sp = new URLSearchParams();
+    sp.set("status", "any");
+    sp.set("name", `#${trimmed}`);
+    sp.set("limit", "10");
+    const { body } = await this.fetchPage<{ orders: ShopifyOrder[] }>(
+      `/orders.json?${sp.toString()}`,
+    );
+    // Shopify's name filter is a contains-match, so pin to an exact name.
+    const want = `#${trimmed}`;
+    return (
+      body.orders.find((o) => o.name === want) ??
+      body.orders.find((o) => String(o.order_number) === trimmed) ??
+      null
+    );
+  }
+
   async getOrderCount(
     params: {
       status?: string;
