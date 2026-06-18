@@ -342,7 +342,10 @@ export default async function CreatorsPage({
           // Carries a blue dot (matching the nav) so pending public signups
           // are obvious the moment you land here.
           <Link
-            href={pillHref("source", "self_registration")}
+            href={pillHref(
+              "source",
+              params.source === "self_registration" ? null : "self_registration",
+            )}
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
               params.source === "self_registration"
                 ? "bg-zinc-900 text-white"
