@@ -338,13 +338,21 @@ export default async function CreatorsPage({
         )}
         {pill("Approved", "vetting", "approved", params.vetting === "approved")}
         {pill("Rejected", "vetting", "rejected", params.vetting === "rejected")}
-        {signupCount > 0 &&
-          pill(
-            `Self-registered ${signupCount}`,
-            "source",
-            "self_registration",
-            params.source === "self_registration",
-          )}
+        {signupCount > 0 && (
+          // Carries a blue dot (matching the nav) so pending public signups
+          // are obvious the moment you land here.
+          <Link
+            href={pillHref("source", "self_registration")}
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+              params.source === "self_registration"
+                ? "bg-zinc-900 text-white"
+                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+            }`}
+          >
+            Self-registered {signupCount}
+            <span className="h-2 w-2 rounded-full bg-blue-500" />
+          </Link>
+        )}
         {pill("Out of market", "market", "out", params.market === "out")}
         {mismatchCount > 0 &&
           pill(

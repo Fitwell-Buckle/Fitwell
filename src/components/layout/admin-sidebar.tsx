@@ -104,13 +104,6 @@ const navItems: NavItem[] = [
       { href: "/funnel", label: "Funnel" },
       { href: "/funnel/strategy", label: "Funnel — Strategic" },
       { href: "/creators", label: "Creators" },
-      // Pre-filtered to the self-registration vetting queue; carries the blue
-      // dot when public signups are waiting to be reviewed.
-      {
-        href: "/creators?source=self_registration",
-        label: "Creator Signups",
-        matchPrefixes: ["/creators/signups"],
-      },
       { href: "/influencers", label: "Influencer List" },
       { href: "/influencer-tracking", label: "Influencer Orders", icon: Gift },
     ],
@@ -278,7 +271,7 @@ function SidebarContent({
   if (supplierMsgs > 0) dotHrefs.add("/modules/production/suppliers");
   if (influencerMsgs > 0) dotHrefs.add("/influencers");
   if (newOrders > 0) dotHrefs.add("/invoices");
-  if (signupCreators > 0) dotHrefs.add("/creators?source=self_registration");
+  if (signupCreators > 0) dotHrefs.add("/creators");
 
   function toggle(label: string, fallback: boolean) {
     setOpen((o) => ({ ...o, [label]: !(o[label] ?? fallback) }));
