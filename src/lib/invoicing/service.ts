@@ -550,8 +550,26 @@ export async function getInvoiceDetail(invoiceId: string) {
   // reached this customer), fall back to fetching it live from Shopify so the
   // invoice still shows it. Read-only — Shopify stays the source of truth.
   let shippingAddress: ShippableAddress | null = null;
+  // The invoice's CHOSEN ship-to (set via the ship-to picker, stored as the
+  // `shipTo` snapshot) wins — it's what the order actually ships to and what the
+  // Shopify draft order uses. Only fall back to the customer's default address
+  // when no ship-to was picked.
+  if (inv.shipTo) {
+    shippingAddress = {
+      firstName: inv.shipTo.firstName ?? null,
+      lastName: inv.shipTo.lastName ?? null,
+      company: inv.shipTo.company ?? null,
+      address1: inv.shipTo.address1 ?? null,
+      address2: inv.shipTo.address2 ?? null,
+      city: inv.shipTo.city ?? null,
+      province: inv.shipTo.province ?? null,
+      provinceCode: inv.shipTo.provinceCode ?? null,
+      zip: inv.shipTo.zip ?? null,
+      country: inv.shipTo.country ?? null,
+    };
+  }
   const linkedCustomerId = inv.company?.customerId ?? null;
-  if (linkedCustomerId) {
+  if (!shippingAddress && linkedCustomerId) {
     shippingAddress =
       (await db.query.customerAddress.findFirst({
         where: eq(customerAddress.customerId, linkedCustomerId),
