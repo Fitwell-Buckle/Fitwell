@@ -212,6 +212,32 @@ export function InvoiceForm({
       active = false;
     };
   }, [companyId]);
+
+  // Pull the customer's addresses fresh from Shopify (delete-and-replace), then
+  // re-load — lets an admin grab a newly-added Shopify address (e.g. an alternate
+  // ship-to) inline without leaving the form. The auto-load above only self-heals
+  // when nothing is synced yet, so this is how you refresh an existing set.
+  const [syncingAddr, setSyncingAddr] = useState(false);
+  async function syncAddressesFromShopify() {
+    if (!companyId || syncingAddr) return;
+    setSyncingAddr(true);
+    try {
+      await fetch(`/api/production/companies/${companyId}/sync-addresses`, { method: "POST" });
+      const r = await fetch(`/api/production/companies/${companyId}/addresses`);
+      const d = r.ok ? await r.json() : null;
+      const addrs = (d?.data as CompanyAddress[]) ?? [];
+      setAddresses(addrs);
+      setOrderAddressId((cur) =>
+        addrs.some((a) => a.id === cur) ? cur : addrs.find((a) => a.isDefault)?.id || "",
+      );
+      setAddrLoaded(true);
+    } catch {
+      /* best-effort — the picker keeps whatever it had */
+    } finally {
+      setSyncingAddr(false);
+    }
+  }
+
   // Remember the last line's collection so a newly-added line defaults to it.
   const [lastCollectionId, setLastCollectionId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -780,7 +806,18 @@ export function InvoiceForm({
 
         {addresses.length > 0 && (
           <div className="mt-4 border-t border-zinc-100 pt-4">
-            <label className={fieldLabel}>{split ? "Default ship-to" : "Ship to"}</label>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <label className={`${fieldLabel} mb-0`}>{split ? "Default ship-to" : "Ship to"}</label>
+              <button
+                type="button"
+                onClick={syncAddressesFromShopify}
+                disabled={syncingAddr}
+                className="text-xs font-medium text-zinc-500 hover:text-zinc-900 disabled:opacity-50"
+                title="Pull this customer's latest addresses from Shopify (e.g. a newly-added alternate)"
+              >
+                {syncingAddr ? "Syncing…" : "Sync from Shopify"}
+              </button>
+            </div>
             <select
               className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
               value={orderAddressId}
@@ -828,10 +865,16 @@ export function InvoiceForm({
           <div className="mt-4 border-t border-zinc-100 pt-4">
             <p className="text-sm text-zinc-500">
               No saved addresses for this company yet. Add them on the customer in
-              Shopify, then click <strong>Sync from Shopify</strong> on the
-              customer&apos;s Addresses tab — the ship-to &amp; split-fulfillment
-              options will appear here.
+              Shopify, then sync to pick a ship-to here.
             </p>
+            <button
+              type="button"
+              onClick={syncAddressesFromShopify}
+              disabled={syncingAddr}
+              className="mt-2 rounded-md border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {syncingAddr ? "Syncing…" : "Sync from Shopify"}
+            </button>
           </div>
         )}
       </Card>

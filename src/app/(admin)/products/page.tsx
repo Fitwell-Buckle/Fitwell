@@ -18,6 +18,7 @@ import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 import { ListFilters } from "@/components/catalog/list-filters";
 import { RefreshCatalogButton } from "@/components/catalog/refresh-catalog-button";
 import { getCatalogCached } from "@/lib/catalog/load";
+import { findSkuCollisions } from "@/lib/catalog/sku-collisions";
 import { ProductRow } from "./product-row";
 import { StopPropagationLink } from "./stop-propagation-link";
 
@@ -147,6 +148,11 @@ export default async function ProductsPage({
   }
   rows.sort((a, b) => b.unitsSold - a.unitsSold || a.title.localeCompare(b.title));
 
+  // Guard: SKUs assigned to more than one distinct product. SKU is the unique
+  // key everywhere (this list dedups by it, /products/[sku] routes by it, sales/
+  // incoming aggregate by it), so a collision silently shows the wrong product.
+  const skuCollisions = findSkuCollisions(catalog);
+
   // Item Chooser filter: keep just the chosen products' rows.
   const visibleProducts = skuSet.size
     ? rows.filter((p) => skuSet.has(p.sku))
@@ -158,6 +164,28 @@ export default async function ProductsPage({
         <PageHeader title="Products" />
         <RefreshCatalogButton />
       </div>
+
+      {skuCollisions.length > 0 && (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm">
+          <p className="font-medium text-red-800">
+            Duplicate SKUs — {skuCollisions.length} SKU
+            {skuCollisions.length === 1 ? " is" : "s are"} assigned to more than one product.
+          </p>
+          <p className="mt-1 text-red-700">
+            SKU is the unique key across products, orders, inventory and labels, so a duplicate
+            shows the wrong product (only one of each appears in this list). Give each variant a
+            unique SKU in Shopify.
+          </p>
+          <ul className="mt-2 space-y-1 text-red-700">
+            {skuCollisions.map((c) => (
+              <li key={c.sku}>
+                <span className="font-mono text-xs">{c.sku}</span> →{" "}
+                {c.products.map((p) => p.label).join("  ·  ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <ListFilters />
 
