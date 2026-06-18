@@ -209,6 +209,7 @@ export const updateOrderSchema = z.object({
   shippedAt: dateString.nullable().optional(),
   deliveredAt: dateString.nullable().optional(),
   trackingNumber: z.string().max(200).nullable().optional(),
+  trackingUrl: z.string().url().max(2000).nullable().or(z.literal("")).optional(),
   expectedPlatform: z.enum(["ig", "yt", "tt", "other"]).nullable().optional(),
 });
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
@@ -228,6 +229,7 @@ export async function updateInfluencerOrder(
   if (input.deliveredAt !== undefined)
     patch.deliveredAt = input.deliveredAt ? new Date(input.deliveredAt) : null;
   if (input.trackingNumber !== undefined) patch.trackingNumber = input.trackingNumber;
+  if (input.trackingUrl !== undefined) patch.trackingUrl = input.trackingUrl || null;
   if (input.expectedPlatform !== undefined) patch.expectedPlatform = input.expectedPlatform;
 
   const [row] = await db

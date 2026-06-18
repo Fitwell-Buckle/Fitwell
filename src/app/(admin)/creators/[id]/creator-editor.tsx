@@ -189,9 +189,9 @@ export function CreatorEditor({
         <textarea
           value={noteDraft}
           onChange={(e) => setNoteDraft(e.target.value)}
-          rows={4}
+          rows={12}
           className="w-full rounded-lg border border-zinc-200 bg-white p-2 text-sm outline-none focus:border-zinc-400"
-          placeholder="Outreach context, content angles, terms…"
+          placeholder="Outreach context, content angles, terms… (paste full DM conversations here)"
         />
         <button
           onClick={() => patch({ notes: noteDraft })}

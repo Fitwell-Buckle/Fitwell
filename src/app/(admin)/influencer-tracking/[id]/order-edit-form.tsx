@@ -47,6 +47,11 @@ export interface EditOrderInitial {
   affiliateLink: string | null;
   status: "draft" | "sent" | "cancelled";
   expectedPlatform: "ig" | "yt" | "tt" | "other" | null;
+  // Sample logistics (auto-stamped by fulfillment webhooks; editable here).
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  shippedAt: string | null; // YYYY-MM-DD
+  deliveredAt: string | null; // YYYY-MM-DD
 }
 
 interface Row {
@@ -124,6 +129,10 @@ export function InfluencerOrderEditForm({
   const [affiliateLink, setAffiliateLink] = useState(initial.affiliateLink ?? "");
   const [status, setStatus] = useState(initial.status);
   const [expectedPlatform, setExpectedPlatform] = useState(initial.expectedPlatform ?? "");
+  const [trackingNumber, setTrackingNumber] = useState(initial.trackingNumber ?? "");
+  const [trackingUrl, setTrackingUrl] = useState(initial.trackingUrl ?? "");
+  const [shippedAt, setShippedAt] = useState(initial.shippedAt ?? "");
+  const [deliveredAt, setDeliveredAt] = useState(initial.deliveredAt ?? "");
 
   const splitSeed = seedSplit(initial, initial.shipToAddressId || undefined);
   const [orderAddressId, setOrderAddressId] = useState(
@@ -338,6 +347,10 @@ export function InfluencerOrderEditForm({
           affiliateLink: affiliateLink.trim() || null,
           status,
           expectedPlatform: expectedPlatform || null,
+          trackingNumber: trackingNumber.trim() || null,
+          trackingUrl: trackingUrl.trim() || null,
+          shippedAt: shippedAt || null,
+          deliveredAt: deliveredAt || null,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -433,6 +446,53 @@ export function InfluencerOrderEditForm({
         <div className="mt-4">
           <label className={fieldLabel}>Affiliate link (optional)</label>
           <Input type="url" placeholder="https://…" value={affiliateLink} onChange={(e) => setAffiliateLink(e.target.value)} />
+        </div>
+      </Card>
+
+      <Card className="p-6">
+        <h2 className="text-sm font-semibold text-zinc-900">Sample logistics</h2>
+        <p className="mt-1 text-xs text-zinc-500">
+          Auto-filled from Shopify fulfillment when the sample ships through the
+          platform. Enter manually for orders fulfilled outside it — a delivered
+          date marks the sample as received.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={fieldLabel}>Tracking number</label>
+            <Input
+              placeholder="e.g. 1Z999AA10123456784"
+              value={trackingNumber}
+              onChange={(e) => setTrackingNumber(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={fieldLabel}>Tracking URL (optional)</label>
+            <Input
+              type="url"
+              placeholder="https://…"
+              value={trackingUrl}
+              onChange={(e) => setTrackingUrl(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={fieldLabel}>Shipped date</label>
+            <Input type="date" value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} />
+          </div>
+          <div>
+            <div className="flex items-center justify-between">
+              <label className={fieldLabel}>Delivered date (received)</label>
+              {!deliveredAt && (
+                <button
+                  type="button"
+                  onClick={() => setDeliveredAt(new Date().toISOString().slice(0, 10))}
+                  className="mb-1 text-[11px] font-medium text-zinc-500 hover:text-zinc-900"
+                >
+                  Mark received today
+                </button>
+              )}
+            </div>
+            <Input type="date" value={deliveredAt} onChange={(e) => setDeliveredAt(e.target.value)} />
+          </div>
         </div>
       </Card>
 

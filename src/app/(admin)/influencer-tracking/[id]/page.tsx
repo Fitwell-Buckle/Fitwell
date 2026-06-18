@@ -49,6 +49,10 @@ export default async function InfluencerOrderDetailPage({
     status,
     expectedPlatform:
       (order.expectedPlatform as EditOrderInitial["expectedPlatform"]) ?? null,
+    trackingNumber: order.trackingNumber,
+    trackingUrl: order.trackingUrl,
+    shippedAt: order.shippedAt ? order.shippedAt.toISOString().slice(0, 10) : null,
+    deliveredAt: order.deliveredAt ? order.deliveredAt.toISOString().slice(0, 10) : null,
   };
 
   return (
