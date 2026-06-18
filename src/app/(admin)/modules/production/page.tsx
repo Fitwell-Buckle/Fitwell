@@ -887,10 +887,8 @@ export default async function ProductionPage({
       </div>
 
       {/* The selected view sits on a slightly-whiter panel than the page bg
-          (#fafafa). The view tabs above render a white "tab leg" beneath the
-          active option that visually merges with this panel. Same `shadow-sm`
-          as the active tab pill, so the whole "tab + panel" reads as one
-          raised surface. */}
+          (#fafafa), raised with a subtle shadow. The underline view tabs above
+          mark the active visualisation; this panel holds its content. */}
       <div className="mt-4 rounded-xl bg-white p-4 shadow-sm md:p-6">
 
       {view === "inventory" && (
