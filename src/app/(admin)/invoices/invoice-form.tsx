@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { computeInvoiceTotals, netLineDisplays } from "@/lib/invoicing/invoicing";
+import { fmtMoney } from "@/lib/production/display";
 import { ProductCombobox, type CatalogVariant } from "@/components/catalog/product-combobox";
 import { useCatalog } from "@/components/catalog/use-catalog";
 import { LineItemRow, LineItemsHeader, LineItemsTotal } from "@/components/invoicing/line-item-row";
@@ -166,6 +167,13 @@ export function InvoiceForm({
     initial?.depositPercent != null ? String(initial.depositPercent) : "",
   );
   const [rows, setRows] = useState<Row[]>(() => seedRows(initial));
+  // Free samples: no charge for the order. Prices come from the catalog (the unit
+  // price isn't hand-edited); ticking this zeroes every line → a $0 invoice → a
+  // $0 Shopify draft (the order-discount path). Seeded on when editing an order
+  // whose lines are all $0.
+  const [freeSamples, setFreeSamples] = useState<boolean>(
+    !!initial && initial.lineItems.length > 0 && initial.lineItems.every((l) => l.unitPriceCents === 0),
+  );
   // Ship-to / split fulfillment. Addresses load async after a company is chosen.
   const [addresses, setAddresses] = useState<CompanyAddress[]>([]);
   // Gates the "no addresses" hint so it shows only after the async load resolves
@@ -387,7 +395,7 @@ export function InvoiceForm({
 
   const totalsLines = rows.map((r) => ({
     quantity: Math.max(0, Math.floor(Number(r.quantity) || 0)),
-    unitPriceCents: Math.max(0, Math.round(Number(r.unitPrice) * 100 || 0)),
+    unitPriceCents: freeSamples ? 0 : Math.max(0, Math.round(Number(r.unitPrice) * 100 || 0)),
   }));
   const totals = computeInvoiceTotals(totalsLines, discount);
   // Per-line NET totals (post-discount, footing to totals.totalCents) — used
@@ -499,7 +507,9 @@ export function InvoiceForm({
       if (!Number.isInteger(quantity) || quantity <= 0) {
         return setError(`Line ${i + 1}: quantity must be a positive whole number.`);
       }
-      const unitPriceCents = Math.round(Number(r.unitPrice) * 100);
+      // Free samples zero every line (→ $0 invoice → $0 draft); otherwise the
+      // price comes straight from the catalog (it's not hand-edited).
+      const unitPriceCents = freeSamples ? 0 : Math.round(Number(r.unitPrice) * 100);
       if (!Number.isFinite(unitPriceCents) || unitPriceCents < 0) {
         return setError(`Line ${i + 1}: unit price must be a non-negative amount.`);
       }
@@ -699,9 +709,20 @@ export function InvoiceForm({
       <Card className="p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-900">Line items</h2>
-          <Button type="button" variant="outline" size="sm" onClick={addRow}>
-            <Plus className="h-4 w-4" /> Add line
-          </Button>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-zinc-600">
+              <input
+                type="checkbox"
+                checked={freeSamples}
+                onChange={(e) => setFreeSamples(e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-300"
+              />
+              Free samples (no charge)
+            </label>
+            <Button type="button" variant="outline" size="sm" onClick={addRow}>
+              <Plus className="h-4 w-4" /> Add line
+            </Button>
+          </div>
         </div>
 
         {catalogError && (
@@ -782,16 +803,9 @@ export function InvoiceForm({
                   />
                 }
                 unitPrice={
-                  <Input
-                    className="w-28"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Unit $ (retail)"
-                    value={r.unitPrice}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => updateRow(i, { unitPrice: e.target.value })}
-                  />
+                  <div className="flex h-10 w-28 items-center justify-end px-2 text-sm tabular-nums text-zinc-700">
+                    {fmtMoney(netLines[i].netUnitPriceCents)}
+                  </div>
                 }
                 lineTotalCents={lineCents}
                 onRemove={() => removeRow(i)}
