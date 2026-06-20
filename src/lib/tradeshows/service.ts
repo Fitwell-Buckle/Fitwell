@@ -1,8 +1,19 @@
-import { and, asc, desc, eq, ilike, or, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  not,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   tradeShow,
   tradeShowVendor,
+  tradeShowVendorContact,
   tradeShowVendorVoiceNote,
 } from "@/lib/schema";
 import { createLead, createLeadSchema } from "@/lib/crm/service";
@@ -10,8 +21,11 @@ import {
   createSupplierLead,
   createSupplierLeadSchema,
 } from "@/lib/suppliers/lead-service";
+import { toNameCase } from "@/lib/crm/names";
 import {
   type AddVoiceNoteInput,
+  type CreateVendorContactInput,
+  type UpdateVendorContactInput,
   type UpdateVendorInput,
   type VendorForPromotion,
   vendorToCustomerLeadInput,
@@ -83,11 +97,36 @@ export async function listVendors(
     .orderBy(desc(tradeShowVendor.priority), asc(tradeShowVendor.booth));
 }
 
+// Contact counts per vendor for a show, for the worklist's people indicator.
+export async function vendorContactCounts(
+  tradeShowId: string,
+): Promise<Record<string, number>> {
+  const rows = await db
+    .select({
+      vendorId: tradeShowVendorContact.vendorId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(tradeShowVendorContact)
+    .innerJoin(
+      tradeShowVendor,
+      eq(tradeShowVendorContact.vendorId, tradeShowVendor.id),
+    )
+    .where(eq(tradeShowVendor.tradeShowId, tradeShowId))
+    .groupBy(tradeShowVendorContact.vendorId);
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.vendorId] = r.count;
+  return out;
+}
+
 export async function getVendor(id: string) {
   return db.query.tradeShowVendor.findFirst({
     where: eq(tradeShowVendor.id, id),
     with: {
       tradeShow: true,
+      // Primary contact first, then oldest-captured.
+      contacts: {
+        orderBy: (c, { desc, asc }) => [desc(c.isPrimary), asc(c.createdAt)],
+      },
       voiceNotes: { orderBy: (v, { desc }) => desc(v.createdAt) },
       lead: true,
       supplierLead: true,
@@ -178,6 +217,128 @@ export async function deleteVendor(
   return row ?? null;
 }
 
+// ─── Contacts ───────────────────────────────────────────────────────
+
+export async function listVendorContacts(vendorId: string) {
+  return db
+    .select()
+    .from(tradeShowVendorContact)
+    .where(eq(tradeShowVendorContact.vendorId, vendorId))
+    .orderBy(
+      desc(tradeShowVendorContact.isPrimary),
+      asc(tradeShowVendorContact.createdAt),
+    );
+}
+
+// Clear the primary flag on every other contact for this vendor, so exactly one
+// stays primary.
+async function clearOtherPrimaries(vendorId: string, keepId: string) {
+  await db
+    .update(tradeShowVendorContact)
+    .set({ isPrimary: false, updatedAt: new Date() })
+    .where(
+      and(
+        eq(tradeShowVendorContact.vendorId, vendorId),
+        not(eq(tradeShowVendorContact.id, keepId)),
+      ),
+    );
+}
+
+export async function addVendorContact(
+  vendorId: string,
+  input: CreateVendorContactInput,
+  userId: string,
+): Promise<{ id: string }> {
+  // First contact for a vendor is primary by default; otherwise honor the flag.
+  const count = (await listVendorContacts(vendorId)).length;
+  const isPrimary = input.isPrimary ?? count === 0;
+
+  const [row] = await db
+    .insert(tradeShowVendorContact)
+    .values({
+      vendorId,
+      firstName: toNameCase(input.firstName),
+      lastName: toNameCase(input.lastName),
+      title: input.title || null,
+      email: input.email || null,
+      phone: input.phone || null,
+      notes: input.notes || null,
+      isPrimary,
+      cardImageUrl: input.cardImageUrl || null,
+      cardRawText: input.cardRawText || null,
+      ocrConfidence: input.ocrConfidence ?? null,
+      capturedByUserId: userId,
+    })
+    .returning({ id: tradeShowVendorContact.id });
+
+  if (isPrimary) await clearOtherPrimaries(vendorId, row.id);
+  return { id: row.id };
+}
+
+export async function updateVendorContact(
+  contactId: string,
+  input: UpdateVendorContactInput,
+): Promise<{ id: string } | null> {
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  if (input.firstName !== undefined)
+    patch.firstName = toNameCase(input.firstName);
+  if (input.lastName !== undefined) patch.lastName = toNameCase(input.lastName);
+  if (input.title !== undefined) patch.title = input.title || null;
+  if (input.email !== undefined) patch.email = input.email || null;
+  if (input.phone !== undefined) patch.phone = input.phone || null;
+  if (input.notes !== undefined) patch.notes = input.notes || null;
+  if (input.isPrimary !== undefined) patch.isPrimary = input.isPrimary;
+  if (input.cardImageUrl !== undefined)
+    patch.cardImageUrl = input.cardImageUrl || null;
+  if (input.cardRawText !== undefined)
+    patch.cardRawText = input.cardRawText || null;
+  if (input.ocrConfidence !== undefined)
+    patch.ocrConfidence = input.ocrConfidence ?? null;
+
+  const [row] = await db
+    .update(tradeShowVendorContact)
+    .set(patch)
+    .where(eq(tradeShowVendorContact.id, contactId))
+    .returning({
+      id: tradeShowVendorContact.id,
+      vendorId: tradeShowVendorContact.vendorId,
+    });
+  if (!row) return null;
+  // Setting one primary demotes the others.
+  if (input.isPrimary === true) await clearOtherPrimaries(row.vendorId, row.id);
+  return { id: row.id };
+}
+
+export async function deleteVendorContact(
+  contactId: string,
+): Promise<{ id: string } | null> {
+  const [row] = await db
+    .delete(tradeShowVendorContact)
+    .where(eq(tradeShowVendorContact.id, contactId))
+    .returning({
+      id: tradeShowVendorContact.id,
+      vendorId: tradeShowVendorContact.vendorId,
+      wasPrimary: tradeShowVendorContact.isPrimary,
+    });
+  if (!row) return null;
+  // If we removed the primary, promote the next-oldest remaining contact so the
+  // vendor always has a primary when it has any contacts at all.
+  if (row.wasPrimary) {
+    const [next] = await db
+      .select({ id: tradeShowVendorContact.id })
+      .from(tradeShowVendorContact)
+      .where(eq(tradeShowVendorContact.vendorId, row.vendorId))
+      .orderBy(asc(tradeShowVendorContact.createdAt))
+      .limit(1);
+    if (next)
+      await db
+        .update(tradeShowVendorContact)
+        .set({ isPrimary: true, updatedAt: new Date() })
+        .where(eq(tradeShowVendorContact.id, next.id));
+  }
+  return { id: row.id };
+}
+
 // ─── Voice notes ────────────────────────────────────────────────────
 
 export async function addVoiceNote(
@@ -230,16 +391,26 @@ export async function promoteVendor(
 ): Promise<PromoteVendorResult | null> {
   const vendor = await db.query.tradeShowVendor.findFirst({
     where: eq(tradeShowVendor.id, vendorId),
-    with: { tradeShow: true },
+    with: {
+      tradeShow: true,
+      contacts: {
+        orderBy: (c, { desc, asc }) => [desc(c.isPrimary), asc(c.createdAt)],
+      },
+    },
   });
   if (!vendor) return null;
 
+  // Use the primary contact (first in the ordered list) for the lead's named
+  // person + card. Fall back to the vendor's legacy contact columns if a vendor
+  // somehow has no contact rows yet.
+  const primary = vendor.contacts[0] ?? null;
   const forPromotion: VendorForPromotion = {
     companyName: vendor.companyName,
-    contactName: vendor.contactName,
-    email: vendor.email,
-    phone: vendor.phone,
-    title: vendor.title,
+    firstName: primary?.firstName ?? null,
+    lastName: primary?.lastName ?? null,
+    email: primary?.email ?? vendor.email,
+    phone: primary?.phone ?? vendor.phone,
+    title: primary?.title ?? vendor.title,
     website: vendor.website,
     addressLine1: vendor.addressLine1,
     addressLine2: vendor.addressLine2,
@@ -251,9 +422,9 @@ export async function promoteVendor(
     seedNotes: vendor.seedNotes,
     notes: vendor.notes,
     nextSteps: vendor.nextSteps,
-    cardImageUrl: vendor.cardImageUrl,
-    cardRawText: vendor.cardRawText,
-    ocrConfidence: vendor.ocrConfidence,
+    cardImageUrl: primary?.cardImageUrl ?? vendor.cardImageUrl,
+    cardRawText: primary?.cardRawText ?? vendor.cardRawText,
+    ocrConfidence: primary?.ocrConfidence ?? vendor.ocrConfidence,
   };
   const showName = vendor.tradeShow?.name ?? "a trade show";
 

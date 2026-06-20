@@ -8,7 +8,8 @@ import {
 
 const baseVendor: VendorForPromotion = {
   companyName: "WOLF SUISSE",
-  contactName: "Beat Geiser",
+  firstName: "Beat",
+  lastName: "Geiser",
   email: "beat.geiser@wolf-suisse.com",
   phone: null,
   title: null,

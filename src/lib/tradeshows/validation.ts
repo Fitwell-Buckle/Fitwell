@@ -50,6 +50,29 @@ export const promoteVendorSchema = z.object({
 });
 export type PromoteVendorInput = z.infer<typeof promoteVendorSchema>;
 
+// A person met at a booth. Create + update share the same shape (all fields
+// optional on update); the service stamps `is_primary` exclusivity.
+export const createVendorContactSchema = z.object({
+  firstName: z.string().max(200).nullish(),
+  lastName: z.string().max(200).nullish(),
+  title: z.string().max(200).nullish(),
+  email: z.string().max(320).nullish(),
+  phone: z.string().max(50).nullish(),
+  notes: z.string().max(10_000).nullish(),
+  isPrimary: z.boolean().optional(),
+  cardImageUrl: z.string().url().max(2000).nullish(),
+  cardRawText: z.string().max(10_000).nullish(),
+  ocrConfidence: z.record(z.string(), z.number()).nullish(),
+});
+export type CreateVendorContactInput = z.infer<
+  typeof createVendorContactSchema
+>;
+
+export const updateVendorContactSchema = createVendorContactSchema;
+export type UpdateVendorContactInput = z.infer<
+  typeof updateVendorContactSchema
+>;
+
 // Split a single free-text contact name into first/last for the lead tables,
 // which store them separately. Everything after the first token becomes the
 // surname; a single token is treated as a first name.
@@ -71,7 +94,10 @@ export function splitContactName(name: string | null | undefined): {
 // (not the full Drizzle row) so the helpers stay db-free and testable.
 export interface VendorForPromotion {
   companyName: string;
-  contactName: string | null;
+  // The chosen contact's fields (primary contact when promoting), resolved by
+  // the caller from the contacts list.
+  firstName: string | null;
+  lastName: string | null;
   email: string | null;
   phone: string | null;
   title: string | null;
@@ -112,10 +138,9 @@ export function vendorToSupplierLeadInput(
   v: VendorForPromotion,
   showName: string,
 ) {
-  const { firstName, lastName } = splitContactName(v.contactName);
   return {
-    firstName,
-    lastName,
+    firstName: v.firstName ?? null,
+    lastName: v.lastName ?? null,
     email: v.email ?? null,
     phone: v.phone ?? null,
     title: v.title ?? null,
@@ -142,10 +167,9 @@ export function vendorToCustomerLeadInput(
   showName: string,
   sourceChannel: string,
 ) {
-  const { firstName, lastName } = splitContactName(v.contactName);
   return {
-    firstName,
-    lastName,
+    firstName: v.firstName ?? null,
+    lastName: v.lastName ?? null,
     email: v.email ?? null,
     phone: v.phone ?? null,
     title: v.title ?? null,

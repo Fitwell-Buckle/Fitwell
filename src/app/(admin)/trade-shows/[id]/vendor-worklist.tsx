@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Check,
   Star,
-  CreditCard,
+  Users,
   Search,
   ChevronRight,
   Link2,
@@ -31,7 +31,7 @@ export interface WorklistVendor {
   visited: boolean;
   sampleGiven: boolean;
   followUpStatus: string;
-  hasCard: boolean;
+  contactCount: number;
   leadId: string | null;
   supplierLeadId: string | null;
 }
@@ -237,8 +237,11 @@ export function VendorWorklist({
                   {v.sampleGiven && (
                     <Gift className="h-3.5 w-3.5 text-violet-500" />
                   )}
-                  {v.hasCard && (
-                    <CreditCard className="h-3.5 w-3.5 text-zinc-400" />
+                  {v.contactCount > 0 && (
+                    <span className="inline-flex items-center gap-0.5 text-xs text-zinc-400">
+                      <Users className="h-3.5 w-3.5" />
+                      {v.contactCount}
+                    </span>
                   )}
                   {v.followUpStatus !== "none" && (
                     <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600">

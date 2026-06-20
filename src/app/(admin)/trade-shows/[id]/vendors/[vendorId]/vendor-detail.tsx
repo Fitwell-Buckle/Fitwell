@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,7 +8,6 @@ import {
   Check,
   Star,
   Mic,
-  CreditCard,
   Loader2,
   Play,
   ExternalLink,
@@ -29,6 +28,7 @@ import {
   type FollowUpStatus,
 } from "@/lib/tradeshows/constants";
 import { VoiceRecorder, type NewVoiceNote } from "./voice-recorder";
+import { ContactsSection, type VendorContact } from "./contacts-section";
 
 interface VendorData {
   id: string;
@@ -39,15 +39,10 @@ interface VendorData {
   priority: boolean;
   visited: boolean;
   sampleGiven: boolean;
-  contactName: string | null;
-  title: string | null;
-  email: string | null;
-  phone: string | null;
   website: string | null;
   notes: string | null;
   nextSteps: string | null;
   followUpStatus: string;
-  cardImageUrl: string | null;
   seedNotes: string | null;
   responseRaw: string | null;
   meetingRaw: string | null;
@@ -59,24 +54,24 @@ export function VendorDetail({
   showId,
   showName,
   vendor: initial,
+  contacts,
   voiceNotes: initialNotes,
 }: {
   showId: string;
   showName: string;
   vendor: VendorData;
+  contacts: VendorContact[];
   voiceNotes: NewVoiceNote[];
 }) {
   const router = useRouter();
   const [vendor, setVendor] = useState(initial);
   const [notes, setVoiceNotes] = useState(initialNotes);
-  const [savingContact, setSavingContact] = useState(false);
+  const [savingCompany, setSavingCompany] = useState(false);
   const [savingFollowUp, setSavingFollowUp] = useState(false);
-  const [scanning, setScanning] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [promoting, setPromoting] = useState<"supplier" | "customer" | null>(
     null,
   );
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const base = `/api/trade-shows/${showId}/vendors/${vendor.id}`;
 
@@ -139,17 +134,13 @@ export function VendorDetail({
     }
   }
 
-  async function saveContact() {
-    setSavingContact(true);
+  async function saveCompany() {
+    setSavingCompany(true);
     const ok = await patch({
-      contactName: vendor.contactName,
-      title: vendor.title,
-      email: vendor.email,
-      phone: vendor.phone,
       website: vendor.website,
       notes: vendor.notes,
     });
-    setSavingContact(false);
+    setSavingCompany(false);
     toast[ok ? "success" : "error"](ok ? "Saved" : "Save failed");
   }
 
@@ -161,56 +152,6 @@ export function VendorDetail({
     });
     setSavingFollowUp(false);
     toast[ok ? "success" : "error"](ok ? "Saved" : "Save failed");
-  }
-
-  async function onScanFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setScanning(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch(`${base}/scan-card`, {
-        method: "POST",
-        body: form,
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error ?? "Scan failed");
-      const d = json.data as {
-        firstName: string | null;
-        lastName: string | null;
-        email: string | null;
-        phone: string | null;
-        title: string | null;
-        cardImageUrl: string;
-        cardRawText?: string;
-        confidence?: Record<string, number>;
-      };
-      const scannedName =
-        [d.firstName, d.lastName].filter(Boolean).join(" ").trim() || null;
-      // Fill empty fields from the scan; never clobber what's already there.
-      const next: Partial<VendorData> = {
-        cardImageUrl: d.cardImageUrl,
-        contactName: vendor.contactName || scannedName,
-        email: vendor.email || d.email,
-        phone: vendor.phone || d.phone,
-        title: vendor.title || d.title,
-      };
-      await patch({
-        ...next,
-        ...({
-          cardRawText: d.cardRawText ?? null,
-          ocrConfidence: d.confidence ?? null,
-        } as Partial<VendorData>),
-      });
-      setVendor((v) => ({ ...v, ...next }));
-      toast.success("Card scanned — review the details");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Scan failed");
-    } finally {
-      setScanning(false);
-    }
   }
 
   async function promote(target: "supplier" | "customer") {
@@ -350,84 +291,24 @@ export function VendorDetail({
         </Card>
       )}
 
-      {/* Business card */}
-      <Section title="Business card">
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={onScanFile}
-        />
-        <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => fileRef.current?.click()}
-            disabled={scanning}
-          >
-            {scanning ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <CreditCard className="mr-2 h-4 w-4" />
-            )}
-            {vendor.cardImageUrl ? "Re-scan card" : "Scan business card"}
-          </Button>
-        </div>
-        {vendor.cardImageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={vendor.cardImageUrl}
-            alt="Business card"
-            className="mt-3 max-h-48 rounded-md border border-zinc-200"
-          />
-        )}
-      </Section>
+      {/* Contacts — one booth often yields several people. */}
+      <ContactsSection baseUrl={base} initialContacts={contacts} />
 
-      {/* Contact */}
-      <Section title="Contact">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field
-            label="Contact name"
-            value={vendor.contactName}
-            onChange={(v) => set("contactName", v)}
-          />
-          <Field
-            label="Title"
-            value={vendor.title}
-            onChange={(v) => set("title", v)}
-          />
-          <Field
-            label="Email"
-            type="email"
-            value={vendor.email}
-            onChange={(v) => set("email", v)}
-          />
-          <Field
-            label="Phone"
-            value={vendor.phone}
-            onChange={(v) => set("phone", v)}
-          />
-          <Field
-            label="Website"
-            value={vendor.website}
-            onChange={(v) => set("website", v)}
-            className="sm:col-span-2"
-          />
-        </div>
+      {/* Company + booth notes (company-level, distinct from per-contact). */}
+      <Section title="Company">
+        <Field
+          label="Website"
+          value={vendor.website}
+          onChange={(v) => set("website", v)}
+        />
         <DictationTextarea
           label="Booth notes"
           value={vendor.notes ?? ""}
           onChange={(v) => set("notes", v)}
           placeholder="What did you discuss? Capabilities, pricing, fit…"
         />
-        <Button
-          className="mt-3"
-          onClick={saveContact}
-          disabled={savingContact}
-        >
-          {savingContact && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        <Button className="mt-3" onClick={saveCompany} disabled={savingCompany}>
+          {savingCompany && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Save
         </Button>
       </Section>

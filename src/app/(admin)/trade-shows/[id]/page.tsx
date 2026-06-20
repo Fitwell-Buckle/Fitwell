@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getTradeShow, listVendors } from "@/lib/tradeshows/service";
+import {
+  getTradeShow,
+  listVendors,
+  vendorContactCounts,
+} from "@/lib/tradeshows/service";
 import { VendorWorklist } from "./vendor-worklist";
 
 export const metadata: Metadata = {
@@ -20,7 +24,10 @@ export default async function TradeShowPage({
   const show = await getTradeShow(id);
   if (!show) notFound();
 
-  const vendors = await listVendors(id);
+  const [vendors, counts] = await Promise.all([
+    listVendors(id),
+    vendorContactCounts(id),
+  ]);
 
   return (
     <VendorWorklist
@@ -36,7 +43,7 @@ export default async function TradeShowPage({
         visited: v.visited,
         sampleGiven: v.sampleGiven,
         followUpStatus: v.followUpStatus,
-        hasCard: Boolean(v.cardImageUrl),
+        contactCount: counts[v.id] ?? 0,
         leadId: v.leadId,
         supplierLeadId: v.supplierLeadId,
       }))}

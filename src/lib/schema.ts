@@ -3028,6 +3028,43 @@ export const tradeShowVendorVoiceNote = pgTable(
   ],
 );
 
+// People we met at a vendor's booth. One booth often yields several contacts
+// (sales lead + an engineer + a principal), so contacts are a child list rather
+// than single columns on the vendor. Exactly one row per vendor is `is_primary`
+// (enforced in the service) — that's the one used when promoting the vendor
+// into a lead/supplier-lead. The vendor's own legacy contact columns
+// (`contact_name`/`email`/`phone`/`title`) predate this table and were
+// backfilled into a primary contact; they're no longer written from the UI.
+export const tradeShowVendorContact = pgTable(
+  "trade_show_vendor_contact",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    vendorId: text("vendor_id")
+      .notNull()
+      .references(() => tradeShowVendor.id, { onDelete: "cascade" }),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    title: text("title"),
+    email: text("email"),
+    phone: text("phone"),
+    notes: text("notes"),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    // Optional per-contact business-card scan (same Claude-vision OCR).
+    cardImageUrl: text("card_image_url"),
+    cardRawText: text("card_raw_text"),
+    ocrConfidence: jsonb("ocr_confidence"),
+    capturedByUserId: text("captured_by_user_id").references(() => user.id),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trade_show_vendor_contact_vendor_id_idx").on(t.vendorId),
+    index("trade_show_vendor_contact_email_idx").on(t.email),
+  ],
+);
+
 export const tradeShowRelations = relations(tradeShow, ({ many }) => ({
   vendors: many(tradeShowVendor),
 }));
@@ -3051,7 +3088,22 @@ export const tradeShowVendorRelations = relations(
       fields: [tradeShowVendor.supplierLeadId],
       references: [supplierLead.id],
     }),
+    contacts: many(tradeShowVendorContact),
     voiceNotes: many(tradeShowVendorVoiceNote),
+  }),
+);
+
+export const tradeShowVendorContactRelations = relations(
+  tradeShowVendorContact,
+  ({ one }) => ({
+    vendor: one(tradeShowVendor, {
+      fields: [tradeShowVendorContact.vendorId],
+      references: [tradeShowVendor.id],
+    }),
+    capturedBy: one(user, {
+      fields: [tradeShowVendorContact.capturedByUserId],
+      references: [user.id],
+    }),
   }),
 );
 
