@@ -722,6 +722,18 @@ Future iterations may add D7 / D25 / other slots if a real job for them
 emerges (e.g. install-help engagement, M4 cross-sell tease, UGC ask). Don't
 pre-build empty slots.
 
+**Copy drafted 2026-06-20 → [`retention-email-content.md`](./retention-email-content.md)**
+— restructured into two fully-automated Fulfilled-triggered flows: a
+post-purchase **nurture** (E1 setup, branched per product M1/M4 and gated on
+product-newness → E2 value → E3 cross-sell → E4 outfit code; outfitters
+buying again divert to an automated **founder-touch** so there's no
+human-in-the-loop failure point) and a separate **review-request** flow that
+replaces the current Judge.me 3-variant timing (POS/domestic/international,
+one reminder, suppress-if-reviewed, via Judge.me↔Klaviyo). Plus the
+welcome-challenger E1–E4 and the single-use D30 code recommendation.
+Review-ready; awaiting Tom's Klaviyo skeleton + the 6 confirmations listed in
+the doc.
+
 ### New — Win-Back (60–90 days post-purchase, no second order)
 - D60: "Still only have one?" — collection angle
 - D75: new finish / limited edition if available

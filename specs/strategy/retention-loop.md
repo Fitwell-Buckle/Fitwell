@@ -223,7 +223,13 @@ aggressively (per-email UTMs, not generic `utm_source=klaviyo`) so
 we can measure email-driven return visits separately from email-
 attributed orders. The "outfit your collection" sequence is the
 single highest-leverage piece of copy to test against — if it's not
-working, that's the place to fix it.
+working, that's the place to fix it. **Copy drafted 2026-06-20 in
+[[retention-email-content]]** — two fully-automated Fulfilled-triggered
+flows: a post-purchase nurture (E1 setup, per-product/product-newness →
+E2 value → E3 cross-sell → E4 outfit code; outfitters divert to an
+automated founder-touch) and a separate review-request flow (geo/channel
+split, one reminder, suppress-if-reviewed, via Judge.me↔Klaviyo). Pending
+Tom's review + Klaviyo skeleton.
 
 ### `judgeme_re_engagement`
 **Targets:** `first_buyer` → `second_buyer`; `outfitter` → `advocate`

@@ -1,10 +1,12 @@
 # Fable 5 Sprint — 2026-06-12 → 2026-06-22
 
-> **Status:** active. This is the working agenda for the next ~10 days,
-> while Tom has access to Claude Fable 5 (frontier-tier model). Owner: Tom
-> (with Claude doing the model-bound work). Tracked here so the whole team
-> can see what's in flight; see also `specs/ops/PRIORITIES.md` → Current
-> Strategic Focus.
+> **Status:** active, but the original premise expired. **Fable 5 access was
+> cut on day 2 (~2026-06-13)** — the sprint's "do the model-capability-bound
+> work while we have a frontier model" framing no longer applies. We kept the
+> remaining workstreams (they're still the right work) and continue them on
+> the standard model; the front-loading rationale is just moot now. WS1 and
+> WS4 shipped during the window. Owner: Tom (with Claude doing the build).
+> See also `specs/ops/PRIORITIES.md` → Current Strategic Focus.
 
 ## Context
 
@@ -182,15 +184,18 @@ Workstream 2 forward ~2 weeks. Spec: `creator-program.md` + `creator-scoring.md`
 ⑤ import real CSV on prod → ⑥ run `backfill-influencers-to-creators.ts`
 on prod → ⑦ Wave 1 outreach (top-50 by fit_score) starts from the list.
 
-### WS2: Post-purchase retention flow content (D1 / D14 / D21 / D30)
-The lead workstream's writing, draftable now — the Klaviyo skeleton only
-blocks deployment. Flow shape locked 2026-06-09: D1 install guide → D14
-"how many watches?" → D21 Judge.me review ask → D30 outfit code (25% off
-5+, 30-day expiry). Ground every line in `personas.md` + `vocabulary-map.md`.
-- [ ] Draft D1 / D14 / D21 / D30 email content (subject lines + body + CTA, per-email UTM tags per event-taxonomy)
-- [ ] Draft welcome-flow rewrite E1–E4 (360 W5) — same grounding
-- [ ] Decide shared vs single-use D30 outfit code (recommendation + tradeoffs for Tom)
-- [ ] Tom on return: create flow skeleton in Klaviyo UI, review copy, deploy
+### WS2: Post-purchase retention flow content
+The lead workstream's writing. **Drafted + redesigned with Tom 2026-06-20 →
+`specs/strategy/retention-email-content.md`** (the copy source of truth;
+review-ready). The original D1/D14/D21/D30 single-flow shape was reworked in
+session into **two fully-automated flows** once two products (M1/M4),
+repeat-buyer re-entry, and a no-human-failure-point constraint surfaced:
+- [x] Post-purchase **nurture** flow — E1 setup (branched per product M1/M4, gated on product-newness, leans into the trust-objection preempt + buckle-not-lug sizing) → E2 value → E3 cross-sell ("complete your kit", recommendation-block-ready for M2/M3/M5) → E4 outfit code. D14 "how many watches" **cut** (Tom: "stupid on its own").
+- [x] **Founder-touch** — outfitters buying again divert from the discount to an *automated* personal note from Tom (reply-to `info@` → Tom+Oliver+Melanie). Tom's call: no human-in-the-loop send step anywhere.
+- [x] **Review-request** flow — replaces the current Judge.me 3-variant timing; Fulfilled-triggered POS+10 / domestic+14 / **intl+26** (fixes "asked before it arrived"), one reminder +7, suppress-if-reviewed, via Judge.me↔Klaviyo. Recommends adding a delivered signal to collapse the geo split.
+- [x] Welcome-flow rewrite E1–E4 — **as an A/B challenger, not a replacement** (live flow is +27.6% LTV, on the Phase 4 denylist); E4 reframed off the cut bundle SKU.
+- [x] Shared vs single-use D30 code — **recommended single-use** (Klaviyo coupon + Shopify price rule) + a new `outfit` classifier family.
+- [ ] Tom on return: confirm the 6 facts/decisions + build the two flow skeletons in Klaviyo UI (full build spec in the doc), then Claude QA's the render and we iterate in place.
 
 ### WS3: Landing page variants A + B (360 W3)
 Author both variants as ready-to-publish drafts; persona-targeted

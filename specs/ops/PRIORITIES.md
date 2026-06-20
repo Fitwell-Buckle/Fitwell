@@ -416,9 +416,9 @@ watches?" (intel only, gates nothing) → **D21** Judge.me review ask →
 **D30** outfit-the-collection code (25% off 5+, 30-day expiry, goes to
 everyone). Single discount touchpoint; product-experience-led posture.
 
-- [ ] Tom: create the post-purchase flow skeleton in Klaviyo UI (~15–20 min) — **blocks everything below**
-- [ ] Claude: pull flow as YAML + write D1 / D14 / D21 / D30 email content (~2–3 hrs)
-- [ ] Generate D30 outfit code in Shopify (25% off any 5+, 30-day expiry; decide shared vs single-use)
+- [ ] Tom: create the post-purchase flow skeleton in Klaviyo UI (~15–20 min) — **blocks deployment** (copy is now drafted, so this is the gate)
+- [x] **Email copy drafted + redesigned 2026-06-20 → `specs/strategy/retention-email-content.md`** — two fully-automated Fulfilled-triggered flows: post-purchase **nurture** (E1 setup branched per product M1/M4 & gated on product-newness → E2 value → E3 cross-sell → E4 outfit code; outfitters divert to an automated **founder-touch**, reply-to `info@`) + a separate **review-request** flow (replaces Judge.me's 3-variant timing; POS+10/dom+14/intl+26, one reminder, suppress-if-reviewed, Judge.me↔Klaviyo). Plus the welcome A/B *challenger* and the single-use D30 code rec. D14 cut. v1 is paste-based (Phase 4 pipeline not built); full Klaviyo build spec + 6 open confirmations in the doc. (Was WS2 of the Fable sprint — Fable access was cut on day 2, work continued on the standard model.)
+- [ ] Generate D30 outfit code in Shopify (25% off any 5+, 30-day expiry) — **recommendation: single-use** (Klaviyo coupon + Shopify price rule) + add an `outfit` classifier family; rationale in the content doc
 - [x] Discount-code-name visibility — **SHIPPED to prod 2026-06-10, plan complete** (`specs/work-plans/completed/discount-code-visibility.md`). `order_discount_code` table (migration `0058`), sync captures codes, classifier families (welcome/creator/review/service/event/other), first-order discount split card on `/funnel/strategy`, prod backfilled (802 orders). **Prod C1 baseline (Apr 10 → Jun 10, 399 first orders): 71.9% no-code · event 10.0% (Windup SF) · welcome 8.8% · creator 7.5% (all watchbros, zero watchchris) · review 0.5%.** Key reframe for W5 §6: the "32.5% use a discount" band was hiding the SF event — true *online signup* capture is ~9% of first orders. Full history rides on the Feb-2024 import (auto-populates through `upsertOrder()`)
 - [x] Add signup-lift workstream to `360-campaign.md` W5 §6 — done 2026-06-10
 - [x] Update PRIORITIES.md with the retention-led sequence — done 2026-06-10
