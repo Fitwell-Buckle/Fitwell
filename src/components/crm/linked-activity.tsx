@@ -64,6 +64,8 @@ interface LinkedActivityData {
     leadName: string | null;
     supplierLeadId: string | null;
     supplierLeadName: string | null;
+    supplierId: string | null;
+    supplierMsgEmails: string[];
   };
   notes: {
     booth: string | null;
@@ -133,48 +135,83 @@ export function LinkedActivity(props: {
     };
   }, [load]);
 
-  // Lazy-load the linked lead's email + WhatsApp (inbound + sent) once we know
-  // the lead id, and merge them into the timeline.
-  const leadId = data?.links.leadId;
+  // Lazy-load the linked records' email + WhatsApp (inbound + sent) and merge
+  // them into the timeline. Two message sources: the customer lead (by lead id,
+  // via /replies) and the supplier side (by email address(es) + promoted
+  // supplier id, via /inbound). A shared address can return the same email from
+  // both, so we dedupe by message id.
   useEffect(() => {
-    if (!leadId) {
+    if (!data) {
       setMessages([]);
       return;
     }
+    const { leadId, supplierId, supplierMsgEmails } = data.links;
+
+    // Build (direction, url) fetch jobs from whichever sources exist.
+    const jobs: { direction: "in" | "out"; url: string }[] = [];
+    if (leadId) {
+      jobs.push({ direction: "in", url: `/api/leads/${leadId}/replies` });
+      jobs.push({
+        direction: "out",
+        url: `/api/leads/${leadId}/replies?direction=sent`,
+      });
+    }
+    if (supplierMsgEmails.length > 0 || supplierId) {
+      const params = new URLSearchParams();
+      if (supplierMsgEmails.length > 0)
+        params.set("emails", supplierMsgEmails.join(","));
+      if (supplierId) {
+        params.set("waType", "supplier");
+        params.set("waId", supplierId);
+      }
+      const base = `/api/inbound?${params.toString()}`;
+      jobs.push({ direction: "in", url: base });
+      jobs.push({ direction: "out", url: `${base}&direction=sent` });
+    }
+    if (jobs.length === 0) {
+      setMessages([]);
+      return;
+    }
+
     let active = true;
-    async function fetchDir(direction: "in" | "out") {
-      const suffix = direction === "out" ? "?direction=sent" : "";
-      const res = await fetch(`/api/leads/${leadId}/replies${suffix}`);
-      if (!res.ok) return [] as MessageItem[];
-      const json = await res.json();
-      const replies = (json?.data?.replies ?? []) as Array<{
-        id: string;
-        channel: "email" | "whatsapp";
-        from: string;
-        subject: string | null;
-        snippet: string | null;
-        dateMs: number;
-      }>;
-      return replies.map(
-        (r): MessageItem => ({
+    Promise.all(
+      jobs.map(async ({ direction, url }) => {
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const json = await res.json();
+        const replies = (json?.data?.replies ?? []) as Array<{
+          id: string;
+          channel: "email" | "whatsapp";
+          from: string;
+          subject: string | null;
+          snippet: string | null;
+          dateMs: number;
+        }>;
+        return replies.map((r) => ({ direction, r }));
+      }),
+    ).then((results) => {
+      if (!active) return;
+      const byKey = new Map<string, MessageItem>();
+      for (const { direction, r } of results.flat()) {
+        const key = `${direction}-${r.id}`;
+        if (byKey.has(key)) continue;
+        byKey.set(key, {
           kind: "message",
-          id: `${direction}-${r.id}`,
+          id: key,
           at: new Date(r.dateMs).toISOString(),
           direction,
           channel: r.channel,
           from: r.from,
           subject: r.subject,
           snippet: r.snippet,
-        }),
-      );
-    }
-    Promise.all([fetchDir("in"), fetchDir("out")]).then(([a, b]) => {
-      if (active) setMessages([...a, ...b]);
+        });
+      }
+      setMessages([...byKey.values()]);
     });
     return () => {
       active = false;
     };
-  }, [leadId]);
+  }, [data]);
 
   const timeline: Item[] = useMemo(() => {
     if (!data) return [];

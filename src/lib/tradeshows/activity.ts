@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import {
   lead,
   leadComment,
+  supplier as supplierTable,
+  supplierContact,
   supplierLead,
   tradeShowVendor,
   tradeShowVendorVoiceNote,
@@ -53,6 +55,13 @@ export interface LinkedActivity {
     leadName: string | null;
     supplierLeadId: string | null;
     supplierLeadName: string | null;
+    // The promoted `supplier` id (set once the supplier lead becomes a real
+    // supplier) — used to match WhatsApp. Null until promoted.
+    supplierId: string | null;
+    // Email addresses to search for the supplier side's messages (the supplier
+    // lead's own email + any promoted-supplier contact emails). Live Gmail
+    // search works on any address, so this populates even before promotion.
+    supplierMsgEmails: string[];
   };
   notes: {
     booth: string | null;
@@ -196,6 +205,29 @@ export async function getEntityActivity(
   // Newest first.
   items.sort((a, b) => (a.at > b.at ? -1 : a.at < b.at ? 1 : 0));
 
+  // Supplier-side message addresses: the supplier lead's email always, plus any
+  // promoted-supplier contact emails. WhatsApp needs the promoted supplier id.
+  let promotedSupplierId: string | null = null;
+  const supplierEmailSet = new Set<string>();
+  if (supplier) {
+    if (supplier.email) supplierEmailSet.add(supplier.email.toLowerCase());
+    if (supplier.supplierId) {
+      promotedSupplierId = supplier.supplierId;
+      const [sup, contacts] = await Promise.all([
+        db.query.supplier.findFirst({
+          where: eq(supplierTable.id, supplier.supplierId),
+        }),
+        db
+          .select({ email: supplierContact.email })
+          .from(supplierContact)
+          .where(eq(supplierContact.supplierId, supplier.supplierId)),
+      ]);
+      if (sup?.contactEmail) supplierEmailSet.add(sup.contactEmail.toLowerCase());
+      for (const c of contacts)
+        if (c.email) supplierEmailSet.add(c.email.toLowerCase());
+    }
+  }
+
   return {
     links: {
       vendorId: vendor.id,
@@ -205,6 +237,8 @@ export async function getEntityActivity(
       leadName: customerLead ? leadDisplayName(customerLead) : null,
       supplierLeadId: vendor.supplierLeadId,
       supplierLeadName: supplier ? supplierLeadName(supplier) : null,
+      supplierId: promotedSupplierId,
+      supplierMsgEmails: [...supplierEmailSet],
     },
     notes: {
       booth: vendor.notes,
