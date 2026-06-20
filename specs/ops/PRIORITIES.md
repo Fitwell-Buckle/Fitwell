@@ -58,6 +58,15 @@ zone. **First send on the new model is 2026-06-14 08:55 UTC.**
 - A local `npm run newsletter:dry-run` also prints the full
   "dropped by triage" list with reasons (but skips dedup — preview only).
 
+**Triage tuning log:**
+- **2026-06-20 (`a3a2eb2`):** jewelry stories were sneaking in on implicit
+  "watches are jewelry" reasoning. Added an explicit drop rule to the
+  `EDITORIAL_CUT` prompt + `newsletter.md`: jewelry is not watch content
+  by default — keep only on a concrete, named watch link (watch-division
+  read of a conglomerate, jeweler→watchmaking, gem/precious-metal supply
+  chain hitting watch production, M&A of a group that owns watch brands).
+  When eyeballing accept/reject, confirm pure jewelry pieces now drop.
+
 Stop the daily check once the classification looks reliable and WatchPro
 is consistently landing.
 
