@@ -15,6 +15,7 @@ import { listMessagesForLead, listOutboundMessages } from "@/lib/crm/messages";
 import { hasInboundFromAnyMailbox } from "@/lib/gmail/inbound";
 import { PageHeader } from "@/components/ui/page-header";
 import { leadDisplayName } from "@/lib/crm/display";
+import { LinkedActivity } from "@/components/crm/linked-activity";
 import { LeadDetail } from "./lead-detail";
 
 export const metadata: Metadata = {
@@ -138,6 +139,7 @@ export default async function LeadDetailPage({
         draftMessages={draftMessages}
         hasNewReplies={hasNewReplies}
       />
+      <LinkedActivity context="lead" leadId={id} />
     </div>
   );
 }

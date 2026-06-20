@@ -3,6 +3,7 @@ import {
   splitContactName,
   vendorToSupplierLeadInput,
   vendorToCustomerLeadInput,
+  addVendorCommentSchema,
   type VendorForPromotion,
 } from "./validation";
 
@@ -75,6 +76,18 @@ describe("vendorToSupplierLeadInput", () => {
     expect(out.notes).toContain("Buckles and clasps mfg");
     expect(out.notes).toContain("Spoke at booth");
     expect(out.notes).toContain("Next steps: Send sample pack");
+  });
+});
+
+describe("addVendorCommentSchema", () => {
+  it("trims and accepts a real note", () => {
+    expect(addVendorCommentSchema.parse({ body: "  follow up next week " })).toEqual(
+      { body: "follow up next week" },
+    );
+  });
+  it("rejects an empty / whitespace-only note", () => {
+    expect(addVendorCommentSchema.safeParse({ body: "   " }).success).toBe(false);
+    expect(addVendorCommentSchema.safeParse({ body: "" }).success).toBe(false);
   });
 });
 

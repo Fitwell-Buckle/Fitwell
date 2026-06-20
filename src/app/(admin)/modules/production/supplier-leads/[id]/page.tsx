@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getSupplierLead } from "@/lib/suppliers/lead-service";
 import { PageHeader } from "@/components/ui/page-header";
+import { LinkedActivity } from "@/components/crm/linked-activity";
 import { SupplierLeadDetail } from "./supplier-lead-detail";
 
 export const metadata: Metadata = {
@@ -64,6 +65,7 @@ export default async function SupplierLeadPage({
             cardRawText: lead.cardRawText,
           }}
         />
+        <LinkedActivity context="supplier" supplierLeadId={lead.id} />
       </div>
     </div>
   );

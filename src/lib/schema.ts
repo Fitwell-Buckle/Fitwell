@@ -3028,6 +3028,31 @@ export const tradeShowVendorVoiceNote = pgTable(
   ],
 );
 
+// The single SHARED activity thread for a booth-met entity. The vendor is the
+// hub that links a customer `lead` and/or a `supplier_lead`, so a note added
+// here is visible on all linked detail pages (booth, customer lead, supplier
+// lead) — "write once, see everywhere". Mirrors `lead_comment`; distinct from
+// it so the customer-lead pipeline keeps its own comments while this thread
+// spans the linked records.
+export const tradeShowVendorComment = pgTable(
+  "trade_show_vendor_comment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    vendorId: text("vendor_id")
+      .notNull()
+      .references(() => tradeShowVendor.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id").references(() => user.id),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trade_show_vendor_comment_vendor_id_idx").on(t.vendorId),
+    index("trade_show_vendor_comment_created_at_idx").on(t.createdAt),
+  ],
+);
+
 // People we met at a vendor's booth. One booth often yields several contacts
 // (sales lead + an engineer + a principal), so contacts are a child list rather
 // than single columns on the vendor. Exactly one row per vendor is `is_primary`
@@ -3090,6 +3115,21 @@ export const tradeShowVendorRelations = relations(
     }),
     contacts: many(tradeShowVendorContact),
     voiceNotes: many(tradeShowVendorVoiceNote),
+    comments: many(tradeShowVendorComment),
+  }),
+);
+
+export const tradeShowVendorCommentRelations = relations(
+  tradeShowVendorComment,
+  ({ one }) => ({
+    vendor: one(tradeShowVendor, {
+      fields: [tradeShowVendorComment.vendorId],
+      references: [tradeShowVendor.id],
+    }),
+    author: one(user, {
+      fields: [tradeShowVendorComment.authorUserId],
+      references: [user.id],
+    }),
   }),
 );
 

@@ -27,6 +27,7 @@ import {
   type VendorSide,
   type FollowUpStatus,
 } from "@/lib/tradeshows/constants";
+import { LinkedActivity } from "@/components/crm/linked-activity";
 import { VoiceRecorder, type NewVoiceNote } from "./voice-recorder";
 import { ContactsSection, type VendorContact } from "./contacts-section";
 
@@ -422,6 +423,8 @@ export function VendorDetail({
           />
         </div>
       </Section>
+
+      <LinkedActivity context="vendor" vendorId={vendor.id} />
     </div>
   );
 }

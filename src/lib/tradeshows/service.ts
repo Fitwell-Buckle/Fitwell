@@ -13,8 +13,10 @@ import { db } from "@/lib/db";
 import {
   tradeShow,
   tradeShowVendor,
+  tradeShowVendorComment,
   tradeShowVendorContact,
   tradeShowVendorVoiceNote,
+  user,
 } from "@/lib/schema";
 import { createLead, createLeadSchema } from "@/lib/crm/service";
 import {
@@ -372,6 +374,35 @@ export async function listVoiceNotes(vendorId: string) {
     .from(tradeShowVendorVoiceNote)
     .where(eq(tradeShowVendorVoiceNote.vendorId, vendorId))
     .orderBy(desc(tradeShowVendorVoiceNote.createdAt));
+}
+
+// ─── Shared activity thread ─────────────────────────────────────────
+
+export async function addVendorComment(
+  vendorId: string,
+  body: string,
+  authorUserId: string,
+): Promise<{ id: string }> {
+  const [row] = await db
+    .insert(tradeShowVendorComment)
+    .values({ vendorId, body, authorUserId })
+    .returning({ id: tradeShowVendorComment.id });
+  return { id: row.id };
+}
+
+export async function listVendorComments(vendorId: string) {
+  return db
+    .select({
+      id: tradeShowVendorComment.id,
+      body: tradeShowVendorComment.body,
+      createdAt: tradeShowVendorComment.createdAt,
+      authorName: user.name,
+      authorEmail: user.email,
+    })
+    .from(tradeShowVendorComment)
+    .leftJoin(user, eq(tradeShowVendorComment.authorUserId, user.id))
+    .where(eq(tradeShowVendorComment.vendorId, vendorId))
+    .orderBy(desc(tradeShowVendorComment.createdAt));
 }
 
 // ─── Promote into the CRM pipelines ─────────────────────────────────

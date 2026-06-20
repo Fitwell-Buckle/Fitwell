@@ -73,6 +73,12 @@ export type UpdateVendorContactInput = z.infer<
   typeof updateVendorContactSchema
 >;
 
+// A note added to the shared activity thread.
+export const addVendorCommentSchema = z.object({
+  body: z.string().trim().min(1).max(5000),
+});
+export type AddVendorCommentInput = z.infer<typeof addVendorCommentSchema>;
+
 // Split a single free-text contact name into first/last for the lead tables,
 // which store them separately. Everything after the first token becomes the
 // surname; a single token is treated as a first name.
