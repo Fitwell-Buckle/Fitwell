@@ -1,9 +1,9 @@
 # Vocabulary Map (Customer Language)
 
-Last updated: 2026-05-26
+Last updated: 2026-06-22
 
-> **Status: first systematic extraction.** Drawn from the 110+
-> Judge.me reviews exported 2026-05-26. Captures what customers
+> **Status: first systematic extraction.** Drawn from the 80
+> published Judge.me reviews exported 2026-05-26. Captures what customers
 > actually say in their own words — for use in ad creative,
 > landing-page copy, email copy, product page copy, and SEO targeting.
 > Companion to [[personas]]. Refresh quarterly or when the review
@@ -21,12 +21,67 @@ Last updated: 2026-05-26
 - Phrase counts below are from a `grep -i` pass over the review CSV;
   semantically related phrases are grouped.
 
-## Top-Line Findings
+## ⚠️ Read this before using the counts below
+
+The phrase counts in this map are **lexical** (`grep -i` over the review
+CSV). A semantic re-read of all 80 reviews (2026-06-22, classifying each
+by the benefit it actually credits rather than the phrase it uses) found
+the lexical counts **badly undercount the between-holes benefit**: only
+17 reviews contain a between-holes *phrase*, but ~35–39 (≈ half the
+corpus) credit the fit/sizing fix as their benefit (e.g. "finally fits,"
+"I can wear this watch now," "rescued a watch I'd stopped wearing").
+Use the phrase tables below for *verbatim copy lifts*; use the semantic
+distribution in *Benefit Distribution* (next section) for *what the
+product is actually valued for*.
+
+**Critical framing caveat:** this corpus is **post-purchase** and sits
+**downstream of Meta creative** that shows both the between-holes problem
+AND the on-wrist adjustment. It measures *retained / articulated value*,
+NOT the *acquisition hook*. Reviews can tell us what people keep and
+voice; they cannot tell us what made them click. See [[hypotheses]] H14
+for the funnel-stage split and the creative test that would resolve the
+acquisition half.
+
+## Benefit Distribution (semantic read, all 80 reviews, 2026-06-22)
+
+What each review actually credits (overlaps exist; many fit reviews also
+praise finish or service):
+
+| Benefit credited | ~Count of 80 |
+|---|---|
+| **Fit / sizing solved** (between-holes, "finally fits," rescued watch, right tension) | **~35–39** |
+| Quality / finish / **aesthetics** ("looks better than the stock buckle," jewellery-like) | ~13 |
+| Company / **service / founder-touch** (Tom covered fees, traded it out, fast fix) | ~10 |
+| Novelty ("why did no one do this") | ~8 |
+| Mechanism **fails** (won't hold / hard to set) | ~8 |
+| **On-wrist ("on-the-fly") motion praised** | **~5** |
+| Price objection (works, but pricey for $40) | ~5 |
+| Pure generic ("good," "amazing," no content) | ~10 |
+
+**Implications for positioning:**
+- The retained-value hero is the **fit / between-holes outcome** — lead
+  the landing page and product story with it.
+- **Aesthetics** and **service/founder-touch** are real but *under-used*
+  secondary benefits, and both are harder for a big-brand copycat to
+  replicate than the on-wrist mechanism. Worth surfacing in copy.
+- On-wrist adjustment is **rarely voiced and sometimes explicitly
+  unused** post-purchase (reviews #57, #62 adjust *off* the wrist), AND
+  is the #1 source of the modest dissatisfaction that exists — but it is
+  in every Meta ad as the visual hook. Do **not** strip it from ads on
+  the strength of this review data; reviews are blind to the hook. See
+  [[hypotheses]] H14.
+- In-corpus competitive line (review #66, found Fitwell in Geneva):
+  "several brands have micro-adjust but on the deployant; on the tang/
+  ardiglione buckle I hadn't seen it." The differentiation customers
+  perceive is *micro-adjust on a tang buckle*, not on-the-fly per se.
+
+## Top-Line Findings (lexical — phrase counts for copy lifts)
 
 1. **"Between holes / between sizes"** is the dominant pain phrase —
    7 reviews use some form of it; one uses *"tweener"*. This is the
    single most common customer-voiced articulation of the problem and
-   should anchor performance-ad copy for P4/P5.
+   should anchor performance-ad copy for P4/P5. (Lexical count;
+   semantically ~half the corpus credits this benefit — see above.)
 2. **"Solution" / "solved"** appears in 9 reviews. Customers frame the
    product as a *solution to a known problem* — not a novelty. Copy
    should match this framing.

@@ -3,7 +3,7 @@
 Last updated: 2026-05-26
 
 > **Status: data-validated draft.** Reflects the Tom/Claude persona
-> deep-dive on 2026-05-26, grounded in 110+ Judge.me reviews,
+> deep-dive on 2026-05-26, grounded in 80 published Judge.me reviews,
 > trade-show observation, current partnership economics, AND the
 > Nov 2025 – May 2026 D2C cohort (824 paying customers, $61K revenue)
 > joined to Judge.me reviewer emails on 2026-05-26. Persona

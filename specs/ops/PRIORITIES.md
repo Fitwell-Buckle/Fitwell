@@ -27,6 +27,33 @@ ready before Tom returns ~06-21), ② post-purchase retention email content
 Pages write client, ④ UTM linking gap root-cause for Greg, ⑤ signup-lift
 experiment designs. Check there first when deciding what to work on.
 
+## 🧭 Positioning finding (2026-06-22) — between-holes vs. on-wrist motion
+
+From a Tom/Claude review-corpus deep-dive (all 80 Judge.me reviews read
+semantically + Shopify refund data). Two truths at two funnel stages,
+and we kept conflating them:
+
+- **Retained value (measured):** the **between-holes / fit fix** is what
+  buyers experience, keep, and voice — ~half the corpus credits it. Lead
+  landing pages and product story with the *outcome*. On-wrist
+  ("on-the-fly") adjustment is rarely voiced, sometimes explicitly
+  unused (people adjust it off-wrist), and is the #1 source of the
+  modest dissatisfaction that exists (mechanism hard to set / won't
+  hold) — though returns are low (~2% full / ~6% any).
+- **Acquisition hook (untested):** every Meta ad shows the on-wrist
+  motion, and reviews sit downstream of that, so they CANNOT tell us
+  what drove the click. The motion is plausibly the scroll-stopping
+  hook even though nobody writes about it. **Do not strip the on-wrist
+  demo from ads on review evidence** — reviews are blind to the hook.
+- **Under-used secondary benefits:** finish/**aesthetics** and
+  **service/founder-touch** both show up strongly and are harder to
+  copy than the mechanism. Bring them into copy.
+- **Next action / open test:** a paired Meta creative A/B (on-wrist
+  motion vs. outcome/between-holes without the motion) is the only
+  thing that resolves the acquisition half. Fits the sprint's landing-
+  page-variant + signup-lift experiment work. Full write-up:
+  [[hypotheses]] **H14**; benefit distribution in [[vocabulary-map]].
+
 ## 📨 Daily check (added 2026-06-13) — Newsletter editorial QA, while the new model beds in
 
 We just shipped a big change to the newsletter editorial model (commits

@@ -1,6 +1,6 @@
 # Hypotheses Register
 
-Last updated: 2026-05-25
+Last updated: 2026-06-22
 
 > **Status: starter draft.** Captures the implicit beliefs surfacing
 > in the strategy conversation. Each is a testable claim, not a
@@ -520,6 +520,89 @@ track 90-day cohort behavior including segment distribution.
 
 **Related:** [[funnel]] `paid_meta_cold` channel, [[funnel]]
 Targeting Discipline section, [[personas]] P2, P1b.
+
+---
+
+### H14 — On-wrist adjustment is the acquisition hook; between-holes is the retained-value benefit
+**Claim:** The on-wrist ("on-the-fly") micro-adjust *motion* and the
+*between-holes fix* do different jobs at different funnel stages. The
+on-wrist motion is the top-of-funnel **hook** — it's the visually
+compelling thing in (currently) every Meta ad that earns the scroll-
+stop and click. The between-holes fix is the **retained value** — what
+buyers actually experience, keep, and articulate afterward. They are
+not competing benefits; conflating them (e.g. deciding to strip the
+on-wrist demo from ads because reviews don't mention it) is a category
+error.
+
+**Confidence:** medium for the retained-value half (measured — see
+evidence); low for the acquisition-hook half (untested — no data we
+hold can isolate it).
+
+**Why we believe it:**
+- *Retained value (measured):* A full semantic read of all 80 published
+  Judge.me reviews (2026-05-26 export) classified by what each actually
+  credits — not phrase-matching. The between-holes / fit fix is the
+  credited benefit in ~35–39 of 80 reviews (~half the corpus), the
+  dominant theme by a wide margin. The on-wrist *motion* is genuinely
+  praised in only ~5, and two satisfied 5★ buyers explicitly say they
+  adjust it *off* the wrist, not on it (reviews #57, #62). So as a
+  *used and voiced* feature, on-the-fly is marginal post-purchase.
+- *Acquisition hook (inference, untested):* most buyers arrive via Meta,
+  and every Meta ad both names the between-holes problem AND shows the
+  on-wrist adjustment. The reviews sit *downstream* of that fused
+  creative, so they cannot separate which element drove the click — and
+  people naturally write about the problem solved, not the visual that
+  hooked them. That every ad leads with the motion is a revealed-
+  preference signal (from whoever built the creative) that the motion
+  is doing the top-of-funnel work, even though it's fiddly and rarely
+  voiced later. "Party trick" = the thing that makes someone go "whoa";
+  the on-wrist motion plausibly *is* that, at the acquisition stage.
+
+**Supporting nuance (from the same review read):**
+- On-wrist adjustment is also the #1 source of the (modest)
+  dissatisfaction that exists: ~10 of 16 sub-5★ reviews are about the
+  mechanism being hard to set or not holding; one is titled "hard to
+  use." Returns are low though (~2% full / ~6% any refund, no reason
+  codes), so it's a satisfaction/positioning signal, not a defect wave.
+- Two under-credited *secondary* benefits surface that current copy
+  underuses: **finish/aesthetics** (~13 reviews — "looks better than
+  the stock buckle," "finished like jewellery") and **service /
+  founder-touch** (~10 reviews). Both are more defensible against a
+  big-brand copycat than the motion itself.
+- In-corpus competitive evidence: review #66 (discovered Fitwell in
+  Geneva) — "several brands have micro-adjust but on the deployant; on
+  the tang/ardiglione buckle I hadn't seen it." A customer drawing the
+  exact differentiation line: micro-adjust *on a tang buckle*, not
+  on-the-fly per se.
+
+**What would validate:** A creative A/B on a single Meta audience —
+on-wrist-motion creative vs. an outcome/between-holes creative *without*
+the motion — shows the motion variant wins materially on CTR / hook
+rate / cost-per-click, while post-purchase satisfaction and review
+language remain between-holes-dominant regardless of which ad acquired
+the customer.
+
+**What would invalidate:** The between-holes/outcome creative matches or
+beats the on-wrist-motion creative on click-through and conversion at
+equal spend — i.e. the motion is not load-bearing as a hook and we've
+been over-weighting it in creative.
+
+**Estimated test cost:** Medium — one paired creative cell on Meta, run
+long enough for a CTR/CPC read (faster than an LTV read; this is a
+hook-stage test, not a cohort test). Gated by H7 budget.
+
+**Test approach:** Paired Meta creative test (motion vs. outcome-static/
+outcome-without-motion), identical audience and targeting; compare hook
+rate, CTR, CPC, landing CVR. Pair with PostHog landing-page behavior if
+the variants route to matched LPs.
+
+**Status:** open (acquisition-hook half untested; retained-value half
+measured). Captures the Tom/Claude positioning discussion of 2026-06-22.
+
+**Related:** [[funnel]] `paid_meta_cold` channel, [[vocabulary-map]]
+(Top-Line Findings — semantic benefit distribution), [[personas]] P4/P5,
+[[360-campaign]] paid channels + content workstreams, H7 (budget gates
+the test), H1 (awareness vs intent).
 
 ---
 
