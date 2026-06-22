@@ -41,6 +41,16 @@ export interface SourceDef {
   scrapeUrl: string | null;
   fetchMode: FetchMode;
   isActive: boolean;
+  /**
+   * Fetch this source's ARTICLE PAGES (enrichment: og:image + body text)
+   * through the BrightData proxy even though its FEED is fetched directly.
+   * For sources whose RSS feed is tolerated but whose article pages are
+   * WAF-walled (e.g. aBlogtoWatch 403s a non-browser page fetch even from a
+   * residential IP, and its feed carries no image — so without this its
+   * stories never get a picture). `rss-proxied`/`scrape-watchpro` sources
+   * already proxy their pages; this flag covers the feed-OK/pages-walled case.
+   */
+  proxyEnrichment?: boolean;
 }
 
 export const SOURCES: SourceDef[] = [
@@ -62,6 +72,12 @@ export const SOURCES: SourceDef[] = [
     scrapeUrl: "https://www.ablogtowatch.com/",
     fetchMode: "rss",
     isActive: true,
+    // Feed fetches fine direct but carries no image, and the article pages
+    // 403 a non-browser fetch (even from a residential IP) — so og:image +
+    // body text only resolve through the proxy. Verified 2026-06-22: page via
+    // proxy 200 w/ og:image, image file loads 200. Without this, every
+    // aBlogtoWatch story shipped pictureless (seen 06-19 & 06-22).
+    proxyEnrichment: true,
   },
   {
     slug: "wornandwound",

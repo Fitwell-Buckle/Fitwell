@@ -15,12 +15,25 @@ import { proxiedFetch } from "./scrape/proxy";
 import { SOURCES } from "./sources";
 import { decodeEntities } from "./text";
 
-/** Slugs whose article pages are Cloudflare-walled → fetch via proxy. */
-const PROXY_SLUGS = new Set(
+/**
+ * Slugs whose article PAGES are WAF/Cloudflare-walled → fetch via proxy.
+ * Covers proxied/scraped feeds (whose pages are walled too) plus the
+ * feed-OK/pages-walled case flagged with `proxyEnrichment` (e.g.
+ * aBlogtoWatch: feed fetches direct but its pages 403 a bare fetch).
+ */
+const PROXY_PAGE_SLUGS = new Set(
   SOURCES.filter(
-    (s) => s.fetchMode === "rss-proxied" || s.fetchMode === "scrape-watchpro",
+    (s) =>
+      s.fetchMode === "rss-proxied" ||
+      s.fetchMode === "scrape-watchpro" ||
+      s.proxyEnrichment,
   ).map((s) => s.slug),
 );
+
+/** True when a source's article pages must be enriched through the proxy. */
+export function pageNeedsProxy(slug: string): boolean {
+  return PROXY_PAGE_SLUGS.has(slug);
+}
 
 const FETCH_TIMEOUT_MS = 10_000;
 // Worn & Wound inlines ~750KB of CSS/JS before the content — the cap must
@@ -175,9 +188,10 @@ export interface Enrichment {
 export async function enrichStory(
   story: Pick<RawStory, "url" | "imageUrl" | "sourceSlug">,
 ): Promise<Enrichment> {
-  // Cloudflare-walled sources (WatchPro) need the residential proxy for
-  // their article pages too, not just the feed.
-  const html = PROXY_SLUGS.has(story.sourceSlug)
+  // WAF-walled sources (WatchPro, aBlogtoWatch) need the residential proxy
+  // for their article pages too, not just the feed. Fall back to a direct
+  // fetch if the proxy comes back empty.
+  const html = pageNeedsProxy(story.sourceSlug)
     ? ((await proxiedFetch(story.url)) ?? (await fetchPageHtml(story.url)))
     : await fetchPageHtml(story.url);
   const articleText = html ? extractArticleText(html) : null;

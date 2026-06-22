@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { extractArticleText, extractOgImage } from "./images";
+import { extractArticleText, extractOgImage, pageNeedsProxy } from "./images";
+
+describe("pageNeedsProxy", () => {
+  it("proxies article pages for proxied + scraped sources", () => {
+    expect(pageNeedsProxy("watchtime")).toBe(true); // rss-proxied
+    expect(pageNeedsProxy("watchpro")).toBe(true); // scrape-watchpro
+  });
+
+  it("proxies aBlogtoWatch pages (feed direct, but pages are WAF-walled)", () => {
+    expect(pageNeedsProxy("ablogtowatch")).toBe(true);
+  });
+
+  it("leaves ordinary direct-RSS sources unproxied", () => {
+    expect(pageNeedsProxy("hodinkee")).toBe(false);
+    expect(pageNeedsProxy("nonexistent-slug")).toBe(false);
+  });
+});
 
 describe("extractOgImage", () => {
   it("finds a standard og:image meta tag", () => {
