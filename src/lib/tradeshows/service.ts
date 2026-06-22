@@ -172,6 +172,9 @@ export async function updateVendor(
   }
   if (input.followUpStatus !== undefined)
     patch.followUpStatus = input.followUpStatus;
+  if (input.followUpTemp !== undefined)
+    patch.followUpTemp = input.followUpTemp ?? null;
+  if (input.leadValue !== undefined) patch.leadValue = input.leadValue ?? null;
   if (input.nextSteps !== undefined) patch.nextSteps = input.nextSteps || null;
   if (input.notes !== undefined) patch.notes = input.notes || null;
   if (input.side !== undefined) patch.side = input.side;

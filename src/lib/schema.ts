@@ -2979,6 +2979,12 @@ export const tradeShowVendor = pgTable(
     // 'none' | 'todo' | 'scheduled' | 'done' | 'skip'.
     followUpStatus: text("follow_up_status").notNull().default("none"),
     nextSteps: text("next_steps"),
+    // Triage classification, set post-booth. Two orthogonal dimensions, both
+    // null until rated: `followUpTemp` = how the conversation is going
+    // ('hot' | 'warm' | 'cold'); `leadValue` = how big the prize is or could
+    // be, 1–5 stars. Apply to either side (supplier or customer).
+    followUpTemp: text("follow_up_temp"),
+    leadValue: integer("lead_value"),
     // ── Pipeline links (set on promote) ──
     leadId: text("lead_id").references(() => lead.id),
     supplierLeadId: text("supplier_lead_id").references(() => supplierLead.id),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   UserPlus,
   CreditCard,
@@ -8,6 +9,7 @@ import {
   Trash2,
   Star,
   Mic,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -409,20 +411,59 @@ function ContactCard({
         />
       </div>
 
-      {c.cardImageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={c.cardImageUrl}
-          alt="Business card"
-          className="mt-3 max-h-40 rounded-md border border-zinc-200"
-        />
-      )}
+      {c.cardImageUrl && <CardImage url={c.cardImageUrl} />}
 
       <Button className="mt-3" size="sm" onClick={save} disabled={saving}>
         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Save
       </Button>
     </Card>
+  );
+}
+
+// Scanned business-card thumbnail that opens a full-size lightbox on click.
+function CardImage({ url }: { url: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <button
+          type="button"
+          className="mt-3 block cursor-zoom-in rounded-md border border-zinc-200 transition-opacity hover:opacity-90"
+          aria-label="Enlarge business card"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt="Business card"
+            className="max-h-40 rounded-md"
+          />
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in" />
+        <Dialog.Content
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 focus:outline-none"
+          // The backdrop is part of the content here; clicking it closes.
+          onClick={() => setOpen(false)}
+        >
+          <Dialog.Title className="sr-only">Business card</Dialog.Title>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt="Business card"
+            className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <Dialog.Close
+            className="fixed right-4 top-4 rounded-full bg-white/10 p-2 text-white backdrop-blur transition-colors hover:bg-white/20"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </Dialog.Close>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

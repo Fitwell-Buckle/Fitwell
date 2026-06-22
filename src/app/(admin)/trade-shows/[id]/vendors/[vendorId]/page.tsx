@@ -37,6 +37,8 @@ export default async function VendorDetailPage({
         notes: vendor.notes,
         nextSteps: vendor.nextSteps,
         followUpStatus: vendor.followUpStatus,
+        followUpTemp: vendor.followUpTemp,
+        leadValue: vendor.leadValue,
         seedNotes: vendor.seedNotes,
         responseRaw: vendor.responseRaw,
         meetingRaw: vendor.meetingRaw,

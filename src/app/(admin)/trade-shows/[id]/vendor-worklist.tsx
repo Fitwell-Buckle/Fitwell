@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Link2,
   Gift,
+  ArrowUpDown,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -31,6 +33,8 @@ export interface WorklistVendor {
   visited: boolean;
   sampleGiven: boolean;
   followUpStatus: string;
+  followUpTemp: string | null;
+  leadValue: number | null;
   contactCount: number;
   leadId: string | null;
   supplierLeadId: string | null;
@@ -42,8 +46,18 @@ const SIDE_BADGE: Record<string, string> = {
   both: "bg-violet-50 text-violet-700",
 };
 
+const TEMP_DOT: Record<string, string> = {
+  hot: "bg-red-500",
+  warm: "bg-amber-500",
+  cold: "bg-sky-500",
+};
+
 type SideFilter = "all" | "supplier" | "customer";
 type VisitedFilter = "all" | "unvisited" | "visited";
+type SortKey = "floor" | "priority" | "value" | "temp";
+
+// Hot first when sorting by temperature; unrated sinks to the bottom.
+const TEMP_RANK: Record<string, number> = { hot: 3, warm: 2, cold: 1 };
 
 export function VendorWorklist({
   showId,
@@ -58,6 +72,7 @@ export function VendorWorklist({
   const [side, setSide] = useState<SideFilter>("all");
   const [visited, setVisited] = useState<VisitedFilter>("all");
   const [priorityOnly, setPriorityOnly] = useState(false);
+  const [sort, setSort] = useState<SortKey>("floor");
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
@@ -82,6 +97,22 @@ export function VendorWorklist({
       return true;
     });
   }, [vendors, side, visited, priorityOnly, search]);
+
+  // Sort is applied after filtering. "floor" keeps the server order (priority
+  // booths first, then booth number); the rating sorts are stable, so vendors
+  // with equal/unset ratings fall back to that floor order. Array.sort mutates,
+  // so copy first.
+  const sorted = useMemo(() => {
+    if (sort === "floor") return filtered;
+    const rank = (v: WorklistVendor) => {
+      const temp = v.followUpTemp ? (TEMP_RANK[v.followUpTemp] ?? 0) : 0;
+      if (sort === "value") return v.leadValue ?? -1;
+      if (sort === "temp") return temp;
+      // "priority": value dominates (×10 outranks any temp), temp breaks ties.
+      return (v.leadValue ?? 0) * 10 + temp;
+    };
+    return [...filtered].sort((a, b) => rank(b) - rank(a));
+  }, [filtered, sort]);
 
   async function toggleVisited(v: WorklistVendor) {
     const next = !v.visited;
@@ -113,7 +144,15 @@ export function VendorWorklist({
 
   return (
     <div className="pb-20">
-      <PageHeader title={showName} />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeader title={showName} />
+        <Link
+          href={`/trade-shows/${showId}/triage`}
+          className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-600 transition-colors hover:bg-zinc-50"
+        >
+          <ClipboardList className="h-4 w-4" /> Triage all
+        </Link>
+      </div>
 
       {/* Progress */}
       <div className="mt-3">
@@ -176,17 +215,30 @@ export function VendorWorklist({
             />
             Priority
           </button>
+          <label className="ml-auto inline-flex items-center gap-1.5 text-sm text-zinc-500">
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+              className="rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-700 outline-none focus:border-zinc-400"
+            >
+              <option value="floor">Floor plan</option>
+              <option value="priority">Priority (value, then hot)</option>
+              <option value="value">Lead value (high→low)</option>
+              <option value="temp">Temperature (hot→cold)</option>
+            </select>
+          </label>
         </div>
       </div>
 
       {/* List */}
       <div className="mt-4 space-y-2">
-        {filtered.length === 0 ? (
+        {sorted.length === 0 ? (
           <p className="py-8 text-center text-sm text-zinc-400">
             No vendors match these filters.
           </p>
         ) : (
-          filtered.map((v) => (
+          sorted.map((v) => (
             <div
               key={v.id}
               className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-3"
@@ -231,6 +283,21 @@ export function VendorWorklist({
 
                 {/* Indicators */}
                 <div className="flex shrink-0 items-center gap-1.5">
+                  {v.followUpTemp && TEMP_DOT[v.followUpTemp] && (
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        TEMP_DOT[v.followUpTemp],
+                      )}
+                      title={`${v.followUpTemp} lead`}
+                    />
+                  )}
+                  {v.leadValue != null && (
+                    <span className="inline-flex items-center gap-0.5 text-xs text-amber-500">
+                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                      {v.leadValue}
+                    </span>
+                  )}
                   {(v.leadId || v.supplierLeadId) && (
                     <Link2 className="h-3.5 w-3.5 text-emerald-600" />
                   )}

@@ -24,8 +24,12 @@ import {
   VENDOR_SIDE_LABELS,
   FOLLOW_UP_STATUSES,
   FOLLOW_UP_STATUS_LABELS,
+  FOLLOW_UP_TEMPS,
+  FOLLOW_UP_TEMP_LABELS,
+  LEAD_VALUE_MAX,
   type VendorSide,
   type FollowUpStatus,
+  type FollowUpTemp,
 } from "@/lib/tradeshows/constants";
 import { LinkedActivity } from "@/components/crm/linked-activity";
 import { VoiceRecorder, type NewVoiceNote } from "./voice-recorder";
@@ -44,6 +48,8 @@ interface VendorData {
   notes: string | null;
   nextSteps: string | null;
   followUpStatus: string;
+  followUpTemp: string | null;
+  leadValue: number | null;
   seedNotes: string | null;
   responseRaw: string | null;
   meetingRaw: string | null;
@@ -149,6 +155,8 @@ export function VendorDetail({
     setSavingFollowUp(true);
     const ok = await patch({
       followUpStatus: vendor.followUpStatus,
+      followUpTemp: vendor.followUpTemp as VendorData["followUpTemp"],
+      leadValue: vendor.leadValue,
       nextSteps: vendor.nextSteps,
     });
     setSavingFollowUp(false);
@@ -383,6 +391,52 @@ export function VendorDetail({
             </button>
           ))}
         </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="text-xs font-medium text-zinc-500">
+              Temperature
+            </label>
+            <p className="mt-0.5 text-[11px] text-zinc-400">
+              How it&apos;s going with them
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {FOLLOW_UP_TEMPS.map((t) => {
+                const active = vendor.followUpTemp === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    // Click the active chip again to clear the rating.
+                    onClick={() => set("followUpTemp", active ? null : t)}
+                    className={cn(
+                      "rounded-md border px-2.5 py-1 text-sm transition-colors",
+                      active
+                        ? TEMP_ACTIVE_CLASS[t]
+                        : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50",
+                    )}
+                  >
+                    {FOLLOW_UP_TEMP_LABELS[t]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-zinc-500">
+              Lead value
+            </label>
+            <p className="mt-0.5 text-[11px] text-zinc-400">
+              How valuable it is, or could be
+            </p>
+            <StarRating
+              value={vendor.leadValue}
+              onChange={(v) => set("leadValue", v)}
+            />
+          </div>
+        </div>
+
         <DictationTextarea
           label="Next steps"
           value={vendor.nextSteps ?? ""}
@@ -425,6 +479,51 @@ export function VendorDetail({
       </Section>
 
       <LinkedActivity context="vendor" vendorId={vendor.id} />
+    </div>
+  );
+}
+
+// Active-chip colour per temperature (inactive chips share the neutral style).
+const TEMP_ACTIVE_CLASS: Record<FollowUpTemp, string> = {
+  hot: "border-red-500 bg-red-500 text-white",
+  warm: "border-amber-500 bg-amber-500 text-white",
+  cold: "border-sky-500 bg-sky-500 text-white",
+};
+
+// 1–5 star rating. Clicking the current high star clears the rating (back to
+// unrated / null) so a mis-tap is recoverable without a separate "clear".
+function StarRating({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+}) {
+  return (
+    <div className="mt-1.5 flex items-center gap-0.5">
+      {Array.from({ length: LEAD_VALUE_MAX }, (_, i) => {
+        const n = i + 1;
+        const filled = value != null && n <= value;
+        return (
+          <button
+            key={n}
+            type="button"
+            aria-label={`${n} star${n > 1 ? "s" : ""}`}
+            onClick={() => onChange(value === n ? null : n)}
+            className="rounded p-0.5 text-amber-400 transition-colors hover:text-amber-500"
+          >
+            <Star
+              className={cn(
+                "h-6 w-6",
+                filled ? "fill-amber-400" : "text-zinc-300",
+              )}
+            />
+          </button>
+        );
+      })}
+      {value != null && (
+        <span className="ml-1.5 text-xs text-zinc-400">{value}/5</span>
+      )}
     </div>
   );
 }

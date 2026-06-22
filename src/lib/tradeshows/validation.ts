@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { FOLLOW_UP_STATUSES, VENDOR_SIDES } from "./constants";
+import {
+  FOLLOW_UP_STATUSES,
+  FOLLOW_UP_TEMPS,
+  LEAD_VALUE_MAX,
+  LEAD_VALUE_MIN,
+  VENDOR_SIDES,
+} from "./constants";
 
 // Pure, db-free validation + the vendor→pipeline mapping helpers, so they can
 // be unit-tested without a database. The service layer (./service) imports
@@ -11,6 +17,9 @@ export const updateVendorSchema = z.object({
   visited: z.boolean().optional(),
   sampleGiven: z.boolean().optional(),
   followUpStatus: z.enum(FOLLOW_UP_STATUSES).optional(),
+  // Triage classification (both nullable → null clears the rating).
+  followUpTemp: z.enum(FOLLOW_UP_TEMPS).nullish(),
+  leadValue: z.number().int().min(LEAD_VALUE_MIN).max(LEAD_VALUE_MAX).nullish(),
   nextSteps: z.string().nullish(),
   notes: z.string().nullish(),
   side: z.enum(VENDOR_SIDES).optional(),
