@@ -139,7 +139,7 @@ export function ProductCadModelCard({
           <FinishViewer
             src={selected.glbUrl}
             alt={`${selected.name} 3D model`}
-            initialFinishId={defaultFinishId}
+            appliedFinishId={defaultFinishId}
           />
         </div>
       )}

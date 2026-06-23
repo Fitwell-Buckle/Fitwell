@@ -9,16 +9,38 @@ import {
   productionPoLineItem,
   productionPo,
 } from "@/lib/schema";
-import { sql, sum, count, and, eq, gte, isNull, lte, ne } from "drizzle-orm";
+import {
+  sql,
+  sum,
+  count,
+  and,
+  eq,
+  gte,
+  isNull,
+  isNotNull,
+  lt,
+  lte,
+  ne,
+  type AnyColumn,
+} from "drizzle-orm";
 import { PageHeader } from "@/components/ui/page-header";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getCatalogCached } from "@/lib/catalog/load";
 import { parseDateRange } from "@/lib/date-range";
+import { STORE_TZ } from "@/lib/timezone";
+import {
+  dateToBucketKey,
+  generateBucketKeys,
+  formatBucketLabel,
+} from "@/lib/chart-utils";
+import { MetricCard } from "@/components/charts/metric-card";
+import type { MetricPoint } from "@/components/charts/metric-sparkline";
 import { getProductCadModel, listReadyCadModels } from "@/lib/cad/products";
 import { matchFinish } from "@/lib/cad/finishes";
 import { ProductCadModelCard } from "./product-cad-model";
+import { DashboardViewToggle } from "../../dashboard/view-toggle";
 
 export const metadata: Metadata = {
   title: "Product | Fitwell Admin",
@@ -43,9 +65,21 @@ export default async function ProductDetailPage({
 
   const { sku: encoded } = await params;
   const sku = decodeURIComponent(encoded);
-  // Sales totals bound by the shared header date picker; Incoming + catalog
-  // are "now" state and stay un-filtered.
-  const { from, to } = parseDateRange(await searchParams);
+  // Sales totals bound by the shared header date picker; the On hand + Incoming
+  // tiles show "now" state and stay un-filtered. The graph view reconstructs a
+  // running curve for each metric across the selected window.
+  const sp = await searchParams;
+  const { from, to, granularity } = parseDateRange(sp);
+  const isGraph = sp.view === "graph";
+
+  // Bucket a timestamp column by the store day/week/month, matching the
+  // dashboard so trend lines line up with Shopify's store-local reporting.
+  const bucketOf = (col: AnyColumn) =>
+    granularity === "day"
+      ? sql`date_trunc('day', (${col} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`
+      : granularity === "week"
+        ? sql`date_trunc('week', (${col} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`
+        : sql`date_trunc('month', (${col} AT TIME ZONE ${sql.raw(`'${STORE_TZ}'`)}))::date`;
 
   // Find the variant in the cached Shopify catalog. If it isn't in the catalog
   // (e.g. archived), fall back to whatever the sales rows tell us so historic
@@ -91,9 +125,122 @@ export default async function ProductDetailPage({
       ),
     );
 
-  const [readyModels, cadLink] = await Promise.all([
+  const notCancelled = ne(productionPo.status, "cancelled");
+
+  const [
+    readyModels,
+    cadLink,
+    salesByBucket,
+    recvByBucket,
+    createdByBucket,
+    [soldBeforeRow],
+    [recvBeforeRow],
+    [createdBeforeRow],
+    [recvAllRow],
+    [soldAllRow],
+  ] = await Promise.all([
     listReadyCadModels(),
     getProductCadModel(sku),
+    // Per-bucket sales flow (units / orders / revenue) within the window.
+    db
+      .select({
+        bucket: bucketOf(order.processedAt),
+        units: sum(orderLineItem.quantity).mapWith(Number),
+        orders: count(sql`DISTINCT ${orderLineItem.orderId}`),
+        revenue: sql<number>`coalesce(sum(${orderLineItem.price} * ${orderLineItem.quantity}), 0)::int`,
+      })
+      .from(orderLineItem)
+      .innerJoin(order, eq(order.id, orderLineItem.orderId))
+      .where(
+        and(
+          eq(orderLineItem.sku, sku),
+          gte(order.processedAt, from),
+          lte(order.processedAt, to),
+        ),
+      )
+      .groupBy(bucketOf(order.processedAt)),
+    // Units received into stock per bucket (production receipts).
+    db
+      .select({
+        bucket: bucketOf(productionPoLineItem.shopifyReceivedAt),
+        qty: sum(productionPoLineItem.quantity).mapWith(Number),
+      })
+      .from(productionPoLineItem)
+      .innerJoin(productionPo, eq(productionPoLineItem.poId, productionPo.id))
+      .where(
+        and(
+          eq(productionPoLineItem.sku, sku),
+          isNotNull(productionPoLineItem.shopifyReceivedAt),
+          gte(productionPoLineItem.shopifyReceivedAt, from),
+          lte(productionPoLineItem.shopifyReceivedAt, to),
+          notCancelled,
+        ),
+      )
+      .groupBy(bucketOf(productionPoLineItem.shopifyReceivedAt)),
+    // Units that entered production (became "incoming") per bucket.
+    db
+      .select({
+        bucket: bucketOf(productionPoLineItem.createdAt),
+        qty: sum(productionPoLineItem.quantity).mapWith(Number),
+      })
+      .from(productionPoLineItem)
+      .innerJoin(productionPo, eq(productionPoLineItem.poId, productionPo.id))
+      .where(
+        and(
+          eq(productionPoLineItem.sku, sku),
+          gte(productionPoLineItem.createdAt, from),
+          lte(productionPoLineItem.createdAt, to),
+          notCancelled,
+        ),
+      )
+      .groupBy(bucketOf(productionPoLineItem.createdAt)),
+    // Baselines before the window, so the running curves start at the right
+    // level instead of from zero.
+    db
+      .select({ q: sum(orderLineItem.quantity).mapWith(Number) })
+      .from(orderLineItem)
+      .innerJoin(order, eq(order.id, orderLineItem.orderId))
+      .where(and(eq(orderLineItem.sku, sku), lt(order.processedAt, from))),
+    db
+      .select({ q: sum(productionPoLineItem.quantity).mapWith(Number) })
+      .from(productionPoLineItem)
+      .innerJoin(productionPo, eq(productionPoLineItem.poId, productionPo.id))
+      .where(
+        and(
+          eq(productionPoLineItem.sku, sku),
+          isNotNull(productionPoLineItem.shopifyReceivedAt),
+          lt(productionPoLineItem.shopifyReceivedAt, from),
+          notCancelled,
+        ),
+      ),
+    db
+      .select({ q: sum(productionPoLineItem.quantity).mapWith(Number) })
+      .from(productionPoLineItem)
+      .innerJoin(productionPo, eq(productionPoLineItem.poId, productionPo.id))
+      .where(
+        and(
+          eq(productionPoLineItem.sku, sku),
+          lt(productionPoLineItem.createdAt, from),
+          notCancelled,
+        ),
+      ),
+    // Lifetime received vs. sold → current On hand (un-filtered, "now" state,
+    // like Incoming). On hand = total received into stock − total sold.
+    db
+      .select({ q: sum(productionPoLineItem.quantity).mapWith(Number) })
+      .from(productionPoLineItem)
+      .innerJoin(productionPo, eq(productionPoLineItem.poId, productionPo.id))
+      .where(
+        and(
+          eq(productionPoLineItem.sku, sku),
+          isNotNull(productionPoLineItem.shopifyReceivedAt),
+          notCancelled,
+        ),
+      ),
+    db
+      .select({ q: sum(orderLineItem.quantity).mapWith(Number) })
+      .from(orderLineItem)
+      .where(eq(orderLineItem.sku, sku)),
   ]);
 
   const title = variant
@@ -102,13 +249,62 @@ export default async function ProductDetailPage({
       : variant.title
     : salesRow?.title ?? sku;
   const incoming = Number(incomingRow?.qty ?? 0);
-  const unitsSold = Number(salesRow?.unitsSold ?? 0);
-  const orderCount = Number(salesRow?.orderCount ?? 0);
-  const revenue = Number(salesRow?.revenue ?? 0);
+  const onHandNow =
+    Number(recvAllRow?.q ?? 0) - Number(soldAllRow?.q ?? 0);
+
+  // Build zero-filled, per-bucket series. Units/orders/revenue are flows; On
+  // hand and Incoming are running levels (received−sold, created−received)
+  // carried forward from the pre-window baseline.
+  const keyOf = (b: unknown) =>
+    dateToBucketKey(new Date(b as string), granularity);
+  const salesMap = new Map(salesByBucket.map((r) => [keyOf(r.bucket), r]));
+  const recvMap = new Map(
+    recvByBucket.map((r) => [keyOf(r.bucket), Number(r.qty ?? 0)]),
+  );
+  const createdMap = new Map(
+    createdByBucket.map((r) => [keyOf(r.bucket), Number(r.qty ?? 0)]),
+  );
+
+  let onHand =
+    Number(recvBeforeRow?.q ?? 0) - Number(soldBeforeRow?.q ?? 0);
+  let incomingLevel =
+    Number(createdBeforeRow?.q ?? 0) - Number(recvBeforeRow?.q ?? 0);
+  const onHandSeries: MetricPoint[] = [];
+  const incomingSeries: MetricPoint[] = [];
+  const unitsSeries: MetricPoint[] = [];
+  const ordersSeries: MetricPoint[] = [];
+  const revenueSeries: MetricPoint[] = [];
+  let unitsSold = 0;
+  let orderCount = 0;
+  let revenue = 0;
+  for (const key of generateBucketKeys(from, to, granularity)) {
+    const s = salesMap.get(key);
+    const soldB = Number(s?.units ?? 0);
+    const ordB = Number(s?.orders ?? 0);
+    const revB = Number(s?.revenue ?? 0);
+    const recvB = recvMap.get(key) ?? 0;
+    const createdB = createdMap.get(key) ?? 0;
+    onHand += recvB - soldB;
+    incomingLevel += createdB - recvB;
+    const label = formatBucketLabel(key, granularity);
+    onHandSeries.push({ label, value: onHand });
+    incomingSeries.push({ label, value: incomingLevel });
+    unitsSeries.push({ label, value: soldB });
+    ordersSeries.push({ label, value: ordB });
+    revenueSeries.push({ label, value: revB });
+    unitsSold += soldB;
+    orderCount += ordB;
+    revenue += revB;
+  }
 
   return (
     <div>
-      <PageHeader title={title} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PageHeader title={title} />
+        {/* Table (numbers) vs graph (per-tile line charts) — same toggle as the
+            dashboard, driving the `view` URL param. */}
+        <DashboardViewToggle />
+      </div>
 
       <Card className="mt-6 p-6">
         <div className="grid grid-cols-2 gap-6 text-sm sm:grid-cols-4">
@@ -145,11 +341,42 @@ export default async function ProductDetailPage({
         </div>
       </Card>
 
-      <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Stat label="Incoming" value={incoming.toLocaleString("en-US")} />
-        <Stat label="Units sold" value={unitsSold.toLocaleString("en-US")} />
-        <Stat label="Orders" value={orderCount.toLocaleString("en-US")} />
-        <Stat label="Revenue" value={fmtMoney(revenue)} />
+      <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <MetricCard
+          label="On hand"
+          value={onHandNow.toLocaleString("en-US")}
+          graph={isGraph}
+          series={onHandSeries}
+          seriesFormat="number"
+        />
+        <MetricCard
+          label="Incoming"
+          value={incoming.toLocaleString("en-US")}
+          graph={isGraph}
+          series={incomingSeries}
+          seriesFormat="number"
+        />
+        <MetricCard
+          label="Units sold"
+          value={unitsSold.toLocaleString("en-US")}
+          graph={isGraph}
+          series={unitsSeries}
+          seriesFormat="number"
+        />
+        <MetricCard
+          label="Orders"
+          value={orderCount.toLocaleString("en-US")}
+          graph={isGraph}
+          series={ordersSeries}
+          seriesFormat="number"
+        />
+        <MetricCard
+          label="Revenue"
+          value={fmtMoney(revenue)}
+          graph={isGraph}
+          series={revenueSeries}
+          seriesFormat="currency"
+        />
       </div>
 
       <ProductCadModelCard
@@ -194,14 +421,5 @@ export default async function ProductDetailPage({
         </div>
       </Card>
     </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <Card className="p-4">
-      <div className="text-xs text-zinc-400">{label}</div>
-      <div className="mt-1 font-mono text-lg text-zinc-900">{value}</div>
-    </Card>
   );
 }
