@@ -484,6 +484,17 @@ One row, `id="default"`.
 The ETA cron uses `supplier.eta_reminder_last_sent_at` to enforce the per-supplier
 cadence (reset to null once a supplier has no missing ETAs).
 
+### `dashboard_settings` (single-row config)
+
+Dashboard analytics settings, edited in **Settings → Returns**. One row,
+`id="default"`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | text | PK, default `"default"` (single row) |
+| `return_label_cost_cents` | int | Assumed per-return shipping-label cost (cents) the business eats, folded into the dashboard's Avg Return Value tile. An estimate — Shopify's API doesn't expose the real merchant-paid label cost. Default 700 (\$7), 0–100000 |
+| `updated_at` | timestamp | |
+
 ### `production_stage_checkin`
 
 One row per (stage instance × threshold) positive-control prompt sent to a
@@ -682,6 +693,143 @@ holds the blob URL + metadata.
 
 Nullable text column added to `user`; set for users with `role='supplier'` so the
 supplier portal can scope queries to their own POs (Phase 3).
+
+### Prototypes
+
+A prototype is a **proposed SKU that doesn't exist in Shopify yet**. A vendor
+(`supplier`) makes physical samples across one or more rounds until it's
+approved, at which point we record the final SKU and create the real product in
+Shopify **manually** (no Shopify write). There is no `product` table — SKU is the
+product identity everywhere — so a prototype just carries the SKU strings.
+Admin-only (suppliers/companies 403). UI at `/modules/production/prototypes`
+(list) + `[id]` (detail w/ rounds), plus a Prototypes section on each supplier
+detail page. Status/round constants + the approval helper live in
+`src/lib/prototypes.ts`; DB writes in `src/lib/prototypes/service.ts`.
+Migration `0081_faulty_professor_monster`.
+
+#### `prototype`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `name` | text | Required. Working name, e.g. "Titanium micro-adjust v2" |
+| `proposed_sku` | text | Nullable. Planned SKU (may be undecided) |
+| `final_sku` | text | Nullable. Recorded on approval — the value to create in Shopify |
+| `supplier_id` | text | Nullable FK → `supplier` (`onDelete: set null`). The vendor making samples |
+| `status` | text | `concept` \| `in_development` \| `approved` \| `rejected` \| `on_hold`. Default `concept`. `approved` is only reachable via the promote action (requires `final_sku`) |
+| `description` | text | Design intent / spec |
+| `est_unit_cost_cents` | integer | Target unit cost (cents) |
+| `approved_at` | timestamp | Stamped when status → `approved` |
+| `notes` | text | |
+| `created_at` / `updated_at` | timestamp | |
+
+#### `prototype_round`
+
+Iterative sample rounds (v1, v2…) — a physical batch from the vendor with its
+own dates, cost, and feedback. Unique on `(prototype_id, round_number)`; the
+round number is derived server-side as `max + 1`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `prototype_id` | text | FK → `prototype` (cascade) |
+| `round_number` | integer | 1-based; unique per prototype |
+| `status` | text | `requested` \| `in_production` \| `shipped` \| `received` \| `reviewed`. Default `requested` |
+| `requested_at` / `expected_at` / `received_at` | date | Nullable |
+| `sample_qty` | integer | Nullable |
+| `unit_cost_cents` | integer | Quoted per-unit sample cost (cents) |
+| `feedback` | text | What we thought / changes for the next round |
+| `created_at` / `updated_at` | timestamp | |
+
+#### `prototype_attachment`
+
+Polymorphic photos/files — **exactly one** of `prototype_id` (prototype-level
+"Other files": spec sheets, photos, PDFs) or `round_id` (sample photos) is set
+(CHECK constraint). Mirrors `production_attachment`; stored in Vercel Blob.
+(CAD files are linked, not uploaded — see `prototype_reference`.)
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `prototype_id` | text | Nullable FK → `prototype` (cascade) |
+| `round_id` | text | Nullable FK → `prototype_round` (cascade) |
+| `blob_url`, `filename`, `content_type`, `size_bytes` | | Blob metadata |
+| `uploaded_by_user_id` | text | FK → user |
+| `uploaded_at` | timestamp | |
+
+#### `prototype_reference`
+
+CAD reference links — Autodesk Fusion ("AutoCAD Fusion") public share links.
+We store the pasted link plus the resolved `?mode=embed` viewer URL so the
+detail page can render an inline interactive 3D preview in an `<iframe>`.
+Resolution + host-allowlist (`a360.co` / `*.autodesk360.com`) live in
+`src/lib/prototypes/fusion.ts`. The iframe embed requires the
+`frame-src https://*.autodesk360.com https://a360.co` allowance in the CSP
+(`next.config.ts`). Migration `0082_nappy_sally_floyd`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `prototype_id` | text | FK → `prototype` (cascade) |
+| `url` | text | The link as pasted (e.g. `https://a360.co/4vPkEVP`) |
+| `embed_url` | text | Resolved viewer URL + `?mode=embed`; null if resolution failed (UI falls back to the raw link) |
+| `title` | text | Optional human label |
+| `created_at` | timestamp | |
+
+### CAD Models (public 3D viewer)
+
+A reusable CAD library that powers the public spinnable 3D product viewer. An
+uploaded **STL** (exported from Autodesk Fusion) is auto-converted **server-side
+in pure Node** to a metallic **GLB** (`src/lib/cad/stl-to-glb.ts` — weld, smooth
+normals, auto lay-flat; no Python/browser). Geometry is shared: many SKUs (color
+variants) point at one `cad_model`, so each geometry is uploaded + converted
+once. GLBs are served from Vercel Blob (CSP `connect-src` allows
+`*.public.blob.vercel-storage.com`; `<model-viewer>` needs it). Admin UI is the
+**CAD Models** tab on Products (`/products/cad-models`); SKUs link a model +
+publish on `/products/[sku]` (public `/3d/[sku]` viewer + Shopify 3D media).
+Migration `0083_complete_ironclad`.
+
+#### `cad_model`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `name` | text | Required |
+| `fusion_url` | text | Optional Fusion share link (reference only; not the conversion source) |
+| `source_stl_url` | text | Uploaded STL (Vercel Blob) |
+| `source_filename` | text | |
+| `glb_url` | text | Generated GLB (Vercel Blob) |
+| `status` | text | `draft` \| `awaiting_export` (Fusion export fired, waiting on the email) \| `processing` \| `ready` \| `failed`. Default `draft` |
+| `error_message` | text | Set when conversion fails |
+| `vertex_count` / `triangle_count` | integer | Mesh stats after conversion |
+| `export_requested_at` | timestamp | When "Generate from Fusion" fired the export (matches the email by timestamp) |
+| `export_requested_by_user_id` | text | FK → user; whose inbox the cron reads the Autodesk email from |
+| `expected_filename` | text | Reserved (unused — the Fusion doc name isn't reliably available server-side) |
+| `created_at` / `updated_at` | timestamp | |
+
+**Generate from Fusion (fully automated):** "Generate from Fusion" on a model
+with a `fusion_url` fires Autodesk's STL export server-side (a plain GET to
+`/shares/download/<id>/?toFormat=stl&email=<admin>` — no cookies needed) → status
+`awaiting_export`. The `process-cad-exports` cron (every 10 min; the admin UI
+also nudges it every 15s while waiting) finds the Autodesk "Download file" email
+in the requester's Gmail (reusing the CRM's read access), extracts the signed
+STL link, downloads it, and runs the same convert path. No Python, browser, or
+manual STL handling. Logic in `src/lib/cad/fusion-export.ts` + `service.ts`.
+
+#### `product_cad_model`
+
+Links a product SKU to a CAD model and tracks where its 3D model is published.
+Unique on `sku`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `sku` | text | Product SKU (unique) |
+| `cad_model_id` | text | FK → `cad_model` (`onDelete: set null`) |
+| `published_to_website_at` | timestamp | In-app public per-SKU viewer is live |
+| `shopify_product_id` / `shopify_media_id` | text | Shopify 3D media after an API push |
+| `shopify_published_at` | timestamp | |
+| `created_at` / `updated_at` | timestamp | |
 
 ## B2B Invoicing
 

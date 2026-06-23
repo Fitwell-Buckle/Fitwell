@@ -13,6 +13,7 @@ Last updated: 2026-06-01
 | `/creator-signup` | Influencer/creator self-registration form — name + **email and/or phone-WhatsApp (at least one required)** + **multiple** social profiles (add/remove rows; platform dropdown incl. **Other → free-text platform name + domain**, which builds a clickable profile URL). Shareable link sent to creators; submissions land in `/creators` as `source=self_registration`, `vettingStatus=unreviewed` for the team to vet (no admin data entry), and fire a team notification + email. Honeypot-guarded | None |
 | `/privacy` | Privacy policy | None |
 | `/terms` | Terms of service | None |
+| `/3d/[sku]` | Public, chrome-free auto-spinning 3D viewer for a SKU's published CAD model (404 until published from the product page). `/buckle-viewer` is a standalone demo of the same viewer | None |
 
 All marketing pages include PostHog tracking and UTM parameter capture.
 
@@ -71,7 +72,10 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/modules/production/supplier-leads` | Supplier Leads list — captured supplier business cards (potential new suppliers): name/company/supplier-type/status/captured. "Capture supplier" button |
 | `/modules/production/supplier-leads/capture` | Mobile-first 3-mode supplier-card capture: photo (Claude vision OCR), live QR, or type manually → review → save. Mirrors `/leads/capture` (reuses its `CardCamera`/`QrScannerView`) but feeds the supplier pipeline |
 | `/modules/production/supplier-leads/[id]` | Supplier lead detail — editable fields + **Create supplier** (promote → real `supplier` row, `status='converted'`, redirects to the supplier) + drop (soft-delete) |
-| `/modules/production/suppliers` | Supplier CRUD |
+| `/modules/production/suppliers` | Supplier CRUD. Detail page also lists the vendor's prototypes |
+| `/modules/production/prototypes` | Prototype list — proposed SKUs in the sample phase. Filter by status/vendor, "Add prototype". Rows link to detail |
+| `/modules/production/prototypes/[id]` | Prototype detail — editable fields + vendor, **Promote to product** (records `final_sku`, stamps `approved_at`), concept reference files, and the **sample rounds** timeline (each round: status/dates/qty/cost/feedback + sample photos) |
+| `/products/cad-models` | **CAD Models** tab on Products (SectionTabs; no separate nav entry). CAD library — reusable saved CAD models. Add a model, upload its STL → auto-converts to a metallic GLB (server-side, Node) with an inline 3D preview. One model shared across many SKUs (color variants) |
 | `/trade-shows` | Trade Shows list (top-level nav) — show cards with a visited-progress bar |
 | `/trade-shows/[id]` | Vendor worklist for one show. Mobile-first: progress bar, search + side (supplier/customer) / visited / priority filters (client-side), **sort** (floor plan / priority [value, then hot] / lead value / temperature), tap-to-toggle visited checkbox per row, indicators for temperature (coloured dot) / lead value (★N) / card scanned / pipeline-linked / follow-up status. Rows link to the vendor detail; **Triage all** link → the bulk triage page |
 | `/trade-shows/[id]/triage` | Bulk triage — every vendor on one desktop page (company + booth/category, pre-show & booth notes), with inline **type** (supplier/customer/both), **temperature** (hot/warm/cold), and **lead value** (★1–5) controls that auto-save per change (optimistic, no per-row save). Rows hold their position while editing; a "N / total triaged" progress bar counts vendors with both a temp and a value. The post-show first pass before working the sorted worklist |
@@ -166,6 +170,23 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |
 | POST | `/api/production/suppliers/[id]/contacts` | Add an authorized login email to a supplier |
 | DELETE | `/api/production/supplier-contacts/[id]` | Remove a supplier login email |
+| POST | `/api/prototypes` | Create a prototype (admin-only; suppliers/companies 403) |
+| PATCH / DELETE | `/api/prototypes/[id]` | Update or delete a prototype. Setting `status:"approved"` requires a `final_sku` (in the payload or already on the row) — validated by `approvePrototype()`, stamps `approved_at`. Delete cascades rounds + attachments |
+| POST | `/api/prototypes/[id]/rounds` | Add a sample round (round number derived server-side) |
+| PATCH / DELETE | `/api/prototypes/rounds/[roundId]` | Update or delete a sample round |
+| POST | `/api/prototypes/[id]/attachments` | Upload a prototype-level file — spec sheets, photos, PDFs (Vercel Blob, 10MB) |
+| POST | `/api/prototypes/rounds/[roundId]/attachments` | Upload a sample photo for a round (Vercel Blob, 10MB) |
+| DELETE | `/api/prototypes/attachments/[id]` | Remove a prototype/round attachment (deletes blob + row) |
+| POST | `/api/prototypes/[id]/references` | Attach an Autodesk Fusion CAD share link. Validates the host (`a360.co`/`*.autodesk360.com`), resolves redirects server-side to build the `?mode=embed` viewer URL for the inline 3D preview. Stores the raw link even if resolution fails |
+| DELETE | `/api/prototypes/references/[id]` | Remove a CAD reference link |
+| POST | `/api/cad-models` | Create a CAD library model (`{ name, fusionUrl? }`); admin-only |
+| PATCH / DELETE | `/api/cad-models/[id]` | Update name/Fusion link, or delete (cleans up STL + GLB blobs) |
+| POST | `/api/cad-models/[id]/stl` | Upload an STL → convert to GLB server-side (Node) → store both in Blob → status `ready`. 422 on bad mesh |
+| POST | `/api/cad-models/[id]/fusion-export` | **Generate from Fusion** — fire Autodesk's STL export to the admin's email (server-side GET), set status `awaiting_export`. The cron reads it back and converts |
+| GET | `/api/cron/process-cad-exports` | Cron (every 10 min) + admin-nudged: find the Autodesk export email in the requester's Gmail, download the STL, convert. `verifyCronOrAdmin` |
+| PUT | `/api/products/[sku]/cad-model` | Link (or unlink with null) a SKU to a saved CAD model |
+| POST / DELETE | `/api/products/[sku]/cad-model/publish` | Publish (or unpublish) the SKU's model to the public in-app `/3d/[sku]` viewer |
+| POST | `/api/products/[sku]/cad-model/shopify` | Push the SKU's model to its Shopify product as native 3D media (`stagedUploadsCreate` → upload → `productCreateMedia`, `write_products`). Writes to the live storefront |
 | GET / POST | `/api/notifications` | Admin notification inbox — unread count (GET) + mark read (POST `{id}` or `{all}`); admin-only (suppliers/companies 403). Excludes supplier-bound rows |
 | GET / POST | `/api/supplier/notifications` | Supplier notification inbox — unread count (GET) + mark read (POST `{id}`/`{all}`); scoped to the signed-in supplier |
 | POST / DELETE | `/api/push/subscribe` | Register (POST, upsert on `endpoint`) or remove (DELETE `{endpoint}`) the current admin's Web Push subscription for one device. Body = browser `PushSubscription.toJSON()`. Admin-only (suppliers/companies 403). Backs Settings → Push notifications |
@@ -175,6 +196,7 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | PUT | `/api/supplier/po/[id]/stage-eta` | Supplier twin of the stage-eta route: same body, same writes via `setPoStageEta`. Allowed for the PO's primary supplier OR any supplier assigned to one of its stages (mirrors the eta-route access check) |
 | POST | `/api/supplier/stage-checkin/[id]` | Answer a positive-control stage check-in `{status: "on_track" \| "at_risk", note?}`. Resolves every still-pending threshold row for that stage instance at once. Scoped to the signed-in supplier's own check-ins (404 otherwise). Surfaced on the supplier PO page via the `stage-checkin-prompts` card |
 | PATCH | `/api/settings/production` | Update production settings — supplier ETA-reminder toggle/interval + stage-check-in toggle/thresholds (`production_settings`). Admin-only |
+| PATCH | `/api/settings/dashboard` | Update dashboard settings — assumed per-return shipping-label cost used by the Avg Return Value tile (`dashboard_settings`). Admin-only |
 | GET / POST | `/api/supplier-leads` | Supplier-lead pipeline (admin-only; suppliers/companies 403). GET lists with optional filters (status, supplierType, search; defaults `status='active'`, `capturedAt desc`). POST creates one — requires at least one of name/email/phone/company |
 | GET / PATCH / DELETE | `/api/supplier-leads/[id]` | GET detail; PATCH partial update (any subset); DELETE soft-deletes (`status='dropped'`) |
 | POST | `/api/supplier-leads/[id]/promote` | Promote a supplier lead → create a real `supplier` row from its fields, set the lead's `supplier_id` + `status='converted'`, return `{ supplierId }`. Already-linked leads return the existing supplier (no duplicate) |

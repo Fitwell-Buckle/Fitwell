@@ -17,3 +17,8 @@ export const ORDERS_TABS: SectionTab[] = [
   { href: "/invoices", label: "B2B" },
   { href: "/orders", label: "Consumer" },
 ];
+
+export const PRODUCTS_TABS: SectionTab[] = [
+  { href: "/products", label: "Products" },
+  { href: "/products/cad-models", label: "CAD Models" },
+];

@@ -87,6 +87,11 @@ const navItems: NavItem[] = [
       // Captured supplier business cards → pipeline of potential new suppliers.
       { href: "/modules/production/supplier-leads", label: "Supplier Leads" },
       { href: "/modules/production/suppliers", label: "Suppliers" },
+      // Proposed SKUs in the sample/prototype phase with their vendor, before
+      // they become real Shopify products.
+      { href: "/modules/production/prototypes", label: "Prototypes" },
+      // CAD library lives as a tab on Products (/products/cad-models), not its
+      // own nav entry.
       { href: "/products", label: "Products" },
       { href: "/cogs", label: "COGS" },
     ],

@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { getBillingSettings } from "@/lib/invoicing/billing-settings";
 import { getFollowupSettings } from "@/lib/crm/followup-settings";
 import { getProductionSettings } from "@/lib/production/production-settings";
+import { getDashboardSettings } from "@/lib/dashboard/settings";
 import { getStages } from "@/lib/production/stage-labels";
 import { WireInfoSetup } from "@/app/(admin)/invoices/wire-info-setup";
 import { StageSetup } from "@/app/(admin)/modules/production/stage-setup";
@@ -23,6 +24,7 @@ import { LeadFollowupSettings } from "./lead-followup-settings";
 import { EtaReminderSettings } from "./eta-reminder-settings";
 import { StageCheckinSettings } from "./stage-checkin-settings";
 import { PushNotificationSettings } from "./push-notification-settings";
+import { DashboardSettings } from "./dashboard-settings";
 
 export const metadata: Metadata = {
   title: "Settings | Fitwell Admin",
@@ -44,6 +46,7 @@ export default async function SettingsPage() {
     priceTiers,
     followup,
     productionSettings,
+    dashboard,
   ] = await Promise.all([
     db.select({ count: count() }).from(customer),
     db.select({ count: count() }).from(order),
@@ -62,6 +65,7 @@ export default async function SettingsPage() {
     db.query.priceTier.findMany({ orderBy: asc(priceTier.name) }),
     getFollowupSettings(),
     getProductionSettings(),
+    getDashboardSettings(),
   ]);
 
   const stageCounts: Record<string, number> = {};
@@ -157,6 +161,19 @@ export default async function SettingsPage() {
               Automatic follow-up rules. More (AI-suggested) are coming soon.
             </p>
             <LeadFollowupSettings initial={followup} />
+          </CardContent>
+        </Card>
+
+        <Card className="sm:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-lg">Returns</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-zinc-500">
+              The assumed shipping-label cost per return, used by the
+              dashboard&apos;s Avg Return Value tile.
+            </p>
+            <DashboardSettings initial={dashboard} />
           </CardContent>
         </Card>
 

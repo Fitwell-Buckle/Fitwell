@@ -43,6 +43,9 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@auth/drizzle-adapter": "^1.11.1",
+    "@gltf-transform/core": "^4.4.0",
+    "@gltf-transform/functions": "^4.4.0",
+    "@google/model-viewer": "^4.3.1",
     "@neondatabase/serverless": "^0.10.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.6",

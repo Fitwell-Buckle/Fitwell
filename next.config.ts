@@ -35,7 +35,15 @@ const nextConfig: NextConfig = {
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob: https:",
             "font-src 'self' data:",
-            "connect-src 'self' https://us.i.posthog.com https://www.google-analytics.com https://analytics.google.com",
+            // `blob:` is needed by the public <model-viewer> 3D viewer: three.js
+            // unpacks a GLB's embedded textures into blob: URLs and fetches them.
+            // The Vercel Blob host serves the GLB files themselves.
+            "connect-src 'self' blob: https://*.public.blob.vercel-storage.com https://us.i.posthog.com https://www.google-analytics.com https://analytics.google.com",
+            // <model-viewer> / three.js may decode textures in blob: workers.
+            "worker-src 'self' blob:",
+            // Allow embedding Autodesk Fusion share viewers (prototype CAD
+            // reference previews). Scoped to Autodesk hosts only.
+            "frame-src 'self' https://*.autodesk360.com https://a360.co",
             "frame-ancestors 'none'",
           ].join("; "),
         },

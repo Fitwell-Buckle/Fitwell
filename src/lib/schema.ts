@@ -975,6 +975,7 @@ export const customerEventRelations = relations(customerEvent, ({ one }) => ({
 export const supplierRelations = relations(supplier, ({ many }) => ({
   pos: many(productionPo),
   contacts: many(supplierContact),
+  prototypes: many(prototype),
 }));
 
 export const supplierContactRelations = relations(supplierContact, ({ one }) => ({
@@ -983,6 +984,257 @@ export const supplierContactRelations = relations(supplierContact, ({ one }) => 
     references: [supplier.id],
   }),
 }));
+
+// ─── Prototypes ─────────────────────────────────────────────────────
+// A prototype is a PROPOSED SKU that doesn't exist in Shopify yet. A vendor
+// (`supplier`) makes physical samples across one or more `prototype_round`s
+// until we approve it — at which point we record the `final_sku` and create
+// the real product in Shopify manually. There is no `product` table; SKU is
+// the product identity everywhere, so a prototype just carries the SKU strings.
+export const prototype = pgTable(
+  "prototype",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Working name while in development, e.g. "Titanium micro-adjust v2".
+    name: text("name").notNull(),
+    // SKU we plan to use; may not be decided yet. `finalSku` is what we commit
+    // to on approval (often the same value, promoted from proposed).
+    proposedSku: text("proposed_sku"),
+    finalSku: text("final_sku"),
+    // The vendor making the samples. Nullable until a supplier is chosen.
+    supplierId: text("supplier_id").references(() => supplier.id, {
+      onDelete: "set null",
+    }),
+    // concept | in_development | approved | rejected | on_hold
+    status: text("status").notNull().default("concept"),
+    // Design intent / spec for the buckle.
+    description: text("description"),
+    // Target unit cost in cents (estimate, before real PO pricing).
+    estUnitCostCents: integer("est_unit_cost_cents"),
+    // Stamped when status flips to "approved".
+    approvedAt: timestamp("approved_at", { mode: "date" }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("prototype_supplier_id_idx").on(t.supplierId)],
+);
+
+// One iterative sample round (v1, v2, v3…) of a prototype. Each round is a
+// physical batch of samples from the vendor with its own dates, cost, and
+// feedback driving the next round.
+export const prototypeRound = pgTable(
+  "prototype_round",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    prototypeId: text("prototype_id")
+      .notNull()
+      .references(() => prototype.id, { onDelete: "cascade" }),
+    roundNumber: integer("round_number").notNull(),
+    // requested | in_production | shipped | received | reviewed
+    status: text("status").notNull().default("requested"),
+    requestedAt: date("requested_at"),
+    expectedAt: date("expected_at"),
+    receivedAt: date("received_at"),
+    sampleQty: integer("sample_qty"),
+    // Quoted per-unit sample cost in cents for this round.
+    unitCostCents: integer("unit_cost_cents"),
+    // What we thought of this round / changes requested for the next.
+    feedback: text("feedback"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("prototype_round_prototype_id_idx").on(t.prototypeId),
+    // One row per (prototype, round number).
+    uniqueIndex("prototype_round_number_idx").on(t.prototypeId, t.roundNumber),
+  ],
+);
+
+// Photos/files for a prototype — polymorphic: exactly one of prototypeId
+// (concept-level reference art/specs) or roundId (sample photos) is set.
+// Mirrors `productionAttachment` + Vercel Blob.
+export const prototypeAttachment = pgTable(
+  "prototype_attachment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    prototypeId: text("prototype_id").references(() => prototype.id, {
+      onDelete: "cascade",
+    }),
+    roundId: text("round_id").references(() => prototypeRound.id, {
+      onDelete: "cascade",
+    }),
+    blobUrl: text("blob_url").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => user.id),
+    uploadedAt: timestamp("uploaded_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("prototype_attachment_prototype_id_idx").on(t.prototypeId),
+    index("prototype_attachment_round_id_idx").on(t.roundId),
+    check(
+      "prototype_attachment_one_parent",
+      sql`(${t.prototypeId} is null) <> (${t.roundId} is null)`,
+    ),
+  ],
+);
+
+// CAD reference link for a prototype — an Autodesk Fusion ("AutoCAD Fusion")
+// public share link. We store the link the user pasted plus the resolved
+// `?mode=embed` viewer URL so the detail page can render an inline interactive
+// 3D preview in an iframe. Links only (no upload); file docs use
+// `prototype_attachment` instead.
+export const prototypeReference = pgTable(
+  "prototype_reference",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    prototypeId: text("prototype_id")
+      .notNull()
+      .references(() => prototype.id, { onDelete: "cascade" }),
+    // The link as pasted (e.g. https://a360.co/4vPkEVP).
+    url: text("url").notNull(),
+    // Resolved embeddable viewer URL (canonical share URL + ?mode=embed).
+    // Null when redirect resolution failed — UI falls back to the raw link.
+    embedUrl: text("embed_url"),
+    // Optional human label for the file.
+    title: text("title"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("prototype_reference_prototype_id_idx").on(t.prototypeId)],
+);
+
+export const prototypeRelations = relations(prototype, ({ one, many }) => ({
+  supplier: one(supplier, {
+    fields: [prototype.supplierId],
+    references: [supplier.id],
+  }),
+  rounds: many(prototypeRound),
+  attachments: many(prototypeAttachment),
+  references: many(prototypeReference),
+}));
+
+export const prototypeReferenceRelations = relations(
+  prototypeReference,
+  ({ one }) => ({
+    prototype: one(prototype, {
+      fields: [prototypeReference.prototypeId],
+      references: [prototype.id],
+    }),
+  }),
+);
+
+export const prototypeRoundRelations = relations(
+  prototypeRound,
+  ({ one, many }) => ({
+    prototype: one(prototype, {
+      fields: [prototypeRound.prototypeId],
+      references: [prototype.id],
+    }),
+    attachments: many(prototypeAttachment),
+  }),
+);
+
+export const prototypeAttachmentRelations = relations(
+  prototypeAttachment,
+  ({ one }) => ({
+    prototype: one(prototype, {
+      fields: [prototypeAttachment.prototypeId],
+      references: [prototype.id],
+    }),
+    round: one(prototypeRound, {
+      fields: [prototypeAttachment.roundId],
+      references: [prototypeRound.id],
+    }),
+    uploadedBy: one(user, {
+      fields: [prototypeAttachment.uploadedByUserId],
+      references: [user.id],
+    }),
+  }),
+);
+
+// ─── CAD Models (public 3D viewer) ──────────────────────────────────
+// A reusable CAD model in the library. An uploaded STL (exported from Autodesk
+// Fusion) is auto-converted server-side to a GLB (src/lib/cad/stl-to-glb.ts)
+// for the public <model-viewer>. Geometry is shared: many SKUs (color variants)
+// point at ONE cad_model, so you upload + convert once and reuse it. The Fusion
+// share link is kept on the record for reference. The library auto-curates —
+// every model added shows up in the picker on the Products page.
+export const cadModel = pgTable("cad_model", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  // Optional Autodesk Fusion share link (reference; not the conversion source).
+  fusionUrl: text("fusion_url"),
+  // Uploaded source STL + the generated GLB, both in Vercel Blob.
+  sourceStlUrl: text("source_stl_url"),
+  sourceFilename: text("source_filename"),
+  glbUrl: text("glb_url"),
+  // draft (no STL yet) | awaiting_export (Fusion export requested, waiting on
+  // the email) | processing | ready | failed
+  status: text("status").notNull().default("draft"),
+  errorMessage: text("error_message"),
+  vertexCount: integer("vertex_count"),
+  triangleCount: integer("triangle_count"),
+  // Fusion auto-export bookkeeping: when the export GET was fired, whose inbox
+  // to read the Autodesk email from, and the expected STL filename (the Fusion
+  // doc name) used to match the right export email.
+  exportRequestedAt: timestamp("export_requested_at", { mode: "date" }),
+  exportRequestedByUserId: text("export_requested_by_user_id").references(
+    () => user.id,
+  ),
+  expectedFilename: text("expected_filename"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Links a product SKU to a CAD model and tracks where its 3D model is published
+// ("Upload Model to Website" → in-app public page + Shopify product media).
+export const productCadModel = pgTable(
+  "product_cad_model",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    sku: text("sku").notNull(),
+    cadModelId: text("cad_model_id").references(() => cadModel.id, {
+      onDelete: "set null",
+    }),
+    // In-app public per-SKU viewer page.
+    publishedToWebsiteAt: timestamp("published_to_website_at", { mode: "date" }),
+    // Shopify storefront 3D media (after a successful API push).
+    shopifyProductId: text("shopify_product_id"),
+    shopifyMediaId: text("shopify_media_id"),
+    shopifyPublishedAt: timestamp("shopify_published_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [uniqueIndex("product_cad_model_sku_idx").on(t.sku)],
+);
+
+export const cadModelRelations = relations(cadModel, ({ many }) => ({
+  products: many(productCadModel),
+}));
+
+export const productCadModelRelations = relations(
+  productCadModel,
+  ({ one }) => ({
+    cadModel: one(cadModel, {
+      fields: [productCadModel.cadModelId],
+      references: [cadModel.id],
+    }),
+  }),
+);
 
 // Per-PO stage ownership: which supplier is responsible for each production
 // stage. A stage with no row defaults to the PO's primary supplier — so an
@@ -2103,6 +2355,19 @@ export const productionSettings = pgTable("production_settings", {
     .$type<number[]>()
     .notNull()
     .default([50, 75, 95]),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Dashboard analytics settings (single row, id="default"), edited in admin
+// Settings. `returnLabelCostCents` is the assumed cost the business eats per
+// return for the prepaid shipping label — folded into the dashboard's Avg
+// Return Value tile. It's a configurable estimate because Shopify's Admin API
+// does NOT expose the real merchant-paid label cost (timeline-UI only).
+export const dashboardSettings = pgTable("dashboard_settings", {
+  id: text("id").primaryKey().default("default"),
+  returnLabelCostCents: integer("return_label_cost_cents")
+    .notNull()
+    .default(700),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 

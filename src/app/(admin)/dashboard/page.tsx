@@ -12,6 +12,7 @@ import {
 } from "@/lib/schema";
 import { sql, eq, desc, count, sum, gte, lte, lt, and } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import { getDashboardSettings } from "@/lib/dashboard/settings";
 import { STORE_TZ } from "@/lib/timezone";
 import {
   formatBucketLabel,
@@ -104,6 +105,7 @@ export default async function DashboardPage({
     perCustomerLtv,
     perCustomerProducts,
     preRangeCustomerRows,
+    dashboardConfig,
   ] = await Promise.all([
       db
         .select({ total: netSales })
@@ -162,7 +164,12 @@ export default async function DashboardPage({
         .orderBy(desc(order.processedAt))
         .limit(10),
       db
-        .select({ segment: segmentExpr, sales: netSales, orders: count() })
+        .select({
+          segment: segmentExpr,
+          sales: netSales,
+          orders: count(),
+          customers: sql<number>`count(distinct ${order.customerId})`.mapWith(Number),
+        })
         .from(order)
         .where(
           and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
@@ -233,7 +240,9 @@ export default async function DashboardPage({
             lt(order.processedAt, from),
           ),
         ),
+      getDashboardSettings(),
     ]);
+  const { returnLabelCostCents } = dashboardConfig;
 
   const totalRevenue = Number(revenueResult[0]?.total ?? 0);
   const totalOrders = orderCountResult[0]?.count ?? 0;
@@ -242,12 +251,31 @@ export default async function DashboardPage({
   const totalReturns = Number(returnsResult[0]?.total ?? 0);
   const returnOrders = returnsResult[0]?.orders ?? 0;
   const returnCustomers = returnsResult[0]?.customers ?? 0;
+  // Avg cost of a return = avg refunded value PLUS the assumed label cost the
+  // business eats on each return (returnLabelCostCents — set in admin Settings;
+  // an estimate, since Shopify doesn't expose the real label cost via API).
   const avgReturnValue =
-    returnOrders > 0 ? Math.round(totalReturns / returnOrders) : 0;
-  // Each return metric as a share of its sales counterpart (e.g. returns ÷
-  // total sales). "—" when the denominator is 0 to avoid a divide-by-zero.
+    returnOrders > 0
+      ? Math.round(totalReturns / returnOrders) + returnLabelCostCents
+      : 0;
+  // Looks up a row from the per-segment query by segment id ("d2c"/"tradeshow"/
+  // "b2b"). Defined here (not below) because the D2C return-rate denominators
+  // need it; also reused for the Sales by Segment table.
+  const segOf = (name: string) =>
+    segmentResult.find((s) => s.segment === name);
+  // Denominators for the "% of total" captions are D2C (online) ONLY — Trade
+  // Show (POS) and B2B (wholesale) sales are deliberately excluded, since
+  // returns are an online-retail phenomenon and we want the rate relative to
+  // the channel that actually drives them. Sourced from the per-segment query
+  // (segOf("d2c")), so they reconcile with the Sales by Segment table's D2C row.
+  const d2cSales = Number(segOf("d2c")?.sales ?? 0);
+  const d2cOrders = segOf("d2c")?.orders ?? 0;
+  const d2cCustomers = segOf("d2c")?.customers ?? 0;
+  const d2cAvgOrderValue = d2cOrders > 0 ? Math.round(d2cSales / d2cOrders) : 0;
+  // Each return metric as a share of its D2C sales counterpart (e.g. returns ÷
+  // D2C sales). "—" when the denominator is 0 to avoid a divide-by-zero.
   const pctOf = (part: number, whole: number) =>
-    whole > 0 ? `${((part / whole) * 100).toFixed(1)}% of total` : "—";
+    whole > 0 ? `${((part / whole) * 100).toFixed(1)}% of D2C` : "—";
   // Avg orders per customer for the SELECTED period: orders ÷ distinct
   // customers, both already scoped to the date filter. Widening the range pulls
   // in more repeat orders from the same buyers, so this rises with the window
@@ -256,8 +284,6 @@ export default async function DashboardPage({
     totalCustomers > 0 ? totalOrders / totalCustomers : 0;
 
   // B2B vs Consumer split of Total sales (same definition as the headline).
-  const segOf = (name: string) =>
-    segmentResult.find((s) => s.segment === name);
   const aov = (sales: number, orders: number) =>
     orders > 0 ? Math.round(sales / orders) : 0;
   const segments = [
@@ -519,22 +545,22 @@ export default async function DashboardPage({
         <MetricCard
           label="Total returns"
           value={fmt(totalReturns)}
-          caption={pctOf(totalReturns, totalRevenue)}
+          caption={pctOf(totalReturns, d2cSales)}
         />
         <MetricCard
           label="Orders refunded"
           value={returnOrders.toLocaleString()}
-          caption={pctOf(returnOrders, totalOrders)}
+          caption={pctOf(returnOrders, d2cOrders)}
         />
         <MetricCard
           label="Customers refunded"
           value={returnCustomers.toLocaleString()}
-          caption={pctOf(returnCustomers, totalCustomers)}
+          caption={pctOf(returnCustomers, d2cCustomers)}
         />
         <MetricCard
           label="Avg Return Value"
           value={fmt(avgReturnValue)}
-          caption={pctOf(avgReturnValue, avgOrderValue)}
+          caption={`${pctOf(avgReturnValue, d2cAvgOrderValue)} · incl. ${fmt(returnLabelCostCents)} est. label`}
         />
       </div>
 

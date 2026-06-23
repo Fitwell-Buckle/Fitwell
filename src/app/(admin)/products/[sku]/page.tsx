@@ -16,6 +16,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getCatalogCached } from "@/lib/catalog/load";
 import { parseDateRange } from "@/lib/date-range";
+import { getProductCadModel, listReadyCadModels } from "@/lib/cad/products";
+import { ProductCadModelCard } from "./product-cad-model";
 
 export const metadata: Metadata = {
   title: "Product | Fitwell Admin",
@@ -88,6 +90,11 @@ export default async function ProductDetailPage({
       ),
     );
 
+  const [readyModels, cadLink] = await Promise.all([
+    listReadyCadModels(),
+    getProductCadModel(sku),
+  ]);
+
   const title = variant
     ? variant.variantTitle
       ? `${variant.title} — ${variant.variantTitle}`
@@ -143,6 +150,27 @@ export default async function ProductDetailPage({
         <Stat label="Orders" value={orderCount.toLocaleString("en-US")} />
         <Stat label="Revenue" value={fmtMoney(revenue)} />
       </div>
+
+      <ProductCadModelCard
+        sku={sku}
+        readyModels={readyModels.map((m) => ({
+          id: m.id,
+          name: m.name,
+          glbUrl: m.glbUrl,
+        }))}
+        initialCadModelId={cadLink?.cadModelId ?? null}
+        publishedAt={
+          cadLink?.publishedToWebsiteAt
+            ? cadLink.publishedToWebsiteAt.toISOString()
+            : null
+        }
+        shopifyPublishedAt={
+          cadLink?.shopifyPublishedAt
+            ? cadLink.shopifyPublishedAt.toISOString()
+            : null
+        }
+        publicPath={`/3d/${encodeURIComponent(sku)}`}
+      />
 
       <Card className="mt-5 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">

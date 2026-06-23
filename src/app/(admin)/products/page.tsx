@@ -14,6 +14,8 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionTabs } from "@/components/ui/section-tabs";
+import { PRODUCTS_TABS } from "@/lib/nav-tabs";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 import { ListFilters } from "@/components/catalog/list-filters";
 import { RefreshCatalogButton } from "@/components/catalog/refresh-catalog-button";
@@ -164,6 +166,7 @@ export default async function ProductsPage({
         <PageHeader title="Products" />
         <RefreshCatalogButton />
       </div>
+      <SectionTabs tabs={PRODUCTS_TABS} />
 
       {skuCollisions.length > 0 && (
         <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm">

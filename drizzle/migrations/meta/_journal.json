@@ -589,6 +589,27 @@
       "when": 1782151174395,
       "tag": "0083_silly_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1782235914841,
+      "tag": "0084_purple_machine_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1782237048874,
+      "tag": "0085_overrated_winter_soldier",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1782238365927,
+      "tag": "0086_noisy_warpath",
+      "breakpoints": true
     }
   ]
 }
