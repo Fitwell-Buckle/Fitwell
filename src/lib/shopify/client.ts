@@ -875,6 +875,47 @@ class ShopifyClient {
     }
   }
 
+  /**
+   * Set the `sku` on a batch of variants under a single product, via the
+   * `productVariantsBulkUpdate` GraphQL mutation. SKU lives on the variant's
+   * inventory item (the `ProductVariant.sku` field is deprecated), so we write
+   * it through `inventoryItem.sku`. Requires write_products.
+   *
+   * Pass the bare numeric Shopify variant ids; gids are constructed here.
+   */
+  async bulkUpdateVariantSkus(params: {
+    productId: string | number;
+    variants: { id: string | number; sku: string }[];
+  }): Promise<void> {
+    if (params.variants.length === 0) return;
+    const productGid = `gid://shopify/Product/${String(params.productId).split("/").pop()}`;
+    const variantInputs = params.variants.map((v) => ({
+      id: `gid://shopify/ProductVariant/${String(v.id).split("/").pop()}`,
+      inventoryItem: { sku: v.sku },
+    }));
+
+    const data = await this.graphql<{
+      productVariantsBulkUpdate: {
+        userErrors: { field: string[] | null; message: string }[];
+      };
+    }>(
+      `mutation FitwellSkuUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+        productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+          userErrors { field message }
+          productVariants { id inventoryItem { sku } }
+        }
+      }`,
+      { productId: productGid, variants: variantInputs },
+    );
+
+    const errs = data.productVariantsBulkUpdate.userErrors;
+    if (errs && errs.length > 0) {
+      throw new Error(
+        `Variant SKU update failed: ${errs.map((e) => e.message).join("; ")}`,
+      );
+    }
+  }
+
   // ── B2B invoicing (draft orders) ──────────────────────────────────
 
   /**
