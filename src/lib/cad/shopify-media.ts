@@ -104,3 +104,40 @@ export async function pushModelToShopify(opts: {
   if (!media) throw new Error("Shopify created no media.");
   return { mediaId: media.id, status: media.status };
 }
+
+// Remove a 3D media from a product (used to replace a prior push so re-pushing a
+// recolored model doesn't pile a second viewer onto the product). Best-effort:
+// reports user errors but never throws so it can't fail the surrounding push.
+export async function deleteProductMedia(opts: {
+  productId: string; // numeric id or gid
+  mediaId: string; // gid
+}): Promise<void> {
+  const client = getShopifyClient();
+  const productGid = opts.productId.startsWith("gid://")
+    ? opts.productId
+    : `gid://shopify/Product/${opts.productId}`;
+  try {
+    const res = await client.graphql<{
+      productDeleteMedia: {
+        deletedMediaIds: string[] | null;
+        mediaUserErrors: { field: string[]; message: string }[];
+      };
+    }>(
+      `mutation productDeleteMedia($productId: ID!, $mediaIds: [ID!]!) {
+        productDeleteMedia(productId: $productId, mediaIds: $mediaIds) {
+          deletedMediaIds
+          mediaUserErrors { field message }
+        }
+      }`,
+      { productId: productGid, mediaIds: [opts.mediaId] },
+    );
+    const errs = res.productDeleteMedia.mediaUserErrors;
+    if (errs?.length) {
+      console.error(
+        `productDeleteMedia: ${errs.map((e) => e.message).join("; ")}`,
+      );
+    }
+  } catch (err) {
+    console.error("productDeleteMedia failed:", err);
+  }
+}

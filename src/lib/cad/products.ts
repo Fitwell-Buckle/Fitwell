@@ -3,7 +3,9 @@ import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cadModel, productCadModel } from "@/lib/schema";
 import { getCatalogCached } from "@/lib/catalog/load";
-import { pushModelToShopify } from "./shopify-media";
+import { pushModelToShopify, deleteProductMedia } from "./shopify-media";
+import { applyFinishToGlb } from "./stl-to-glb";
+import { matchFinish } from "./finishes";
 
 // CAD models that have a finished GLB — the ones eligible to publish to a SKU.
 export async function listReadyCadModels() {
@@ -82,7 +84,17 @@ export async function pushToShopify(
 
   const res = await fetch(link.glbUrl);
   if (!res.ok) throw new Error("Could not read the generated GLB.");
-  const glb = new Uint8Array(await res.arrayBuffer());
+  const storedGlb = new Uint8Array(await res.arrayBuffer());
+
+  // Bake this SKU's finish into the GLB before handing it to Shopify. The stored
+  // GLB is silver (the default) and the portal viewer recolors it live, but that
+  // recolor never leaves the browser — so without this, Shopify always shows
+  // silver. Match the finish from the same fields the product page uses.
+  const finishText = [variant.color, variant.title, variant.variantTitle]
+    .filter(Boolean)
+    .join(" ");
+  const finishId = matchFinish(finishText)?.id ?? null;
+  const glb = await applyFinishToGlb(storedGlb, finishId);
 
   const { mediaId, status } = await pushModelToShopify({
     productId: variant.shopifyProductId,
@@ -90,6 +102,16 @@ export async function pushToShopify(
     filename: `${sku.replace(/[^a-zA-Z0-9._-]/g, "_")}.glb`,
     alt: link.modelName ?? sku,
   });
+
+  // Replace any earlier push for this SKU so the product doesn't accumulate a
+  // stale (e.g. silver) viewer alongside the new one. Done after the new media
+  // is created so a delete failure can't leave the product with no model.
+  if (link.shopifyMediaId && link.shopifyMediaId !== mediaId) {
+    await deleteProductMedia({
+      productId: variant.shopifyProductId,
+      mediaId: link.shopifyMediaId,
+    });
+  }
 
   await db
     .update(productCadModel)

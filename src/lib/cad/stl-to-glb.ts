@@ -7,6 +7,29 @@ import {
   getFinish,
 } from "./finishes";
 
+// Recolor a generated GLB's `body` material to a specific finish, returning new
+// GLB bytes. The stored GLB is baked with the default (silver) finish and the
+// portal viewer recolors it live per SKU — but that recolor is client-side only,
+// so anything we hand off (e.g. Shopify native 3D media) must have the finish
+// baked in. The `spring_bar` material is left untouched (always silver).
+export async function applyFinishToGlb(
+  glb: Uint8Array,
+  finishId: string | null,
+): Promise<Uint8Array> {
+  const finish = getFinish(finishId);
+  const io = new WebIO();
+  const doc = await io.readBinary(glb);
+  for (const mat of doc.getRoot().listMaterials()) {
+    if (mat.getName() === BODY_MATERIAL_NAME) {
+      mat
+        .setBaseColorFactor([...finish.baseColor, 1])
+        .setMetallicFactor(finish.metallic)
+        .setRoughnessFactor(finish.roughness);
+    }
+  }
+  return io.writeBinary(doc);
+}
+
 // Pure-Node STL → GLB conversion for the public 3D viewer. Mirrors the
 // scripts/stl-to-glb.py pipeline (weld coincident verts, smooth normals, auto
 // lay-flat, polished-steel material) but runs in a serverless function so the
