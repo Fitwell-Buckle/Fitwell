@@ -713,6 +713,27 @@ class ShopifyClient {
     return variant.inventory_item_id;
   }
 
+  /**
+   * A variant's current on-hand stock (total available across locations), as
+   * Shopify reports it live. Returns null when inventory isn't tracked for the
+   * variant (no `inventory_management`), so callers can distinguish "0 in stock"
+   * from "not tracked".
+   */
+  async getVariantInventoryQuantity(
+    variantId: string | number,
+  ): Promise<number | null> {
+    const id = String(variantId).split("/").pop();
+    const { variant } = await this.fetch<{
+      variant: {
+        id: number;
+        inventory_quantity: number | null;
+        inventory_management: string | null;
+      };
+    }>(`/variants/${id}.json`);
+    if (!variant.inventory_management) return null;
+    return variant.inventory_quantity ?? 0;
+  }
+
   /** A variant's retail price in cents — the basis for B2B invoice pricing. */
   async getVariantPriceCents(variantId: string | number): Promise<number> {
     const id = String(variantId).split("/").pop();

@@ -28,6 +28,7 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getCatalogCached } from "@/lib/catalog/load";
+import { getShopifyClient } from "@/lib/shopify/client";
 import { parseDateRange } from "@/lib/date-range";
 import { STORE_TZ } from "@/lib/timezone";
 import {
@@ -249,8 +250,22 @@ export default async function ProductDetailPage({
       : variant.title
     : salesRow?.title ?? sku;
   const incoming = Number(incomingRow?.qty ?? 0);
-  const onHandNow =
+  // On hand = Shopify's live inventory for this variant. Fall back to the
+  // receipts−sales reconstruction only if inventory isn't tracked there or
+  // Shopify is unreachable, so the tile never breaks.
+  const reconstructedOnHand =
     Number(recvAllRow?.q ?? 0) - Number(soldAllRow?.q ?? 0);
+  let onHandNow = reconstructedOnHand;
+  if (variant?.shopifyVariantId) {
+    try {
+      const live = await getShopifyClient().getVariantInventoryQuantity(
+        variant.shopifyVariantId,
+      );
+      if (live != null) onHandNow = live;
+    } catch (err) {
+      console.error("Live inventory fetch failed; using reconstruction:", err);
+    }
+  }
 
   // Build zero-filled, per-bucket series. Units/orders/revenue are flows; On
   // hand and Incoming are running levels (received−sold, created−received)
@@ -295,6 +310,16 @@ export default async function ProductDetailPage({
     unitsSold += soldB;
     orderCount += ordB;
     revenue += revB;
+  }
+
+  // Anchor the On hand curve to Shopify's live number: the received−sold flow
+  // gives the curve's *shape*, but the live value gives its absolute *level*.
+  // Shift the whole series so its final point equals on-hand now (the constant
+  // offset cancels the POS-derived baseline, which was the source of impossible
+  // negative levels). Assumes the window ends ~now — true for Today/7d/30d/YTD.
+  if (onHandSeries.length > 0) {
+    const shift = onHandNow - onHandSeries[onHandSeries.length - 1].value;
+    if (shift !== 0) for (const p of onHandSeries) p.value += shift;
   }
 
   return (
