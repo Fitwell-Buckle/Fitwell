@@ -17,6 +17,8 @@ interface MetricCardProps {
   seriesFormat?: "currency" | "number";
   /** Plot each point's `pct` as a second line (e.g. returns as % of D2C). */
   showPct?: boolean;
+  /** What the `pct` line is a share of, shown in the tooltip (e.g. "D2C"). */
+  pctLabel?: string;
   /** When true (and `series` is present), render the line chart instead of the
    * big number + caption. Driven by the dashboard's table/graph toggle. */
   graph?: boolean;
@@ -33,6 +35,7 @@ export function MetricCard({
   series,
   seriesFormat = "number",
   showPct,
+  pctLabel,
   graph,
   color,
 }: MetricCardProps) {
@@ -58,6 +61,7 @@ export function MetricCard({
               format={seriesFormat}
               color={color}
               showPct={showPct}
+              pctLabel={pctLabel}
             />
           </div>
         </>

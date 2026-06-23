@@ -23,11 +23,13 @@ function SparkTooltip({
   payload,
   label,
   fmt,
+  pctLabel,
 }: {
   active?: boolean;
   payload?: { dataKey: string; value: number; color: string }[];
   label?: string;
   fmt: (n: number) => string;
+  pctLabel: string;
 }) {
   if (!active || !payload?.length) return null;
   return (
@@ -40,7 +42,7 @@ function SparkTooltip({
             style={{ backgroundColor: p.color }}
           />
           {p.dataKey === "pct"
-            ? `${p.value.toFixed(1)}% of D2C`
+            ? `${p.value.toFixed(1)}% of ${pctLabel}`
             : fmt(p.value)}
         </p>
       ))}
@@ -59,11 +61,13 @@ export function MetricSparkline({
   format,
   color = "#18181b",
   showPct = false,
+  pctLabel = "total",
 }: {
   data: MetricPoint[];
   format: "currency" | "number";
   color?: string;
   showPct?: boolean;
+  pctLabel?: string;
 }) {
   const fmt = format === "currency" ? formatCurrency : formatNumber;
   const hasValue = data.some((d) => d.value !== 0);
@@ -86,7 +90,7 @@ export function MetricSparkline({
             <YAxis yAxisId="pct" hide domain={["dataMin", "dataMax"]} />
           )}
           <Tooltip
-            content={<SparkTooltip fmt={fmt} />}
+            content={<SparkTooltip fmt={fmt} pctLabel={pctLabel} />}
             cursor={{ stroke: "#e4e4e7" }}
           />
           <Line

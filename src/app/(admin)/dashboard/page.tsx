@@ -19,7 +19,9 @@ import {
   type RepeatTiming,
 } from "@/lib/analytics/repeat-windows";
 import { MetricCard } from "@/components/charts/metric-card";
+import { CustomerValueChart } from "@/components/charts/customer-value-chart";
 import { DashboardViewToggle } from "./view-toggle";
+import { SegmentToggle } from "./segment-toggle";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
@@ -60,6 +62,31 @@ export default async function DashboardPage({
   // Table (numbers) vs graph (per-tile line charts), driven by the top-bar
   // toggle. Each tile renders the same metric either way.
   const isGraph = params.view === "graph";
+  // Segment scope (top-bar toggle): "all" (default) or one of the three. A
+  // single WHERE condition added to every order metric query; undefined = all.
+  const segment =
+    params.segment === "d2c" ||
+    params.segment === "tradeshow" ||
+    params.segment === "b2b"
+      ? params.segment
+      : "all";
+  const segmentCond =
+    segment === "d2c"
+      ? sql`${order.sourceName} IS DISTINCT FROM 'shopify_draft_order' AND ${order.sourceName} IS DISTINCT FROM 'pos'`
+      : segment === "tradeshow"
+        ? sql`${order.sourceName} = 'pos'`
+        : segment === "b2b"
+          ? sql`${order.sourceName} = 'shopify_draft_order'`
+          : undefined;
+  // Denominator label for the returns "% of …" captions, tracking the scope.
+  const segmentDenomLabel =
+    segment === "all"
+      ? "total"
+      : segment === "d2c"
+        ? "D2C"
+        : segment === "tradeshow"
+          ? "Trade Show"
+          : "B2B";
 
   // Bucket by the STORE timezone so the daily trend lines up with Shopify
   // (whose reports use the store day). Without `AT TIME ZONE`, evening-Pacific
@@ -97,7 +124,6 @@ export default async function DashboardPage({
     customerCountResult,
     returnsResult,
     recentOrders,
-    segmentResult,
     perCustomerLtv,
     perCustomerProducts,
     preRangeCustomerRows,
@@ -107,13 +133,13 @@ export default async function DashboardPage({
         .select({ total: netSales })
         .from(order)
         .where(
-          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({ count: count() })
         .from(order)
         .where(
-          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       // Distinct customers who actually ordered in the period — consistent with
       // the Sales/Orders cards (both keyed off order.processedAt). The old query
@@ -125,7 +151,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .where(
-          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       // Returns: mirrors the headline cards but on refunded value. Same
       // notCancelled/notSample/date filters so it reconciles with Total sales
@@ -140,7 +166,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .where(
-          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({
@@ -156,21 +182,9 @@ export default async function DashboardPage({
         })
         .from(order)
         .leftJoin(customer, eq(order.customerId, customer.id))
-        .where(and(notSample, gte(order.processedAt, from), lte(order.processedAt, to)))
+        .where(and(notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)))
         .orderBy(desc(order.processedAt))
         .limit(10),
-      db
-        .select({
-          segment: segmentExpr,
-          sales: netSales,
-          orders: count(),
-          customers: sql<number>`count(distinct ${order.customerId})`.mapWith(Number),
-        })
-        .from(order)
-        .where(
-          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
-        )
-        .groupBy(segmentExpr),
       // Per-customer aggregates for the LTV / retention table, scoped to the
       // SELECTED date range (so the segment totals reconcile with the top cards).
       // One row per customer: whether they're B2B (ever placed a draft order in
@@ -193,6 +207,7 @@ export default async function DashboardPage({
           and(
             notCancelled,
             notSample,
+            segmentCond,
             sql`${order.customerId} IS NOT NULL`,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
@@ -214,6 +229,7 @@ export default async function DashboardPage({
           and(
             notCancelled,
             notSample,
+            segmentCond,
             sql`${order.customerId} IS NOT NULL`,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
@@ -232,6 +248,7 @@ export default async function DashboardPage({
           and(
             notCancelled,
             notSample,
+            segmentCond,
             sql`${order.customerId} IS NOT NULL`,
             lt(order.processedAt, from),
           ),
@@ -255,51 +272,20 @@ export default async function DashboardPage({
   const totalReturnsWithShipping = totalReturns + returnsLabelCost;
   const avgReturnValue =
     returnOrders > 0 ? Math.round(totalReturnsWithShipping / returnOrders) : 0;
-  // Looks up a row from the per-segment query by segment id ("d2c"/"tradeshow"/
-  // "b2b"). Defined here (not below) because the D2C return-rate denominators
-  // need it; also reused for the Sales by Segment table.
-  const segOf = (name: string) =>
-    segmentResult.find((s) => s.segment === name);
-  // Denominators for the "% of total" captions are D2C (online) ONLY — Trade
-  // Show (POS) and B2B (wholesale) sales are deliberately excluded, since
-  // returns are an online-retail phenomenon and we want the rate relative to
-  // the channel that actually drives them. Sourced from the per-segment query
-  // (segOf("d2c")), so they reconcile with the Sales by Segment table's D2C row.
-  const d2cSales = Number(segOf("d2c")?.sales ?? 0);
-  const d2cOrders = segOf("d2c")?.orders ?? 0;
-  const d2cCustomers = segOf("d2c")?.customers ?? 0;
-  const d2cAvgOrderValue = d2cOrders > 0 ? Math.round(d2cSales / d2cOrders) : 0;
-  // Each return metric as a share of its D2C sales counterpart (e.g. returns ÷
-  // D2C sales). "—" when the denominator is 0 to avoid a divide-by-zero.
+  // Each return metric as a share of its sales counterpart, within the current
+  // segment scope (denominator = the scoped Total sales / Orders / Customers /
+  // AOV; label tracks the scope — "% of total" for All, "% of D2C", etc.).
+  // "—" when the denominator is 0 to avoid a divide-by-zero.
   const pctOf = (part: number, whole: number) =>
-    whole > 0 ? `${((part / whole) * 100).toFixed(1)}% of D2C` : "—";
+    whole > 0
+      ? `${((part / whole) * 100).toFixed(1)}% of ${segmentDenomLabel}`
+      : "—";
   // Avg orders per customer for the SELECTED period: orders ÷ distinct
   // customers, both already scoped to the date filter. Widening the range pulls
   // in more repeat orders from the same buyers, so this rises with the window
   // (≈1.0 over a single day, the all-time figure over "All").
   const avgOrdersPerCustomer =
     totalCustomers > 0 ? totalOrders / totalCustomers : 0;
-
-  // B2B vs Consumer split of Total sales (same definition as the headline).
-  const aov = (sales: number, orders: number) =>
-    orders > 0 ? Math.round(sales / orders) : 0;
-  const segments = [
-    {
-      label: "D2C (Online)",
-      sales: Number(segOf("d2c")?.sales ?? 0),
-      orders: segOf("d2c")?.orders ?? 0,
-    },
-    {
-      label: "Trade Show",
-      sales: Number(segOf("tradeshow")?.sales ?? 0),
-      orders: segOf("tradeshow")?.orders ?? 0,
-    },
-    {
-      label: "B2B (Wholesale)",
-      sales: Number(segOf("b2b")?.sales ?? 0),
-      orders: segOf("b2b")?.orders ?? 0,
-    },
-  ];
 
   // ── Customer value & retention (scoped to the selected date range) ─────
   // Net revenue per customer over orders in range — the assumption-free measure
@@ -378,6 +364,7 @@ export default async function DashboardPage({
     const s = ltvAgg[key];
     const win = windowsBySeg[key];
     return {
+      key,
       label,
       avgLtv: s.customers > 0 ? Math.round(s.rev / s.customers) : 0,
       avgOrders: s.customers > 0 ? s.orders / s.customers : 0,
@@ -397,30 +384,54 @@ export default async function DashboardPage({
   // One bucketed pass over the SAME orders the tiles count (notCancelled +
   // notSample, in range), so each tile's line chart reconciles with its number.
   const bucketKeys = generateBucketKeys(from, to, granularity);
-  // D2C (online) only — Trade Show (POS) + B2B (wholesale) excluded. These are
-  // the per-bucket denominators for the returns tiles' "% of D2C" line, so they
-  // track the same definition as the headline captions.
-  const isD2c = sql`${order.sourceName} IS DISTINCT FROM 'shopify_draft_order' AND ${order.sourceName} IS DISTINCT FROM 'pos'`;
-  const metricsByBucket = await db
-    .select({
-      bucket: bucketExpr,
-      sales: netSales,
-      orders: count(),
-      customers: sql<number>`count(distinct ${order.customerId})`.mapWith(Number),
-      returns: sql<number>`COALESCE(SUM(${order.totalRefunded}), 0)`.mapWith(Number),
-      ordersRefunded: sql<number>`COUNT(*) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
-      customersRefunded:
-        sql<number>`COUNT(DISTINCT ${order.customerId}) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
-      d2cSales: sql<number>`COALESCE(SUM(${order.totalPrice} - ${order.totalRefunded}) FILTER (WHERE ${isD2c}), 0)`.mapWith(Number),
-      d2cOrders: sql<number>`COUNT(*) FILTER (WHERE ${isD2c})`.mapWith(Number),
-      d2cCustomers: sql<number>`COUNT(DISTINCT ${order.customerId}) FILTER (WHERE ${isD2c})`.mapWith(Number),
-    })
-    .from(order)
-    .where(
-      and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
-    )
-    .groupBy(bucketExpr)
-    .orderBy(bucketExpr);
+  const [metricsByBucket, segmentByBucket, productsByBucket] = await Promise.all([
+    db
+      .select({
+        bucket: bucketExpr,
+        sales: netSales,
+        orders: count(),
+        customers: sql<number>`count(distinct ${order.customerId})`.mapWith(Number),
+        returns: sql<number>`COALESCE(SUM(${order.totalRefunded}), 0)`.mapWith(Number),
+        ordersRefunded: sql<number>`COUNT(*) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
+        customersRefunded:
+          sql<number>`COUNT(DISTINCT ${order.customerId}) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
+      })
+      .from(order)
+      .where(
+        and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+      )
+      .groupBy(bucketExpr)
+      .orderBy(bucketExpr),
+    // Per (bucket × segment) revenue / customers / orders — feeds the Customer
+    // Value chart. No line-item join here, so counts aren't inflated.
+    db
+      .select({
+        bucket: bucketExpr,
+        segment: segmentExpr,
+        revenue: netSales,
+        customers: sql<number>`count(distinct ${order.customerId})`.mapWith(Number),
+        orders: count(),
+      })
+      .from(order)
+      .where(
+        and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+      )
+      .groupBy(bucketExpr, segmentExpr),
+    // Per (bucket × segment) product units — separate query because the line-
+    // item join would multiply order rows and inflate the counts above.
+    db
+      .select({
+        bucket: bucketExpr,
+        segment: segmentExpr,
+        products: sql<number>`COALESCE(SUM(${orderLineItem.quantity}), 0)`.mapWith(Number),
+      })
+      .from(order)
+      .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
+      .where(
+        and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+      )
+      .groupBy(bucketExpr, segmentExpr),
+  ]);
 
   type MetricBucketRow = (typeof metricsByBucket)[number];
   const metricRowByBucket = new Map<string, MetricBucketRow>();
@@ -453,8 +464,8 @@ export default async function DashboardPage({
     r.ordersRefunded > 0
       ? Math.round(bucketReturnsWithShipping(r) / r.ordersRefunded)
       : 0;
-  const bucketD2cAov = (r: MetricBucketRow) =>
-    r.d2cOrders > 0 ? Math.round(Number(r.d2cSales) / r.d2cOrders) : 0;
+  const bucketAov = (r: MetricBucketRow) =>
+    r.orders > 0 ? Math.round(Number(r.sales) / r.orders) : 0;
   const series = {
     sales: buildSeries((r) => Number(r.sales)),
     orders: buildSeries((r) => r.orders),
@@ -463,26 +474,65 @@ export default async function DashboardPage({
       r.orders > 0 ? Math.round(Number(r.sales) / r.orders) : 0,
     ),
     totalReturns: buildSeries(bucketReturnsWithShipping, (r) =>
-      pct(bucketReturnsWithShipping(r), Number(r.d2cSales)),
+      pct(bucketReturnsWithShipping(r), Number(r.sales)),
     ),
     ordersRefunded: buildSeries(
       (r) => r.ordersRefunded,
-      (r) => pct(r.ordersRefunded, r.d2cOrders),
+      (r) => pct(r.ordersRefunded, r.orders),
     ),
     customersRefunded: buildSeries(
       (r) => r.customersRefunded,
-      (r) => pct(r.customersRefunded, r.d2cCustomers),
+      (r) => pct(r.customersRefunded, r.customers),
     ),
     avgReturnValue: buildSeries(bucketAvgReturnValue, (r) =>
-      pct(bucketAvgReturnValue(r), bucketD2cAov(r)),
+      pct(bucketAvgReturnValue(r), bucketAov(r)),
     ),
   };
+
+  // Per (bucket × segment) data for the Customer Value chart.
+  const segKey = (bucketKey: string, seg: string) => `${bucketKey}|${seg}`;
+  const segAggByKey = new Map<
+    string,
+    { revenue: number; customers: number; orders: number }
+  >();
+  for (const row of segmentByBucket) {
+    segAggByKey.set(
+      segKey(dateToBucketKey(new Date(row.bucket as string), granularity), row.segment),
+      { revenue: Number(row.revenue), customers: row.customers, orders: row.orders },
+    );
+  }
+  const productsByKey = new Map<string, number>();
+  for (const row of productsByBucket) {
+    productsByKey.set(
+      segKey(dateToBucketKey(new Date(row.bucket as string), granularity), row.segment),
+      Number(row.products),
+    );
+  }
+  const segPoint = (bucketKey: string, seg: string) => {
+    const a = segAggByKey.get(segKey(bucketKey, seg)) ?? {
+      revenue: 0,
+      customers: 0,
+      orders: 0,
+    };
+    return { ...a, products: productsByKey.get(segKey(bucketKey, seg)) ?? 0 };
+  };
+  // Customer Value (graph): raw per-segment aggregates; the client component
+  // derives the selected metric (avg revenue/orders/products per customer, or
+  // customer count) on toggle.
+  const customerValueData = bucketKeys.map((key) => ({
+    label: formatBucketLabel(key, granularity),
+    d2c: segPoint(key, "d2c"),
+    tradeshow: segPoint(key, "tradeshow"),
+    b2b: segPoint(key, "b2b"),
+  }));
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title="Dashboard" />
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Scope the whole dashboard to a sales segment (All / D2C / …). */}
+          <SegmentToggle />
           {/* Table (numbers) vs graph (per-tile line charts). */}
           <DashboardViewToggle />
           {/* Fast path to the trade-show capture flow — the dashboard is where
@@ -530,82 +580,44 @@ export default async function DashboardPage({
         <MetricCard
           label="Total returns"
           value={fmt(totalReturnsWithShipping)}
-          caption={`${pctOf(totalReturnsWithShipping, d2cSales)} · incl. ${fmt(returnsLabelCost)} est. labels`}
+          caption={`${pctOf(totalReturnsWithShipping, totalRevenue)} · incl. ${fmt(returnsLabelCost)} est. labels`}
           graph={isGraph}
           series={series.totalReturns}
           seriesFormat="currency"
           showPct
+          pctLabel={segmentDenomLabel}
         />
         <MetricCard
           label="Orders refunded"
           value={returnOrders.toLocaleString()}
-          caption={pctOf(returnOrders, d2cOrders)}
+          caption={pctOf(returnOrders, totalOrders)}
           graph={isGraph}
           series={series.ordersRefunded}
           seriesFormat="number"
           showPct
+          pctLabel={segmentDenomLabel}
         />
         <MetricCard
           label="Customers refunded"
           value={returnCustomers.toLocaleString()}
-          caption={pctOf(returnCustomers, d2cCustomers)}
+          caption={pctOf(returnCustomers, totalCustomers)}
           graph={isGraph}
           series={series.customersRefunded}
           seriesFormat="number"
           showPct
+          pctLabel={segmentDenomLabel}
         />
         <MetricCard
           label="Avg Return Value"
           value={fmt(avgReturnValue)}
-          caption={`${pctOf(avgReturnValue, d2cAvgOrderValue)} · incl. ${fmt(returnLabelCostCents)} est. label`}
+          caption={`${pctOf(avgReturnValue, avgOrderValue)} · incl. ${fmt(returnLabelCostCents)} est. label`}
           graph={isGraph}
           series={series.avgReturnValue}
           seriesFormat="currency"
           showPct
+          pctLabel={segmentDenomLabel}
         />
       </div>
-
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Sales by Segment</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Segment</TableHead>
-                <TableHead className="text-right">Total sales</TableHead>
-                <TableHead className="text-right">Orders</TableHead>
-                <TableHead className="text-right">Avg order</TableHead>
-                <TableHead className="text-right">% of sales</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {segments.map((s) => (
-                <TableRow key={s.label}>
-                  <TableCell className="font-medium text-zinc-900">
-                    {s.label}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{fmt(s.sales)}</Mono>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {s.orders.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Mono>{fmt(aov(s.sales, s.orders))}</Mono>
-                  </TableCell>
-                  <TableCell className="text-right text-zinc-500">
-                    {totalRevenue > 0
-                      ? `${Math.round((s.sales / totalRevenue) * 100)}%`
-                      : "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
 
       <Card className="mt-8">
         <CardHeader>
@@ -643,6 +655,9 @@ export default async function DashboardPage({
               </span>
             </span>
           </div>
+          {isGraph ? (
+            <CustomerValueChart data={customerValueData} segment={segment} />
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -659,7 +674,9 @@ export default async function DashboardPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ltvRows.map((s) => (
+              {ltvRows
+                .filter((s) => segment === "all" || s.key === segment)
+                .map((s) => (
                 <TableRow key={s.label}>
                   <TableCell className="font-medium text-zinc-900">
                     {s.label}
@@ -693,6 +710,7 @@ export default async function DashboardPage({
               ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
