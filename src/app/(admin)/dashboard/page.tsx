@@ -251,13 +251,14 @@ export default async function DashboardPage({
   const totalReturns = Number(returnsResult[0]?.total ?? 0);
   const returnOrders = returnsResult[0]?.orders ?? 0;
   const returnCustomers = returnsResult[0]?.customers ?? 0;
-  // Avg cost of a return = avg refunded value PLUS the assumed label cost the
-  // business eats on each return (returnLabelCostCents — set in admin Settings;
-  // an estimate, since Shopify doesn't expose the real label cost via API).
+  // Shipping-label cost the business eats across all returns: one assumed label
+  // per refunded order (returnLabelCostCents — set in admin Settings; an
+  // estimate, since Shopify doesn't expose the real label cost via API).
+  const returnsLabelCost = returnOrders * returnLabelCostCents;
+  // Total + avg cost of returns BOTH fold in that label cost (refunds + labels).
+  const totalReturnsWithShipping = totalReturns + returnsLabelCost;
   const avgReturnValue =
-    returnOrders > 0
-      ? Math.round(totalReturns / returnOrders) + returnLabelCostCents
-      : 0;
+    returnOrders > 0 ? Math.round(totalReturnsWithShipping / returnOrders) : 0;
   // Looks up a row from the per-segment query by segment id ("d2c"/"tradeshow"/
   // "b2b"). Defined here (not below) because the D2C return-rate denominators
   // need it; also reused for the Sales by Segment table.
@@ -544,8 +545,8 @@ export default async function DashboardPage({
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Total returns"
-          value={fmt(totalReturns)}
-          caption={pctOf(totalReturns, d2cSales)}
+          value={fmt(totalReturnsWithShipping)}
+          caption={`${pctOf(totalReturnsWithShipping, d2cSales)} · incl. ${fmt(returnsLabelCost)} est. labels`}
         />
         <MetricCard
           label="Orders refunded"
