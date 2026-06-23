@@ -22,6 +22,7 @@ import { MetricCard } from "@/components/charts/metric-card";
 import { CustomerValueChart } from "@/components/charts/customer-value-chart";
 import { DashboardViewToggle } from "./view-toggle";
 import { SegmentToggle } from "./segment-toggle";
+import { CustomerToggle } from "./customer-toggle";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
@@ -88,6 +89,23 @@ export default async function DashboardPage({
           ? "Trade Show"
           : "B2B";
 
+  // Customer-cohort scope (top-bar toggle): "all" (default), "new" (first-ever
+  // order falls in range — no order before `from`), or "existing" (ordered
+  // before the range). Like segmentCond, a single WHERE condition added to every
+  // order query; undefined = all. The prior-buyers subquery carries the same
+  // segment scope so the two filters compose ("new B2B customers", etc.).
+  const customerType =
+    params.customer === "new" || params.customer === "existing"
+      ? params.customer
+      : "all";
+  const priorBuyers = sql`SELECT ${order.customerId} FROM ${order} WHERE ${order.processedAt} < ${from} AND ${order.customerId} IS NOT NULL AND ${order.cancelledAt} IS NULL AND ${order.isSample} = false${segmentCond ? sql` AND ${segmentCond}` : sql``}`;
+  const customerTypeCond =
+    customerType === "existing"
+      ? sql`${order.customerId} IN (${priorBuyers})`
+      : customerType === "new"
+        ? sql`${order.customerId} IS NOT NULL AND ${order.customerId} NOT IN (${priorBuyers})`
+        : undefined;
+
   // Bucket by the STORE timezone so the daily trend lines up with Shopify
   // (whose reports use the store day). Without `AT TIME ZONE`, evening-Pacific
   // orders fall into the next UTC day and the line is off by a day.
@@ -133,13 +151,13 @@ export default async function DashboardPage({
         .select({ total: netSales })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({ count: count() })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       // Distinct customers who actually ordered in the period — consistent with
       // the Sales/Orders cards (both keyed off order.processedAt). The old query
@@ -151,7 +169,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       // Returns: mirrors the headline cards but on refunded value. Same
       // notCancelled/notSample/date filters so it reconciles with Total sales
@@ -166,7 +184,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({
@@ -182,7 +200,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .leftJoin(customer, eq(order.customerId, customer.id))
-        .where(and(notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)))
+        .where(and(notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)))
         .orderBy(desc(order.processedAt))
         .limit(10),
       // Per-customer aggregates for the LTV / retention table, scoped to the
@@ -208,6 +226,7 @@ export default async function DashboardPage({
             notCancelled,
             notSample,
             segmentCond,
+            customerTypeCond,
             sql`${order.customerId} IS NOT NULL`,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
@@ -230,6 +249,7 @@ export default async function DashboardPage({
             notCancelled,
             notSample,
             segmentCond,
+            customerTypeCond,
             sql`${order.customerId} IS NOT NULL`,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
@@ -249,6 +269,7 @@ export default async function DashboardPage({
             notCancelled,
             notSample,
             segmentCond,
+            customerTypeCond,
             sql`${order.customerId} IS NOT NULL`,
             lt(order.processedAt, from),
           ),
@@ -392,7 +413,7 @@ export default async function DashboardPage({
       })
       .from(order)
       .where(
-        and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+        and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
       )
       .groupBy(bucketExpr)
       .orderBy(bucketExpr),
@@ -408,7 +429,7 @@ export default async function DashboardPage({
       })
       .from(order)
       .where(
-        and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+        and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
       )
       .groupBy(bucketExpr, segmentExpr),
     // Per (bucket × segment) product units — separate query because the line-
@@ -422,7 +443,7 @@ export default async function DashboardPage({
       .from(order)
       .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
       .where(
-        and(notCancelled, notSample, segmentCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+        and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
       )
       .groupBy(bucketExpr, segmentExpr),
   ]);
@@ -527,6 +548,8 @@ export default async function DashboardPage({
         <div className="flex flex-wrap items-center gap-3">
           {/* Scope the whole dashboard to a sales segment (All / D2C / …). */}
           <SegmentToggle />
+          {/* Scope to a customer cohort (All / New / Existing). */}
+          <CustomerToggle />
           {/* Table (numbers) vs graph (per-tile line charts). */}
           <DashboardViewToggle />
           {/* Fast path to the trade-show capture flow — the dashboard is where
