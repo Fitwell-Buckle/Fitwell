@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { ArrowDown } from "lucide-react";
 import { listSupplierLeads } from "@/lib/suppliers/lead-service";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LeadRating } from "@/components/crm/lead-rating";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -54,7 +57,24 @@ export default async function SupplierLeadsPage({
     status: strParam(params.status),
     supplierType: strParam(params.supplierType),
     search: strParam(params.search),
+    sort: strParam(params.sort),
   });
+
+  // Toggle the "Value" header between rating-sorted and the default
+  // newest-first, preserving every other active filter in the URL.
+  const sortedByRating = strParam(params.sort) === "rating";
+  const sortHref = (() => {
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (k === "sort") continue;
+      const s = strParam(v);
+      if (s) sp.set(k, s);
+    }
+    if (!sortedByRating) sp.set("sort", "rating");
+    const qs = sp.toString();
+    const base = "/modules/production/supplier-leads";
+    return qs ? `${base}?${qs}` : base;
+  })();
 
   return (
     <div>
@@ -77,8 +97,26 @@ export default async function SupplierLeadsPage({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
               <TableHead>Company</TableHead>
+              <TableHead>Contact</TableHead>
+              <TableHead>
+                <Link
+                  href={sortHref}
+                  className={cn(
+                    "inline-flex items-center gap-1 hover:text-zinc-900",
+                    sortedByRating && "font-semibold text-zinc-900",
+                  )}
+                  title="Sort by triage rating"
+                >
+                  Value
+                  <ArrowDown
+                    className={cn(
+                      "h-3 w-3",
+                      sortedByRating ? "text-zinc-900" : "text-zinc-300",
+                    )}
+                  />
+                </Link>
+              </TableHead>
               <TableHead>Persona</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Captured</TableHead>
@@ -87,7 +125,7 @@ export default async function SupplierLeadsPage({
           <TableBody>
             {leads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-zinc-400">
+                <TableCell colSpan={6} className="py-8 text-center text-zinc-400">
                   No supplier leads yet.
                 </TableCell>
               </TableRow>
@@ -99,13 +137,21 @@ export default async function SupplierLeadsPage({
                       href={`/modules/production/supplier-leads/${l.id}`}
                       className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
                     >
-                      {displayName(l)}
+                      {l.companyName ?? displayName(l)}
                     </Link>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm text-zinc-700">
+                      {[l.firstName, l.lastName].filter(Boolean).join(" ") ||
+                        "—"}
+                    </div>
                     {l.email && (
                       <div className="text-xs text-zinc-500">{l.email}</div>
                     )}
                   </TableCell>
-                  <TableCell>{l.companyName ?? "—"}</TableCell>
+                  <TableCell>
+                    <LeadRating value={l.leadValue} temp={l.followUpTemp} />
+                  </TableCell>
                   <TableCell className="text-xs text-zinc-600">
                     {l.supplierTypes?.length ? l.supplierTypes.join(", ") : "—"}
                   </TableCell>

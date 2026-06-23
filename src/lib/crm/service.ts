@@ -1,5 +1,16 @@
 import { z } from "zod";
-import { and, asc, desc, eq, ilike, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  ilike,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   company,
@@ -7,6 +18,7 @@ import {
   lead,
   leadCardImage,
   leadComment,
+  tradeShowVendor,
   user as userTable,
 } from "@/lib/schema";
 import {
@@ -333,6 +345,9 @@ export interface ListLeadsFilters {
   ownerUserId?: string;
   status?: string;
   search?: string;
+  // 'rating' = highest triage star value first (unrated last). Anything else
+  // (incl. undefined) falls back to newest-captured-first.
+  sort?: string;
 }
 
 // ─── Email-domain → company / lead matching ────────────────────────
@@ -568,6 +583,32 @@ export async function listLeadComments(
     .orderBy(desc(leadComment.createdAt));
 }
 
+// Triage rating carried over from the booth: a lead is promoted from a
+// trade-show vendor (tradeShowVendor.leadId), and that vendor row holds the
+// 1–5 star value + hot/warm/cold temperature set during triage. Surfaced on
+// the leads list so the team can prioritise without opening each lead. Scalar
+// subqueries (not a join) keep one row per lead even in the rare case two
+// vendors point at the same lead — we take the highest-value one.
+//
+// The outer column is written fully-qualified as "lead"."id": embedding a
+// Drizzle Column (${lead.id}) renders it bare as "id", which the inner
+// trade_show_vendor scope would shadow with its own id column, breaking the
+// correlation. Qualify it explicitly so it binds to the outer lead row.
+const leadTriageValue = sql<number | null>`(
+  select v.lead_value
+  from ${tradeShowVendor} v
+  where v.lead_id = "lead"."id" and v.lead_value is not null
+  order by v.lead_value desc
+  limit 1
+)`;
+const leadTriageTemp = sql<string | null>`(
+  select v.follow_up_temp
+  from ${tradeShowVendor} v
+  where v.lead_id = "lead"."id" and v.follow_up_temp is not null
+  order by v.lead_value desc nulls last
+  limit 1
+)`;
+
 export async function listLeads(filters: ListLeadsFilters = {}) {
   const conds: SQL[] = [];
 
@@ -591,9 +632,18 @@ export async function listLeads(filters: ListLeadsFilters = {}) {
     if (searchCond) conds.push(searchCond);
   }
 
+  const order =
+    filters.sort === "rating"
+      ? [sql`${leadTriageValue} desc nulls last`, desc(lead.capturedAt)]
+      : [desc(lead.capturedAt)];
+
   return db
-    .select()
+    .select({
+      ...getTableColumns(lead),
+      leadValue: leadTriageValue,
+      followUpTemp: leadTriageTemp,
+    })
     .from(lead)
     .where(and(...conds))
-    .orderBy(desc(lead.capturedAt));
+    .orderBy(...order);
 }

@@ -7,8 +7,10 @@ import {
   countDraftMessages,
   leadIdsWithDraftMessages,
 } from "@/lib/crm/messages";
+import { ArrowDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LeadRating } from "@/components/crm/lead-rating";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionTabs } from "@/components/ui/section-tabs";
@@ -21,12 +23,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  leadDisplayName,
   sourceChannelLabel,
   stageBadgeClass,
   stageLabel,
 } from "@/lib/crm/display";
 import { LEADS_TABS } from "@/lib/nav-tabs";
+import { cn } from "@/lib/utils";
 import { LeadsFilters } from "./leads-filters";
 
 export const metadata: Metadata = {
@@ -54,7 +56,23 @@ export default async function LeadsPage({
     ownerUserId: strParam(params.ownerUserId),
     status: strParam(params.status),
     search: strParam(params.search),
+    sort: strParam(params.sort),
   };
+
+  // Toggle the "Value" header between rating-sorted and the default
+  // newest-first, preserving every other active filter in the URL.
+  const sortedByRating = filters.sort === "rating";
+  const sortHref = (() => {
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (k === "sort") continue;
+      const s = strParam(v);
+      if (s) sp.set(k, s);
+    }
+    if (!sortedByRating) sp.set("sort", "rating");
+    const qs = sp.toString();
+    return qs ? `/leads?${qs}` : "/leads";
+  })();
 
   const [leads, draftCount, nextStepLeadIds] = await Promise.all([
     listLeads(filters),
@@ -87,8 +105,26 @@ export default async function LeadsPage({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
               <TableHead>Company</TableHead>
+              <TableHead>Contact</TableHead>
+              <TableHead>
+                <Link
+                  href={sortHref}
+                  className={cn(
+                    "inline-flex items-center gap-1 hover:text-zinc-900",
+                    sortedByRating && "font-semibold text-zinc-900",
+                  )}
+                  title="Sort by triage rating"
+                >
+                  Value
+                  <ArrowDown
+                    className={cn(
+                      "h-3 w-3",
+                      sortedByRating ? "text-zinc-900" : "text-zinc-300",
+                    )}
+                  />
+                </Link>
+              </TableHead>
               <TableHead>Stage</TableHead>
               <TableHead>Next Steps</TableHead>
               <TableHead>Source</TableHead>
@@ -99,7 +135,7 @@ export default async function LeadsPage({
             {leads.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="py-8 text-center text-zinc-400"
                 >
                   No leads match.
@@ -113,13 +149,21 @@ export default async function LeadsPage({
                       href={`/leads/${l.id}`}
                       className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
                     >
-                      {leadDisplayName(l)}
+                      {l.companyName ?? "—"}
                     </Link>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm text-zinc-700">
+                      {[l.firstName, l.lastName].filter(Boolean).join(" ") ||
+                        "—"}
+                    </div>
                     {l.email && (
                       <div className="text-xs text-zinc-500">{l.email}</div>
                     )}
                   </TableCell>
-                  <TableCell>{l.companyName ?? "—"}</TableCell>
+                  <TableCell>
+                    <LeadRating value={l.leadValue} temp={l.followUpTemp} />
+                  </TableCell>
                   <TableCell>
                     <Badge className={stageBadgeClass(l.stage)}>
                       {stageLabel(l.stage)}

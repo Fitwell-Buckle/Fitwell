@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Star } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, Loader2, Star } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -25,7 +25,12 @@ export interface TriageVendor {
   leadValue: number | null;
   seedNotes: string | null;
   notes: string | null;
+  // Pipeline links — set once the vendor has been promoted to that side.
+  leadId: string | null;
+  supplierLeadId: string | null;
 }
+
+type PromoteTarget = "supplier" | "customer";
 
 // Active-chip colour per temperature (matches the vendor detail page).
 const TEMP_ACTIVE_CLASS: Record<FollowUpTemp, string> = {
@@ -44,6 +49,8 @@ export function TriageTable({
   vendors: TriageVendor[];
 }) {
   const [vendors, setVendors] = useState(initial);
+  // Keyed by `${vendorId}:${target}` while a promote request is in flight.
+  const [promoting, setPromoting] = useState<Set<string>>(new Set());
 
   // A vendor counts as triaged once it has both a temperature and a value —
   // side always has a value (defaults to "both"), so it isn't part of the bar.
@@ -72,6 +79,52 @@ export function TriageTable({
     } catch {
       setVendors((list) => list.map((v) => (v.id === id ? prev : v)));
       toast.error("Couldn't save — try again");
+    }
+  }
+
+  // Promote a vendor into a CRM pipeline (idempotent server-side). On success
+  // we store the returned link id so the cell flips to a "Linked" shortcut.
+  async function promote(id: string, target: PromoteTarget) {
+    const key = `${id}:${target}`;
+    setPromoting((s) => new Set(s).add(key));
+    try {
+      const res = await fetch(
+        `/api/trade-shows/${showId}/vendors/${id}/promote`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target }),
+        },
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? "Convert failed");
+      setVendors((list) =>
+        list.map((v) =>
+          v.id === id
+            ? {
+                ...v,
+                leadId: target === "customer" ? json.data.leadId : v.leadId,
+                supplierLeadId:
+                  target === "supplier"
+                    ? json.data.supplierLeadId
+                    : v.supplierLeadId,
+              }
+            : v,
+        ),
+      );
+      toast.success(
+        target === "supplier"
+          ? "Added to Supplier Leads"
+          : "Added to Customer Leads",
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Convert failed");
+    } finally {
+      setPromoting((s) => {
+        const next = new Set(s);
+        next.delete(key);
+        return next;
+      });
     }
   }
 
@@ -113,13 +166,14 @@ export function TriageTable({
               <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">Temp</th>
               <th className="px-3 py-2">Value</th>
+              <th className="px-3 py-2">Convert</th>
             </tr>
           </thead>
           <tbody>
             {vendors.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-3 py-8 text-center text-zinc-400"
                 >
                   No vendors on this show yet.
@@ -250,6 +304,33 @@ export function TriageTable({
                       })}
                     </div>
                   </td>
+
+                  <td className="px-3 py-3">
+                    <div className="flex flex-col items-start gap-1">
+                      {(v.side === "supplier" || v.side === "both") && (
+                        <ConvertAction
+                          label="Supplier"
+                          linkedHref={
+                            v.supplierLeadId
+                              ? `/modules/production/supplier-leads/${v.supplierLeadId}`
+                              : null
+                          }
+                          busy={promoting.has(`${v.id}:supplier`)}
+                          onConvert={() => promote(v.id, "supplier")}
+                        />
+                      )}
+                      {(v.side === "customer" || v.side === "both") && (
+                        <ConvertAction
+                          label="Customer"
+                          linkedHref={
+                            v.leadId ? `/leads/${v.leadId}` : null
+                          }
+                          busy={promoting.has(`${v.id}:customer`)}
+                          onConvert={() => promote(v.id, "customer")}
+                        />
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))
             )}
@@ -257,5 +338,46 @@ export function TriageTable({
         </table>
       </div>
     </div>
+  );
+}
+
+// One pipeline action for a triage row. Shows a "Linked" shortcut once the
+// vendor has been promoted to this side, otherwise a compact convert button.
+function ConvertAction({
+  label,
+  linkedHref,
+  busy,
+  onConvert,
+}: {
+  label: string;
+  linkedHref: string | null;
+  busy: boolean;
+  onConvert: () => void;
+}) {
+  if (linkedHref) {
+    return (
+      <Link
+        href={linkedHref}
+        className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+      >
+        <Check className="h-3 w-3" /> {label}
+        <ExternalLink className="h-3 w-3" />
+      </Link>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onConvert}
+      disabled={busy}
+      className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50"
+    >
+      {busy ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <span aria-hidden>→</span>
+      )}
+      {label}
+    </button>
   );
 }

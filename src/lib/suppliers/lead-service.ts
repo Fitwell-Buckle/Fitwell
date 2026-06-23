@@ -1,6 +1,21 @@
-import { and, arrayContains, desc, eq, ilike, or, type SQL } from "drizzle-orm";
+import {
+  and,
+  arrayContains,
+  desc,
+  eq,
+  getTableColumns,
+  ilike,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/lib/db";
-import { supplier, supplierLead, supplierLeadCardImage } from "@/lib/schema";
+import {
+  supplier,
+  supplierLead,
+  supplierLeadCardImage,
+  tradeShowVendor,
+} from "@/lib/schema";
 import { toNameCase } from "@/lib/crm/names";
 import {
   SUPPLIER_PERSONA_PRESETS,
@@ -149,7 +164,34 @@ export interface ListSupplierLeadsFilters {
   status?: string;
   supplierType?: string;
   search?: string;
+  // 'rating' = highest triage star value first (unrated last). Anything else
+  // (incl. undefined) falls back to newest-captured-first.
+  sort?: string;
 }
+
+// Triage rating carried over from the booth: a supplier lead is promoted from
+// a trade-show vendor (tradeShowVendor.supplierLeadId), which holds the 1–5
+// star value + hot/warm/cold temperature set during triage. Scalar subqueries
+// (not a join) keep one row per lead; we take the highest-value vendor.
+//
+// The outer column is written fully-qualified as "supplier_lead"."id":
+// embedding a Drizzle Column (${supplierLead.id}) renders it bare as "id",
+// which the inner trade_show_vendor scope shadows with its own id column,
+// breaking the correlation. Qualify it explicitly so it binds to the outer row.
+const supplierTriageValue = sql<number | null>`(
+  select v.lead_value
+  from ${tradeShowVendor} v
+  where v.supplier_lead_id = "supplier_lead"."id" and v.lead_value is not null
+  order by v.lead_value desc
+  limit 1
+)`;
+const supplierTriageTemp = sql<string | null>`(
+  select v.follow_up_temp
+  from ${tradeShowVendor} v
+  where v.supplier_lead_id = "supplier_lead"."id" and v.follow_up_temp is not null
+  order by v.lead_value desc nulls last
+  limit 1
+)`;
 
 export async function listSupplierLeads(
   filters: ListSupplierLeadsFilters = {},
@@ -173,11 +215,20 @@ export async function listSupplierLeads(
     if (searchCond) conds.push(searchCond);
   }
 
+  const order =
+    filters.sort === "rating"
+      ? [sql`${supplierTriageValue} desc nulls last`, desc(supplierLead.capturedAt)]
+      : [desc(supplierLead.capturedAt)];
+
   return db
-    .select()
+    .select({
+      ...getTableColumns(supplierLead),
+      leadValue: supplierTriageValue,
+      followUpTemp: supplierTriageTemp,
+    })
     .from(supplierLead)
     .where(and(...conds))
-    .orderBy(desc(supplierLead.capturedAt));
+    .orderBy(...order);
 }
 
 // Options for the persona multi-select: the built-in presets first, then every

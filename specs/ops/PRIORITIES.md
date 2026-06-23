@@ -1,6 +1,19 @@
 # Priorities
 
-Last updated: 2026-06-16
+Last updated: 2026-06-22
+
+## 🧹 Ops note (2026-06-22) — harmless orphan row in prod `__drizzle_migrations`
+
+`npm run db:pending:prod` prints `(DB has 1 migration not in local journal)`.
+This is **cosmetic, not a problem** — don't chase it. It's prod row `id=60`
+(applied 2026-06-11 14:38): the original pre-renumber apply of
+`production_comment.updated_at`, which collided at `0057` with concurrent work
+and was renumbered + rewritten idempotently as the committed
+**`0059_stormy_smiling_tiger`** (commit `707b69b`). The column is in prod and
+in the repo (via `0059`); the orphan is just a duplicate apply-record whose
+hash matches no on-disk file. The hash-based pending check stays correct.
+Optional one-time cleanup (needs Greg's sign-off — manual prod-DB write):
+`DELETE FROM drizzle.__drizzle_migrations WHERE id = 60;`.
 
 ## 🆕 Shipped 2026-06-16 — Trade Shows section (EPHJ Geneva)
 

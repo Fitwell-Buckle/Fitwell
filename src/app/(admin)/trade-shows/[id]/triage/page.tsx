@@ -36,6 +36,8 @@ export default async function TradeShowTriagePage({
         leadValue: v.leadValue,
         seedNotes: v.seedNotes,
         notes: v.notes,
+        leadId: v.leadId,
+        supplierLeadId: v.supplierLeadId,
       }))}
     />
   );
