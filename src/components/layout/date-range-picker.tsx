@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import type { Granularity } from "@/lib/date-range";
+import { parseDateRange, type Granularity } from "@/lib/date-range";
 import { storeToday, shiftDate } from "@/lib/timezone";
 
 const PRESETS = [
@@ -58,12 +58,6 @@ function getActiveDays(from: string | null, to: string | null): number | null {
   return null;
 }
 
-function defaultGranularity(days: number): Granularity {
-  if (days <= 30 && days > 0) return "day";
-  if (days <= 90 && days > 0) return "week";
-  return "month";
-}
-
 // Pages whose path (or a subpath) shows the date-range picker.
 const PICKER_PREFIXES = [
   "/dashboard",
@@ -101,12 +95,16 @@ export function DateRangePicker({ embedded }: { embedded?: boolean } = {}) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const activeDays = getActiveDays(from, to);
-  const activeGranularity = (searchParams.get("g") as Granularity | null) ?? null;
 
-  // Compute the effective granularity for highlighting
-  const effectiveGranularity: Granularity =
-    activeGranularity ??
-    (activeDays !== null ? defaultGranularity(Math.abs(activeDays)) : "day");
+  // Highlight the granularity the data is ACTUALLY bucketed at by deferring to
+  // the same parseDateRange the pages use. Computing it from the preset alone
+  // was wrong for sentinel presets — e.g. YTD (sentinel −1) highlighted "Day"
+  // while the range spans months and the charts render Month.
+  const effectiveGranularity: Granularity = parseDateRange({
+    from: from ?? undefined,
+    to: to ?? undefined,
+    g: searchParams.get("g") ?? undefined,
+  }).granularity;
 
   const setRange = useCallback(
     (days: number) => {

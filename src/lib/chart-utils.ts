@@ -61,6 +61,29 @@ export function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
 
+// Least-squares linear trend: returns the fitted y-value for each index, so a
+// straight best-fit line can be overlaid on a series. Returns the input
+// unchanged for < 2 points, and a flat mean line if x has no spread.
+export function computeTrend(values: number[]): number[] {
+  const n = values.length;
+  if (n < 2) return values.slice();
+  let sx = 0,
+    sy = 0,
+    sxy = 0,
+    sxx = 0;
+  for (let i = 0; i < n; i++) {
+    sx += i;
+    sy += values[i];
+    sxy += i * values[i];
+    sxx += i * i;
+  }
+  const denom = n * sxx - sx * sx;
+  if (denom === 0) return values.map(() => sy / n);
+  const slope = (n * sxy - sx * sy) / denom;
+  const intercept = (sy - slope * sx) / n;
+  return values.map((_, i) => slope * i + intercept);
+}
+
 // Shared Recharts styling
 export const GRID_PROPS = { strokeDasharray: "3 3", stroke: "#e4e4e7" } as const;
 export const X_AXIS_STYLE = { fontSize: 11, fill: "#a1a1aa" } as const;

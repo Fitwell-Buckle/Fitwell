@@ -5,7 +5,29 @@ import {
   formatBucketLabel,
   formatCurrency,
   formatNumber,
+  computeTrend,
 } from "@/lib/chart-utils";
+
+describe("computeTrend", () => {
+  it("fits a perfectly linear series exactly", () => {
+    expect(computeTrend([2, 4, 6, 8])).toEqual([2, 4, 6, 8]);
+  });
+
+  it("returns a flat mean line for constant data", () => {
+    expect(computeTrend([5, 5, 5])).toEqual([5, 5, 5]);
+  });
+
+  it("best-fits a noisy upward series (endpoints straddle the data)", () => {
+    const t = computeTrend([1, 2, 100]);
+    expect(t[2]).toBeGreaterThan(t[0]); // upward slope
+    expect(t[0]).toBeLessThan(1 + 2 + 100); // fitted, not raw
+  });
+
+  it("passes through < 2 points unchanged", () => {
+    expect(computeTrend([])).toEqual([]);
+    expect(computeTrend([7])).toEqual([7]);
+  });
+});
 
 describe("dateToBucketKey", () => {
   const d = new Date(2026, 4, 18); // local 2026-05-18

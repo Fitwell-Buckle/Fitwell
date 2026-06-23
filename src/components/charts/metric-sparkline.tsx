@@ -8,7 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { formatCurrency, formatNumber } from "@/lib/chart-utils";
+import { formatCurrency, formatNumber, computeTrend } from "@/lib/chart-utils";
 
 export interface MetricPoint {
   label: string;
@@ -33,10 +33,11 @@ function SparkTooltip({
   pctLabel: string;
 }) {
   if (!active || !payload?.length) return null;
+  const rows = payload.filter((p) => !p.dataKey.endsWith("Trend"));
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs shadow-md">
       <p className="mb-0.5 font-medium text-zinc-900">{label}</p>
-      {payload.map((p) => (
+      {rows.map((p) => (
         <p key={p.dataKey} className="flex items-center gap-1.5 text-zinc-600">
           <span
             className="h-2 w-2 rounded-full"
@@ -82,10 +83,13 @@ export function MetricSparkline({
   }
   const startLabel = data[0]?.label ?? "";
   const endLabel = data[data.length - 1]?.label ?? "";
+  // Overlay a straight best-fit line on the value series.
+  const valueTrend = computeTrend(data.map((d) => d.value));
+  const chartData = data.map((d, i) => ({ ...d, valueTrend: valueTrend[i] }));
   return (
     <div>
       <ResponsiveContainer width="100%" height={72}>
-        <LineChart data={data} margin={{ top: 6, right: 4, left: 4, bottom: 0 }}>
+        <LineChart data={chartData} margin={{ top: 6, right: 4, left: 4, bottom: 0 }}>
           {/* Hidden, but binds the tooltip header to the bucket label (e.g.
               "Apr 26") instead of falling back to the row index. */}
           <XAxis dataKey="label" hide />
@@ -96,6 +100,18 @@ export function MetricSparkline({
           <Tooltip
             content={<SparkTooltip fmt={fmt} pctLabel={pctLabel} />}
             cursor={{ stroke: "#e4e4e7" }}
+          />
+          {/* Trend first so the actual line sits on top of it. */}
+          <Line
+            yAxisId="value"
+            type="linear"
+            dataKey="valueTrend"
+            stroke={color}
+            strokeOpacity={0.35}
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
+            dot={false}
+            isAnimationActive={false}
           />
           <Line
             yAxisId="value"

@@ -15,6 +15,7 @@ import {
   Y_AXIS_STYLE,
   formatCurrency,
   formatNumber,
+  computeTrend,
 } from "@/lib/chart-utils";
 
 export type SegmentFormat = "currency" | "number" | "decimal";
@@ -56,10 +57,11 @@ function SegTooltip({
   fmt: (n: number) => string;
 }) {
   if (!active || !payload?.length) return null;
+  const rows = payload.filter((p) => !p.dataKey.endsWith("Trend"));
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs shadow-md">
       <p className="mb-1 font-medium text-zinc-900">{label}</p>
-      {payload.map((p) => (
+      {rows.map((p) => (
         <p key={p.dataKey} className="flex items-center gap-2 text-zinc-600">
           <span
             className="h-2 w-2 rounded-full"
@@ -85,6 +87,16 @@ export function SegmentLineChart({
 }) {
   const fmt = formatterFor(format);
   const visible = SERIES.filter((s) => !show || show.includes(s.key));
+  // Overlay a straight best-fit line per visible segment.
+  const enriched: Record<string, number | string>[] = data.map((d) => ({
+    ...d,
+  }));
+  for (const s of visible) {
+    const t = computeTrend(data.map((d) => d[s.key]));
+    enriched.forEach((row, i) => {
+      row[`${s.key}Trend`] = t[i];
+    });
+  }
   if (!data.some((d) => d.d2c || d.tradeshow || d.b2b)) {
     return (
       <p className="py-12 text-center text-sm text-zinc-400">
@@ -109,7 +121,7 @@ export function SegmentLineChart({
         ))}
       </div>
       <ResponsiveContainer width="100%" height={280}>
-        <LineChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+        <LineChart data={enriched} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
           <CartesianGrid {...GRID_PROPS} />
           <XAxis
             dataKey="label"
@@ -124,6 +136,21 @@ export function SegmentLineChart({
             tickFormatter={axisTickFor(format)}
           />
           <Tooltip content={<SegTooltip fmt={fmt} />} />
+          {/* Trend lines first, so the actual lines render on top. */}
+          {visible.map((s) => (
+            <Line
+              key={`${s.key}-trend`}
+              type="linear"
+              dataKey={`${s.key}Trend`}
+              stroke={s.color}
+              strokeOpacity={0.3}
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+              isAnimationActive={false}
+              legendType="none"
+            />
+          ))}
           {visible.map((s) => (
             <Line
               key={s.key}
