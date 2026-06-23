@@ -63,7 +63,12 @@ async function main() {
   }
   const html = injectUtms(rawHtml, { campaign: slug, content: "blast" });
 
-  const client = new KlaviyoClient();
+  // Drafting a campaign is a write op, so prefer the write-scoped key
+  // (NEWSLETTER_KLAVIYO_API_KEY). It falls back to KLAVIYO_API_KEY per
+  // .env.example; the default KLAVIYO_API_KEY is read-only and 4xxs on writes.
+  const client = new KlaviyoClient({
+    apiKey: process.env.NEWSLETTER_KLAVIYO_API_KEY ?? process.env.KLAVIYO_API_KEY,
+  });
   try {
     const result = await draftCampaign({ slug, config, html, client });
     console.log(`✓ Campaign ${result.mode}: ${slug}`);

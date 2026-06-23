@@ -1,0 +1,63 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif" />
+      <mj-text font-size="16px" line-height="1.6" color="#ffffff" />
+      <mj-section background-color="#2a3641" />
+    </mj-attributes>
+    <mj-style>
+      a.inline { color: #ffffff !important; text-decoration: underline; }
+    </mj-style>
+    <mj-preview>Our summer sale's on — 20% off 3+, through June 30.</mj-preview>
+  </mj-head>
+
+  <mj-body background-color="#2a3641" width="600px">
+    <!-- Header: white wordmark -->
+    <mj-section padding="22px 0 6px">
+      <mj-column>
+        <mj-image src="https://d3k81ch9hvuctc.cloudfront.net/company/R3gvvz/images/15eda511-48d4-4287-88ba-464ecfa6db1a.png" alt="Fitwell Buckle Co." width="168px" align="center" />
+      </mj-column>
+    </mj-section>
+
+    <!-- Hero product GIF (same asset + size as the daily newsletter ad) -->
+    <mj-section padding="14px 0 4px">
+      <mj-column>
+        <mj-image src="https://u7unnafmnzoxkkki.public.blob.vercel-storage.com/newsletter/fitwell-buckle.gif?v=3" alt="Fitwell micro-adjust buckle" width="220px" border-radius="6px" align="center" />
+      </mj-column>
+    </mj-section>
+
+    <!-- Body -->
+    <mj-section padding="20px 28px 8px">
+      <mj-column>
+        <mj-text>Hi {{ first_name|default:"there" }},</mj-text>
+        <mj-text>Summer's here, there's a heat wave across Europe, and it's warming up everywhere else — which means a bigger wrist. The strap that sat just right a few months ago is suddenly between sizes — too tight on one hole, too loose on the next — and a watch you love ends up in the drawer for months.</mj-text>
+        <mj-text>You already know the difference a Fitwell makes: the watches you've outfitted sit just right. It's the ones you haven't that go quiet this time of year.</mj-text>
+        <mj-text>So this is the nudge to outfit the rest. The <a class="inline" href="https://fitwellbuckle.co/pages/m1-micro-adjust-buckle">M1 Buckle</a> replaces your existing buckle with half-hole adjustment; the <a class="inline" href="https://fitwellbuckle.co/products/fitwell-universal-micro-adjust-link">M4 Universal Link</a> adds the same to deployants, buckles you'd rather keep, and a touch of length to straps on their last hole. Between them, nothing in your collection has to wait out the summer in a drawer.</mj-text>        <mj-text padding-top="8px">And to make it easy — <strong>we're giving you 20% off of three or more</strong>. Use code <a class="inline" href="https://www.fitwellbuckle.co/discount/SUMMER20">SUMMER20</a> at checkout, now through June 30.</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- CTA (last element) -->
+    <mj-section padding="8px 28px 28px">
+      <mj-column>
+        <mj-button href="https://www.fitwellbuckle.co/discount/SUMMER20?redirect=/collections/all" background-color="#c08a4d" color="#ffffff" font-family="Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif" font-size="16px" font-weight="bold" border-radius="7px" inner-padding="16px 40px" align="center">Outfit the rest of your collection →</mj-button>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer: social + unsubscribe -->
+    <mj-section padding="20px 0 6px">
+      <mj-column>
+        <mj-social mode="horizontal" icon-size="28px" align="center" padding="0">
+          <mj-social-element name="instagram" href="https://www.instagram.com/fitwellbuckles/" src="https://d3k81ch9hvuctc.cloudfront.net/assets/email/buttons/subtleinverse/instagram_96.png" background-color="transparent" />
+          <mj-social-element name="facebook" href="https://www.facebook.com/fitwellbuckle" src="https://d3k81ch9hvuctc.cloudfront.net/assets/email/buttons/subtleinverse/facebook_96.png" background-color="transparent" />
+          <mj-social-element name="tiktok" href="https://www.tiktok.com/@fitwellbuckles" src="https://d3k81ch9hvuctc.cloudfront.net/assets/email/buttons/subtleinverse/tiktok_96.png" background-color="transparent" />
+          <mj-social-element name="youtube" href="https://www.youtube.com/@FitwellBuckleCo" src="https://d3k81ch9hvuctc.cloudfront.net/assets/email/buttons/subtleinverse/youtube_96.png" background-color="transparent" />
+        </mj-social>
+      </mj-column>
+    </mj-section>
+    <mj-section padding="0 0 24px">
+      <mj-column>
+        <mj-text color="#ffffff" font-size="12px" align="center" line-height="1.6" font-family="'Courier New', Courier, monospace">No longer want to receive these emails? <a href="{% unsubscribe_link %}" style="color:#ffffff;">Unsubscribe</a>.<br /><br />{{ organization.name }}<br />{{ organization.full_address }}</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

@@ -1,0 +1,10 @@
+# Segment B — Prospects (signed up, never purchased). Summer heat campaign.
+# Draft only; never auto-sends. Review + send manually in Klaviyo.
+subject: "Summer's here and your watch doesn't fit"
+preview_text: "Make the watch you stopped wearing wearable again. 15% off inside."
+from_email: info@fitwellbuckle.co
+from_label: "Fitwell Buckle Co."
+reply_to_email: info@fitwellbuckle.co
+audiences:
+  included:
+    - "UiFhJ2" # Segment: "Signed Up - No Purchase - Consumers"

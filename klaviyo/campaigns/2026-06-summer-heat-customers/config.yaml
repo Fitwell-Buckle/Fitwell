@@ -1,0 +1,12 @@
+# Segment A — Customers (any prior purchase). Summer heat / outfit campaign.
+# Draft only; never auto-sends. Review + send manually in Klaviyo.
+# NOTE: audience ID is a placeholder — replace with the real customers
+# list/segment ID before running `npm run klaviyo:campaign:draft`.
+subject: "It's not the watch. It's the summer."
+preview_text: "Our summer sale's on — 20% off 3+, through June 30."
+from_email: info@fitwellbuckle.co
+from_label: "Fitwell Buckle Co."
+reply_to_email: info@fitwellbuckle.co
+audiences:
+  included:
+    - "UKuzAA" # Segment: "Customers - All Purchasers - Consumer"
