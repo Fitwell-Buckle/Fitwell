@@ -26,19 +26,38 @@ export const SPRING_BAR = {
 
 export const FINISHES: Finish[] = [
   // Glossy (low roughness, high metallic).
+  { id: "silver_steel", label: "Silver Steel", group: "glossy", baseColor: [0.72, 0.73, 0.75], metallic: 1, roughness: 0.22, swatch: "#c2c4c7" },
   { id: "black_steel", label: "Black Steel", group: "glossy", baseColor: [0.045, 0.045, 0.05], metallic: 1, roughness: 0.28, swatch: "#1b1b1e" },
   { id: "yellow_gold_steel", label: "Yellow Gold Steel", group: "glossy", baseColor: [0.86, 0.66, 0.22], metallic: 1, roughness: 0.25, swatch: "#d6a838" },
   { id: "rose_gold_steel", label: "Rose Gold Steel", group: "glossy", baseColor: [0.82, 0.53, 0.46], metallic: 1, roughness: 0.25, swatch: "#cf8a78" },
   { id: "titanium", label: "Titanium", group: "glossy", baseColor: [0.62, 0.63, 0.65], metallic: 1, roughness: 0.32, swatch: "#b7babe" },
-  // Matte (high roughness).
-  { id: "matte_titanium", label: "Matte Titanium", group: "matte", baseColor: [0.58, 0.59, 0.61], metallic: 1, roughness: 0.62, swatch: "#a7aaae" },
-  { id: "matte_steel", label: "Matte Steel", group: "matte", baseColor: [0.66, 0.67, 0.69], metallic: 1, roughness: 0.62, swatch: "#bbbec2" },
+  // Matte = bead blasted (high roughness). Only steel + titanium are bead blasted.
+  { id: "matte_titanium", label: "Bead Blasted Titanium", group: "matte", baseColor: [0.58, 0.59, 0.61], metallic: 1, roughness: 0.62, swatch: "#a7aaae" },
+  { id: "matte_steel", label: "Bead Blasted Steel", group: "matte", baseColor: [0.66, 0.67, 0.69], metallic: 1, roughness: 0.62, swatch: "#bbbec2" },
 ];
 
-export const DEFAULT_FINISH_ID = "titanium";
+export const DEFAULT_FINISH_ID = "silver_steel";
 
 export function getFinish(id: string | null | undefined): Finish {
   return FINISHES.find((f) => f.id === id) ?? FINISHES.find((f) => f.id === DEFAULT_FINISH_ID)!;
+}
+
+// Map a product/variant color or name to a finish. "Bead blasted" (or "matte")
+// selects the matte variant (only steel + titanium have one). Specific colors
+// are checked before generic ones (rose gold before gold; black/gold before the
+// catch-all steel) so "Yellow Gold Steel" → gold, not steel.
+export function matchFinish(text: string | null | undefined): Finish | null {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  const matte = /bead[\s-]*blast|matte|\bmatt\b/.test(t);
+  let id: string | null = null;
+  if (/black/.test(t)) id = "black_steel";
+  else if (/rose[\s-]*gold/.test(t)) id = "rose_gold_steel";
+  else if (/yellow[\s-]*gold|gold/.test(t)) id = "yellow_gold_steel";
+  else if (/titan/.test(t)) id = matte ? "matte_titanium" : "titanium";
+  else if (/natural|silver|stainless|steel|polish/.test(t))
+    id = matte ? "matte_steel" : "silver_steel";
+  return id ? (FINISHES.find((f) => f.id === id) ?? null) : null;
 }
 
 // glTF material name for the recolorable body (the viewer targets this to apply

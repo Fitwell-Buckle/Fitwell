@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { getCatalogCached } from "@/lib/catalog/load";
 import { parseDateRange } from "@/lib/date-range";
 import { getProductCadModel, listReadyCadModels } from "@/lib/cad/products";
+import { matchFinish } from "@/lib/cad/finishes";
 import { ProductCadModelCard } from "./product-cad-model";
 
 export const metadata: Metadata = {
@@ -163,6 +164,10 @@ export default async function ProductDetailPage({
           cadLink?.shopifyPublishedAt
             ? cadLink.shopifyPublishedAt.toISOString()
             : null
+        }
+        defaultFinishId={
+          matchFinish([variant?.color, title].filter(Boolean).join(" "))?.id ??
+          null
         }
       />
 

@@ -11,12 +11,15 @@ export function FinishViewer({
   src,
   alt,
   cameraOrbit = "-45deg 55deg auto",
+  initialFinishId,
 }: {
   src: string;
   alt: string;
   cameraOrbit?: string;
+  // Pre-select a finish (e.g. auto-matched from the product's color).
+  initialFinishId?: string | null;
 }) {
-  const [finishId, setFinishId] = useState(DEFAULT_FINISH_ID);
+  const [finishId, setFinishId] = useState(initialFinishId || DEFAULT_FINISH_ID);
 
   return (
     <div>

@@ -20,11 +20,14 @@ export function ProductCadModelCard({
   readyModels,
   initialCadModelId,
   shopifyPublishedAt,
+  defaultFinishId,
 }: {
   sku: string;
   readyModels: ReadyModel[];
   initialCadModelId: string | null;
   shopifyPublishedAt: string | null;
+  // Finish auto-matched from this product's color (e.g. "Natural (silver)").
+  defaultFinishId: string | null;
 }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string>(initialCadModelId ?? "");
@@ -133,7 +136,11 @@ export function ProductCadModelCard({
 
       {selected?.glbUrl && (
         <div className="mt-4">
-          <FinishViewer src={selected.glbUrl} alt={`${selected.name} 3D model`} />
+          <FinishViewer
+            src={selected.glbUrl}
+            alt={`${selected.name} 3D model`}
+            initialFinishId={defaultFinishId}
+          />
         </div>
       )}
     </Card>
