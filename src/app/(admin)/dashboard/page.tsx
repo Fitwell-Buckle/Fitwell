@@ -4,7 +4,21 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { order, orderLineItem, customer } from "@/lib/schema";
-import { sql, eq, desc, count, gte, lte, lt, and } from "drizzle-orm";
+import {
+  sql,
+  eq,
+  desc,
+  count,
+  gte,
+  lte,
+  lt,
+  and,
+  isNotNull,
+  exists,
+  not,
+  type Column,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { parseDateRange } from "@/lib/date-range";
 import { getDashboardSettings } from "@/lib/dashboard/settings";
 import { STORE_TZ } from "@/lib/timezone";
@@ -71,14 +85,15 @@ export default async function DashboardPage({
     params.segment === "b2b"
       ? params.segment
       : "all";
-  const segmentCond =
+  const segmentConditionFor = (col: Column) =>
     segment === "d2c"
-      ? sql`${order.sourceName} IS DISTINCT FROM 'shopify_draft_order' AND ${order.sourceName} IS DISTINCT FROM 'pos'`
+      ? sql`${col} IS DISTINCT FROM 'shopify_draft_order' AND ${col} IS DISTINCT FROM 'pos'`
       : segment === "tradeshow"
-        ? sql`${order.sourceName} = 'pos'`
+        ? sql`${col} = 'pos'`
         : segment === "b2b"
-          ? sql`${order.sourceName} = 'shopify_draft_order'`
+          ? sql`${col} = 'shopify_draft_order'`
           : undefined;
+  const segmentCond = segmentConditionFor(order.sourceName);
   // Denominator label for the returns "% of …" captions, tracking the scope.
   const segmentDenomLabel =
     segment === "all"
@@ -89,21 +104,37 @@ export default async function DashboardPage({
           ? "Trade Show"
           : "B2B";
 
-  // Customer-cohort scope (top-bar toggle): "all" (default), "new" (first-ever
-  // order falls in range — no order before `from`), or "existing" (ordered
-  // before the range). Like segmentCond, a single WHERE condition added to every
-  // order query; undefined = all. The prior-buyers subquery carries the same
-  // segment scope so the two filters compose ("new B2B customers", etc.).
+  // Customer-cohort scope (top-bar toggle): "all" (default), "new" (this is the
+  // customer's first-ever order), or "existing" (the customer placed an earlier
+  // order). Range-INDEPENDENT — based on each customer's own history, not the
+  // range start — so it stays meaningful at every range incl. "All" (where
+  // "existing" = repeat-customer activity). Like segmentCond, a single WHERE
+  // condition added to every order query; undefined = all. The earlier-order
+  // check is segment-scoped so the two filters compose ("returning B2B
+  // customer" = had an earlier B2B order). Built with the query builder (not raw
+  // sql) so the aliased self-join renders as `"order" "prev_order"` correctly.
   const customerType =
     params.customer === "new" || params.customer === "existing"
       ? params.customer
       : "all";
-  const priorBuyers = sql`SELECT ${order.customerId} FROM ${order} WHERE ${order.processedAt} < ${from} AND ${order.customerId} IS NOT NULL AND ${order.cancelledAt} IS NULL AND ${order.isSample} = false${segmentCond ? sql` AND ${segmentCond}` : sql``}`;
+  const prevOrder = alias(order, "prev_order");
+  const earlierOrder = db
+    .select({ one: sql`1` })
+    .from(prevOrder)
+    .where(
+      and(
+        eq(prevOrder.customerId, order.customerId),
+        lt(prevOrder.processedAt, order.processedAt),
+        sql`${prevOrder.cancelledAt} IS NULL`,
+        sql`${prevOrder.isSample} = false`,
+        segmentConditionFor(prevOrder.sourceName),
+      ),
+    );
   const customerTypeCond =
     customerType === "existing"
-      ? sql`${order.customerId} IN (${priorBuyers})`
+      ? and(isNotNull(order.customerId), exists(earlierOrder))
       : customerType === "new"
-        ? sql`${order.customerId} IS NOT NULL AND ${order.customerId} NOT IN (${priorBuyers})`
+        ? and(isNotNull(order.customerId), not(exists(earlierOrder)))
         : undefined;
 
   // Bucket by the STORE timezone so the daily trend lines up with Shopify
