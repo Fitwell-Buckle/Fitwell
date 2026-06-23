@@ -98,6 +98,7 @@ export default async function DashboardPage({
     revenueResult,
     orderCountResult,
     customerCountResult,
+    returnsResult,
     recentOrders,
     segmentResult,
     perCustomerLtv,
@@ -123,6 +124,21 @@ export default async function DashboardPage({
       db
         .select({
           count: sql<number>`count(distinct ${order.customerId})`.mapWith(Number),
+        })
+        .from(order)
+        .where(
+          and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
+        ),
+      // Returns: mirrors the headline cards but on refunded value. Same
+      // notCancelled/notSample/date filters so it reconciles with Total sales
+      // (which already subtracts these refunds). Orders/customers are counted
+      // only where a refund actually occurred (totalRefunded > 0).
+      db
+        .select({
+          total: sql<number>`COALESCE(SUM(${order.totalRefunded}), 0)`.mapWith(Number),
+          orders: sql<number>`COUNT(*) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
+          customers:
+            sql<number>`COUNT(DISTINCT ${order.customerId}) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
         })
         .from(order)
         .where(
@@ -223,6 +239,11 @@ export default async function DashboardPage({
   const totalOrders = orderCountResult[0]?.count ?? 0;
   const totalCustomers = customerCountResult[0]?.count ?? 0;
   const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+  const totalReturns = Number(returnsResult[0]?.total ?? 0);
+  const returnOrders = returnsResult[0]?.orders ?? 0;
+  const returnCustomers = returnsResult[0]?.customers ?? 0;
+  const avgReturnValue =
+    returnOrders > 0 ? Math.round(totalReturns / returnOrders) : 0;
   // Avg orders per customer for the SELECTED period: orders ÷ distinct
   // customers, both already scoped to the date filter. Widening the range pulls
   // in more repeat orders from the same buyers, so this rises with the window
@@ -488,6 +509,13 @@ export default async function DashboardPage({
         <MetricCard label="Orders" value={totalOrders.toLocaleString()} />
         <MetricCard label="Customers" value={totalCustomers.toLocaleString()} />
         <MetricCard label="Avg Order Value" value={fmt(avgOrderValue)} />
+      </div>
+
+      <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Total returns" value={fmt(totalReturns)} />
+        <MetricCard label="Orders refunded" value={returnOrders.toLocaleString()} />
+        <MetricCard label="Customers refunded" value={returnCustomers.toLocaleString()} />
+        <MetricCard label="Avg Return Value" value={fmt(avgReturnValue)} />
       </div>
 
       <Card className="mt-8">
