@@ -36,6 +36,7 @@ export function ProductCombobox({
   value,
   onSelect,
   onSelectMany,
+  onReplaceMany,
   exclude,
   placeholder = "Search products…",
   disabled = false,
@@ -51,6 +52,12 @@ export function ProductCombobox({
    *  one or more are checked — lets the user add several products at once.
    *  Single-clicking a row still adds just that item (via onSelect). */
   onSelectMany?: (variants: CatalogVariant[]) => void;
+  /** Filter use case (e.g. the products list): when size/colour chips are
+   *  active, REPLACE the selection with the chip-filtered subset — lets the
+   *  user narrow an already-selected collection down to one size. Without this,
+   *  already-picked products are hidden (add-picker behaviour) so refining a
+   *  fully-selected collection shows nothing. */
+  onReplaceMany?: (variants: CatalogVariant[]) => void;
   /** Variant ids to hide (e.g. already chosen on other lines). */
   exclude?: Set<string>;
   placeholder?: string;
@@ -166,11 +173,27 @@ export function ProductCombobox({
     setOpen(false);
   }
 
+  function commitReplace(list: CatalogVariant[]) {
+    onReplaceMany?.(list);
+    setChecked(new Set());
+    setOpen(false);
+  }
+
   const q = query.trim().toLowerCase();
+  const chipsActive = sizes.size > 0 || colors.size > 0 || materials.size > 0;
+  // In filter mode (onReplaceMany), once chips are active, SHOW already-selected
+  // products so the user can narrow down to them. Otherwise a fully-selected
+  // collection has every product excluded, and refining by size shows nothing.
+  const showExcluded = !!onReplaceMany && chipsActive;
   // Everything matching the current collection + chip + search filters (used by
   // "Add all"); `results` is just the slice we render.
   const filteredAll = pool
-    .filter((v) => !exclude?.has(v.shopifyVariantId) || v.shopifyVariantId === value)
+    .filter(
+      (v) =>
+        showExcluded ||
+        !exclude?.has(v.shopifyVariantId) ||
+        v.shopifyVariantId === value,
+    )
     .filter((v) => sizes.size === 0 || (v.sizeMm != null && sizes.has(v.sizeMm)))
     .filter((v) => colors.size === 0 || (v.color != null && colors.has(v.color)))
     .filter((v) => materials.size === 0 || (v.material != null && materials.has(v.material)))
@@ -307,31 +330,44 @@ export function ProductCombobox({
             </div>
           )}
 
-          {onSelectMany &&
-            (checked.size > 0 ||
-              collectionId ||
-              sizes.size > 0 ||
-              colors.size > 0 ||
-              materials.size > 0) && (
+          {(onSelectMany || onReplaceMany) &&
+            (checked.size > 0 || collectionId || chipsActive) && (
               <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    commitMany(
-                      checked.size > 0
-                        ? variants.filter((v) => checked.has(v.shopifyVariantId))
-                        : filteredAll,
-                    )
-                  }
-                  className="rounded-md bg-brand px-3 py-1 text-xs font-medium text-white hover:bg-brand-hover"
-                >
-                  {checked.size > 0
-                    ? `Select ${checked.size}`
-                    : `Select all ${filteredAll.length}`}
-                </button>
-                <span className="text-xs text-zinc-500">
-                  {checked.size > 0 ? `${checked.size} checked` : "matching products"}
-                </span>
+                {onReplaceMany && chipsActive && checked.size === 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => commitReplace(filteredAll)}
+                      className="rounded-md bg-brand px-3 py-1 text-xs font-medium text-white hover:bg-brand-hover"
+                    >
+                      Show only these {filteredAll.length}
+                    </button>
+                    <span className="text-xs text-zinc-500">
+                      narrow the filter to these
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        commitMany(
+                          checked.size > 0
+                            ? variants.filter((v) => checked.has(v.shopifyVariantId))
+                            : filteredAll,
+                        )
+                      }
+                      className="rounded-md bg-brand px-3 py-1 text-xs font-medium text-white hover:bg-brand-hover"
+                    >
+                      {checked.size > 0
+                        ? `Select ${checked.size}`
+                        : `Select all ${filteredAll.length}`}
+                    </button>
+                    <span className="text-xs text-zinc-500">
+                      {checked.size > 0 ? `${checked.size} checked` : "matching products"}
+                    </span>
+                  </>
+                )}
               </div>
             )}
 

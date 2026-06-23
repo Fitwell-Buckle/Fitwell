@@ -97,6 +97,9 @@ export function ListFilters({ production }: { production?: ProductionFilterProps
           disabled={loading}
           onSelect={(v) => setSkus([...skus, v.sku])}
           onSelectMany={(vs) => setSkus([...skus, ...vs.map((v) => v.sku)])}
+          // Narrow: when size/colour chips are active, replace the filter with
+          // just the matching subset (e.g. M1 collection → only the 16mm SKUs).
+          onReplaceMany={(vs) => setSkus(vs.map((v) => v.sku))}
         />
       </div>
 
