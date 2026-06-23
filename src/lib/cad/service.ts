@@ -242,3 +242,68 @@ export async function processStl(
     throw err;
   }
 }
+
+// Re-run STL → GLB for a model that already has a stored source STL, rebuilding
+// the GLB with the current converter (e.g. after a shading/normals improvement).
+// Reuses the same source bytes — no Fusion export or re-upload needed — and
+// overwrites the model's `glbUrl`. SKUs already linked to this model pick up the
+// new GLB automatically (the link is by id; the URL is read fresh).
+export async function reconvertCadModel(id: string): Promise<{ glbUrl: string }> {
+  const model = await db.query.cadModel.findFirst({
+    where: eq(cadModel.id, id),
+  });
+  if (!model) throw new Error(`CAD model ${id} not found.`);
+  if (!model.sourceStlUrl) {
+    throw new Error(
+      `CAD model ${id} has no stored source STL to re-convert from.`,
+    );
+  }
+
+  await db
+    .update(cadModel)
+    .set({ status: "processing", errorMessage: null, updatedAt: new Date() })
+    .where(eq(cadModel.id, id));
+
+  try {
+    const res = await fetch(model.sourceStlUrl);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch source STL (${res.status}).`);
+    }
+    const stlBytes = new Uint8Array(await res.arrayBuffer());
+
+    const { glb, vertexCount, triangleCount } = await stlToGlb(stlBytes);
+    const glbBlob = await put(`cad/${id}/model.glb`, Buffer.from(glb), {
+      access: "public",
+      addRandomSuffix: true,
+      contentType: "model/gltf-binary",
+    });
+
+    // Drop the old GLB blob so we don't leak orphaned files on every re-convert.
+    const oldGlbUrl = model.glbUrl;
+
+    await db
+      .update(cadModel)
+      .set({
+        glbUrl: glbBlob.url,
+        vertexCount,
+        triangleCount,
+        status: "ready",
+        errorMessage: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(cadModel.id, id));
+
+    if (oldGlbUrl && oldGlbUrl !== glbBlob.url) {
+      await del(oldGlbUrl).catch(() => {});
+    }
+
+    return { glbUrl: glbBlob.url };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Conversion failed.";
+    await db
+      .update(cadModel)
+      .set({ status: "failed", errorMessage: message, updatedAt: new Date() })
+      .where(eq(cadModel.id, id));
+    throw err;
+  }
+}

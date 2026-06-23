@@ -102,15 +102,19 @@ function layFlat(verts: Float32Array): void {
   }
 }
 
-function computeSmoothNormals(
+// Per-face geometric normal + area (area = weight for smooth averaging). The
+// cross product's magnitude is twice the triangle area, so we get both at once.
+function computeFaceData(
   verts: Float32Array,
   indices: Uint32Array,
-): Float32Array {
-  const n = new Float32Array(verts.length);
-  for (let t = 0; t < indices.length; t += 3) {
-    const a = indices[t] * 3,
-      b = indices[t + 1] * 3,
-      c = indices[t + 2] * 3;
+): { faceNormal: Float32Array; faceArea: Float32Array } {
+  const faceCount = indices.length / 3;
+  const faceNormal = new Float32Array(faceCount * 3);
+  const faceArea = new Float32Array(faceCount);
+  for (let f = 0; f < faceCount; f++) {
+    const a = indices[3 * f] * 3,
+      b = indices[3 * f + 1] * 3,
+      c = indices[3 * f + 2] * 3;
     const ux = verts[b] - verts[a],
       uy = verts[b + 1] - verts[a + 1],
       uz = verts[b + 2] - verts[a + 2];
@@ -120,19 +124,41 @@ function computeSmoothNormals(
     const nx = uy * vz - uz * vy,
       ny = uz * vx - ux * vz,
       nz = ux * vy - uy * vx;
-    for (const i of [a, b, c]) {
-      n[i] += nx;
-      n[i + 1] += ny;
-      n[i + 2] += nz;
+    const len = Math.hypot(nx, ny, nz);
+    faceArea[f] = len / 2;
+    const inv = len || 1;
+    faceNormal[3 * f] = nx / inv;
+    faceNormal[3 * f + 1] = ny / inv;
+    faceNormal[3 * f + 2] = nz / inv;
+  }
+  return { faceNormal, faceArea };
+}
+
+// Map each face corner to a coarse (1µm) position key, and index the faces
+// incident to each key. Used by the angle-based smoother to find the
+// neighbouring faces at a vertex — across hairline weld seams included.
+function buildCornerAdjacency(
+  verts: Float32Array,
+  indices: Uint32Array,
+): { incidentByCorner: Map<string, number[]>; cornerKey: string[] } {
+  const PQ = 1e3; // 1µm grid
+  const faceCount = indices.length / 3;
+  const cornerKey = new Array<string>(faceCount * 3);
+  const incidentByCorner = new Map<string, number[]>();
+  for (let f = 0; f < faceCount; f++) {
+    for (let k = 0; k < 3; k++) {
+      const vi = indices[3 * f + k] * 3;
+      const key = `${Math.round(verts[vi] * PQ)},${Math.round(verts[vi + 1] * PQ)},${Math.round(verts[vi + 2] * PQ)}`;
+      cornerKey[3 * f + k] = key;
+      let arr = incidentByCorner.get(key);
+      if (!arr) {
+        arr = [];
+        incidentByCorner.set(key, arr);
+      }
+      arr.push(f);
     }
   }
-  for (let i = 0; i < n.length; i += 3) {
-    const l = Math.hypot(n[i], n[i + 1], n[i + 2]) || 1;
-    n[i] /= l;
-    n[i + 1] /= l;
-    n[i + 2] /= l;
-  }
-  return n;
+  return { incidentByCorner, cornerKey };
 }
 
 // Split the welded mesh into connected components (groups of faces joined
@@ -212,7 +238,7 @@ function classifyFaces(
   verts: Float32Array,
   indices: Uint32Array,
   components: number[][],
-): { bodyIndices: Uint32Array; barIndices: Uint32Array } {
+): { bodyFaces: number[]; barFaces: number[] } {
   const parts = components.map((faces) => ({ faces, ...partExtents(verts, indices, faces) }));
   let largest = parts[0];
   for (const p of parts) if (p.vol > largest.vol) largest = p;
@@ -223,18 +249,71 @@ function classifyFaces(
     const isBar = isSpringBar(p.ext, p === largest);
     (isBar ? barFaces : bodyFaces).push(...p.faces);
   }
+  return { bodyFaces, barFaces };
+}
 
-  const toIndices = (faces: number[]) => {
-    const arr = new Uint32Array(faces.length * 3);
-    for (let i = 0; i < faces.length; i++) {
-      const f = faces[i];
-      arr[3 * i] = indices[3 * f];
-      arr[3 * i + 1] = indices[3 * f + 1];
-      arr[3 * i + 2] = indices[3 * f + 2];
+// Angle-based ("auto-smooth") normals. Naive smoothing averages face normals
+// across *every* shared edge, which rounds off the buckle's sharp 90° edges and
+// leaves view-dependent, jagged-looking shading along them. Instead we average
+// only across edges whose dihedral angle is below a threshold: gentle fillets
+// stay smooth, genuine hard edges stay crisp. Output is non-indexed (one normal
+// per face corner) so a single vertex can carry a different normal on each side
+// of a hard edge.
+//
+// Adjacency is keyed by a coarse position grid (1µm) rather than the welded
+// index, so two faces meeting at a hairline float seam (common in CAD STL
+// exports — the same point written as 1.00004 vs 1.00006) are still recognised
+// as sharing the edge and get smoothed together. That seam is itself a frequent
+// cause of a hard shading line that reads as "jagged" on one side only.
+const SMOOTH_ANGLE_DEG = 40;
+
+function buildSmoothedPrimitive(
+  verts: Float32Array,
+  indices: Uint32Array,
+  faceList: number[],
+  faceNormal: Float32Array,
+  faceArea: Float32Array,
+  incidentByCorner: Map<string, number[]>,
+  cornerKey: string[],
+): { positions: Float32Array; normals: Float32Array } {
+  const cosThreshold = Math.cos((SMOOTH_ANGLE_DEG * Math.PI) / 180);
+  const positions = new Float32Array(faceList.length * 9);
+  const normals = new Float32Array(faceList.length * 9);
+  for (let i = 0; i < faceList.length; i++) {
+    const f = faceList[i];
+    const fnx = faceNormal[3 * f],
+      fny = faceNormal[3 * f + 1],
+      fnz = faceNormal[3 * f + 2];
+    for (let k = 0; k < 3; k++) {
+      const vi = indices[3 * f + k] * 3;
+      const o = i * 9 + k * 3;
+      positions[o] = verts[vi];
+      positions[o + 1] = verts[vi + 1];
+      positions[o + 2] = verts[vi + 2];
+      // Average the incident faces whose normal is within the smoothing angle
+      // of this face (area-weighted). Faces across a hard edge are excluded, so
+      // the edge stays crisp.
+      let sx = 0,
+        sy = 0,
+        sz = 0;
+      for (const g of incidentByCorner.get(cornerKey[3 * f + k]) ?? [f]) {
+        const gx = faceNormal[3 * g],
+          gy = faceNormal[3 * g + 1],
+          gz = faceNormal[3 * g + 2];
+        if (gx * fnx + gy * fny + gz * fnz >= cosThreshold) {
+          const w = faceArea[g];
+          sx += gx * w;
+          sy += gy * w;
+          sz += gz * w;
+        }
+      }
+      const l = Math.hypot(sx, sy, sz) || 1;
+      normals[o] = sx / l;
+      normals[o + 1] = sy / l;
+      normals[o + 2] = sz / l;
     }
-    return arr;
-  };
-  return { bodyIndices: toIndices(bodyFaces), barIndices: toIndices(barFaces) };
+  }
+  return { positions, normals };
 }
 
 export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
@@ -242,24 +321,49 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   if (flat.length === 0) throw new Error("STL contains no geometry.");
   const { verts, indices } = weld(flat);
   layFlat(verts);
-  const normals = computeSmoothNormals(verts, indices);
+  const { faceNormal, faceArea } = computeFaceData(verts, indices);
+  const { incidentByCorner, cornerKey } = buildCornerAdjacency(verts, indices);
   const components = splitComponents(verts.length / 3, indices);
-  const { bodyIndices, barIndices } = classifyFaces(verts, indices, components);
+  const { bodyFaces, barFaces } = classifyFaces(verts, indices, components);
 
   const doc = new Document();
   const buffer = doc.createBuffer();
-  const pos = doc
-    .createAccessor()
-    .setType("VEC3")
-    .setArray(verts as Float32Array<ArrayBuffer>)
-    .setBuffer(buffer);
-  const nrm = doc
-    .createAccessor()
-    .setType("VEC3")
-    .setArray(normals as Float32Array<ArrayBuffer>)
-    .setBuffer(buffer);
-
   const mesh = doc.createMesh();
+
+  // Add one non-indexed primitive (angle-smoothed per-corner normals) for a set
+  // of faces under a material.
+  const addPart = (
+    faces: number[],
+    mat: ReturnType<Document["createMaterial"]>,
+  ) => {
+    if (faces.length === 0) return;
+    const { positions, normals } = buildSmoothedPrimitive(
+      verts,
+      indices,
+      faces,
+      faceNormal,
+      faceArea,
+      incidentByCorner,
+      cornerKey,
+    );
+    const pos = doc
+      .createAccessor()
+      .setType("VEC3")
+      .setArray(positions as Float32Array<ArrayBuffer>)
+      .setBuffer(buffer);
+    const nrm = doc
+      .createAccessor()
+      .setType("VEC3")
+      .setArray(normals as Float32Array<ArrayBuffer>)
+      .setBuffer(buffer);
+    mesh.addPrimitive(
+      doc
+        .createPrimitive()
+        .setAttribute("POSITION", pos)
+        .setAttribute("NORMAL", nrm)
+        .setMaterial(mat),
+    );
+  };
 
   // Body — named so the viewer can recolor it per finish. Baked with the
   // default finish so the stored GLB looks right un-recolored.
@@ -269,40 +373,16 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
     .setBaseColorFactor([...body.baseColor, 1])
     .setMetallicFactor(body.metallic)
     .setRoughnessFactor(body.roughness);
-  const bodyIdx = doc
-    .createAccessor()
-    .setType("SCALAR")
-    .setArray(bodyIndices as Uint32Array<ArrayBuffer>)
-    .setBuffer(buffer);
-  mesh.addPrimitive(
-    doc
-      .createPrimitive()
-      .setAttribute("POSITION", pos)
-      .setAttribute("NORMAL", nrm)
-      .setIndices(bodyIdx)
-      .setMaterial(bodyMat),
-  );
+  addPart(bodyFaces, bodyMat);
 
   // Spring bars — always silver, never recolored.
-  if (barIndices.length > 0) {
+  if (barFaces.length > 0) {
     const barMat = doc
       .createMaterial(SPRING_BAR_MATERIAL_NAME)
       .setBaseColorFactor([...SPRING_BAR.baseColor, 1])
       .setMetallicFactor(SPRING_BAR.metallic)
       .setRoughnessFactor(SPRING_BAR.roughness);
-    const barIdx = doc
-      .createAccessor()
-      .setType("SCALAR")
-      .setArray(barIndices as Uint32Array<ArrayBuffer>)
-      .setBuffer(buffer);
-    mesh.addPrimitive(
-      doc
-        .createPrimitive()
-        .setAttribute("POSITION", pos)
-        .setAttribute("NORMAL", nrm)
-        .setIndices(barIdx)
-        .setMaterial(barMat),
-    );
+    addPart(barFaces, barMat);
   }
 
   const node = doc.createNode().setMesh(mesh);
