@@ -280,12 +280,6 @@ export default async function DashboardPage({
     whole > 0
       ? `${((part / whole) * 100).toFixed(1)}% of ${segmentDenomLabel}`
       : "—";
-  // Avg orders per customer for the SELECTED period: orders ÷ distinct
-  // customers, both already scoped to the date filter. Widening the range pulls
-  // in more repeat orders from the same buyers, so this rises with the window
-  // (≈1.0 over a single day, the all-time figure over "All").
-  const avgOrdersPerCustomer =
-    totalCustomers > 0 ? totalOrders / totalCustomers : 0;
 
   // ── Customer value & retention (scoped to the selected date range) ─────
   // Net revenue per customer over orders in range — the assumption-free measure
@@ -643,18 +637,6 @@ export default async function DashboardPage({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-zinc-100 pb-3">
-            <span className="text-sm font-medium text-zinc-900">
-              Avg orders / customer (selected period)
-            </span>
-            <span className="text-sm text-zinc-700">
-              <Mono>{avgOrdersPerCustomer.toFixed(2)}</Mono>
-              <span className="ml-2 text-xs text-zinc-400">
-                {totalOrders.toLocaleString()} orders ÷{" "}
-                {totalCustomers.toLocaleString()} customers
-              </span>
-            </span>
-          </div>
           {isGraph ? (
             <CustomerValueChart data={customerValueData} segment={segment} />
           ) : (

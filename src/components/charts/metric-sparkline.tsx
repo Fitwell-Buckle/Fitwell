@@ -3,6 +3,7 @@
 import {
   LineChart,
   Line,
+  XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
@@ -85,6 +86,9 @@ export function MetricSparkline({
     <div>
       <ResponsiveContainer width="100%" height={72}>
         <LineChart data={data} margin={{ top: 6, right: 4, left: 4, bottom: 0 }}>
+          {/* Hidden, but binds the tooltip header to the bucket label (e.g.
+              "Apr 26") instead of falling back to the row index. */}
+          <XAxis dataKey="label" hide />
           <YAxis yAxisId="value" hide domain={["dataMin", "dataMax"]} />
           {showPct && (
             <YAxis yAxisId="pct" hide domain={["dataMin", "dataMax"]} />
