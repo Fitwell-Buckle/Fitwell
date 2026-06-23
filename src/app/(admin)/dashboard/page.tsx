@@ -244,6 +244,10 @@ export default async function DashboardPage({
   const returnCustomers = returnsResult[0]?.customers ?? 0;
   const avgReturnValue =
     returnOrders > 0 ? Math.round(totalReturns / returnOrders) : 0;
+  // Each return metric as a share of its sales counterpart (e.g. returns ÷
+  // total sales). "—" when the denominator is 0 to avoid a divide-by-zero.
+  const pctOf = (part: number, whole: number) =>
+    whole > 0 ? `${((part / whole) * 100).toFixed(1)}% of total` : "—";
   // Avg orders per customer for the SELECTED period: orders ÷ distinct
   // customers, both already scoped to the date filter. Widening the range pulls
   // in more repeat orders from the same buyers, so this rises with the window
@@ -512,10 +516,26 @@ export default async function DashboardPage({
       </div>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Total returns" value={fmt(totalReturns)} />
-        <MetricCard label="Orders refunded" value={returnOrders.toLocaleString()} />
-        <MetricCard label="Customers refunded" value={returnCustomers.toLocaleString()} />
-        <MetricCard label="Avg Return Value" value={fmt(avgReturnValue)} />
+        <MetricCard
+          label="Total returns"
+          value={fmt(totalReturns)}
+          caption={pctOf(totalReturns, totalRevenue)}
+        />
+        <MetricCard
+          label="Orders refunded"
+          value={returnOrders.toLocaleString()}
+          caption={pctOf(returnOrders, totalOrders)}
+        />
+        <MetricCard
+          label="Customers refunded"
+          value={returnCustomers.toLocaleString()}
+          caption={pctOf(returnCustomers, totalCustomers)}
+        />
+        <MetricCard
+          label="Avg Return Value"
+          value={fmt(avgReturnValue)}
+          caption={pctOf(avgReturnValue, avgOrderValue)}
+        />
       </div>
 
       <Card className="mt-8">

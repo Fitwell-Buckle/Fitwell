@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 interface MetricCardProps {
   label: string;
   value: string;
+  /** Small muted line under the value, e.g. a percentage of another metric. */
+  caption?: string;
   trend?: {
     value: number;
     direction: "up" | "down";
@@ -10,7 +12,13 @@ interface MetricCardProps {
   className?: string;
 }
 
-export function MetricCard({ label, value, trend, className }: MetricCardProps) {
+export function MetricCard({
+  label,
+  value,
+  caption,
+  trend,
+  className,
+}: MetricCardProps) {
   return (
     <div
       className={cn(
@@ -24,6 +32,9 @@ export function MetricCard({ label, value, trend, className }: MetricCardProps) 
       <p className="mt-2 font-mono text-3xl font-medium tracking-tight text-zinc-900">
         {value}
       </p>
+      {caption && (
+        <p className="mt-1.5 text-xs font-medium text-zinc-400">{caption}</p>
+      )}
       {trend && (
         <p
           className={cn(
