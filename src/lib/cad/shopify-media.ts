@@ -105,6 +105,38 @@ export async function pushModelToShopify(opts: {
   return { mediaId: media.id, status: media.status };
 }
 
+// Every 3D-model media id currently on a product. Used to fully clear prior
+// pushes (including ones from before we tracked/deleted media), so a recolored
+// re-push leaves exactly one model behind.
+export async function listProductModelMediaIds(
+  productId: string,
+): Promise<string[]> {
+  const client = getShopifyClient();
+  const productGid = productId.startsWith("gid://")
+    ? productId
+    : `gid://shopify/Product/${productId}`;
+  try {
+    const data = await client.graphql<{
+      product: {
+        media: { nodes: { id: string; mediaContentType: string }[] };
+      } | null;
+    }>(
+      `query productModelMedia($id: ID!) {
+        product(id: $id) {
+          media(first: 50) { nodes { id mediaContentType } }
+        }
+      }`,
+      { id: productGid },
+    );
+    return (data.product?.media.nodes ?? [])
+      .filter((n) => n.mediaContentType === "MODEL_3D")
+      .map((n) => n.id);
+  } catch (err) {
+    console.error("listProductModelMediaIds failed:", err);
+    return [];
+  }
+}
+
 // Remove a 3D media from a product (used to replace a prior push so re-pushing a
 // recolored model doesn't pile a second viewer onto the product). Best-effort:
 // reports user errors but never throws so it can't fail the surrounding push.

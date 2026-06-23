@@ -3,7 +3,11 @@ import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cadModel, productCadModel } from "@/lib/schema";
 import { getCatalogCached } from "@/lib/catalog/load";
-import { pushModelToShopify, deleteProductMedia } from "./shopify-media";
+import {
+  pushModelToShopify,
+  deleteProductMedia,
+  listProductModelMediaIds,
+} from "./shopify-media";
 import { applyFinishToGlb } from "./stl-to-glb";
 import { matchFinish } from "./finishes";
 
@@ -103,14 +107,19 @@ export async function pushToShopify(
     alt: link.modelName ?? sku,
   });
 
-  // Replace any earlier push for this SKU so the product doesn't accumulate a
-  // stale (e.g. silver) viewer alongside the new one. Done after the new media
-  // is created so a delete failure can't leave the product with no model.
-  if (link.shopifyMediaId && link.shopifyMediaId !== mediaId) {
-    await deleteProductMedia({
-      productId: variant.shopifyProductId,
-      mediaId: link.shopifyMediaId,
-    });
+  // Remove EVERY other 3D model on the product so a recolored re-push fully
+  // replaces them — not just the one id we last tracked. Earlier pushes (before
+  // this cleanup existed) can leave stale silver models behind that the
+  // storefront then shows instead of the new one. Done after the new media is
+  // created so a delete failure can't leave the product with no model.
+  const priorMediaIds = await listProductModelMediaIds(variant.shopifyProductId);
+  for (const priorId of priorMediaIds) {
+    if (priorId !== mediaId) {
+      await deleteProductMedia({
+        productId: variant.shopifyProductId,
+        mediaId: priorId,
+      });
+    }
   }
 
   await db
