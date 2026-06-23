@@ -778,16 +778,20 @@ Resolution + host-allowlist (`a360.co` / `*.autodesk360.com`) live in
 
 ### CAD Models (public 3D viewer)
 
-A reusable CAD library that powers the public spinnable 3D product viewer. An
-uploaded **STL** (exported from Autodesk Fusion) is auto-converted **server-side
-in pure Node** to a metallic **GLB** (`src/lib/cad/stl-to-glb.ts` — weld, smooth
-normals, auto lay-flat; no Python/browser). Geometry is shared: many SKUs (color
-variants) point at one `cad_model`, so each geometry is uploaded + converted
-once. GLBs are served from Vercel Blob (CSP `connect-src` allows
-`*.public.blob.vercel-storage.com`; `<model-viewer>` needs it). Admin UI is the
-**CAD Models** tab on Products (`/products/cad-models`); SKUs link a model +
-publish on `/products/[sku]` (public `/3d/[sku]` viewer + Shopify 3D media).
-Migration `0083_complete_ironclad`.
+A reusable CAD library that powers the spinnable 3D product viewer. An uploaded
+**STL** (exported from Autodesk Fusion) is auto-converted **server-side in pure
+Node** to a **GLB** (`src/lib/cad/stl-to-glb.ts` — weld, smooth normals, auto
+lay-flat; no Python/browser). The converter **splits the mesh into connected
+components** and emits **two materials**: `body` (recolorable) and `spring_bar`
+(always silver — the rod through the pin, detected as the elongated non-largest
+piece). **Finishes** (`src/lib/cad/finishes.ts`: Black/Yellow-Gold/Rose-Gold/
+Titanium glossy + Matte Titanium/Steel) recolor the `body` material at runtime in
+`<model-viewer>`; the spring bar never changes. Geometry is shared: many SKUs
+(color variants) point at one `cad_model`. GLBs are served from Vercel Blob (CSP
+`connect-src` allows `*.public.blob.vercel-storage.com`; `<model-viewer>` needs
+it). Admin UI is the **CAD Models** tab on Products (`/products/cad-models`); SKUs
+link a model on `/products/[sku]` and push to Shopify 3D media. Migration
+`0083_complete_ironclad`.
 
 #### `cad_model`
 

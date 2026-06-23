@@ -61,30 +61,6 @@ export async function linkCadModel(sku: string, cadModelId: string | null) {
     });
 }
 
-// Publish the linked model to the in-app public per-SKU viewer. Requires a
-// linked, ready model with a GLB.
-export async function publishToWebsite(sku: string) {
-  const link = await getProductCadModel(sku);
-  if (!link?.cadModelId) {
-    throw new Error("Link a CAD model to this SKU first.");
-  }
-  if (link.modelStatus !== "ready" || !link.glbUrl) {
-    throw new Error("That CAD model has no finished 3D model yet.");
-  }
-  await db
-    .update(productCadModel)
-    .set({ publishedToWebsiteAt: new Date(), updatedAt: new Date() })
-    .where(eq(productCadModel.sku, sku));
-  return { glbUrl: link.glbUrl };
-}
-
-export async function unpublishFromWebsite(sku: string) {
-  await db
-    .update(productCadModel)
-    .set({ publishedToWebsiteAt: null, updatedAt: new Date() })
-    .where(eq(productCadModel.sku, sku));
-}
-
 // Push the SKU's linked model to its Shopify product as native 3D media.
 // Resolves the Shopify product from the SKU via the catalog. Writes to the
 // live storefront, so it's a deliberate, separate action from the in-app
@@ -128,12 +104,3 @@ export async function pushToShopify(
   return { mediaId, status };
 }
 
-// For the public /3d/[sku] page: the GLB to show, only if published + ready.
-export async function getPublishedModelForSku(
-  sku: string,
-): Promise<{ glbUrl: string; name: string } | null> {
-  const link = await getProductCadModel(sku);
-  if (!link || !link.publishedToWebsiteAt) return null;
-  if (link.modelStatus !== "ready" || !link.glbUrl) return null;
-  return { glbUrl: link.glbUrl, name: link.modelName ?? sku };
-}

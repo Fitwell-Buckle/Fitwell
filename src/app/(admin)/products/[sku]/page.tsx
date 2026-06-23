@@ -159,17 +159,11 @@ export default async function ProductDetailPage({
           glbUrl: m.glbUrl,
         }))}
         initialCadModelId={cadLink?.cadModelId ?? null}
-        publishedAt={
-          cadLink?.publishedToWebsiteAt
-            ? cadLink.publishedToWebsiteAt.toISOString()
-            : null
-        }
         shopifyPublishedAt={
           cadLink?.shopifyPublishedAt
             ? cadLink.shopifyPublishedAt.toISOString()
             : null
         }
-        publicPath={`/3d/${encodeURIComponent(sku)}`}
       />
 
       <Card className="mt-5 p-6">

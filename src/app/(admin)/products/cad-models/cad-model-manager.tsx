@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/ui/delete-button";
-import { ModelViewer } from "@/components/marketing/model-viewer";
+import { FinishViewer } from "@/components/cad/finish-viewer";
 
 interface CadModelItem {
   id: string;
@@ -260,24 +260,24 @@ function ModelCard({ model }: { model: CadModelItem }) {
         <p className="px-4 pb-2 text-sm text-red-600">{model.errorMessage}</p>
       )}
 
-      <div className="aspect-[16/9] w-full border-t border-zinc-100 bg-gradient-to-b from-zinc-50 to-zinc-100">
-        {model.glbUrl ? (
-          <ModelViewer
-            src={model.glbUrl}
-            alt={`${model.name} 3D model`}
-            cameraOrbit="-45deg 55deg auto"
-          />
-        ) : model.status === "awaiting_export" ? (
-          <div className="flex h-full items-center justify-center text-amber-600">
-            <Sparkles className="mr-2 h-5 w-5 animate-pulse" /> Waiting for the
-            Autodesk export email, then converting automatically…
-          </div>
-        ) : (
-          <div className="flex h-full items-center justify-center text-zinc-400">
-            <Box className="mr-2 h-5 w-5" /> Generate from Fusion or upload an STL
-          </div>
-        )}
-      </div>
+      {model.glbUrl ? (
+        <div className="border-t border-zinc-100 p-4">
+          <FinishViewer src={model.glbUrl} alt={`${model.name} 3D model`} />
+        </div>
+      ) : (
+        <div className="aspect-[16/9] w-full border-t border-zinc-100 bg-gradient-to-b from-zinc-50 to-zinc-100">
+          {model.status === "awaiting_export" ? (
+            <div className="flex h-full items-center justify-center text-amber-600">
+              <Sparkles className="mr-2 h-5 w-5 animate-pulse" /> Waiting for the
+              Autodesk export email, then converting automatically…
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center text-zinc-400">
+              <Box className="mr-2 h-5 w-5" /> Generate from Fusion or upload an STL
+            </div>
+          )}
+        </div>
+      )}
     </Card>
   );
 }

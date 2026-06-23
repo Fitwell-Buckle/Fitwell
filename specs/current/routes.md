@@ -13,7 +13,6 @@ Last updated: 2026-06-01
 | `/creator-signup` | Influencer/creator self-registration form — name + **email and/or phone-WhatsApp (at least one required)** + **multiple** social profiles (add/remove rows; platform dropdown incl. **Other → free-text platform name + domain**, which builds a clickable profile URL). Shareable link sent to creators; submissions land in `/creators` as `source=self_registration`, `vettingStatus=unreviewed` for the team to vet (no admin data entry), and fire a team notification + email. Honeypot-guarded | None |
 | `/privacy` | Privacy policy | None |
 | `/terms` | Terms of service | None |
-| `/3d/[sku]` | Public, chrome-free auto-spinning 3D viewer for a SKU's published CAD model (404 until published from the product page). `/buckle-viewer` is a standalone demo of the same viewer | None |
 
 All marketing pages include PostHog tracking and UTM parameter capture.
 
@@ -185,7 +184,6 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | POST | `/api/cad-models/[id]/fusion-export` | **Generate from Fusion** — fire Autodesk's STL export to the admin's email (server-side GET), set status `awaiting_export`. The cron reads it back and converts |
 | GET | `/api/cron/process-cad-exports` | Cron (every 10 min) + admin-nudged: find the Autodesk export email in the requester's Gmail, download the STL, convert. `verifyCronOrAdmin` |
 | PUT | `/api/products/[sku]/cad-model` | Link (or unlink with null) a SKU to a saved CAD model |
-| POST / DELETE | `/api/products/[sku]/cad-model/publish` | Publish (or unpublish) the SKU's model to the public in-app `/3d/[sku]` viewer |
 | POST | `/api/products/[sku]/cad-model/shopify` | Push the SKU's model to its Shopify product as native 3D media (`stagedUploadsCreate` → upload → `productCreateMedia`, `write_products`). Writes to the live storefront |
 | GET / POST | `/api/notifications` | Admin notification inbox — unread count (GET) + mark read (POST `{id}` or `{all}`); admin-only (suppliers/companies 403). Excludes supplier-bound rows |
 | GET / POST | `/api/supplier/notifications` | Supplier notification inbox — unread count (GET) + mark read (POST `{id}`/`{all}`); scoped to the signed-in supplier |

@@ -2,7 +2,27 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { stlToGlb } from "./stl-to-glb";
+import { stlToGlb, isSpringBar } from "./stl-to-glb";
+
+describe("isSpringBar (spring-bar detection)", () => {
+  it("flags true rods (thin in two dims, elongated)", () => {
+    expect(isSpringBar([1.8, 5.4, 1.8], false)).toBe(true); // 18mm spring bar
+    expect(isSpringBar([1.8, 20, 1.79], false)).toBe(true); // 16mm spring bar
+  });
+
+  it("rejects flat prongs/tangs (thin in only one dim)", () => {
+    // 16mm M1 prong — elongated (3.1) but NOT rod-like (roundness 2.3).
+    expect(isSpringBar([12.59, 1.75, 4.01], false)).toBe(false);
+  });
+
+  it("rejects chunky connectors (not elongated)", () => {
+    expect(isSpringBar([3.52, 3, 3.25], false)).toBe(false);
+  });
+
+  it("never flags the largest component (the body)", () => {
+    expect(isSpringBar([1.8, 20, 1.79], true)).toBe(false);
+  });
+});
 
 // Build a minimal binary STL with `tris` triangles (a fan of distinct verts).
 function makeBinaryStl(tris: { v: number[][] }[]): Uint8Array {

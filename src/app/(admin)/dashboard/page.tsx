@@ -3,14 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import {
-  order,
-  orderLineItem,
-  customer,
-  metaAdsDaily,
-  googleAdsDaily,
-} from "@/lib/schema";
-import { sql, eq, desc, count, sum, gte, lte, lt, and } from "drizzle-orm";
+import { order, orderLineItem, customer } from "@/lib/schema";
+import { sql, eq, desc, count, gte, lte, lt, and } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
 import { getDashboardSettings } from "@/lib/dashboard/settings";
 import { STORE_TZ } from "@/lib/timezone";
@@ -25,8 +19,7 @@ import {
   type RepeatTiming,
 } from "@/lib/analytics/repeat-windows";
 import { MetricCard } from "@/components/charts/metric-card";
-import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart";
-import { AdSpendRevenueChart } from "@/components/charts/ad-spend-revenue-chart";
+import { DashboardViewToggle } from "./view-toggle";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
@@ -64,6 +57,9 @@ export default async function DashboardPage({
 
   const params = await searchParams;
   const { from, to, granularity } = parseDateRange(params);
+  // Table (numbers) vs graph (per-tile line charts), driven by the top-bar
+  // toggle. Each tile renders the same metric either way.
+  const isGraph = params.view === "graph";
 
   // Bucket by the STORE timezone so the daily trend lines up with Shopify
   // (whose reports use the store day). Without `AT TIME ZONE`, evening-Pacific
@@ -397,149 +393,137 @@ export default async function DashboardPage({
     };
   });
 
-  // ── Chart data: Revenue trend + Ad Spend vs Revenue ──────────────
-  const [revenueByBucket, metaByBucket, googleByBucket, orderRevenueByBucket] =
-    await Promise.all([
-      db
-        .select({
-          bucket: bucketExpr,
-          channel: sql<string>`CASE
-            WHEN ${order.sourceName} != 'web' THEN 'wholesale'
-            WHEN ${order.landingSite} ILIKE '%utm_source=meta%' OR ${order.landingSite} ILIKE '%utm_source=ig%' OR ${order.landingSite} ILIKE '%utm_source=fb%' OR ${order.landingSite} ILIKE '%utm_source=instagram%' OR ${order.referringSite} ILIKE '%facebook.com%' OR ${order.referringSite} ILIKE '%instagram.com%' THEN 'meta'
-            WHEN ${order.landingSite} ILIKE '%gad_source%' OR ${order.landingSite} ILIKE '%gclid%' OR ${order.landingSite} ILIKE '%utm_source=google%' THEN 'google'
-            ELSE 'organic'
-          END`,
-          revenue: netSales,
-        })
-        .from(order)
-        .where(
-          and(
-            notCancelled,
-            gte(order.processedAt, from),
-            lte(order.processedAt, to),
-          ),
-        )
-        .groupBy(bucketExpr, sql`CASE
-            WHEN ${order.sourceName} != 'web' THEN 'wholesale'
-            WHEN ${order.landingSite} ILIKE '%utm_source=meta%' OR ${order.landingSite} ILIKE '%utm_source=ig%' OR ${order.landingSite} ILIKE '%utm_source=fb%' OR ${order.landingSite} ILIKE '%utm_source=instagram%' OR ${order.referringSite} ILIKE '%facebook.com%' OR ${order.referringSite} ILIKE '%instagram.com%' THEN 'meta'
-            WHEN ${order.landingSite} ILIKE '%gad_source%' OR ${order.landingSite} ILIKE '%gclid%' OR ${order.landingSite} ILIKE '%utm_source=google%' THEN 'google'
-            ELSE 'organic'
-          END`)
-        .orderBy(bucketExpr),
-      db
-        .select({
-          bucket: sql`date_trunc('${sql.raw(granularity)}', ${metaAdsDaily.date})::date`,
-          spend: sum(metaAdsDaily.cost).mapWith(Number),
-        })
-        .from(metaAdsDaily)
-        .where(and(gte(metaAdsDaily.date, from), lte(metaAdsDaily.date, to)))
-        .groupBy(
-          sql`date_trunc('${sql.raw(granularity)}', ${metaAdsDaily.date})::date`,
-        ),
-      db
-        .select({
-          bucket: sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
-          spend: sum(googleAdsDaily.cost).mapWith(Number),
-        })
-        .from(googleAdsDaily)
-        .where(
-          and(gte(googleAdsDaily.date, from), lte(googleAdsDaily.date, to)),
-        )
-        .groupBy(
-          sql`date_trunc('${sql.raw(granularity)}', ${googleAdsDaily.date})::date`,
-        ),
-      db
-        .select({
-          bucket: bucketExpr,
-          revenue: netSales,
-        })
-        .from(order)
-        .where(
-          and(
-            notCancelled,
-            gte(order.processedAt, from),
-            lte(order.processedAt, to),
-            sql`${order.sourceName} = 'web'`,
-          ),
-        )
-        .groupBy(bucketExpr)
-        .orderBy(bucketExpr),
-    ]);
-
-  // Build revenue trend data by channel
+  // ── Per-tile time series (graph view) ────────────────────────────
+  // One bucketed pass over the SAME orders the tiles count (notCancelled +
+  // notSample, in range), so each tile's line chart reconciles with its number.
   const bucketKeys = generateBucketKeys(from, to, granularity);
-  const revenueMap = new Map<string, { wholesale: number; organic: number; meta: number; google: number }>();
-  for (const key of bucketKeys) {
-    revenueMap.set(key, { wholesale: 0, organic: 0, meta: 0, google: 0 });
-  }
-  for (const row of revenueByBucket) {
-    const key = dateToBucketKey(new Date(row.bucket as string), granularity);
-    const entry = revenueMap.get(key) ?? { wholesale: 0, organic: 0, meta: 0, google: 0 };
-    const channel = (row.channel as string) ?? "organic";
-    if (channel in entry) entry[channel as keyof typeof entry] += row.revenue ?? 0;
-    revenueMap.set(key, entry);
-  }
-  const revenueTrendData = bucketKeys.map((key) => ({
-    bucket: key,
-    label: formatBucketLabel(key, granularity),
-    ...revenueMap.get(key)!,
-  }));
+  // D2C (online) only — Trade Show (POS) + B2B (wholesale) excluded. These are
+  // the per-bucket denominators for the returns tiles' "% of D2C" line, so they
+  // track the same definition as the headline captions.
+  const isD2c = sql`${order.sourceName} IS DISTINCT FROM 'shopify_draft_order' AND ${order.sourceName} IS DISTINCT FROM 'pos'`;
+  const metricsByBucket = await db
+    .select({
+      bucket: bucketExpr,
+      sales: netSales,
+      orders: count(),
+      customers: sql<number>`count(distinct ${order.customerId})`.mapWith(Number),
+      returns: sql<number>`COALESCE(SUM(${order.totalRefunded}), 0)`.mapWith(Number),
+      ordersRefunded: sql<number>`COUNT(*) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
+      customersRefunded:
+        sql<number>`COUNT(DISTINCT ${order.customerId}) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
+      d2cSales: sql<number>`COALESCE(SUM(${order.totalPrice} - ${order.totalRefunded}) FILTER (WHERE ${isD2c}), 0)`.mapWith(Number),
+      d2cOrders: sql<number>`COUNT(*) FILTER (WHERE ${isD2c})`.mapWith(Number),
+      d2cCustomers: sql<number>`COUNT(DISTINCT ${order.customerId}) FILTER (WHERE ${isD2c})`.mapWith(Number),
+    })
+    .from(order)
+    .where(
+      and(notCancelled, notSample, gte(order.processedAt, from), lte(order.processedAt, to)),
+    )
+    .groupBy(bucketExpr)
+    .orderBy(bucketExpr);
 
-  // Build ad spend vs revenue data
-  const metaSpendMap = new Map<string, number>();
-  for (const row of metaByBucket) {
-    metaSpendMap.set(
+  type MetricBucketRow = (typeof metricsByBucket)[number];
+  const metricRowByBucket = new Map<string, MetricBucketRow>();
+  for (const row of metricsByBucket) {
+    metricRowByBucket.set(
       dateToBucketKey(new Date(row.bucket as string), granularity),
-      row.spend ?? 0,
+      row,
     );
   }
-  const googleSpendMap = new Map<string, number>();
-  for (const row of googleByBucket) {
-    googleSpendMap.set(
-      dateToBucketKey(new Date(row.bucket as string), granularity),
-      row.spend ?? 0,
-    );
-  }
-  const orderRevenueMap = new Map<string, number>();
-  for (const row of orderRevenueByBucket) {
-    orderRevenueMap.set(
-      dateToBucketKey(new Date(row.bucket as string), granularity),
-      row.revenue ?? 0,
-    );
-  }
-  const adSpendRevenueData = bucketKeys.map((key) => {
-    const metaSpend = metaSpendMap.get(key) ?? 0;
-    const googleSpend = googleSpendMap.get(key) ?? 0;
-    const revenue = orderRevenueMap.get(key) ?? 0;
-    const totalSpend = metaSpend + googleSpend;
-    return {
-      bucket: key,
-      label: formatBucketLabel(key, granularity),
-      metaSpend,
-      googleSpend,
-      revenue,
-      roas: totalSpend > 0 ? revenue / totalSpend : 0,
-    };
-  });
+  const pct = (part: number, whole: number) =>
+    whole > 0 ? (part / whole) * 100 : 0;
+  // Zero-filled series across all buckets. `pctOf` (optional) adds the companion
+  // percentage line for the returns tiles.
+  const buildSeries = (
+    valueOf: (r: MetricBucketRow) => number,
+    pctOf?: (r: MetricBucketRow) => number,
+  ) =>
+    bucketKeys.map((key) => {
+      const r = metricRowByBucket.get(key);
+      return {
+        label: formatBucketLabel(key, granularity),
+        value: r ? valueOf(r) : 0,
+        ...(pctOf ? { pct: r ? pctOf(r) : 0 } : {}),
+      };
+    });
+  // Per-bucket derived metrics mirror the headline tile definitions exactly.
+  const bucketReturnsWithShipping = (r: MetricBucketRow) =>
+    Number(r.returns) + r.ordersRefunded * returnLabelCostCents;
+  const bucketAvgReturnValue = (r: MetricBucketRow) =>
+    r.ordersRefunded > 0
+      ? Math.round(bucketReturnsWithShipping(r) / r.ordersRefunded)
+      : 0;
+  const bucketD2cAov = (r: MetricBucketRow) =>
+    r.d2cOrders > 0 ? Math.round(Number(r.d2cSales) / r.d2cOrders) : 0;
+  const series = {
+    sales: buildSeries((r) => Number(r.sales)),
+    orders: buildSeries((r) => r.orders),
+    customers: buildSeries((r) => r.customers),
+    avgOrderValue: buildSeries((r) =>
+      r.orders > 0 ? Math.round(Number(r.sales) / r.orders) : 0,
+    ),
+    totalReturns: buildSeries(bucketReturnsWithShipping, (r) =>
+      pct(bucketReturnsWithShipping(r), Number(r.d2cSales)),
+    ),
+    ordersRefunded: buildSeries(
+      (r) => r.ordersRefunded,
+      (r) => pct(r.ordersRefunded, r.d2cOrders),
+    ),
+    customersRefunded: buildSeries(
+      (r) => r.customersRefunded,
+      (r) => pct(r.customersRefunded, r.d2cCustomers),
+    ),
+    avgReturnValue: buildSeries(bucketAvgReturnValue, (r) =>
+      pct(bucketAvgReturnValue(r), bucketD2cAov(r)),
+    ),
+  };
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title="Dashboard" />
-        {/* Fast path to the trade-show capture flow — the dashboard is where
-            you land on login, so this is the quickest way to a new lead. */}
-        <Button asChild size="lg">
-          <Link href="/leads/capture">
-            <Camera className="h-5 w-5" /> Capture Business Card
-          </Link>
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Table (numbers) vs graph (per-tile line charts). */}
+          <DashboardViewToggle />
+          {/* Fast path to the trade-show capture flow — the dashboard is where
+              you land on login, so this is the quickest way to a new lead. */}
+          <Button asChild size="lg">
+            <Link href="/leads/capture">
+              <Camera className="h-5 w-5" /> Capture Business Card
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Total sales" value={fmt(totalRevenue)} />
-        <MetricCard label="Orders" value={totalOrders.toLocaleString()} />
-        <MetricCard label="Customers" value={totalCustomers.toLocaleString()} />
-        <MetricCard label="Avg Order Value" value={fmt(avgOrderValue)} />
+        <MetricCard
+          label="Total sales"
+          value={fmt(totalRevenue)}
+          graph={isGraph}
+          series={series.sales}
+          seriesFormat="currency"
+        />
+        <MetricCard
+          label="Orders"
+          value={totalOrders.toLocaleString()}
+          graph={isGraph}
+          series={series.orders}
+          seriesFormat="number"
+        />
+        <MetricCard
+          label="Customers"
+          value={totalCustomers.toLocaleString()}
+          graph={isGraph}
+          series={series.customers}
+          seriesFormat="number"
+        />
+        <MetricCard
+          label="Avg Order Value"
+          value={fmt(avgOrderValue)}
+          graph={isGraph}
+          series={series.avgOrderValue}
+          seriesFormat="currency"
+        />
       </div>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -547,21 +531,37 @@ export default async function DashboardPage({
           label="Total returns"
           value={fmt(totalReturnsWithShipping)}
           caption={`${pctOf(totalReturnsWithShipping, d2cSales)} · incl. ${fmt(returnsLabelCost)} est. labels`}
+          graph={isGraph}
+          series={series.totalReturns}
+          seriesFormat="currency"
+          showPct
         />
         <MetricCard
           label="Orders refunded"
           value={returnOrders.toLocaleString()}
           caption={pctOf(returnOrders, d2cOrders)}
+          graph={isGraph}
+          series={series.ordersRefunded}
+          seriesFormat="number"
+          showPct
         />
         <MetricCard
           label="Customers refunded"
           value={returnCustomers.toLocaleString()}
           caption={pctOf(returnCustomers, d2cCustomers)}
+          graph={isGraph}
+          series={series.customersRefunded}
+          seriesFormat="number"
+          showPct
         />
         <MetricCard
           label="Avg Return Value"
           value={fmt(avgReturnValue)}
           caption={`${pctOf(avgReturnValue, d2cAvgOrderValue)} · incl. ${fmt(returnLabelCostCents)} est. label`}
+          graph={isGraph}
+          series={series.avgReturnValue}
+          seriesFormat="currency"
+          showPct
         />
       </div>
 
@@ -695,25 +695,6 @@ export default async function DashboardPage({
           </Table>
         </CardContent>
       </Card>
-
-      <div className="mt-8 grid gap-5 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Revenue Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RevenueTrendChart data={revenueTrendData} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Ad Spend vs Revenue</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <AdSpendRevenueChart data={adSpendRevenueData} />
-          </CardContent>
-        </Card>
-      </div>
 
       <Card className="mt-8">
         <CardHeader>
