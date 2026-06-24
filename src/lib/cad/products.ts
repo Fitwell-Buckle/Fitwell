@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cadModel, productCadModel } from "@/lib/schema";
 import { getCatalogCached } from "@/lib/catalog/load";
@@ -7,7 +7,6 @@ import {
   pushModelToShopify,
   deleteProductMedia,
   listProductModelMediaIds,
-  appendVariantMedia,
 } from "./shopify-media";
 import { applyFinishToGlb } from "./stl-to-glb";
 import { matchFinish } from "./finishes";
@@ -75,13 +74,20 @@ export interface PushResult {
   skipped: { sku: string; variantTitle: string | null; reason: string }[];
 }
 
-// Push 3D models for a product to its Shopify product as native 3D media — one
-// per size variant, each baked in that variant's colour and ASSOCIATED with its
-// variant so the storefront swaps the model when a shopper picks a size. The
-// caller passes any one SKU of the product; we resolve the whole product and
-// push every variant that has a linked, finished model. Writes to the live
-// storefront, so it's a deliberate, separate action from the in-app publish.
+// Push the SKU's linked model to its Shopify product as native 3D media, baked
+// in the SKU's colour. Shopify attaches 3D media at the PRODUCT level only —
+// models/video cannot be tied to a variant (only images can), so this is one
+// model per product, not per size. The previous per-variant attempt failed on
+// Shopify's "Non-image media cannot be attached to variants" — per-size
+// switching needs a custom theme integration instead (see notes). Writes to the
+// live storefront, so it's a deliberate, separate action from the in-app publish.
 export async function pushToShopify(sku: string): Promise<PushResult> {
+  const link = await getProductCadModel(sku);
+  if (!link?.cadModelId) throw new Error("Link a CAD model to this SKU first.");
+  if (link.modelStatus !== "ready" || !link.glbUrl) {
+    throw new Error("That CAD model has no finished 3D model yet.");
+  }
+
   const catalog = await getCatalogCached();
   const variant = catalog.find((v) => v.sku === sku);
   if (!variant?.shopifyProductId) {
@@ -89,107 +95,47 @@ export async function pushToShopify(sku: string): Promise<PushResult> {
   }
   const productId = variant.shopifyProductId;
 
-  // Every variant of this product (e.g. each size), and the CAD model linked to
-  // each. Color variants live in separate products, so a product's variants
-  // share a colour but differ by size — exactly the per-size model switch.
-  const productVariants = catalog.filter(
-    (v) => v.shopifyProductId === productId && v.sku,
-  );
-  const links = await db
-    .select({
-      sku: productCadModel.sku,
-      cadModelId: productCadModel.cadModelId,
-      glbUrl: cadModel.glbUrl,
-      status: cadModel.status,
-      name: cadModel.name,
-    })
-    .from(productCadModel)
-    .leftJoin(cadModel, eq(productCadModel.cadModelId, cadModel.id))
-    .where(
-      inArray(
-        productCadModel.sku,
-        productVariants.map((v) => v.sku),
-      ),
-    );
-  const linkBySku = new Map(links.map((l) => [l.sku, l]));
+  const res = await fetch(link.glbUrl);
+  if (!res.ok) throw new Error("Could not read the generated GLB.");
+  const storedGlb = new Uint8Array(await res.arrayBuffer());
 
-  const ready = productVariants
-    .map((v) => ({ v, link: linkBySku.get(v.sku) }))
-    .filter(
-      (x) => x.link?.cadModelId && x.link.status === "ready" && x.link.glbUrl,
-    );
-  if (ready.length === 0) {
-    throw new Error(
-      "Link a finished CAD model to at least one of this product's size variants first.",
-    );
-  }
+  // Bake this SKU's finish (the stored GLB is silver; the portal recolor is
+  // client-only, so Shopify needs it baked in).
+  const finishId =
+    matchFinish(
+      [variant.color, variant.title, variant.variantTitle]
+        .filter(Boolean)
+        .join(" "),
+    )?.id ?? null;
+  const glb = await applyFinishToGlb(storedGlb, finishId);
 
-  // Snapshot the product's existing 3D media so we can clear stale models (the
-  // old product-level model + any prior per-variant pushes) once the new ones
-  // are in place — leaving exactly one model per size.
+  const { mediaId } = await pushModelToShopify({
+    productId,
+    glb,
+    filename: `${sku.replace(/[^a-zA-Z0-9._-]/g, "_")}.glb`,
+    alt: link.modelName ?? sku,
+  });
+
+  // Replace every other model on the product (incl. junk left by the failed
+  // per-variant attempts) so exactly one clean model remains.
   const existingModelIds = await listProductModelMediaIds(productId);
-
-  const pushed: PushResult["pushed"] = [];
-  for (const { v, link } of ready) {
-    const res = await fetch(link!.glbUrl!);
-    if (!res.ok) continue;
-    const storedGlb = new Uint8Array(await res.arrayBuffer());
-
-    // Bake this variant's finish (the stored GLB is silver; the recolor is
-    // client-only in the portal, so Shopify needs it baked in).
-    const finishId =
-      matchFinish(
-        [v.color, v.title, v.variantTitle].filter(Boolean).join(" "),
-      )?.id ?? null;
-    const glb = await applyFinishToGlb(storedGlb, finishId);
-
-    const { mediaId } = await pushModelToShopify({
-      productId,
-      glb,
-      filename: `${v.sku.replace(/[^a-zA-Z0-9._-]/g, "_")}.glb`,
-      alt: `${link!.name ?? v.sku} — ${v.variantTitle ?? v.sku}`,
-    });
-    // Tie the model to this specific variant so selecting the size shows it.
-    await appendVariantMedia({
-      productId,
-      variantId: v.shopifyVariantId,
-      mediaIds: [mediaId],
-    });
-    pushed.push({ sku: v.sku, variantTitle: v.variantTitle, mediaId });
-  }
-
-  // Clear every model that existed before this push (legacy product-level model
-  // + superseded per-variant models). Deleting a media also drops its variant
-  // associations, so only the freshly associated models remain.
-  const keep = new Set(pushed.map((p) => p.mediaId));
   for (const id of existingModelIds) {
-    if (!keep.has(id)) await deleteProductMedia({ productId, mediaId: id });
+    if (id !== mediaId) await deleteProductMedia({ productId, mediaId: id });
   }
 
-  // Record per-variant publish state.
-  const now = new Date();
-  for (const p of pushed) {
-    await db
-      .update(productCadModel)
-      .set({
-        shopifyProductId: productId,
-        shopifyMediaId: p.mediaId,
-        shopifyPublishedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(productCadModel.sku, p.sku));
-  }
+  await db
+    .update(productCadModel)
+    .set({
+      shopifyProductId: productId,
+      shopifyMediaId: mediaId,
+      shopifyPublishedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(productCadModel.sku, sku));
 
-  const skipped: PushResult["skipped"] = productVariants
-    .filter((v) => !pushed.some((p) => p.sku === v.sku))
-    .map((v) => ({
-      sku: v.sku,
-      variantTitle: v.variantTitle,
-      reason: linkBySku.get(v.sku)?.cadModelId
-        ? "model not finished yet"
-        : "no model linked",
-    }));
-
-  return { pushed, skipped };
+  return {
+    pushed: [{ sku, variantTitle: variant.variantTitle, mediaId }],
+    skipped: [],
+  };
 }
 

@@ -141,9 +141,9 @@ export function ProductCadModelCard({
         >
           CAD library
         </Link>{" "}
-        (color variants share one model). Push sends a spinnable 3D viewer for{" "}
-        <strong>every size variant</strong> that has a model linked — each tied
-        to its variant so the storefront swaps the model per size.
+        (color variants share one model), then push its spinnable 3D viewer to
+        the Shopify product. Shopify shows one 3D model per product (it can&apos;t
+        attach models to individual size variants).
       </p>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       {notice && <p className="mt-2 text-sm text-green-700">{notice}</p>}
