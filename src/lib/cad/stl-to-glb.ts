@@ -1,11 +1,27 @@
 import "server-only";
 import { Document, WebIO } from "@gltf-transform/core";
+import { KHRMaterialsAnisotropy } from "@gltf-transform/extensions";
 import {
   BODY_MATERIAL_NAME,
+  BODY_BRUSHED_MATERIAL_NAME,
   SPRING_BAR_MATERIAL_NAME,
   SPRING_BAR,
+  BRUSHED,
   getFinish,
 } from "./finishes";
+
+// IO that preserves the KHR_materials_anisotropy extension on read/write — used
+// everywhere we (de)serialize a GLB, so the brushed material survives round-trips.
+function anisoIO(): WebIO {
+  return new WebIO().registerExtensions([KHRMaterialsAnisotropy]);
+}
+
+// Brushed roughness for a finish: the brushed top/sides keep their satin
+// roughness for glossy finishes, but go fully matte for the bead-blasted ones
+// (where there's no polish to contrast against).
+function brushedRoughnessFor(finish: ReturnType<typeof getFinish>): number {
+  return finish.group === "matte" ? finish.roughness : BRUSHED.roughness;
+}
 
 // Recolor a generated GLB's `body` material to a specific finish, returning new
 // GLB bytes. The stored GLB is baked with the default (silver) finish and the
@@ -17,7 +33,7 @@ export async function applyFinishToGlb(
   finishId: string | null,
 ): Promise<Uint8Array> {
   const finish = getFinish(finishId);
-  const io = new WebIO();
+  const io = anisoIO();
   const doc = await io.readBinary(glb);
   for (const mat of doc.getRoot().listMaterials()) {
     if (mat.getName() === BODY_MATERIAL_NAME) {
@@ -25,6 +41,13 @@ export async function applyFinishToGlb(
         .setBaseColorFactor([...finish.baseColor, 1])
         .setMetallicFactor(finish.metallic)
         .setRoughnessFactor(finish.roughness);
+    } else if (mat.getName() === BODY_BRUSHED_MATERIAL_NAME) {
+      // Brushed top/sides: finish colour, but keep the brushed (satin) roughness
+      // and the baked anisotropy (left untouched here).
+      mat
+        .setBaseColorFactor([...finish.baseColor, 1])
+        .setMetallicFactor(finish.metallic)
+        .setRoughnessFactor(brushedRoughnessFor(finish));
     } else if (mat.getName() === SPRING_BAR_MATERIAL_NAME) {
       // Refresh the spring bar to the current SPRING_BAR too, so its matte/shine
       // tracks config changes on re-push without re-baking the stored model.
@@ -305,10 +328,18 @@ function buildSmoothedPrimitive(
   faceArea: Float32Array,
   incidentByCorner: Map<string, number[]>,
   cornerKey: string[],
-): { positions: Float32Array; normals: Float32Array } {
+  // When set, also emit per-corner TANGENTs aligned to this world axis (the
+  // brush direction) — needed for the anisotropic brushed material.
+  brushAxis?: [number, number, number],
+): {
+  positions: Float32Array;
+  normals: Float32Array;
+  tangents: Float32Array | null;
+} {
   const cosThreshold = Math.cos((SMOOTH_ANGLE_DEG * Math.PI) / 180);
   const positions = new Float32Array(faceList.length * 9);
   const normals = new Float32Array(faceList.length * 9);
+  const tangents = brushAxis ? new Float32Array(faceList.length * 12) : null;
   for (let i = 0; i < faceList.length; i++) {
     const f = faceList[i];
     const fnx = faceNormal[3 * f],
@@ -338,12 +369,65 @@ function buildSmoothedPrimitive(
         }
       }
       const l = Math.hypot(sx, sy, sz) || 1;
-      normals[o] = sx / l;
-      normals[o + 1] = sy / l;
-      normals[o + 2] = sz / l;
+      const nx = sx / l,
+        ny = sy / l,
+        nz = sz / l;
+      normals[o] = nx;
+      normals[o + 1] = ny;
+      normals[o + 2] = nz;
+      if (tangents) {
+        // Project the world brush axis onto this corner's tangent plane so the
+        // grain runs consistently along the buckle regardless of curvature.
+        let ax = brushAxis![0],
+          ay = brushAxis![1],
+          az = brushAxis![2];
+        let d = ax * nx + ay * ny + az * nz;
+        let tx = ax - d * nx,
+          ty = ay - d * ny,
+          tz = az - d * nz;
+        let tl = Math.hypot(tx, ty, tz);
+        if (tl < 1e-4) {
+          // Brush axis ~parallel to the normal: fall back to a perpendicular.
+          ax = Math.abs(nx) < 0.9 ? 1 : 0;
+          ay = 0;
+          az = Math.abs(nx) < 0.9 ? 0 : 1;
+          d = ax * nx + ay * ny + az * nz;
+          tx = ax - d * nx;
+          ty = ay - d * ny;
+          tz = az - d * nz;
+          tl = Math.hypot(tx, ty, tz) || 1;
+        }
+        const to = i * 12 + k * 4;
+        tangents[to] = tx / tl;
+        tangents[to + 1] = ty / tl;
+        tangents[to + 2] = tz / tl;
+        tangents[to + 3] = 1;
+      }
     }
   }
-  return { positions, normals };
+  return { positions, normals, tangents };
+}
+
+// Brush direction = the body's longest horizontal axis (world X or Z, after lay-
+// flat puts +Y up). A unit vector the tangents align to.
+function computeBrushAxis(
+  verts: Float32Array,
+  indices: Uint32Array,
+  faces: number[],
+): [number, number, number] {
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (const f of faces) {
+    for (let k = 0; k < 3; k++) {
+      const vi = indices[3 * f + k] * 3;
+      for (let a = 0; a < 3; a++) {
+        const v = verts[vi + a];
+        if (v < min[a]) min[a] = v;
+        if (v > max[a]) max[a] = v;
+      }
+    }
+  }
+  return max[0] - min[0] >= max[2] - min[2] ? [1, 0, 0] : [0, 0, 1];
 }
 
 export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
@@ -361,13 +445,15 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   const mesh = doc.createMesh();
 
   // Add one non-indexed primitive (angle-smoothed per-corner normals) for a set
-  // of faces under a material.
+  // of faces under a material. With `brushAxis`, also emits TANGENTs for the
+  // anisotropic brushed material.
   const addPart = (
     faces: number[],
     mat: ReturnType<Document["createMaterial"]>,
+    brushAxis?: [number, number, number],
   ) => {
     if (faces.length === 0) return;
-    const { positions, normals } = buildSmoothedPrimitive(
+    const { positions, normals, tangents } = buildSmoothedPrimitive(
       verts,
       indices,
       faces,
@@ -375,6 +461,7 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
       faceArea,
       incidentByCorner,
       cornerKey,
+      brushAxis,
     );
     const pos = doc
       .createAccessor()
@@ -386,24 +473,62 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
       .setType("VEC3")
       .setArray(normals as Float32Array<ArrayBuffer>)
       .setBuffer(buffer);
-    mesh.addPrimitive(
-      doc
-        .createPrimitive()
-        .setAttribute("POSITION", pos)
-        .setAttribute("NORMAL", nrm)
-        .setMaterial(mat),
-    );
+    const prim = doc
+      .createPrimitive()
+      .setAttribute("POSITION", pos)
+      .setAttribute("NORMAL", nrm)
+      .setMaterial(mat);
+    if (tangents) {
+      const tan = doc
+        .createAccessor()
+        .setType("VEC4")
+        .setArray(tangents as Float32Array<ArrayBuffer>)
+        .setBuffer(buffer);
+      prim.setAttribute("TANGENT", tan);
+    }
+    mesh.addPrimitive(prim);
   };
 
-  // Body — named so the viewer can recolor it per finish. Baked with the
-  // default finish so the stored GLB looks right un-recolored.
   const body = getFinish(null);
-  const bodyMat = doc
-    .createMaterial(BODY_MATERIAL_NAME)
-    .setBaseColorFactor([...body.baseColor, 1])
-    .setMetallicFactor(body.metallic)
-    .setRoughnessFactor(body.roughness);
-  addPart(bodyFaces, bodyMat);
+
+  // Split the body's outward top + side faces (brushed) from the rest (the
+  // underside/inner faces stay mirror-polished). After lay-flat +Y is up, so
+  // anything not clearly facing down is "top/side". `TOP_SIDE_NY` is the cutoff.
+  const TOP_SIDE_NY = -0.2;
+  const bodyBrushedFaces = bodyFaces.filter(
+    (f) => faceNormal[3 * f + 1] > TOP_SIDE_NY,
+  );
+  const bodyPolishedFaces = bodyFaces.filter(
+    (f) => faceNormal[3 * f + 1] <= TOP_SIDE_NY,
+  );
+
+  // Polished body — named so the viewer can recolor it per finish. Baked with
+  // the default finish so the stored GLB looks right un-recolored.
+  if (bodyPolishedFaces.length > 0) {
+    const bodyMat = doc
+      .createMaterial(BODY_MATERIAL_NAME)
+      .setBaseColorFactor([...body.baseColor, 1])
+      .setMetallicFactor(body.metallic)
+      .setRoughnessFactor(body.roughness);
+    addPart(bodyPolishedFaces, bodyMat);
+  }
+
+  // Brushed top/sides — anisotropic (directional) brushed metal, finish-coloured.
+  if (bodyBrushedFaces.length > 0) {
+    const anisoExt = doc.createExtension(KHRMaterialsAnisotropy);
+    const aniso = anisoExt
+      .createAnisotropy()
+      .setAnisotropyStrength(BRUSHED.anisotropyStrength)
+      .setAnisotropyRotation(BRUSHED.anisotropyRotation);
+    const brushedMat = doc
+      .createMaterial(BODY_BRUSHED_MATERIAL_NAME)
+      .setBaseColorFactor([...body.baseColor, 1])
+      .setMetallicFactor(body.metallic)
+      .setRoughnessFactor(brushedRoughnessFor(body))
+      .setExtension("KHR_materials_anisotropy", aniso);
+    const brushAxis = computeBrushAxis(verts, indices, bodyFaces);
+    addPart(bodyBrushedFaces, brushedMat, brushAxis);
+  }
 
   // Spring bars — always silver, never recolored.
   if (barFaces.length > 0) {
@@ -418,7 +543,7 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   const node = doc.createNode().setMesh(mesh);
   doc.createScene().addChild(node);
 
-  const glb = await new WebIO().writeBinary(doc);
+  const glb = await anisoIO().writeBinary(doc);
   return {
     glb,
     vertexCount: verts.length / 3,

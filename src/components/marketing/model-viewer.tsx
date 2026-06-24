@@ -5,8 +5,10 @@ import type { DetailedHTMLProps, HTMLAttributes } from "react";
 import {
   getFinish,
   BODY_MATERIAL_NAME,
+  BODY_BRUSHED_MATERIAL_NAME,
   SPRING_BAR_MATERIAL_NAME,
   SPRING_BAR,
+  BRUSHED,
 } from "@/lib/cad/finishes";
 
 // Minimal typing for the <model-viewer> custom element (only the attributes we
@@ -108,6 +110,14 @@ export function ModelViewer({
         body?.pbrMetallicRoughness.setBaseColorFactor([...f.baseColor, 1]);
         body?.pbrMetallicRoughness.setMetallicFactor(f.metallic);
         body?.pbrMetallicRoughness.setRoughnessFactor(f.roughness);
+        // Brushed top/sides — same finish colour, but keep the satin brushed
+        // roughness (matte finishes go fully matte; the baked anisotropy stays).
+        const brushed = mats.find((m) => m.name === BODY_BRUSHED_MATERIAL_NAME);
+        brushed?.pbrMetallicRoughness.setBaseColorFactor([...f.baseColor, 1]);
+        brushed?.pbrMetallicRoughness.setMetallicFactor(f.metallic);
+        brushed?.pbrMetallicRoughness.setRoughnessFactor(
+          f.group === "matte" ? f.roughness : BRUSHED.roughness,
+        );
       }
       // Spring bar — always the fixed silver, applied live so tweaks to its
       // matte/shine take effect without re-baking the stored model.
