@@ -14,6 +14,8 @@ import {
 
 const REPEAT_WRAP = 10497; // glTF sampler wrap = REPEAT
 const BUMP_TILES = 45; // cast bump texture repeats across the model (density)
+const BEAD_TILES = 140; // fine bead-blasted bump on the body (much finer than cast)
+const BEAD_NORMAL_SCALE = 0.32; // bead-blasted bump strength
 
 // Isotropic bump normal map for the cast-steel surface — random per-texel tilts
 // (red/green) over a flat blue, giving a fine granular "bumpy" look in any
@@ -58,6 +60,9 @@ export async function applyFinishToGlb(
         .setBaseColorFactor([...finish.baseColor, 1])
         .setMetallicFactor(finish.metallic)
         .setRoughnessFactor(finish.roughness);
+      // Keep the fine bump only for bead-blasted (matte) finishes; a polished
+      // finish drops it so the mirror stays clean.
+      if (finish.group !== "matte") mat.setNormalTexture(null);
     } else if (mat.getName() === BODY_BRUSHED_MATERIAL_NAME) {
       // Tagged faces: finish colour, kept matte (distinct from the polish).
       mat
@@ -489,15 +494,41 @@ async function meshToGlb(
 
   const body = getFinish(null);
 
-  // Polished body — named so the viewer can recolor it per finish. Baked with
-  // the default finish so the stored GLB looks right un-recolored.
+  // Body horizontal span (for unit-independent bump tiling) + one shared
+  // procedural bump normal map (fine on the body for bead-blasted, coarser on
+  // the cast surface).
+  let minX = Infinity,
+    maxX = -Infinity,
+    minZ = Infinity,
+    maxZ = -Infinity;
+  for (const f of bodyFaces)
+    for (let k = 0; k < 3; k++) {
+      const vi = indices[3 * f + k] * 3;
+      const x = verts[vi],
+        z = verts[vi + 2];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+  const span = Math.max(maxX - minX, maxZ - minZ) || 1;
+  const bumpTex = doc
+    .createTexture("bump")
+    .setImage(await makeBumpNormalMap())
+    .setMimeType("image/png");
+
+  // Polished body — recolored per finish. Carries a fine bump map used only for
+  // the bead-blasted (matte) finishes; the recolor/bake drops it for the polished
+  // ones (so polished stays a clean mirror).
   if (bodyPolishedFaces.length > 0) {
     const bodyMat = doc
       .createMaterial(BODY_MATERIAL_NAME)
       .setBaseColorFactor([...body.baseColor, 1])
       .setMetallicFactor(body.metallic)
       .setRoughnessFactor(body.roughness);
-    addPart(bodyPolishedFaces, bodyMat);
+    bodyMat.setNormalTexture(bumpTex).setNormalScale(BEAD_NORMAL_SCALE);
+    bodyMat.getNormalTextureInfo()?.setWrapS(REPEAT_WRAP).setWrapT(REPEAT_WRAP);
+    addPart(bodyPolishedFaces, bodyMat, BEAD_TILES / span);
   }
 
   // Matte (satin) faces — higher roughness, no grain; recolored per finish.
@@ -510,36 +541,16 @@ async function meshToGlb(
     addPart(bodyMatteFaces, brushedMat);
   }
 
-  // Cast faces — bumpy, always steel-coloured (never recolored), via a noise
-  // normal map tiled by a planar projection.
+  // Cast faces — bumpy, always steel-coloured (never recolored), reusing the
+  // shared bump texture at a coarser tiling.
   if (bodyCastFaces.length > 0) {
     const castMat = doc
       .createMaterial(BODY_CAST_MATERIAL_NAME)
       .setBaseColorFactor([...CAST.baseColor, 1])
       .setMetallicFactor(CAST.metallic)
       .setRoughnessFactor(CAST.roughness);
-    const bumpTex = doc
-      .createTexture("cast_bump")
-      .setImage(await makeBumpNormalMap())
-      .setMimeType("image/png");
     castMat.setNormalTexture(bumpTex).setNormalScale(CAST.normalScale);
     castMat.getNormalTextureInfo()?.setWrapS(REPEAT_WRAP).setWrapT(REPEAT_WRAP);
-    // Bump density relative to the body size (unit-independent).
-    let minX = Infinity,
-      maxX = -Infinity,
-      minZ = Infinity,
-      maxZ = -Infinity;
-    for (const f of bodyFaces)
-      for (let k = 0; k < 3; k++) {
-        const vi = indices[3 * f + k] * 3;
-        const x = verts[vi],
-          z = verts[vi + 2];
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (z < minZ) minZ = z;
-        if (z > maxZ) maxZ = z;
-      }
-    const span = Math.max(maxX - minX, maxZ - minZ) || 1;
     addPart(bodyCastFaces, castMat, BUMP_TILES / span);
   }
 

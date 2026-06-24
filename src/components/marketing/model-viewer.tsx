@@ -53,6 +53,10 @@ declare module "react" {
  * Pass `finishId` to recolor the body material (spring bar stays silver).
  */
 // Minimal shape of the bits of the <model-viewer> element we touch.
+interface MVTexture {
+  texture: unknown;
+  setTexture(texture: unknown): void;
+}
 interface ModelViewerEl extends HTMLElement {
   model?: {
     materials: {
@@ -62,6 +66,7 @@ interface ModelViewerEl extends HTMLElement {
         setMetallicFactor(v: number): void;
         setRoughnessFactor(v: number): void;
       };
+      normalTexture?: MVTexture;
     }[];
   };
 }
@@ -93,6 +98,9 @@ export function ModelViewer({
   finishId?: string;
 }) {
   const ref = useRef<ModelViewerEl | null>(null);
+  // The body's baked bump texture, saved so we can restore it after removing it
+  // for polished finishes (bead-blasted keeps it).
+  const savedBodyBump = useRef<unknown>(undefined);
 
   useEffect(() => {
     // Registers the custom element; browser-only, so load it on the client.
@@ -112,6 +120,15 @@ export function ModelViewer({
         body?.pbrMetallicRoughness.setBaseColorFactor([...f.baseColor, 1]);
         body?.pbrMetallicRoughness.setMetallicFactor(f.metallic);
         body?.pbrMetallicRoughness.setRoughnessFactor(f.roughness);
+        // Bead-blasted bump: the body carries a fine bump map — keep it for
+        // matte finishes, drop it for polished (so the mirror stays clean).
+        if (body?.normalTexture) {
+          if (savedBodyBump.current === undefined)
+            savedBodyBump.current = body.normalTexture.texture;
+          body.normalTexture.setTexture(
+            f.group === "matte" ? savedBodyBump.current : null,
+          );
+        }
         // Brushed top/sides — same finish colour, but keep the satin brushed
         // roughness (matte finishes go fully matte; the baked anisotropy stays).
         const brushed = mats.find((m) => m.name === BODY_BRUSHED_MATERIAL_NAME);
