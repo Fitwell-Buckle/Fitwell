@@ -577,16 +577,14 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   // "top/side". `TOP_SIDE_NY` is the cutoff.
   const TOP_SIDE_NY = -0.2;
 
-  // The polished top-outer edge "rail": a face that faces up-and-outward at a
-  // mid angle — i.e. the chamfer between the flat top (ny≈1, stays brushed) and
-  // the vertical side (low ny, stays brushed). `outward` = its horizontal normal
-  // points away from the frame center. Tune the band if it catches too much/little.
-  const RAIL_NY_LO = 0.5;
-  const RAIL_NY_HI = 0.93;
-  const isRail = (f: number): boolean => {
-    const ny = faceNormal[3 * f + 1];
-    if (ny <= RAIL_NY_LO || ny >= RAIL_NY_HI) return false;
-    // Face centroid relative to the frame center, in the horizontal plane.
+  // The polished perimeter edge: the rounded "piping" that wraps the outer
+  // profile (top-outer and bottom-outer edges, all the way around). It's
+  // distinguished from the broad faces by pointing OUTWARD — its horizontal
+  // normal has a strong radial-outward component. The broad top points up
+  // (small outward component → stays brushed); the underside points down.
+  // Raise EDGE_OUTWARD to polish a thinner edge band, lower it to polish more.
+  const EDGE_OUTWARD = 0.5;
+  const outwardDot = (f: number): number => {
     let cxF = 0,
       czF = 0;
     for (let k = 0; k < 3; k++) {
@@ -594,17 +592,21 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
       cxF += verts[vi];
       czF += verts[vi + 2];
     }
-    const rx = cxF / 3 - brushCenter[0];
-    const rz = czF / 3 - brushCenter[1];
-    return faceNormal[3 * f] * rx + faceNormal[3 * f + 2] * rz > 0;
+    let rx = cxF / 3 - brushCenter[0];
+    let rz = czF / 3 - brushCenter[1];
+    const rl = Math.hypot(rx, rz) || 1;
+    rx /= rl;
+    rz /= rl;
+    return faceNormal[3 * f] * rx + faceNormal[3 * f + 2] * rz;
   };
+  const isPerimeterEdge = (f: number) => outwardDot(f) > EDGE_OUTWARD;
 
   const bodyBrushedFaces = frameFaces.filter(
-    (f) => faceNormal[3 * f + 1] > TOP_SIDE_NY && !isRail(f),
+    (f) => faceNormal[3 * f + 1] > TOP_SIDE_NY && !isPerimeterEdge(f),
   );
   const bodyPolishedFaces = [
     ...frameFaces.filter(
-      (f) => faceNormal[3 * f + 1] <= TOP_SIDE_NY || isRail(f),
+      (f) => faceNormal[3 * f + 1] <= TOP_SIDE_NY || isPerimeterEdge(f),
     ),
     ...otherBodyFaces,
   ];
