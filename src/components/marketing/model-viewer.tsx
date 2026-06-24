@@ -2,7 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
-import { getFinish, BODY_MATERIAL_NAME } from "@/lib/cad/finishes";
+import {
+  getFinish,
+  BODY_MATERIAL_NAME,
+  SPRING_BAR_MATERIAL_NAME,
+  SPRING_BAR,
+} from "@/lib/cad/finishes";
 
 // Minimal typing for the <model-viewer> custom element (only the attributes we
 // use). Augments React's JSX so TSX accepts the tag.
@@ -92,14 +97,24 @@ export function ModelViewer({
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || !finishId) return;
+    if (!el) return;
     const apply = () => {
-      const f = getFinish(finishId);
-      const mat = el.model?.materials.find((m) => m.name === BODY_MATERIAL_NAME);
-      if (!mat) return;
-      mat.pbrMetallicRoughness.setBaseColorFactor([...f.baseColor, 1]);
-      mat.pbrMetallicRoughness.setMetallicFactor(f.metallic);
-      mat.pbrMetallicRoughness.setRoughnessFactor(f.roughness);
+      const mats = el.model?.materials;
+      if (!mats) return;
+      // Body — recolored to the chosen finish.
+      if (finishId) {
+        const f = getFinish(finishId);
+        const body = mats.find((m) => m.name === BODY_MATERIAL_NAME);
+        body?.pbrMetallicRoughness.setBaseColorFactor([...f.baseColor, 1]);
+        body?.pbrMetallicRoughness.setMetallicFactor(f.metallic);
+        body?.pbrMetallicRoughness.setRoughnessFactor(f.roughness);
+      }
+      // Spring bar — always the fixed silver, applied live so tweaks to its
+      // matte/shine take effect without re-baking the stored model.
+      const bar = mats.find((m) => m.name === SPRING_BAR_MATERIAL_NAME);
+      bar?.pbrMetallicRoughness.setBaseColorFactor([...SPRING_BAR.baseColor, 1]);
+      bar?.pbrMetallicRoughness.setMetallicFactor(SPRING_BAR.metallic);
+      bar?.pbrMetallicRoughness.setRoughnessFactor(SPRING_BAR.roughness);
     };
     if (el.model) apply();
     el.addEventListener("load", apply);

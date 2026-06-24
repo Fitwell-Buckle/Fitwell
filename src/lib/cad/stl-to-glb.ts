@@ -25,6 +25,13 @@ export async function applyFinishToGlb(
         .setBaseColorFactor([...finish.baseColor, 1])
         .setMetallicFactor(finish.metallic)
         .setRoughnessFactor(finish.roughness);
+    } else if (mat.getName() === SPRING_BAR_MATERIAL_NAME) {
+      // Refresh the spring bar to the current SPRING_BAR too, so its matte/shine
+      // tracks config changes on re-push without re-baking the stored model.
+      mat
+        .setBaseColorFactor([...SPRING_BAR.baseColor, 1])
+        .setMetallicFactor(SPRING_BAR.metallic)
+        .setRoughnessFactor(SPRING_BAR.roughness);
     }
   }
   return io.writeBinary(doc);
