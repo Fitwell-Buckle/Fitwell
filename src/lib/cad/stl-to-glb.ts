@@ -581,20 +581,16 @@ async function meshToGlb(
     addPart(bodyPolishedFaces, bodyMat);
   }
 
-  // Brushed faces — a linear brushed-metal normal map (visible grooves) running
-  // along the region's long axis, plus anisotropy for the stretched highlight.
+  // Brushed faces — a linear brushed-metal normal map (visible grooves running
+  // along the region's long axis). No anisotropy: its view-dependent stretched
+  // highlight sweeps as the model rotates and reads as scattered; the static
+  // normal-map grooves give a steady, uniform grain.
   if (bodyBrushedFaces.length > 0) {
-    const anisoExt = doc.createExtension(KHRMaterialsAnisotropy);
-    const aniso = anisoExt
-      .createAnisotropy()
-      .setAnisotropyStrength(BRUSHED.anisotropyStrength)
-      .setAnisotropyRotation(BRUSHED.anisotropyRotation);
     const brushedMat = doc
       .createMaterial(BODY_BRUSHED_MATERIAL_NAME)
       .setBaseColorFactor([...body.baseColor, 1])
       .setMetallicFactor(body.metallic)
-      .setRoughnessFactor(brushedRoughnessFor(body))
-      .setExtension("KHR_materials_anisotropy", aniso);
+      .setRoughnessFactor(brushedRoughnessFor(body));
 
     const normalTex = doc
       .createTexture("brushed_normal")
