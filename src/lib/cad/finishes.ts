@@ -65,18 +65,13 @@ export function matchFinish(text: string | null | undefined): Finish | null {
 // a finish at runtime).
 export const BODY_MATERIAL_NAME = "body";
 export const SPRING_BAR_MATERIAL_NAME = "spring_bar";
-// The brushed top/side shell of the body — same finish colour as `body`, but a
-// directional (anisotropic) brushed look instead of mirror polish. Split out as
-// its own material/primitive so only the outward-facing surfaces get the grain.
+// The tagged surfaces of the body (Fusion's "brushed" appearance) — same finish
+// colour as `body`, but rendered MATTE instead of mirror-polished. Split out as
+// its own material/primitive so only the tagged faces get the matte finish.
 export const BODY_BRUSHED_MATERIAL_NAME = "body_brushed";
 
-// Brushed-finish parameters. Higher roughness than the mirror finishes plus
-// strong anisotropy gives the stretched, directional highlight of brushed metal.
+// Matte-finish parameter for the tagged faces — high roughness so they read as a
+// distinctly different, non-reflective metal next to the polish.
 export const BRUSHED = {
-  roughness: 0.35,
-  anisotropyStrength: 0.95,
-  // Rotation (radians) of the brush direction within the tangent frame. The
-  // mesh tangents are aligned to the buckle's long axis; tune if the grain
-  // should run the other way.
-  anisotropyRotation: 0,
+  roughness: 0.6,
 };

@@ -1,43 +1,5 @@
 import "server-only";
-import sharp from "sharp";
 import { Document, WebIO } from "@gltf-transform/core";
-import { KHRMaterialsAnisotropy } from "@gltf-transform/extensions";
-
-// ── Brushed grain texture ────────────────────────────────────────────────
-// Visible grain needs an actual normal-map (anisotropy only stretches the
-// highlight). We generate a tangent-space brushed normal map procedurally:
-// fine random ridges that vary along V (across the grain) and are uniform along
-// U (so grooves run along U — i.e. circumferentially, given the cylindrical UVs).
-const BRUSH_TEX_HEIGHT = 512; // rows of grain
-const BRUSH_GRAIN_AMPLITUDE = 92; // green-channel deviation = groove depth
-const BRUSH_TILES_ACROSS = 5; // groove-texture repeats across the brushed region (density, unit-independent)
-const BRUSH_NORMAL_SCALE = 0.7; // overall groove strength on the material
-
-const REPEAT_WRAP = 10497; // glTF sampler wrap = REPEAT
-
-async function makeBrushedNormalMap(): Promise<Uint8Array> {
-  const W = 8;
-  const H = BRUSH_TEX_HEIGHT;
-  const raw = Buffer.alloc(W * H * 3);
-  for (let y = 0; y < H; y++) {
-    // Random per-row bitangent tilt (green) = a fine groove of varying depth;
-    // red 128 (no cross-grain tilt), blue 255 (surface normal up).
-    const g = Math.max(
-      0,
-      Math.min(255, 128 + Math.round(BRUSH_GRAIN_AMPLITUDE * (Math.random() * 2 - 1))),
-    );
-    for (let x = 0; x < W; x++) {
-      const o = (y * W + x) * 3;
-      raw[o] = 128;
-      raw[o + 1] = g;
-      raw[o + 2] = 255;
-    }
-  }
-  const png = await sharp(raw, { raw: { width: W, height: H, channels: 3 } })
-    .png()
-    .toBuffer();
-  return new Uint8Array(png);
-}
 import {
   BODY_MATERIAL_NAME,
   BODY_BRUSHED_MATERIAL_NAME,
@@ -47,15 +9,9 @@ import {
   getFinish,
 } from "./finishes";
 
-// IO that preserves the KHR_materials_anisotropy extension on read/write — used
-// everywhere we (de)serialize a GLB, so the brushed material survives round-trips.
-function anisoIO(): WebIO {
-  return new WebIO().registerExtensions([KHRMaterialsAnisotropy]);
-}
-
-// Brushed roughness for a finish: the brushed top/sides keep their satin
-// roughness for glossy finishes, but go fully matte for the bead-blasted ones
-// (where there's no polish to contrast against).
+// Roughness for the tagged "brushed" faces — rendered as a MATTE metal (no
+// grain), distinct from the polished body. Bead-blasted finishes are already
+// matte, so use their own roughness; glossy finishes use the matte BRUSHED value.
 function brushedRoughnessFor(finish: ReturnType<typeof getFinish>): number {
   return finish.group === "matte" ? finish.roughness : BRUSHED.roughness;
 }
@@ -70,7 +26,7 @@ export async function applyFinishToGlb(
   finishId: string | null,
 ): Promise<Uint8Array> {
   const finish = getFinish(finishId);
-  const io = anisoIO();
+  const io = new WebIO();
   const doc = await io.readBinary(glb);
   for (const mat of doc.getRoot().listMaterials()) {
     if (mat.getName() === BODY_MATERIAL_NAME) {
@@ -79,8 +35,7 @@ export async function applyFinishToGlb(
         .setMetallicFactor(finish.metallic)
         .setRoughnessFactor(finish.roughness);
     } else if (mat.getName() === BODY_BRUSHED_MATERIAL_NAME) {
-      // Brushed top/sides: finish colour, but keep the brushed (satin) roughness
-      // and the baked anisotropy (left untouched here).
+      // Tagged faces: finish colour, kept matte (distinct from the polish).
       mat
         .setBaseColorFactor([...finish.baseColor, 1])
         .setMetallicFactor(finish.metallic)
@@ -368,25 +323,13 @@ function buildSmoothedPrimitive(
   faceArea: Float32Array,
   incidentByCorner: Map<string, number[]>,
   cornerKey: string[],
-  // When set, emit per-corner TANGENTs + UVs for the brushed material. `axis` is
-  // the world brush direction (linear "long" grain); `perp` the across-grain
-  // horizontal axis; `vScale` the groove density (tiles per across-grain unit).
-  brush?: {
-    axis: [number, number, number];
-    perp: [number, number, number];
-    vScale: number;
-  },
 ): {
   positions: Float32Array;
   normals: Float32Array;
-  tangents: Float32Array | null;
-  uvs: Float32Array | null;
 } {
   const cosThreshold = Math.cos((SMOOTH_ANGLE_DEG * Math.PI) / 180);
   const positions = new Float32Array(faceList.length * 9);
   const normals = new Float32Array(faceList.length * 9);
-  const tangents = brush ? new Float32Array(faceList.length * 12) : null;
-  const uvs = brush ? new Float32Array(faceList.length * 6) : null;
   for (let i = 0; i < faceList.length; i++) {
     const f = faceList[i];
     const fnx = faceNormal[3 * f],
@@ -416,78 +359,12 @@ function buildSmoothedPrimitive(
         }
       }
       const l = Math.hypot(sx, sy, sz) || 1;
-      const nx = sx / l,
-        ny = sy / l,
-        nz = sz / l;
-      normals[o] = nx;
-      normals[o + 1] = ny;
-      normals[o + 2] = nz;
-      if (tangents) {
-        // Constant world-horizontal tangent (the brush axis) — NOT projected
-        // onto each face — so the grain runs the same world direction on every
-        // brushed face instead of tilting with the surface. Faces edge-on to the
-        // axis get a vanishing bitangent (no grain), which is fine.
-        const to = i * 12 + k * 4;
-        tangents[to] = brush!.axis[0];
-        tangents[to + 1] = brush!.axis[1];
-        tangents[to + 2] = brush!.axis[2];
-        tangents[to + 3] = 1;
-
-        // UV: U along the grain (texture uniform in U), V across the grain ×
-        // density → fine grooves running along `axis`.
-        const px = positions[o],
-          pz = positions[o + 2];
-        const uo = i * 6 + k * 2;
-        uvs![uo] = px * brush!.axis[0] + pz * brush!.axis[2];
-        uvs![uo + 1] =
-          (px * brush!.perp[0] + pz * brush!.perp[2]) * brush!.vScale;
-      }
+      normals[o] = sx / l;
+      normals[o + 1] = sy / l;
+      normals[o + 2] = sz / l;
     }
   }
-  return { positions, normals, tangents, uvs };
-}
-
-// Linear brush direction = the brushed region's longest horizontal axis (world
-// X or Z, after lay-flat puts +Y up) — "brushed linear long". Returns the grain
-// axis, the across-grain (perp) axis, and the groove density so the grain looks
-// the same regardless of the model's units/scale.
-function computeBrushAxis(
-  verts: Float32Array,
-  indices: Uint32Array,
-  faces: number[],
-): {
-  axis: [number, number, number];
-  perp: [number, number, number];
-  vScale: number;
-} {
-  let minX = Infinity,
-    maxX = -Infinity,
-    minZ = Infinity,
-    maxZ = -Infinity;
-  for (const f of faces) {
-    for (let k = 0; k < 3; k++) {
-      const vi = indices[3 * f + k] * 3;
-      const x = verts[vi],
-        z = verts[vi + 2];
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (z < minZ) minZ = z;
-      if (z > maxZ) maxZ = z;
-    }
-  }
-  const extX = maxX - minX;
-  const extZ = maxZ - minZ;
-  // Grain runs along the LONGER horizontal axis ("brushed linear long") so it
-  // wraps consistently onto the long side edges (which run the same way). Flip
-  // this comparison to rotate the grain 90° — but then the long sides, now
-  // facing the grain direction, can't carry the lines.
-  const alongX = extX >= extZ;
-  const perpExtent = (alongX ? extZ : extX) || 1;
-  return {
-    axis: alongX ? [1, 0, 0] : [0, 0, 1],
-    perp: alongX ? [0, 0, 1] : [1, 0, 0],
-    vScale: BRUSH_TILES_ACROSS / perpExtent,
-  };
+  return { positions, normals };
 }
 
 // Core conversion. `flat` is a triangle-soup of positions (9 floats per
@@ -516,19 +393,13 @@ async function meshToGlb(
   const mesh = doc.createMesh();
 
   // Add one non-indexed primitive (angle-smoothed per-corner normals) for a set
-  // of faces under a material. With `brush`, also emits TANGENTs + UVs for the
-  // brushed (linear-grain) material.
+  // of faces under a material.
   const addPart = (
     faces: number[],
     mat: ReturnType<Document["createMaterial"]>,
-    brush?: {
-      axis: [number, number, number];
-      perp: [number, number, number];
-      vScale: number;
-    },
   ) => {
     if (faces.length === 0) return;
-    const { positions, normals, tangents, uvs } = buildSmoothedPrimitive(
+    const { positions, normals } = buildSmoothedPrimitive(
       verts,
       indices,
       faces,
@@ -536,7 +407,6 @@ async function meshToGlb(
       faceArea,
       incidentByCorner,
       cornerKey,
-      brush,
     );
     const pos = doc
       .createAccessor()
@@ -548,28 +418,13 @@ async function meshToGlb(
       .setType("VEC3")
       .setArray(normals as Float32Array<ArrayBuffer>)
       .setBuffer(buffer);
-    const prim = doc
-      .createPrimitive()
-      .setAttribute("POSITION", pos)
-      .setAttribute("NORMAL", nrm)
-      .setMaterial(mat);
-    if (tangents) {
-      const tan = doc
-        .createAccessor()
-        .setType("VEC4")
-        .setArray(tangents as Float32Array<ArrayBuffer>)
-        .setBuffer(buffer);
-      prim.setAttribute("TANGENT", tan);
-    }
-    if (uvs) {
-      const uv = doc
-        .createAccessor()
-        .setType("VEC2")
-        .setArray(uvs as Float32Array<ArrayBuffer>)
-        .setBuffer(buffer);
-      prim.setAttribute("TEXCOORD_0", uv);
-    }
-    mesh.addPrimitive(prim);
+    mesh.addPrimitive(
+      doc
+        .createPrimitive()
+        .setAttribute("POSITION", pos)
+        .setAttribute("NORMAL", nrm)
+        .setMaterial(mat),
+    );
   };
 
   const body = getFinish(null);
@@ -585,30 +440,15 @@ async function meshToGlb(
     addPart(bodyPolishedFaces, bodyMat);
   }
 
-  // Brushed faces — a linear brushed-metal normal map (visible grooves running
-  // along the region's long axis). No anisotropy: its view-dependent stretched
-  // highlight sweeps as the model rotates and reads as scattered; the static
-  // normal-map grooves give a steady, uniform grain.
+  // Tagged faces — a MATTE metal (higher roughness, no grain), distinct from the
+  // polished body. Recolored per finish at runtime, kept matte.
   if (bodyBrushedFaces.length > 0) {
     const brushedMat = doc
       .createMaterial(BODY_BRUSHED_MATERIAL_NAME)
       .setBaseColorFactor([...body.baseColor, 1])
       .setMetallicFactor(body.metallic)
       .setRoughnessFactor(brushedRoughnessFor(body));
-
-    const normalTex = doc
-      .createTexture("brushed_normal")
-      .setImage(await makeBrushedNormalMap())
-      .setMimeType("image/png");
-    brushedMat.setNormalTexture(normalTex);
-    brushedMat.setNormalScale(BRUSH_NORMAL_SCALE);
-    const texInfo = brushedMat.getNormalTextureInfo();
-    texInfo?.setWrapS(REPEAT_WRAP).setWrapT(REPEAT_WRAP);
-
-    // Base the grain on the WHOLE body's long axis (not the scattered brushed
-    // patches) so the strokes all run the same way across every brushed face.
-    const brush = computeBrushAxis(verts, indices, bodyFaces);
-    addPart(bodyBrushedFaces, brushedMat, brush);
+    addPart(bodyBrushedFaces, brushedMat);
   }
 
   // Spring bars — always silver, never recolored.
@@ -624,7 +464,7 @@ async function meshToGlb(
   const node = doc.createNode().setMesh(mesh);
   doc.createScene().addChild(node);
 
-  const glb = await anisoIO().writeBinary(doc);
+  const glb = await new WebIO().writeBinary(doc);
   return {
     glb,
     vertexCount: verts.length / 3,
