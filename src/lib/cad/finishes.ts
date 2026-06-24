@@ -75,3 +75,14 @@ export const BODY_BRUSHED_MATERIAL_NAME = "body_brushed";
 export const BRUSHED = {
   roughness: 0.6,
 };
+
+// Cast-steel surfaces (Fusion's "Cast" appearance) — a bumpy, always-steel-
+// coloured metal (never recoloured per finish, like the spring bar). The bump
+// comes from a procedural noise normal map baked onto these faces.
+export const BODY_CAST_MATERIAL_NAME = "body_cast";
+export const CAST = {
+  baseColor: [0.72, 0.73, 0.75] as [number, number, number], // steel
+  metallic: 1,
+  roughness: 0.62,
+  normalScale: 0.7, // bumpiness
+};

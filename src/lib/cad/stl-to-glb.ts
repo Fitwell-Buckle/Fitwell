@@ -1,13 +1,37 @@
 import "server-only";
+import sharp from "sharp";
 import { Document, WebIO } from "@gltf-transform/core";
 import {
   BODY_MATERIAL_NAME,
   BODY_BRUSHED_MATERIAL_NAME,
+  BODY_CAST_MATERIAL_NAME,
   SPRING_BAR_MATERIAL_NAME,
   SPRING_BAR,
   BRUSHED,
+  CAST,
   getFinish,
 } from "./finishes";
+
+const REPEAT_WRAP = 10497; // glTF sampler wrap = REPEAT
+const BUMP_TILES = 45; // cast bump texture repeats across the model (density)
+
+// Isotropic bump normal map for the cast-steel surface — random per-texel tilts
+// (red/green) over a flat blue, giving a fine granular "bumpy" look in any
+// direction (unlike the directional brushed grain).
+async function makeBumpNormalMap(): Promise<Uint8Array> {
+  const N = 128;
+  const raw = Buffer.alloc(N * N * 3);
+  for (let i = 0; i < N * N; i++) {
+    const o = i * 3;
+    raw[o] = 128 + Math.round(40 * (Math.random() * 2 - 1));
+    raw[o + 1] = 128 + Math.round(40 * (Math.random() * 2 - 1));
+    raw[o + 2] = 255;
+  }
+  const png = await sharp(raw, { raw: { width: N, height: N, channels: 3 } })
+    .png()
+    .toBuffer();
+  return new Uint8Array(png);
+}
 
 // Roughness for the tagged "brushed" faces — rendered as a MATTE metal (no
 // grain), distinct from the polished body. Bead-blasted finishes are already
@@ -323,13 +347,18 @@ function buildSmoothedPrimitive(
   faceArea: Float32Array,
   incidentByCorner: Map<string, number[]>,
   cornerKey: string[],
+  // When set, emit planar TEXCOORD_0 (world X/Z × uvScale) for a tiling normal
+  // map — used by the bumpy cast material (isotropic, so direction is irrelevant).
+  uvScale?: number,
 ): {
   positions: Float32Array;
   normals: Float32Array;
+  uvs: Float32Array | null;
 } {
   const cosThreshold = Math.cos((SMOOTH_ANGLE_DEG * Math.PI) / 180);
   const positions = new Float32Array(faceList.length * 9);
   const normals = new Float32Array(faceList.length * 9);
+  const uvs = uvScale ? new Float32Array(faceList.length * 6) : null;
   for (let i = 0; i < faceList.length; i++) {
     const f = faceList[i];
     const fnx = faceNormal[3 * f],
@@ -362,9 +391,14 @@ function buildSmoothedPrimitive(
       normals[o] = sx / l;
       normals[o + 1] = sy / l;
       normals[o + 2] = sz / l;
+      if (uvs) {
+        const uo = i * 6 + k * 2;
+        uvs[uo] = positions[o] * uvScale!;
+        uvs[uo + 1] = positions[o + 2] * uvScale!;
+      }
     }
   }
-  return { positions, normals };
+  return { positions, normals, uvs };
 }
 
 // Core conversion. `flat` is a triangle-soup of positions (9 floats per
@@ -374,7 +408,8 @@ function buildSmoothedPrimitive(
 // them via `usemtl`.
 async function meshToGlb(
   flat: number[],
-  brushedFlags: boolean[],
+  matteFlags: boolean[],
+  castFlags: boolean[],
 ): Promise<ConvertResult> {
   if (flat.length === 0) throw new Error("Mesh contains no geometry.");
   const { verts, indices } = weld(flat);
@@ -382,24 +417,34 @@ async function meshToGlb(
   const { faceNormal, faceArea } = computeFaceData(verts, indices);
   const { incidentByCorner, cornerKey } = buildCornerAdjacency(verts, indices);
   const components = splitComponents(verts.length / 3, indices);
-  const { bodyFaces, barFaces } = classifyFaces(verts, indices, components);
+  const cls = classifyFaces(verts, indices, components);
+  // Explicit finish tags (matte/cast) win over the geometric spring-bar guess —
+  // a tagged face is never silently turned into a silver rod.
+  const tagged = (f: number) => matteFlags[f] || castFlags[f];
+  const barFaces = cls.barFaces.filter((f) => !tagged(f));
+  const bodyFaces = [...cls.bodyFaces, ...cls.barFaces.filter(tagged)];
 
-  // Within the body, brushed vs polished comes straight from the source tags.
-  const bodyBrushedFaces = bodyFaces.filter((f) => brushedFlags[f]);
-  const bodyPolishedFaces = bodyFaces.filter((f) => !brushedFlags[f]);
+  // Within the body, the finish per face comes straight from the source tags.
+  const bodyCastFaces = bodyFaces.filter((f) => castFlags[f]);
+  const bodyMatteFaces = bodyFaces.filter((f) => matteFlags[f] && !castFlags[f]);
+  const bodyPolishedFaces = bodyFaces.filter(
+    (f) => !matteFlags[f] && !castFlags[f],
+  );
 
   const doc = new Document();
   const buffer = doc.createBuffer();
   const mesh = doc.createMesh();
 
   // Add one non-indexed primitive (angle-smoothed per-corner normals) for a set
-  // of faces under a material.
+  // of faces under a material. With `uvScale`, also emits planar TEXCOORD_0 for
+  // a tiling normal map (the bumpy cast surface).
   const addPart = (
     faces: number[],
     mat: ReturnType<Document["createMaterial"]>,
+    uvScale?: number,
   ) => {
     if (faces.length === 0) return;
-    const { positions, normals } = buildSmoothedPrimitive(
+    const { positions, normals, uvs } = buildSmoothedPrimitive(
       verts,
       indices,
       faces,
@@ -407,6 +452,7 @@ async function meshToGlb(
       faceArea,
       incidentByCorner,
       cornerKey,
+      uvScale,
     );
     const pos = doc
       .createAccessor()
@@ -418,13 +464,20 @@ async function meshToGlb(
       .setType("VEC3")
       .setArray(normals as Float32Array<ArrayBuffer>)
       .setBuffer(buffer);
-    mesh.addPrimitive(
-      doc
-        .createPrimitive()
-        .setAttribute("POSITION", pos)
-        .setAttribute("NORMAL", nrm)
-        .setMaterial(mat),
-    );
+    const prim = doc
+      .createPrimitive()
+      .setAttribute("POSITION", pos)
+      .setAttribute("NORMAL", nrm)
+      .setMaterial(mat);
+    if (uvs) {
+      const uv = doc
+        .createAccessor()
+        .setType("VEC2")
+        .setArray(uvs as Float32Array<ArrayBuffer>)
+        .setBuffer(buffer);
+      prim.setAttribute("TEXCOORD_0", uv);
+    }
+    mesh.addPrimitive(prim);
   };
 
   const body = getFinish(null);
@@ -440,15 +493,47 @@ async function meshToGlb(
     addPart(bodyPolishedFaces, bodyMat);
   }
 
-  // Tagged faces — a MATTE metal (higher roughness, no grain), distinct from the
-  // polished body. Recolored per finish at runtime, kept matte.
-  if (bodyBrushedFaces.length > 0) {
+  // Matte (satin) faces — higher roughness, no grain; recolored per finish.
+  if (bodyMatteFaces.length > 0) {
     const brushedMat = doc
       .createMaterial(BODY_BRUSHED_MATERIAL_NAME)
       .setBaseColorFactor([...body.baseColor, 1])
       .setMetallicFactor(body.metallic)
       .setRoughnessFactor(brushedRoughnessFor(body));
-    addPart(bodyBrushedFaces, brushedMat);
+    addPart(bodyMatteFaces, brushedMat);
+  }
+
+  // Cast faces — bumpy, always steel-coloured (never recolored), via a noise
+  // normal map tiled by a planar projection.
+  if (bodyCastFaces.length > 0) {
+    const castMat = doc
+      .createMaterial(BODY_CAST_MATERIAL_NAME)
+      .setBaseColorFactor([...CAST.baseColor, 1])
+      .setMetallicFactor(CAST.metallic)
+      .setRoughnessFactor(CAST.roughness);
+    const bumpTex = doc
+      .createTexture("cast_bump")
+      .setImage(await makeBumpNormalMap())
+      .setMimeType("image/png");
+    castMat.setNormalTexture(bumpTex).setNormalScale(CAST.normalScale);
+    castMat.getNormalTextureInfo()?.setWrapS(REPEAT_WRAP).setWrapT(REPEAT_WRAP);
+    // Bump density relative to the body size (unit-independent).
+    let minX = Infinity,
+      maxX = -Infinity,
+      minZ = Infinity,
+      maxZ = -Infinity;
+    for (const f of bodyFaces)
+      for (let k = 0; k < 3; k++) {
+        const vi = indices[3 * f + k] * 3;
+        const x = verts[vi],
+          z = verts[vi + 2];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+      }
+    const span = Math.max(maxX - minX, maxZ - minZ) || 1;
+    addPart(bodyCastFaces, castMat, BUMP_TILES / span);
   }
 
   // Spring bars — always silver, never recolored.
@@ -476,24 +561,34 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   const flat = parseBinarySTL(stl);
   if (flat.length === 0) throw new Error("STL contains no geometry.");
   // STL has no material info → everything polished.
-  return meshToGlb(flat, new Array(flat.length / 9).fill(false));
+  const none = new Array(flat.length / 9).fill(false);
+  return meshToGlb(flat, none, none);
 }
 
-// Parse an OBJ (with `usemtl` groups) into a triangle soup + per-triangle
-// brushed flags. A face is "brushed" when its active material name contains
-// "brush" (Fusion's "Stainless Steel - Brushed Linear Long" appearance). The
-// MTL file isn't needed — only the material NAMES referenced by `usemtl`.
-function parseObj(text: string): { flat: number[]; brushedFlags: boolean[] } {
+// Parse an OBJ (with `usemtl` groups) into a triangle soup + per-triangle finish
+// flags, from the active material NAME (the MTL file isn't needed):
+//  - cast  → name contains "cast"  (Fusion's "Cast" appearance → bumpy steel)
+//  - matte → name contains "satin" or "brush" (matte appearance)
+//  - else  → polished
+function parseObj(text: string): {
+  flat: number[];
+  matteFlags: boolean[];
+  castFlags: boolean[];
+} {
   const vx: number[] = [];
   const flat: number[] = [];
-  const brushedFlags: boolean[] = [];
-  let brushed = false;
+  const matteFlags: boolean[] = [];
+  const castFlags: boolean[] = [];
+  let matte = false;
+  let cast = false;
   for (const line of text.split(/\r?\n/)) {
     if (line.startsWith("v ")) {
       const p = line.split(/\s+/);
       vx.push(+p[1], +p[2], +p[3]);
     } else if (line.startsWith("usemtl ")) {
-      brushed = /brush/i.test(line.slice(7));
+      const name = line.slice(7);
+      cast = /cast/i.test(name);
+      matte = !cast && /satin|brush/i.test(name);
     } else if (line.startsWith("f ")) {
       const idx = line
         .trim()
@@ -508,15 +603,16 @@ function parseObj(text: string): { flat: number[]; brushedFlags: boolean[] } {
         for (const v of [idx[0], idx[i], idx[i + 1]]) {
           flat.push(vx[v * 3], vx[v * 3 + 1], vx[v * 3 + 2]);
         }
-        brushedFlags.push(brushed);
+        matteFlags.push(matte);
+        castFlags.push(cast);
       }
     }
   }
-  return { flat, brushedFlags };
+  return { flat, matteFlags, castFlags };
 }
 
 export async function objToGlb(objText: string): Promise<ConvertResult> {
-  const { flat, brushedFlags } = parseObj(objText);
+  const { flat, matteFlags, castFlags } = parseObj(objText);
   if (flat.length === 0) throw new Error("OBJ contains no geometry.");
-  return meshToGlb(flat, brushedFlags);
+  return meshToGlb(flat, matteFlags, castFlags);
 }
