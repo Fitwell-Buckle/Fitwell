@@ -1,11 +1,64 @@
 import "server-only";
+import sharp from "sharp";
 import { Document, WebIO } from "@gltf-transform/core";
+import { KHRMaterialsAnisotropy } from "@gltf-transform/extensions";
+
+// ── Brushed grain texture ────────────────────────────────────────────────
+// Visible grain needs an actual normal-map (anisotropy only stretches the
+// highlight). We generate a tangent-space brushed normal map procedurally:
+// fine random ridges that vary along V (across the grain) and are uniform along
+// U (so grooves run along U — i.e. circumferentially, given the cylindrical UVs).
+const BRUSH_TEX_HEIGHT = 512; // rows of grain
+const BRUSH_GRAIN_AMPLITUDE = 92; // green-channel deviation = groove depth
+const BRUSH_TILES_ACROSS = 5; // groove-texture repeats across the brushed region (density, unit-independent)
+const BRUSH_NORMAL_SCALE = 0.7; // overall groove strength on the material
+
+const REPEAT_WRAP = 10497; // glTF sampler wrap = REPEAT
+
+async function makeBrushedNormalMap(): Promise<Uint8Array> {
+  const W = 8;
+  const H = BRUSH_TEX_HEIGHT;
+  const raw = Buffer.alloc(W * H * 3);
+  for (let y = 0; y < H; y++) {
+    // Random per-row bitangent tilt (green) = a fine groove of varying depth;
+    // red 128 (no cross-grain tilt), blue 255 (surface normal up).
+    const g = Math.max(
+      0,
+      Math.min(255, 128 + Math.round(BRUSH_GRAIN_AMPLITUDE * (Math.random() * 2 - 1))),
+    );
+    for (let x = 0; x < W; x++) {
+      const o = (y * W + x) * 3;
+      raw[o] = 128;
+      raw[o + 1] = g;
+      raw[o + 2] = 255;
+    }
+  }
+  const png = await sharp(raw, { raw: { width: W, height: H, channels: 3 } })
+    .png()
+    .toBuffer();
+  return new Uint8Array(png);
+}
 import {
   BODY_MATERIAL_NAME,
+  BODY_BRUSHED_MATERIAL_NAME,
   SPRING_BAR_MATERIAL_NAME,
   SPRING_BAR,
+  BRUSHED,
   getFinish,
 } from "./finishes";
+
+// IO that preserves the KHR_materials_anisotropy extension on read/write — used
+// everywhere we (de)serialize a GLB, so the brushed material survives round-trips.
+function anisoIO(): WebIO {
+  return new WebIO().registerExtensions([KHRMaterialsAnisotropy]);
+}
+
+// Brushed roughness for a finish: the brushed top/sides keep their satin
+// roughness for glossy finishes, but go fully matte for the bead-blasted ones
+// (where there's no polish to contrast against).
+function brushedRoughnessFor(finish: ReturnType<typeof getFinish>): number {
+  return finish.group === "matte" ? finish.roughness : BRUSHED.roughness;
+}
 
 // Recolor a generated GLB's `body` material to a specific finish, returning new
 // GLB bytes. The stored GLB is baked with the default (silver) finish and the
@@ -17,7 +70,7 @@ export async function applyFinishToGlb(
   finishId: string | null,
 ): Promise<Uint8Array> {
   const finish = getFinish(finishId);
-  const io = new WebIO();
+  const io = anisoIO();
   const doc = await io.readBinary(glb);
   for (const mat of doc.getRoot().listMaterials()) {
     if (mat.getName() === BODY_MATERIAL_NAME) {
@@ -25,6 +78,13 @@ export async function applyFinishToGlb(
         .setBaseColorFactor([...finish.baseColor, 1])
         .setMetallicFactor(finish.metallic)
         .setRoughnessFactor(finish.roughness);
+    } else if (mat.getName() === BODY_BRUSHED_MATERIAL_NAME) {
+      // Brushed top/sides: finish colour, but keep the brushed (satin) roughness
+      // and the baked anisotropy (left untouched here).
+      mat
+        .setBaseColorFactor([...finish.baseColor, 1])
+        .setMetallicFactor(finish.metallic)
+        .setRoughnessFactor(brushedRoughnessFor(finish));
     } else if (mat.getName() === SPRING_BAR_MATERIAL_NAME) {
       // Refresh the spring bar to the current SPRING_BAR too, so its matte/shine
       // tracks config changes on re-push without re-baking the stored model.
@@ -264,6 +324,9 @@ export function isSpringBar(ext: number[], isLargest: boolean): boolean {
   return elong > 2.0 && roundness < 1.6;
 }
 
+// Split faces into the spring bars (silver rods, detected by geometry) and the
+// rest ("body"). Brushed-vs-polished within the body is decided per face by the
+// source material (OBJ tags), not geometry — so we only need bar vs body here.
 function classifyFaces(
   verts: Float32Array,
   indices: Uint32Array,
@@ -305,10 +368,25 @@ function buildSmoothedPrimitive(
   faceArea: Float32Array,
   incidentByCorner: Map<string, number[]>,
   cornerKey: string[],
-): { positions: Float32Array; normals: Float32Array } {
+  // When set, emit per-corner TANGENTs + UVs for the brushed material. `axis` is
+  // the world brush direction (linear "long" grain); `perp` the across-grain
+  // horizontal axis; `vScale` the groove density (tiles per across-grain unit).
+  brush?: {
+    axis: [number, number, number];
+    perp: [number, number, number];
+    vScale: number;
+  },
+): {
+  positions: Float32Array;
+  normals: Float32Array;
+  tangents: Float32Array | null;
+  uvs: Float32Array | null;
+} {
   const cosThreshold = Math.cos((SMOOTH_ANGLE_DEG * Math.PI) / 180);
   const positions = new Float32Array(faceList.length * 9);
   const normals = new Float32Array(faceList.length * 9);
+  const tangents = brush ? new Float32Array(faceList.length * 12) : null;
+  const uvs = brush ? new Float32Array(faceList.length * 6) : null;
   for (let i = 0; i < faceList.length; i++) {
     const f = faceList[i];
     const fnx = faceNormal[3 * f],
@@ -338,17 +416,103 @@ function buildSmoothedPrimitive(
         }
       }
       const l = Math.hypot(sx, sy, sz) || 1;
-      normals[o] = sx / l;
-      normals[o + 1] = sy / l;
-      normals[o + 2] = sz / l;
+      const nx = sx / l,
+        ny = sy / l,
+        nz = sz / l;
+      normals[o] = nx;
+      normals[o + 1] = ny;
+      normals[o + 2] = nz;
+      if (tangents) {
+        // Linear grain: tangent = the world brush axis projected onto this
+        // corner's tangent plane (so the grain runs straight along `axis`).
+        let ax = brush!.axis[0],
+          ay = brush!.axis[1],
+          az = brush!.axis[2];
+        let d = ax * nx + ay * ny + az * nz;
+        let tx = ax - d * nx,
+          ty = ay - d * ny,
+          tz = az - d * nz;
+        let tl = Math.hypot(tx, ty, tz);
+        if (tl < 1e-4) {
+          // Axis ~parallel to the normal: fall back to the across-grain axis.
+          ax = brush!.perp[0];
+          ay = brush!.perp[1];
+          az = brush!.perp[2];
+          d = ax * nx + ay * ny + az * nz;
+          tx = ax - d * nx;
+          ty = ay - d * ny;
+          tz = az - d * nz;
+          tl = Math.hypot(tx, ty, tz) || 1;
+        }
+        const to = i * 12 + k * 4;
+        tangents[to] = tx / tl;
+        tangents[to + 1] = ty / tl;
+        tangents[to + 2] = tz / tl;
+        tangents[to + 3] = 1;
+
+        // UV: U along the grain (texture uniform in U), V across the grain ×
+        // density → fine grooves running along `axis`.
+        const px = positions[o],
+          pz = positions[o + 2];
+        const uo = i * 6 + k * 2;
+        uvs![uo] = px * brush!.axis[0] + pz * brush!.axis[2];
+        uvs![uo + 1] =
+          (px * brush!.perp[0] + pz * brush!.perp[2]) * brush!.vScale;
+      }
     }
   }
-  return { positions, normals };
+  return { positions, normals, tangents, uvs };
 }
 
-export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
-  const flat = parseBinarySTL(stl);
-  if (flat.length === 0) throw new Error("STL contains no geometry.");
+// Linear brush direction = the brushed region's longest horizontal axis (world
+// X or Z, after lay-flat puts +Y up) — "brushed linear long". Returns the grain
+// axis, the across-grain (perp) axis, and the groove density so the grain looks
+// the same regardless of the model's units/scale.
+function computeBrushAxis(
+  verts: Float32Array,
+  indices: Uint32Array,
+  faces: number[],
+): {
+  axis: [number, number, number];
+  perp: [number, number, number];
+  vScale: number;
+} {
+  let minX = Infinity,
+    maxX = -Infinity,
+    minZ = Infinity,
+    maxZ = -Infinity;
+  for (const f of faces) {
+    for (let k = 0; k < 3; k++) {
+      const vi = indices[3 * f + k] * 3;
+      const x = verts[vi],
+        z = verts[vi + 2];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+  }
+  const extX = maxX - minX;
+  const extZ = maxZ - minZ;
+  const alongX = extX >= extZ;
+  const perpExtent = (alongX ? extZ : extX) || 1;
+  return {
+    axis: alongX ? [1, 0, 0] : [0, 0, 1],
+    perp: alongX ? [0, 0, 1] : [1, 0, 0],
+    vScale: BRUSH_TILES_ACROSS / perpExtent,
+  };
+}
+
+// Core conversion. `flat` is a triangle-soup of positions (9 floats per
+// triangle); `brushedFlags[i]` marks triangle i as brushed (from the source
+// material). Welding keeps triangle order, so the flag indexes the welded faces
+// directly. STL input has no materials → no brushed faces; OBJ input carries
+// them via `usemtl`.
+async function meshToGlb(
+  flat: number[],
+  brushedFlags: boolean[],
+): Promise<ConvertResult> {
+  if (flat.length === 0) throw new Error("Mesh contains no geometry.");
   const { verts, indices } = weld(flat);
   layFlat(verts);
   const { faceNormal, faceArea } = computeFaceData(verts, indices);
@@ -356,18 +520,28 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   const components = splitComponents(verts.length / 3, indices);
   const { bodyFaces, barFaces } = classifyFaces(verts, indices, components);
 
+  // Within the body, brushed vs polished comes straight from the source tags.
+  const bodyBrushedFaces = bodyFaces.filter((f) => brushedFlags[f]);
+  const bodyPolishedFaces = bodyFaces.filter((f) => !brushedFlags[f]);
+
   const doc = new Document();
   const buffer = doc.createBuffer();
   const mesh = doc.createMesh();
 
   // Add one non-indexed primitive (angle-smoothed per-corner normals) for a set
-  // of faces under a material.
+  // of faces under a material. With `brush`, also emits TANGENTs + UVs for the
+  // brushed (linear-grain) material.
   const addPart = (
     faces: number[],
     mat: ReturnType<Document["createMaterial"]>,
+    brush?: {
+      axis: [number, number, number];
+      perp: [number, number, number];
+      vScale: number;
+    },
   ) => {
     if (faces.length === 0) return;
-    const { positions, normals } = buildSmoothedPrimitive(
+    const { positions, normals, tangents, uvs } = buildSmoothedPrimitive(
       verts,
       indices,
       faces,
@@ -375,6 +549,7 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
       faceArea,
       incidentByCorner,
       cornerKey,
+      brush,
     );
     const pos = doc
       .createAccessor()
@@ -386,24 +561,70 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
       .setType("VEC3")
       .setArray(normals as Float32Array<ArrayBuffer>)
       .setBuffer(buffer);
-    mesh.addPrimitive(
-      doc
-        .createPrimitive()
-        .setAttribute("POSITION", pos)
-        .setAttribute("NORMAL", nrm)
-        .setMaterial(mat),
-    );
+    const prim = doc
+      .createPrimitive()
+      .setAttribute("POSITION", pos)
+      .setAttribute("NORMAL", nrm)
+      .setMaterial(mat);
+    if (tangents) {
+      const tan = doc
+        .createAccessor()
+        .setType("VEC4")
+        .setArray(tangents as Float32Array<ArrayBuffer>)
+        .setBuffer(buffer);
+      prim.setAttribute("TANGENT", tan);
+    }
+    if (uvs) {
+      const uv = doc
+        .createAccessor()
+        .setType("VEC2")
+        .setArray(uvs as Float32Array<ArrayBuffer>)
+        .setBuffer(buffer);
+      prim.setAttribute("TEXCOORD_0", uv);
+    }
+    mesh.addPrimitive(prim);
   };
 
-  // Body — named so the viewer can recolor it per finish. Baked with the
-  // default finish so the stored GLB looks right un-recolored.
   const body = getFinish(null);
-  const bodyMat = doc
-    .createMaterial(BODY_MATERIAL_NAME)
-    .setBaseColorFactor([...body.baseColor, 1])
-    .setMetallicFactor(body.metallic)
-    .setRoughnessFactor(body.roughness);
-  addPart(bodyFaces, bodyMat);
+
+  // Polished body — named so the viewer can recolor it per finish. Baked with
+  // the default finish so the stored GLB looks right un-recolored.
+  if (bodyPolishedFaces.length > 0) {
+    const bodyMat = doc
+      .createMaterial(BODY_MATERIAL_NAME)
+      .setBaseColorFactor([...body.baseColor, 1])
+      .setMetallicFactor(body.metallic)
+      .setRoughnessFactor(body.roughness);
+    addPart(bodyPolishedFaces, bodyMat);
+  }
+
+  // Brushed faces — a linear brushed-metal normal map (visible grooves) running
+  // along the region's long axis, plus anisotropy for the stretched highlight.
+  if (bodyBrushedFaces.length > 0) {
+    const anisoExt = doc.createExtension(KHRMaterialsAnisotropy);
+    const aniso = anisoExt
+      .createAnisotropy()
+      .setAnisotropyStrength(BRUSHED.anisotropyStrength)
+      .setAnisotropyRotation(BRUSHED.anisotropyRotation);
+    const brushedMat = doc
+      .createMaterial(BODY_BRUSHED_MATERIAL_NAME)
+      .setBaseColorFactor([...body.baseColor, 1])
+      .setMetallicFactor(body.metallic)
+      .setRoughnessFactor(brushedRoughnessFor(body))
+      .setExtension("KHR_materials_anisotropy", aniso);
+
+    const normalTex = doc
+      .createTexture("brushed_normal")
+      .setImage(await makeBrushedNormalMap())
+      .setMimeType("image/png");
+    brushedMat.setNormalTexture(normalTex);
+    brushedMat.setNormalScale(BRUSH_NORMAL_SCALE);
+    const texInfo = brushedMat.getNormalTextureInfo();
+    texInfo?.setWrapS(REPEAT_WRAP).setWrapT(REPEAT_WRAP);
+
+    const brush = computeBrushAxis(verts, indices, bodyBrushedFaces);
+    addPart(bodyBrushedFaces, brushedMat, brush);
+  }
 
   // Spring bars — always silver, never recolored.
   if (barFaces.length > 0) {
@@ -418,10 +639,59 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   const node = doc.createNode().setMesh(mesh);
   doc.createScene().addChild(node);
 
-  const glb = await new WebIO().writeBinary(doc);
+  const glb = await anisoIO().writeBinary(doc);
   return {
     glb,
     vertexCount: verts.length / 3,
     triangleCount: indices.length / 3,
   };
+}
+
+export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
+  const flat = parseBinarySTL(stl);
+  if (flat.length === 0) throw new Error("STL contains no geometry.");
+  // STL has no material info → everything polished.
+  return meshToGlb(flat, new Array(flat.length / 9).fill(false));
+}
+
+// Parse an OBJ (with `usemtl` groups) into a triangle soup + per-triangle
+// brushed flags. A face is "brushed" when its active material name contains
+// "brush" (Fusion's "Stainless Steel - Brushed Linear Long" appearance). The
+// MTL file isn't needed — only the material NAMES referenced by `usemtl`.
+function parseObj(text: string): { flat: number[]; brushedFlags: boolean[] } {
+  const vx: number[] = [];
+  const flat: number[] = [];
+  const brushedFlags: boolean[] = [];
+  let brushed = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (line.startsWith("v ")) {
+      const p = line.split(/\s+/);
+      vx.push(+p[1], +p[2], +p[3]);
+    } else if (line.startsWith("usemtl ")) {
+      brushed = /brush/i.test(line.slice(7));
+    } else if (line.startsWith("f ")) {
+      const idx = line
+        .trim()
+        .split(/\s+/)
+        .slice(1)
+        .map((t) => {
+          const n = parseInt(t.split("/")[0], 10);
+          return n > 0 ? n - 1 : vx.length / 3 + n; // 1-based, or negative=relative
+        });
+      // Fan-triangulate any n-gon into triangles.
+      for (let i = 1; i + 1 < idx.length; i++) {
+        for (const v of [idx[0], idx[i], idx[i + 1]]) {
+          flat.push(vx[v * 3], vx[v * 3 + 1], vx[v * 3 + 2]);
+        }
+        brushedFlags.push(brushed);
+      }
+    }
+  }
+  return { flat, brushedFlags };
+}
+
+export async function objToGlb(objText: string): Promise<ConvertResult> {
+  const { flat, brushedFlags } = parseObj(objText);
+  if (flat.length === 0) throw new Error("OBJ contains no geometry.");
+  return meshToGlb(flat, brushedFlags);
 }
