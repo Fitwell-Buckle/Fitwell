@@ -423,31 +423,14 @@ function buildSmoothedPrimitive(
       normals[o + 1] = ny;
       normals[o + 2] = nz;
       if (tangents) {
-        // Linear grain: tangent = the world brush axis projected onto this
-        // corner's tangent plane (so the grain runs straight along `axis`).
-        let ax = brush!.axis[0],
-          ay = brush!.axis[1],
-          az = brush!.axis[2];
-        let d = ax * nx + ay * ny + az * nz;
-        let tx = ax - d * nx,
-          ty = ay - d * ny,
-          tz = az - d * nz;
-        let tl = Math.hypot(tx, ty, tz);
-        if (tl < 1e-4) {
-          // Axis ~parallel to the normal: fall back to the across-grain axis.
-          ax = brush!.perp[0];
-          ay = brush!.perp[1];
-          az = brush!.perp[2];
-          d = ax * nx + ay * ny + az * nz;
-          tx = ax - d * nx;
-          ty = ay - d * ny;
-          tz = az - d * nz;
-          tl = Math.hypot(tx, ty, tz) || 1;
-        }
+        // Constant world-horizontal tangent (the brush axis) — NOT projected
+        // onto each face — so the grain runs the same world direction on every
+        // brushed face instead of tilting with the surface. Faces edge-on to the
+        // axis get a vanishing bitangent (no grain), which is fine.
         const to = i * 12 + k * 4;
-        tangents[to] = tx / tl;
-        tangents[to + 1] = ty / tl;
-        tangents[to + 2] = tz / tl;
+        tangents[to] = brush!.axis[0];
+        tangents[to + 1] = brush!.axis[1];
+        tangents[to + 2] = brush!.axis[2];
         tangents[to + 3] = 1;
 
         // UV: U along the grain (texture uniform in U), V across the grain ×
