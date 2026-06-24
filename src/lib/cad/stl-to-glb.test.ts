@@ -60,18 +60,4 @@ describe("stlToGlb", () => {
   it("throws on a non-STL / size-mismatched buffer", async () => {
     await expect(stlToGlb(new Uint8Array(10))).rejects.toThrow();
   });
-
-  it("gives top/side faces an anisotropic brushed material", async () => {
-    // A flat quad lays flat with its faces pointing up → classified as
-    // top/side, so it becomes the brushed material (with anisotropy + tangents).
-    const stl = makeBinaryStl([
-      { v: [[0, 0, 0], [4, 0, 0], [0, 2, 0]] },
-      { v: [[4, 0, 0], [4, 2, 0], [0, 2, 0]] },
-    ]);
-    const { glb } = await stlToGlb(stl);
-    expect(new TextDecoder().decode(glb).includes("KHR_materials_anisotropy")).toBe(true);
-    expect(new TextDecoder().decode(glb).includes("body_brushed")).toBe(true);
-    // The brushed primitive carries TANGENTs (the brush direction).
-    expect(new TextDecoder().decode(glb).includes("TANGENT")).toBe(true);
-  });
 });
