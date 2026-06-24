@@ -10,7 +10,7 @@ import { KHRMaterialsAnisotropy } from "@gltf-transform/extensions";
 // U (so grooves run along U — i.e. circumferentially, given the cylindrical UVs).
 const BRUSH_TEX_HEIGHT = 512; // rows of grain
 const BRUSH_GRAIN_AMPLITUDE = 46; // green-channel deviation = groove depth
-const BRUSH_UV_V_PER_MM = 0.35; // texture repeats across the grain per mm (density)
+const BRUSH_UV_V_PER_MM = 0.175; // texture repeats across the grain per mm (density)
 const BRUSH_NORMAL_SCALE = 0.7; // overall groove strength on the material
 
 const REPEAT_WRAP = 10497; // glTF sampler wrap = REPEAT
