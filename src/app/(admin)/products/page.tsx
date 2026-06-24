@@ -1,10 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { order, orderLineItem, productionPoLineItem, productionPo } from "@/lib/schema";
-import { sql, sum, count, and, eq, gte, isNull, lte, ne } from "drizzle-orm";
-import { parseDateRange } from "@/lib/date-range";
 import {
   Table,
   TableHeader,
@@ -19,8 +15,7 @@ import { PRODUCTS_TABS } from "@/lib/nav-tabs";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
 import { ListFilters } from "@/components/catalog/list-filters";
 import { RefreshCatalogButton } from "@/components/catalog/refresh-catalog-button";
-import { getCatalogCached } from "@/lib/catalog/load";
-import { findSkuCollisions } from "@/lib/catalog/sku-collisions";
+import { getProductList, buildListQuery } from "@/lib/catalog/product-list";
 import { ProductRow } from "./product-row";
 import { StopPropagationLink } from "./stop-propagation-link";
 
@@ -44,121 +39,20 @@ export default async function ProductsPage({
   if (!session) redirect("/auth/login");
 
   const params = await searchParams;
-  // Item Chooser filter: the chosen product SKU(s). Next can deliver either a
-  // single comma-separated string (?sku=A,B) or repeated keys (?sku=A&sku=B),
-  // so accept both shapes.
-  const rawSku = params.sku;
-  const skuSet = new Set(
-    (Array.isArray(rawSku) ? rawSku.join(",") : (rawSku ?? ""))
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
 
-  // Sales reporting is bounded by the shared header date picker (from/to in the
-  // URL); default range is the rolling 30 days (parseDateRange's fallback). The
-  // Incoming + Shopify catalog columns stay un-filtered — they're "now" state.
-  const { from, to } = parseDateRange(params);
+  // Shared list builder (same ordering the detail page reuses for Prev/Next).
+  const {
+    visible: visibleProducts,
+    incomingBySku,
+    skuCollisions,
+    skuSet,
+  } = await getProductList(params);
 
-  // Sales performance per SKU (from order line items), bounded by date range.
-  const salesRows = await db
-    .select({
-      sku: orderLineItem.sku,
-      title: orderLineItem.title,
-      unitsSold: sum(orderLineItem.quantity).mapWith(Number),
-      orderCount: count(sql`DISTINCT ${orderLineItem.orderId}`),
-      revenue: sql<number>`coalesce(sum(${orderLineItem.price} * ${orderLineItem.quantity}), 0)::int`,
-    })
-    .from(orderLineItem)
-    .innerJoin(order, eq(order.id, orderLineItem.orderId))
-    .where(and(gte(order.processedAt, from), lte(order.processedAt, to)))
-    .groupBy(orderLineItem.sku, orderLineItem.title)
-    .orderBy(sql`sum(${orderLineItem.quantity}) desc`);
-  const salesBySku = new Map(salesRows.map((r) => [r.sku ?? "", r]));
-
-  // Incoming = produced-but-not-yet-received units, by SKU (excludes cancelled POs).
-  const incomingRows = await db
-    .select({
-      sku: productionPoLineItem.sku,
-      qty: sum(productionPoLineItem.quantity).mapWith(Number),
-    })
-    .from(productionPoLineItem)
-    .innerJoin(productionPo, eq(productionPoLineItem.poId, productionPo.id))
-    .where(
-      and(
-        isNull(productionPoLineItem.shopifyReceivedAt),
-        ne(productionPo.status, "cancelled"),
-      ),
-    )
-    .groupBy(productionPoLineItem.sku);
-  const incomingBySku = new Map(incomingRows.map((r) => [r.sku, r.qty ?? 0]));
-
-  // The list is the whole Shopify catalog (so brand-new / unsold products show
-  // too), left-joined with the sales aggregates. Falls back to sales-only if
-  // Shopify is unreachable. The catalog is cached — "Refresh catalog" re-pulls it.
-  type ProductRow = {
-    key: string;
-    sku: string;
-    title: string;
-    unitsSold: number;
-    orderCount: number;
-    revenue: number;
-  };
-  let catalog: Awaited<ReturnType<typeof getCatalogCached>> = [];
-  try {
-    catalog = await getCatalogCached();
-  } catch (err) {
-    console.error("products page: catalog load failed — showing sold SKUs only", err);
-  }
-
-  const rows: ProductRow[] = [];
-  const seen = new Set<string>();
-  // SAMPLE variants share SKUs with their customer-facing twin, and sales are
-  // keyed by SKU — so listing both rows would double-count the same revenue.
-  // Visit non-samples first; the duplicate SAMPLE row is then skipped by `seen`.
-  const sortedCatalog = [...catalog].sort((a, b) => {
-    const aSample = /sample/i.test(`${a.title ?? ""} ${a.variantTitle ?? ""}`);
-    const bSample = /sample/i.test(`${b.title ?? ""} ${b.variantTitle ?? ""}`);
-    return Number(aSample) - Number(bSample);
-  });
-  for (const v of sortedCatalog) {
-    const sku = v.sku ?? "";
-    if (sku && seen.has(sku)) continue;
-    const s = sku ? salesBySku.get(sku) : undefined;
-    rows.push({
-      key: sku || v.shopifyVariantId,
-      sku,
-      title: v.variantTitle ? `${v.title} — ${v.variantTitle}` : v.title,
-      unitsSold: Number(s?.unitsSold ?? 0),
-      orderCount: Number(s?.orderCount ?? 0),
-      revenue: Number(s?.revenue ?? 0),
-    });
-    if (sku) seen.add(sku);
-  }
-  // Keep historical sold SKUs no longer in the catalog (e.g. archived items).
-  for (const r of salesRows) {
-    const sku = r.sku ?? "";
-    if (sku && seen.has(sku)) continue;
-    rows.push({
-      key: sku || `sold-${rows.length}`,
-      sku,
-      title: r.title ?? "—",
-      unitsSold: Number(r.unitsSold ?? 0),
-      orderCount: Number(r.orderCount ?? 0),
-      revenue: Number(r.revenue ?? 0),
-    });
-  }
-  rows.sort((a, b) => b.unitsSold - a.unitsSold || a.title.localeCompare(b.title));
-
-  // Guard: SKUs assigned to more than one distinct product. SKU is the unique
-  // key everywhere (this list dedups by it, /products/[sku] routes by it, sales/
-  // incoming aggregate by it), so a collision silently shows the wrong product.
-  const skuCollisions = findSkuCollisions(catalog);
-
-  // Item Chooser filter: keep just the chosen products' rows.
-  const visibleProducts = skuSet.size
-    ? rows.filter((p) => skuSet.has(p.sku))
-    : rows;
+  // Carry the current filter + date range into each product link so the detail
+  // page can rebuild this exact list for its Prev/Next navigation.
+  const listQuery = buildListQuery(params);
+  const detailHref = (sku: string) =>
+    `/products/${encodeURIComponent(sku)}${listQuery ? `?${listQuery}` : ""}`;
 
   return (
     <div>
@@ -257,10 +151,7 @@ export default async function ProductsPage({
                   </>
                 );
                 return p.sku ? (
-                  <ProductRow
-                    key={p.key}
-                    href={`/products/${encodeURIComponent(p.sku)}`}
-                  >
+                  <ProductRow key={p.key} href={detailHref(p.sku)}>
                     {cells}
                   </ProductRow>
                 ) : (

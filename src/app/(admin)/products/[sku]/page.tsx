@@ -38,8 +38,14 @@ import {
 } from "@/lib/chart-utils";
 import { MetricCard } from "@/components/charts/metric-card";
 import type { MetricPoint } from "@/components/charts/metric-sparkline";
+import {
+  getProductList,
+  buildListQuery,
+  parseSkuSet,
+} from "@/lib/catalog/product-list";
 import { getProductCadModel, listReadyCadModels } from "@/lib/cad/products";
 import { matchFinish } from "@/lib/cad/finishes";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ProductCadModelCard } from "./product-cad-model";
 import { DashboardViewToggle } from "../../dashboard/view-toggle";
 
@@ -72,6 +78,40 @@ export default async function ProductDetailPage({
   const sp = await searchParams;
   const { from, to, granularity } = parseDateRange(sp);
   const isGraph = sp.view === "graph";
+
+  // Prev/Next navigation through the filtered Products list the user clicked
+  // from. Only when a `sku` filter is carried in the URL (i.e. arrived from a
+  // filtered list) — rebuild that same ordered list and locate this SKU. The
+  // links preserve the filter + the table/graph view.
+  let nav: {
+    index: number;
+    total: number;
+    prevHref: string | null;
+    nextHref: string | null;
+    prevTitle: string | null;
+    nextTitle: string | null;
+  } | null = null;
+  if (parseSkuSet(sp.sku).size > 0) {
+    const { visible } = await getProductList(sp);
+    const idx = visible.findIndex((p) => p.sku === sku);
+    if (idx !== -1 && visible.length > 1) {
+      const qs = new URLSearchParams(buildListQuery(sp));
+      if (sp.view === "graph") qs.set("view", "graph");
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      const hrefFor = (s: string) =>
+        `/products/${encodeURIComponent(s)}${suffix}`;
+      const prev = idx > 0 ? visible[idx - 1] : null;
+      const next = idx < visible.length - 1 ? visible[idx + 1] : null;
+      nav = {
+        index: idx,
+        total: visible.length,
+        prevHref: prev ? hrefFor(prev.sku) : null,
+        nextHref: next ? hrefFor(next.sku) : null,
+        prevTitle: prev?.title ?? null,
+        nextTitle: next?.title ?? null,
+      };
+    }
+  }
 
   // Bucket a timestamp column by the store day/week/month, matching the
   // dashboard so trend lines line up with Shopify's store-local reporting.
@@ -324,6 +364,36 @@ export default async function ProductDetailPage({
 
   return (
     <div>
+      {nav && (
+        <nav className="mb-3 flex items-center justify-between gap-3">
+          {nav.prevHref ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={nav.prevHref} title={nav.prevTitle ?? undefined}>
+                <ChevronLeft className="h-4 w-4" /> Previous
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled>
+              <ChevronLeft className="h-4 w-4" /> Previous
+            </Button>
+          )}
+          <span className="text-xs text-zinc-500">
+            {nav.index + 1} of {nav.total}
+          </span>
+          {nav.nextHref ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={nav.nextHref} title={nav.nextTitle ?? undefined}>
+                Next <ChevronRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled>
+              Next <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+        </nav>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title={title} />
         {/* Table (numbers) vs graph (per-tile line charts) — same toggle as the
