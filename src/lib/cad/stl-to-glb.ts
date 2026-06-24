@@ -622,7 +622,9 @@ async function meshToGlb(
     const texInfo = brushedMat.getNormalTextureInfo();
     texInfo?.setWrapS(REPEAT_WRAP).setWrapT(REPEAT_WRAP);
 
-    const brush = computeBrushAxis(verts, indices, bodyBrushedFaces);
+    // Base the grain on the WHOLE body's long axis (not the scattered brushed
+    // patches) so the strokes all run the same way across every brushed face.
+    const brush = computeBrushAxis(verts, indices, bodyFaces);
     addPart(bodyBrushedFaces, brushedMat, brush);
   }
 
