@@ -81,8 +81,8 @@ export const BRUSHED = {
 // comes from a procedural noise normal map baked onto these faces.
 export const BODY_CAST_MATERIAL_NAME = "body_cast";
 export const CAST = {
-  baseColor: [0.72, 0.73, 0.75] as [number, number, number], // steel
-  metallic: 1,
-  roughness: 0.62,
+  baseColor: [0.34, 0.34, 0.36] as [number, number, number], // dark steel
+  metallic: 0.8, // lower → less mirror, more diffuse
+  roughness: 0.85, // high → matte, low reflectivity
   normalScale: 0.7, // bumpiness
 };
