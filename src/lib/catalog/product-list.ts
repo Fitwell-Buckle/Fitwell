@@ -4,8 +4,20 @@ import {
   orderLineItem,
   productionPoLineItem,
   productionPo,
+  productCadModel,
 } from "@/lib/schema";
-import { sql, sum, count, and, eq, gte, isNull, lte, ne } from "drizzle-orm";
+import {
+  sql,
+  sum,
+  count,
+  and,
+  eq,
+  gte,
+  isNull,
+  isNotNull,
+  lte,
+  ne,
+} from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
 import { getCatalogCached } from "@/lib/catalog/load";
 import { findSkuCollisions } from "@/lib/catalog/sku-collisions";
@@ -23,6 +35,8 @@ export interface ProductListRow {
   unitsSold: number;
   orderCount: number;
   revenue: number;
+  /** This SKU's 3D model has been pushed to its Shopify product. */
+  onShopify: boolean;
 }
 
 export interface ProductList {
@@ -100,6 +114,13 @@ export async function getProductList(params: SearchParams): Promise<ProductList>
     .groupBy(productionPoLineItem.sku);
   const incomingBySku = new Map(incomingRows.map((r) => [r.sku, r.qty ?? 0]));
 
+  // SKUs whose 3D model has been pushed to Shopify (drives the "On Shopify" tag).
+  const publishedRows = await db
+    .select({ sku: productCadModel.sku })
+    .from(productCadModel)
+    .where(isNotNull(productCadModel.shopifyPublishedAt));
+  const onShopifySkus = new Set(publishedRows.map((r) => r.sku));
+
   // The list is the whole Shopify catalog (so brand-new / unsold products show
   // too), left-joined with the sales aggregates. Falls back to sales-only if
   // Shopify is unreachable. The catalog is cached — "Refresh catalog" re-pulls it.
@@ -134,6 +155,7 @@ export async function getProductList(params: SearchParams): Promise<ProductList>
       unitsSold: Number(s?.unitsSold ?? 0),
       orderCount: Number(s?.orderCount ?? 0),
       revenue: Number(s?.revenue ?? 0),
+      onShopify: onShopifySkus.has(sku),
     });
     if (sku) seen.add(sku);
   }
@@ -148,6 +170,7 @@ export async function getProductList(params: SearchParams): Promise<ProductList>
       unitsSold: Number(r.unitsSold ?? 0),
       orderCount: Number(r.orderCount ?? 0),
       revenue: Number(r.revenue ?? 0),
+      onShopify: onShopifySkus.has(sku),
     });
   }
   rows.sort(

@@ -13,6 +13,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { PRODUCTS_TABS } from "@/lib/nav-tabs";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Check } from "lucide-react";
 import { ListFilters } from "@/components/catalog/list-filters";
 import { RefreshCatalogButton } from "@/components/catalog/refresh-catalog-button";
 import { getProductList, buildListQuery } from "@/lib/catalog/product-list";
@@ -96,6 +98,7 @@ export default async function ProductsPage({
               <TableHead className="text-right">Units Sold</TableHead>
               <TableHead className="text-right">Orders</TableHead>
               <TableHead className="text-right">Revenue</TableHead>
+              <TableHead className="text-center">Shopify</TableHead>
               <TableHead className="w-0" aria-label="Actions" />
             </TableRow>
           </TableHeader>
@@ -103,7 +106,7 @@ export default async function ProductsPage({
             {visibleProducts.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="py-8 text-center text-zinc-400"
                 >
                   {skuSet.size ? "No products match." : "No product data yet."}
@@ -134,6 +137,15 @@ export default async function ProductsPage({
                     </TableCell>
                     <TableCell className="text-right">
                       <Mono>{fmt(Number(p.revenue) || 0)}</Mono>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {p.onShopify ? (
+                        <Badge className="bg-green-100 text-green-700">
+                          <Check className="mr-1 h-3 w-3" /> On Shopify
+                        </Badge>
+                      ) : (
+                        <Muted>—</Muted>
+                      )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap pr-2 text-right">
                       {p.sku ? (
