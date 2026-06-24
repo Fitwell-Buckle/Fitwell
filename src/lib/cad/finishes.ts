@@ -25,12 +25,12 @@ export const SPRING_BAR = {
 };
 
 export const FINISHES: Finish[] = [
-  // Glossy (low roughness, high metallic).
-  { id: "silver_steel", label: "Silver Steel", group: "glossy", baseColor: [0.72, 0.73, 0.75], metallic: 1, roughness: 0.22, swatch: "#c2c4c7" },
-  { id: "black_steel", label: "Black Steel", group: "glossy", baseColor: [0.045, 0.045, 0.05], metallic: 1, roughness: 0.28, swatch: "#1b1b1e" },
-  { id: "yellow_gold_steel", label: "Yellow Gold Steel", group: "glossy", baseColor: [0.86, 0.66, 0.22], metallic: 1, roughness: 0.25, swatch: "#d6a838" },
-  { id: "rose_gold_steel", label: "Rose Gold Steel", group: "glossy", baseColor: [0.82, 0.53, 0.46], metallic: 1, roughness: 0.25, swatch: "#cf8a78" },
-  { id: "titanium", label: "Titanium", group: "glossy", baseColor: [0.62, 0.63, 0.65], metallic: 1, roughness: 0.32, swatch: "#b7babe" },
+  // Polished (very low roughness, high metallic) — mirror-like reflective metal.
+  { id: "silver_steel", label: "Silver Steel", group: "glossy", baseColor: [0.72, 0.73, 0.75], metallic: 1, roughness: 0.1, swatch: "#c2c4c7" },
+  { id: "black_steel", label: "Black Steel", group: "glossy", baseColor: [0.045, 0.045, 0.05], metallic: 1, roughness: 0.12, swatch: "#1b1b1e" },
+  { id: "yellow_gold_steel", label: "Yellow Gold Steel", group: "glossy", baseColor: [0.86, 0.66, 0.22], metallic: 1, roughness: 0.1, swatch: "#d6a838" },
+  { id: "rose_gold_steel", label: "Rose Gold Steel", group: "glossy", baseColor: [0.82, 0.53, 0.46], metallic: 1, roughness: 0.1, swatch: "#cf8a78" },
+  { id: "titanium", label: "Titanium", group: "glossy", baseColor: [0.62, 0.63, 0.65], metallic: 1, roughness: 0.15, swatch: "#b7babe" },
   // Matte = bead blasted (high roughness). Only steel + titanium are bead blasted.
   { id: "matte_titanium", label: "Bead Blasted Titanium", group: "matte", baseColor: [0.58, 0.59, 0.61], metallic: 1, roughness: 0.62, swatch: "#a7aaae" },
   { id: "matte_steel", label: "Bead Blasted Steel", group: "matte", baseColor: [0.66, 0.67, 0.69], metallic: 1, roughness: 0.62, swatch: "#bbbec2" },
