@@ -571,19 +571,9 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   const body = getFinish(null);
   const brushCenter = computeBrushCenter(verts, indices, frameFaces);
 
-  // Brushing applies only to the frame's outward top + side faces. The frame's
-  // underside and ALL other parts (the tang/tongue especially) stay mirror
-  // polished. After lay-flat +Y is up, so faces not clearly facing down are
-  // "top/side". `TOP_SIDE_NY` is the cutoff.
-  const TOP_SIDE_NY = -0.2;
-
-  // The polished perimeter edge: the rounded "piping" that wraps the outer
-  // profile (top-outer and bottom-outer edges, all the way around). It's
-  // distinguished from the broad faces by pointing OUTWARD — its horizontal
-  // normal has a strong radial-outward component. The broad top points up
-  // (small outward component → stays brushed); the underside points down.
-  // Raise EDGE_OUTWARD to polish a thinner edge band, lower it to polish more.
-  const EDGE_OUTWARD = 0.72;
+  // Brushing covers the whole frame except the polished outer perimeter edge
+  // (below) and the separate parts (the tang/tongue), which stay polished.
+  // Radial-outward component of a face's horizontal normal (>0 outward, <0 inward).
   const outwardDot = (f: number): number => {
     let cxF = 0,
       czF = 0;
@@ -599,15 +589,36 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
     rz /= rl;
     return faceNormal[3 * f] * rx + faceNormal[3 * f + 2] * rz;
   };
-  const isPerimeterEdge = (f: number) => outwardDot(f) > EDGE_OUTWARD;
 
-  const bodyBrushedFaces = frameFaces.filter(
-    (f) => faceNormal[3 * f + 1] > TOP_SIDE_NY && !isPerimeterEdge(f),
-  );
+  // Per-face curvature: how far the sharpest neighbouring face normal bends away
+  // (0 on a flat/gently-domed face, larger on a rounded edge). The polished
+  // perimeter piping is the rounded OUTER edge — high curvature AND outward.
+  // Broad top/sides/inner walls/underside are low-curvature (or inward) → brushed.
+  const CURV_EDGE = 1 - Math.cos((14 * Math.PI) / 180); // neighbor >14° ⇒ edge
+  const EDGE_OUT_MIN = 0.15;
+  const faceCurvature = (f: number): number => {
+    const nx = faceNormal[3 * f],
+      ny = faceNormal[3 * f + 1],
+      nz = faceNormal[3 * f + 2];
+    let minDot = 1;
+    for (let k = 0; k < 3; k++) {
+      for (const g of incidentByCorner.get(cornerKey[3 * f + k]) ?? []) {
+        if (g === f) continue;
+        const d =
+          nx * faceNormal[3 * g] +
+          ny * faceNormal[3 * g + 1] +
+          nz * faceNormal[3 * g + 2];
+        if (d < minDot) minDot = d;
+      }
+    }
+    return 1 - minDot;
+  };
+  const isPerimeterEdge = (f: number) =>
+    faceCurvature(f) > CURV_EDGE && outwardDot(f) > EDGE_OUT_MIN;
+
+  const bodyBrushedFaces = frameFaces.filter((f) => !isPerimeterEdge(f));
   const bodyPolishedFaces = [
-    ...frameFaces.filter(
-      (f) => faceNormal[3 * f + 1] <= TOP_SIDE_NY || isPerimeterEdge(f),
-    ),
+    ...frameFaces.filter((f) => isPerimeterEdge(f)),
     ...otherBodyFaces,
   ];
 
