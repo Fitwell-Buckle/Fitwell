@@ -1,6 +1,43 @@
 import "server-only";
+import sharp from "sharp";
 import { Document, WebIO } from "@gltf-transform/core";
 import { KHRMaterialsAnisotropy } from "@gltf-transform/extensions";
+
+// ── Brushed grain texture ────────────────────────────────────────────────
+// Visible grain needs an actual normal-map (anisotropy only stretches the
+// highlight). We generate a tangent-space brushed normal map procedurally:
+// fine random ridges that vary along V (across the grain) and are uniform along
+// U (so grooves run along U — i.e. circumferentially, given the cylindrical UVs).
+const BRUSH_TEX_HEIGHT = 512; // rows of grain
+const BRUSH_GRAIN_AMPLITUDE = 46; // green-channel deviation = groove depth
+const BRUSH_UV_V_PER_MM = 0.35; // texture repeats across the grain per mm (density)
+const BRUSH_NORMAL_SCALE = 0.7; // overall groove strength on the material
+
+const REPEAT_WRAP = 10497; // glTF sampler wrap = REPEAT
+
+async function makeBrushedNormalMap(): Promise<Uint8Array> {
+  const W = 8;
+  const H = BRUSH_TEX_HEIGHT;
+  const raw = Buffer.alloc(W * H * 3);
+  for (let y = 0; y < H; y++) {
+    // Random per-row bitangent tilt (green) = a fine groove of varying depth;
+    // red 128 (no cross-grain tilt), blue 255 (surface normal up).
+    const g = Math.max(
+      0,
+      Math.min(255, 128 + Math.round(BRUSH_GRAIN_AMPLITUDE * (Math.random() * 2 - 1))),
+    );
+    for (let x = 0; x < W; x++) {
+      const o = (y * W + x) * 3;
+      raw[o] = 128;
+      raw[o + 1] = g;
+      raw[o + 2] = 255;
+    }
+  }
+  const png = await sharp(raw, { raw: { width: W, height: H, channels: 3 } })
+    .png()
+    .toBuffer();
+  return new Uint8Array(png);
+}
 import {
   BODY_MATERIAL_NAME,
   BODY_BRUSHED_MATERIAL_NAME,
@@ -291,18 +328,23 @@ function classifyFaces(
   verts: Float32Array,
   indices: Uint32Array,
   components: number[][],
-): { bodyFaces: number[]; barFaces: number[] } {
+): { frameFaces: number[]; otherBodyFaces: number[]; barFaces: number[] } {
   const parts = components.map((faces) => ({ faces, ...partExtents(verts, indices, faces) }));
   let largest = parts[0];
   for (const p of parts) if (p.vol > largest.vol) largest = p;
 
-  const bodyFaces: number[] = [];
+  // frame = the largest component (gets the brushed top/sides). Other solid
+  // parts — the tang/tongue especially — stay fully polished. Rods are the
+  // spring bars (always silver).
+  const frameFaces: number[] = [];
+  const otherBodyFaces: number[] = [];
   const barFaces: number[] = [];
   for (const p of parts) {
-    const isBar = isSpringBar(p.ext, p === largest);
-    (isBar ? barFaces : bodyFaces).push(...p.faces);
+    if (p === largest) frameFaces.push(...p.faces);
+    else if (isSpringBar(p.ext, false)) barFaces.push(...p.faces);
+    else otherBodyFaces.push(...p.faces);
   }
-  return { bodyFaces, barFaces };
+  return { frameFaces, otherBodyFaces, barFaces };
 }
 
 // Angle-based ("auto-smooth") normals. Naive smoothing averages face normals
@@ -337,11 +379,13 @@ function buildSmoothedPrimitive(
   positions: Float32Array;
   normals: Float32Array;
   tangents: Float32Array | null;
+  uvs: Float32Array | null;
 } {
   const cosThreshold = Math.cos((SMOOTH_ANGLE_DEG * Math.PI) / 180);
   const positions = new Float32Array(faceList.length * 9);
   const normals = new Float32Array(faceList.length * 9);
   const tangents = brushCenter ? new Float32Array(faceList.length * 12) : null;
+  const uvs = brushCenter ? new Float32Array(faceList.length * 6) : null;
   for (let i = 0; i < faceList.length; i++) {
     const f = faceList[i];
     const fnx = faceNormal[3 * f],
@@ -414,10 +458,17 @@ function buildSmoothedPrimitive(
         tangents[to + 1] = ty / tl;
         tangents[to + 2] = tz / tl;
         tangents[to + 3] = 1;
+
+        // Cylindrical UVs: U = angle around center (texture is uniform in U, so
+        // the wrap seam is invisible), V = radial distance × density (across the
+        // grain), so the normal-map grooves run circumferentially.
+        const uo = i * 6 + k * 2;
+        uvs![uo] = Math.atan2(rz, rx) / (2 * Math.PI);
+        uvs![uo + 1] = Math.hypot(rx, rz) * BRUSH_UV_V_PER_MM;
       }
     }
   }
-  return { positions, normals, tangents };
+  return { positions, normals, tangents, uvs };
 }
 
 // Brush center = the body's horizontal bbox center (after lay-flat puts +Y up).
@@ -454,7 +505,11 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   const { faceNormal, faceArea } = computeFaceData(verts, indices);
   const { incidentByCorner, cornerKey } = buildCornerAdjacency(verts, indices);
   const components = splitComponents(verts.length / 3, indices);
-  const { bodyFaces, barFaces } = classifyFaces(verts, indices, components);
+  const { frameFaces, otherBodyFaces, barFaces } = classifyFaces(
+    verts,
+    indices,
+    components,
+  );
 
   const doc = new Document();
   const buffer = doc.createBuffer();
@@ -469,7 +524,7 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
     brushCenter?: [number, number],
   ) => {
     if (faces.length === 0) return;
-    const { positions, normals, tangents } = buildSmoothedPrimitive(
+    const { positions, normals, tangents, uvs } = buildSmoothedPrimitive(
       verts,
       indices,
       faces,
@@ -502,21 +557,31 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
         .setBuffer(buffer);
       prim.setAttribute("TANGENT", tan);
     }
+    if (uvs) {
+      const uv = doc
+        .createAccessor()
+        .setType("VEC2")
+        .setArray(uvs as Float32Array<ArrayBuffer>)
+        .setBuffer(buffer);
+      prim.setAttribute("TEXCOORD_0", uv);
+    }
     mesh.addPrimitive(prim);
   };
 
   const body = getFinish(null);
 
-  // Split the body's outward top + side faces (brushed) from the rest (the
-  // underside/inner faces stay mirror-polished). After lay-flat +Y is up, so
-  // anything not clearly facing down is "top/side". `TOP_SIDE_NY` is the cutoff.
+  // Brushing applies only to the frame's outward top + side faces. The frame's
+  // underside and ALL other parts (the tang/tongue especially) stay mirror
+  // polished. After lay-flat +Y is up, so faces not clearly facing down are
+  // "top/side". `TOP_SIDE_NY` is the cutoff.
   const TOP_SIDE_NY = -0.2;
-  const bodyBrushedFaces = bodyFaces.filter(
+  const bodyBrushedFaces = frameFaces.filter(
     (f) => faceNormal[3 * f + 1] > TOP_SIDE_NY,
   );
-  const bodyPolishedFaces = bodyFaces.filter(
-    (f) => faceNormal[3 * f + 1] <= TOP_SIDE_NY,
-  );
+  const bodyPolishedFaces = [
+    ...frameFaces.filter((f) => faceNormal[3 * f + 1] <= TOP_SIDE_NY),
+    ...otherBodyFaces,
+  ];
 
   // Polished body — named so the viewer can recolor it per finish. Baked with
   // the default finish so the stored GLB looks right un-recolored.
@@ -529,7 +594,8 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
     addPart(bodyPolishedFaces, bodyMat);
   }
 
-  // Brushed top/sides — anisotropic (directional) brushed metal, finish-coloured.
+  // Brushed top/sides — a brushed-metal normal map (visible grooves) running
+  // circumferentially, plus anisotropy for the stretched highlight.
   if (bodyBrushedFaces.length > 0) {
     const anisoExt = doc.createExtension(KHRMaterialsAnisotropy);
     const aniso = anisoExt
@@ -542,7 +608,17 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
       .setMetallicFactor(body.metallic)
       .setRoughnessFactor(brushedRoughnessFor(body))
       .setExtension("KHR_materials_anisotropy", aniso);
-    const brushCenter = computeBrushCenter(verts, indices, bodyFaces);
+
+    const normalTex = doc
+      .createTexture("brushed_normal")
+      .setImage(await makeBrushedNormalMap())
+      .setMimeType("image/png");
+    brushedMat.setNormalTexture(normalTex);
+    brushedMat.setNormalScale(BRUSH_NORMAL_SCALE);
+    const texInfo = brushedMat.getNormalTextureInfo();
+    texInfo?.setWrapS(REPEAT_WRAP).setWrapT(REPEAT_WRAP);
+
+    const brushCenter = computeBrushCenter(verts, indices, frameFaces);
     addPart(bodyBrushedFaces, brushedMat, brushCenter);
   }
 
