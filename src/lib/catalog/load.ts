@@ -69,15 +69,29 @@ export async function loadCatalog(): Promise<CatalogVariant[]> {
   return variants;
 }
 
+const _catalogCached = unstable_cache(loadCatalog, ["production-catalog"], {
+  revalidate: CATALOG_REVALIDATE_SECONDS,
+  tags: [CATALOG_CACHE_TAG],
+});
+
 /**
  * Cached catalog for server components that only need variant attributes
  * (e.g. the POs page size/colour filter), so they don't re-page Shopify on
  * every render. The picker still fetches live via /api/production/products.
+ *
+ * Falls back to an uncached load when there's no Next.js runtime (e.g. a CLI
+ * script), where `unstable_cache` throws "incrementalCache missing".
  */
-export const getCatalogCached = unstable_cache(loadCatalog, ["production-catalog"], {
-  revalidate: CATALOG_REVALIDATE_SECONDS,
-  tags: [CATALOG_CACHE_TAG],
-});
+export async function getCatalogCached(): Promise<CatalogVariant[]> {
+  try {
+    return await _catalogCached();
+  } catch (err) {
+    if (err instanceof Error && /incrementalCache/.test(err.message)) {
+      return loadCatalog();
+    }
+    throw err;
+  }
+}
 
 export interface CatalogCollectionGroup {
   id: string;
