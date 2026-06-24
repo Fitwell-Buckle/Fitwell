@@ -64,6 +64,13 @@ export async function applyFinishToGlb(
         .setBaseColorFactor([...finish.baseColor, 1])
         .setMetallicFactor(finish.metallic)
         .setRoughnessFactor(brushedRoughnessFor(finish));
+    } else if (mat.getName() === BODY_CAST_MATERIAL_NAME) {
+      // Cast faces take the buckle colour but stay matte + bumpy (the baked
+      // bump normal map is left untouched).
+      mat
+        .setBaseColorFactor([...finish.baseColor, 1])
+        .setMetallicFactor(CAST.metallic)
+        .setRoughnessFactor(CAST.roughness);
     } else if (mat.getName() === SPRING_BAR_MATERIAL_NAME) {
       // Refresh the spring bar to the current SPRING_BAR too, so its matte/shine
       // tracks config changes on re-push without re-baking the stored model.

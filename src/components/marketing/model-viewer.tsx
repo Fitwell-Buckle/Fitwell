@@ -6,9 +6,11 @@ import {
   getFinish,
   BODY_MATERIAL_NAME,
   BODY_BRUSHED_MATERIAL_NAME,
+  BODY_CAST_MATERIAL_NAME,
   SPRING_BAR_MATERIAL_NAME,
   SPRING_BAR,
   BRUSHED,
+  CAST,
 } from "@/lib/cad/finishes";
 
 // Minimal typing for the <model-viewer> custom element (only the attributes we
@@ -118,6 +120,12 @@ export function ModelViewer({
         brushed?.pbrMetallicRoughness.setRoughnessFactor(
           f.group === "matte" ? f.roughness : BRUSHED.roughness,
         );
+        // Cast — the buckle's colour, but kept as a matte, bumpy cast surface
+        // (the baked bump normal map stays). No longer fixed steel.
+        const cast = mats.find((m) => m.name === BODY_CAST_MATERIAL_NAME);
+        cast?.pbrMetallicRoughness.setBaseColorFactor([...f.baseColor, 1]);
+        cast?.pbrMetallicRoughness.setMetallicFactor(CAST.metallic);
+        cast?.pbrMetallicRoughness.setRoughnessFactor(CAST.roughness);
       }
       // Spring bar — always the fixed silver, applied live so tweaks to its
       // matte/shine take effect without re-baking the stored model.
