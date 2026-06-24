@@ -583,7 +583,7 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   // normal has a strong radial-outward component. The broad top points up
   // (small outward component → stays brushed); the underside points down.
   // Raise EDGE_OUTWARD to polish a thinner edge band, lower it to polish more.
-  const EDGE_OUTWARD = 0.5;
+  const EDGE_OUTWARD = 0.72;
   const outwardDot = (f: number): number => {
     let cxF = 0,
       czF = 0;
