@@ -477,7 +477,9 @@ function computeBrushAxis(
   }
   const extX = maxX - minX;
   const extZ = maxZ - minZ;
-  const alongX = extX >= extZ;
+  // Grain runs along the SHORTER horizontal axis (rotated 90° from the long
+  // axis) — flip the comparison to run it the other way.
+  const alongX = extX < extZ;
   const perpExtent = (alongX ? extZ : extX) || 1;
   return {
     axis: alongX ? [1, 0, 0] : [0, 0, 1],
