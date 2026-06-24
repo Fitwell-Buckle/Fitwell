@@ -35,6 +35,7 @@ export function ProductCadModelCard({
   const [shopifyBusy, setShopifyBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const selected = readyModels.find((m) => m.id === selectedId) ?? null;
 
@@ -64,6 +65,7 @@ export function ProductCadModelCard({
 
   async function pushShopify() {
     setError(null);
+    setNotice(null);
     setShopifyBusy(true);
     try {
       const res = await fetch(
@@ -75,6 +77,16 @@ export function ProductCadModelCard({
         setError(d.error || "Shopify push failed.");
         return;
       }
+      const pushed = d.data?.pushed ?? [];
+      const skipped = d.data?.skipped ?? [];
+      const names = (
+        arr: { variantTitle: string | null; sku: string }[],
+      ) => arr.map((x) => x.variantTitle || x.sku).join(", ");
+      let msg = `Pushed ${pushed.length} size${pushed.length === 1 ? "" : "s"}: ${names(pushed)}.`;
+      if (skipped.length > 0) {
+        msg += ` Skipped (no model linked): ${names(skipped)}.`;
+      }
+      setNotice(msg);
       setOnShopify(true);
       router.refresh();
     } catch {
@@ -129,10 +141,12 @@ export function ProductCadModelCard({
         >
           CAD library
         </Link>{" "}
-        (color variants share one model), then push its spinnable 3D viewer to
-        the Shopify product.
+        (color variants share one model). Push sends a spinnable 3D viewer for{" "}
+        <strong>every size variant</strong> that has a model linked — each tied
+        to its variant so the storefront swaps the model per size.
       </p>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {notice && <p className="mt-2 text-sm text-green-700">{notice}</p>}
 
       {selected?.glbUrl && (
         <div className="mt-4">

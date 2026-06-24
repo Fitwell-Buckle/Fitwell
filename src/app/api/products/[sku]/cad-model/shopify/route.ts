@@ -23,8 +23,8 @@ export async function POST(
   const sku = decodeURIComponent(encoded);
 
   try {
-    const { mediaId, status } = await pushToShopify(sku);
-    return NextResponse.json({ data: { sku, mediaId, status } });
+    const { pushed, skipped } = await pushToShopify(sku);
+    return NextResponse.json({ data: { sku, pushed, skipped } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Shopify push failed.";
     console.error("Shopify 3D media push failed:", err);

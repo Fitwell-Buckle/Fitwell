@@ -105,6 +105,47 @@ export async function pushModelToShopify(opts: {
   return { mediaId: media.id, status: media.status };
 }
 
+// Associate a media (already on the product) with a specific variant, so the
+// storefront features it when that variant is selected. This is what makes the
+// 3D model switch per size: each size variant gets its own size model. Throws on
+// user errors so a failed association surfaces.
+export async function appendVariantMedia(opts: {
+  productId: string; // numeric id or gid
+  variantId: string; // numeric id or gid
+  mediaIds: string[]; // gids
+}): Promise<void> {
+  if (opts.mediaIds.length === 0) return;
+  const client = getShopifyClient();
+  const productGid = opts.productId.startsWith("gid://")
+    ? opts.productId
+    : `gid://shopify/Product/${opts.productId}`;
+  const variantGid = opts.variantId.startsWith("gid://")
+    ? opts.variantId
+    : `gid://shopify/ProductVariant/${opts.variantId}`;
+
+  const data = await client.graphql<{
+    productVariantAppendMedia: {
+      userErrors: { field: string[] | null; message: string }[];
+    };
+  }>(
+    `mutation productVariantAppendMedia($productId: ID!, $variantMedia: [ProductVariantAppendMediaInput!]!) {
+      productVariantAppendMedia(productId: $productId, variantMedia: $variantMedia) {
+        userErrors { field message }
+      }
+    }`,
+    {
+      productId: productGid,
+      variantMedia: [{ variantId: variantGid, mediaIds: opts.mediaIds }],
+    },
+  );
+  const errs = data.productVariantAppendMedia.userErrors;
+  if (errs?.length) {
+    throw new Error(
+      `productVariantAppendMedia: ${errs.map((e) => e.message).join("; ")}`,
+    );
+  }
+}
+
 // Every 3D-model media id currently on a product. Used to fully clear prior
 // pushes (including ones from before we tracked/deleted media), so a recolored
 // re-push leaves exactly one model behind.
