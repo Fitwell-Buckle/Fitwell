@@ -328,9 +328,11 @@ function buildSmoothedPrimitive(
   faceArea: Float32Array,
   incidentByCorner: Map<string, number[]>,
   cornerKey: string[],
-  // When set, also emit per-corner TANGENTs aligned to this world axis (the
-  // brush direction) — needed for the anisotropic brushed material.
-  brushAxis?: [number, number, number],
+  // When set ([centerX, centerZ]), also emit per-corner TANGENTs that run
+  // circumferentially around this center in the horizontal plane — so the brush
+  // grain follows the buckle's form (wraps the frame, runs lengthwise down each
+  // arm) rather than along one fixed axis. Needed for the brushed material.
+  brushCenter?: [number, number],
 ): {
   positions: Float32Array;
   normals: Float32Array;
@@ -339,7 +341,7 @@ function buildSmoothedPrimitive(
   const cosThreshold = Math.cos((SMOOTH_ANGLE_DEG * Math.PI) / 180);
   const positions = new Float32Array(faceList.length * 9);
   const normals = new Float32Array(faceList.length * 9);
-  const tangents = brushAxis ? new Float32Array(faceList.length * 12) : null;
+  const tangents = brushCenter ? new Float32Array(faceList.length * 12) : null;
   for (let i = 0; i < faceList.length; i++) {
     const f = faceList[i];
     const fnx = faceNormal[3 * f],
@@ -376,25 +378,35 @@ function buildSmoothedPrimitive(
       normals[o + 1] = ny;
       normals[o + 2] = nz;
       if (tangents) {
-        // Project the world brush axis onto this corner's tangent plane so the
-        // grain runs consistently along the buckle regardless of curvature.
-        let ax = brushAxis![0],
-          ay = brushAxis![1],
-          az = brushAxis![2];
-        let d = ax * nx + ay * ny + az * nz;
+        // Circumferential brush direction: rotate the horizontal radial vector
+        // (from the buckle center to this point) 90° in the XZ plane, then
+        // project onto the corner's tangent plane. The result wraps the grain
+        // around the frame and runs lengthwise down each arm.
+        const rx = positions[o] - brushCenter![0];
+        const rz = positions[o + 2] - brushCenter![1];
+        let ax = -rz,
+          az = rx;
+        const al = Math.hypot(ax, az);
+        if (al < 1e-5) {
+          ax = 1;
+          az = 0;
+        } else {
+          ax /= al;
+          az /= al;
+        }
+        let d = ax * nx + az * nz; // ay = 0
         let tx = ax - d * nx,
-          ty = ay - d * ny,
+          ty = -d * ny,
           tz = az - d * nz;
         let tl = Math.hypot(tx, ty, tz);
         if (tl < 1e-4) {
-          // Brush axis ~parallel to the normal: fall back to a perpendicular.
-          ax = Math.abs(nx) < 0.9 ? 1 : 0;
-          ay = 0;
-          az = Math.abs(nx) < 0.9 ? 0 : 1;
-          d = ax * nx + ay * ny + az * nz;
-          tx = ax - d * nx;
-          ty = ay - d * ny;
-          tz = az - d * nz;
+          // Direction ~parallel to the normal: fall back to any perpendicular.
+          const fx = Math.abs(nx) < 0.9 ? 1 : 0;
+          const fz = Math.abs(nx) < 0.9 ? 0 : 1;
+          d = fx * nx + fz * nz;
+          tx = fx - d * nx;
+          ty = -d * ny;
+          tz = fz - d * nz;
           tl = Math.hypot(tx, ty, tz) || 1;
         }
         const to = i * 12 + k * 4;
@@ -408,26 +420,30 @@ function buildSmoothedPrimitive(
   return { positions, normals, tangents };
 }
 
-// Brush direction = the body's longest horizontal axis (world X or Z, after lay-
-// flat puts +Y up). A unit vector the tangents align to.
-function computeBrushAxis(
+// Brush center = the body's horizontal bbox center (after lay-flat puts +Y up).
+// The brushed tangents run circumferentially around this point, so the grain
+// follows the frame's sweep.
+function computeBrushCenter(
   verts: Float32Array,
   indices: Uint32Array,
   faces: number[],
-): [number, number, number] {
-  const min = [Infinity, Infinity, Infinity];
-  const max = [-Infinity, -Infinity, -Infinity];
+): [number, number] {
+  let minX = Infinity,
+    maxX = -Infinity,
+    minZ = Infinity,
+    maxZ = -Infinity;
   for (const f of faces) {
     for (let k = 0; k < 3; k++) {
       const vi = indices[3 * f + k] * 3;
-      for (let a = 0; a < 3; a++) {
-        const v = verts[vi + a];
-        if (v < min[a]) min[a] = v;
-        if (v > max[a]) max[a] = v;
-      }
+      const x = verts[vi],
+        z = verts[vi + 2];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
     }
   }
-  return max[0] - min[0] >= max[2] - min[2] ? [1, 0, 0] : [0, 0, 1];
+  return [(minX + maxX) / 2, (minZ + maxZ) / 2];
 }
 
 export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
@@ -450,7 +466,7 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
   const addPart = (
     faces: number[],
     mat: ReturnType<Document["createMaterial"]>,
-    brushAxis?: [number, number, number],
+    brushCenter?: [number, number],
   ) => {
     if (faces.length === 0) return;
     const { positions, normals, tangents } = buildSmoothedPrimitive(
@@ -461,7 +477,7 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
       faceArea,
       incidentByCorner,
       cornerKey,
-      brushAxis,
+      brushCenter,
     );
     const pos = doc
       .createAccessor()
@@ -526,8 +542,8 @@ export async function stlToGlb(stl: Uint8Array): Promise<ConvertResult> {
       .setMetallicFactor(body.metallic)
       .setRoughnessFactor(brushedRoughnessFor(body))
       .setExtension("KHR_materials_anisotropy", aniso);
-    const brushAxis = computeBrushAxis(verts, indices, bodyFaces);
-    addPart(bodyBrushedFaces, brushedMat, brushAxis);
+    const brushCenter = computeBrushCenter(verts, indices, bodyFaces);
+    addPart(bodyBrushedFaces, brushedMat, brushCenter);
   }
 
   // Spring bars — always silver, never recolored.
