@@ -38,7 +38,10 @@ export function FinishViewer({
 
   return (
     <div>
-      <div className="aspect-[16/9] w-full overflow-hidden rounded-lg border border-zinc-200 bg-gradient-to-b from-zinc-50 to-zinc-100">
+      {/* #464449 matches the slate-grey backdrop of the Fitwell product photos
+          (sampled from the storefront images), so the preview reads like a
+          product shot. */}
+      <div className="aspect-[16/9] w-full overflow-hidden rounded-lg border border-zinc-700 bg-[#464449]">
         <ModelViewer src={src} alt={alt} finishId={finishId} cameraOrbit={cameraOrbit} />
       </div>
 
