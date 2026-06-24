@@ -137,6 +137,40 @@ export default async function DashboardPage({
         ? and(isNotNull(order.customerId), not(exists(earlierOrder)))
         : undefined;
 
+  // Heuristic "likely exchange" signal for a refunded order: the same customer
+  // re-bought one of its products in a DIFFERENT variant within a short window
+  // (the classic size/color swap) — vs a "pure return" (dissatisfied). It's a
+  // proxy, not ground truth (Shopify's Returns API has the real exchange flag +
+  // reason codes; not synced). Built with the query builder so the aliased
+  // self-joins render correctly.
+  const exchOli = alias(orderLineItem, "exch_oli");
+  const exchOli2 = alias(orderLineItem, "exch_oli2");
+  const exchO2 = alias(order, "exch_o2");
+  const likelyExchange = exists(
+    db
+      .select({ one: sql`1` })
+      .from(exchOli)
+      .innerJoin(
+        exchOli2,
+        and(
+          eq(exchOli2.shopifyProductId, exchOli.shopifyProductId),
+          sql`${exchOli2.shopifyVariantId} <> ${exchOli.shopifyVariantId}`,
+        ),
+      )
+      .innerJoin(exchO2, eq(exchO2.id, exchOli2.orderId))
+      .where(
+        and(
+          eq(exchOli.orderId, order.id),
+          eq(exchO2.customerId, order.customerId),
+          sql`${exchO2.id} <> ${order.id}`,
+          sql`${exchO2.processedAt} >= ${order.processedAt} - interval '7 days'`,
+          sql`${exchO2.processedAt} <= ${order.processedAt} + interval '45 days'`,
+          sql`${exchO2.cancelledAt} IS NULL`,
+          sql`${exchO2.isSample} = false`,
+        ),
+      ),
+  );
+
   // Bucket by the STORE timezone so the daily trend lines up with Shopify
   // (whose reports use the store day). Without `AT TIME ZONE`, evening-Pacific
   // orders fall into the next UTC day and the line is off by a day.
@@ -212,6 +246,8 @@ export default async function DashboardPage({
           orders: sql<number>`COUNT(*) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
           customers:
             sql<number>`COUNT(DISTINCT ${order.customerId}) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
+          exchanges:
+            sql<number>`COUNT(*) FILTER (WHERE ${order.totalRefunded} > 0 AND ${likelyExchange})`.mapWith(Number),
         })
         .from(order)
         .where(
@@ -316,6 +352,10 @@ export default async function DashboardPage({
   const totalReturns = Number(returnsResult[0]?.total ?? 0);
   const returnOrders = returnsResult[0]?.orders ?? 0;
   const returnCustomers = returnsResult[0]?.customers ?? 0;
+  // Split of refunded orders into likely exchanges (size/color swap) vs pure
+  // returns (dissatisfied). Heuristic — see `likelyExchange`.
+  const exchangeOrders = returnsResult[0]?.exchanges ?? 0;
+  const pureReturnOrders = Math.max(0, returnOrders - exchangeOrders);
   // Shipping-label cost the business eats across all returns: one assumed label
   // per refunded order (returnLabelCostCents — set in admin Settings; an
   // estimate, since Shopify doesn't expose the real label cost via API).
@@ -666,6 +706,23 @@ export default async function DashboardPage({
           pctLabel={segmentDenomLabel}
         />
       </div>
+
+      {returnOrders > 0 && (
+        <p className="mt-3 text-xs text-zinc-500">
+          Of {returnOrders.toLocaleString()} refunded order
+          {returnOrders === 1 ? "" : "s"}, ~
+          <span className="font-medium text-zinc-700">
+            {exchangeOrders.toLocaleString()}
+          </span>{" "}
+          look like exchanges (same customer rebought the product in a different
+          variant within ~45 days) and{" "}
+          <span className="font-medium text-zinc-700">
+            {pureReturnOrders.toLocaleString()}
+          </span>{" "}
+          like pure returns. Heuristic estimate — Shopify&apos;s real
+          exchange/return-reason data isn&apos;t synced yet.
+        </p>
+      )}
 
       <Card className="mt-8">
         <CardHeader>
