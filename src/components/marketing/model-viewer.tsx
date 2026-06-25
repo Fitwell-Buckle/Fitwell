@@ -157,8 +157,8 @@ export function ModelViewer({
       camera-orbit={cameraOrbit}
       interaction-prompt="none"
       touch-action="pan-y"
-      shadow-intensity="1.6"
-      shadow-softness="0.9"
+      shadow-intensity="2.6"
+      shadow-softness="0.8"
       exposure="1"
       className={className}
       style={{ width: "100%", height: "100%", backgroundColor: "transparent" }}
