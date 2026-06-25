@@ -59,7 +59,7 @@ function ReferenceCard({
           title={label}
           loading="lazy"
           allowFullScreen
-          className="h-80 w-full border-0 bg-zinc-50"
+          className="h-[34rem] w-full border-0 bg-zinc-50"
         />
       ) : (
         <div className="px-3 py-6 text-sm text-zinc-500">

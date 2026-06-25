@@ -23,6 +23,7 @@ import {
   type PrototypeStatus,
 } from "@/lib/prototypes";
 import { VendorMultiSelect } from "@/components/production/vendor-inline-create";
+import { isAllowedFusionUrl } from "@/lib/prototypes/fusion";
 import { cn } from "@/lib/utils";
 
 interface PrototypeVendor {
@@ -113,6 +114,7 @@ function NewPrototypeForm({
   // Local copy so inline-created vendors show up immediately in the list.
   const [vendors, setVendors] = useState<SupplierOption[]>(suppliers);
   const [supplierIds, setSupplierIds] = useState<string[]>([]);
+  const [fusionUrl, setFusionUrl] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -120,6 +122,12 @@ function NewPrototypeForm({
   async function save() {
     setError(null);
     if (!name.trim()) return setError("Name is required.");
+    const link = fusionUrl.trim();
+    if (link && !isAllowedFusionUrl(link)) {
+      return setError(
+        "That doesn’t look like a Fusion share link (a360.co or autodesk360.com). Leave it blank to add one later.",
+      );
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/prototypes", {
@@ -137,6 +145,16 @@ function NewPrototypeForm({
         setError(d.error || "Save failed.");
         setBusy(false);
         return;
+      }
+      // Best-effort: attach the Fusion CAD link to the new prototype. The
+      // prototype already exists, so a link failure shouldn't block — the user
+      // lands on the detail page and can add/retry it under CAD references.
+      if (link) {
+        await fetch(`/api/prototypes/${d.data.id}/references`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: link, title: null }),
+        }).catch(() => {});
       }
       router.push(`/modules/production/prototypes/${d.data.id}`);
     } catch {
@@ -177,6 +195,19 @@ function NewPrototypeForm({
             selectedIds={supplierIds}
             onChange={setSupplierIds}
             onVendorCreated={(v) => setVendors((prev) => [...prev, v])}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={fieldLabel}>
+            Fusion / CAD link{" "}
+            <span className="font-normal text-zinc-400">
+              — optional; renders as an inline 3D preview. You can add more later.
+            </span>
+          </label>
+          <Input
+            value={fusionUrl}
+            onChange={(e) => setFusionUrl(e.target.value)}
+            placeholder="https://a360.co/…"
           />
         </div>
         <div className="sm:col-span-2">
