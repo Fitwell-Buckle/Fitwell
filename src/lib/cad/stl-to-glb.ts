@@ -426,7 +426,11 @@ async function meshToGlb(
   const components = splitComponents(verts.length / 3, indices);
   const cls = classifyFaces(verts, indices, components);
   // Explicit finish tags (matte/cast) win over the geometric spring-bar guess —
-  // a tagged face is never silently turned into a silver rod.
+  // a tagged face is never silently turned into a silver rod. This is what keeps
+  // a satin patch (e.g. the engraved text) matte even when welding merges it into
+  // a rod-shaped component. Corollary: a spring bar must NOT carry a satin/cast
+  // appearance in the source, or it'll be read as a satin body surface (recolored
+  // with the finish) instead of a silver rod — leave spring bars polished/Nickel.
   const tagged = (f: number) => matteFlags[f] || castFlags[f];
   const barFaces = cls.barFaces.filter((f) => !tagged(f));
   const bodyFaces = [...cls.bodyFaces, ...cls.barFaces.filter(tagged)];
