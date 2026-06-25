@@ -248,6 +248,8 @@ export default async function DashboardPage({
             sql<number>`COUNT(DISTINCT ${order.customerId}) FILTER (WHERE ${order.totalRefunded} > 0)`.mapWith(Number),
           exchanges:
             sql<number>`COUNT(*) FILTER (WHERE ${order.totalRefunded} > 0 AND ${likelyExchange})`.mapWith(Number),
+          exchangeValue:
+            sql<number>`COALESCE(SUM(${order.totalRefunded}) FILTER (WHERE ${order.totalRefunded} > 0 AND ${likelyExchange}), 0)`.mapWith(Number),
         })
         .from(order)
         .where(
@@ -356,6 +358,22 @@ export default async function DashboardPage({
   // returns (dissatisfied). Heuristic — see `likelyExchange`.
   const exchangeOrders = returnsResult[0]?.exchanges ?? 0;
   const pureReturnOrders = Math.max(0, returnOrders - exchangeOrders);
+  const exchangeValue = Number(returnsResult[0]?.exchangeValue ?? 0);
+  const pureReturnValue = Math.max(0, totalReturns - exchangeValue);
+  const returnsBreakdown = [
+    {
+      label: "Likely exchange",
+      hint: "wrong size / color",
+      orders: exchangeOrders,
+      value: exchangeValue,
+    },
+    {
+      label: "Pure return",
+      hint: "dissatisfied",
+      orders: pureReturnOrders,
+      value: pureReturnValue,
+    },
+  ];
   // Shipping-label cost the business eats across all returns: one assumed label
   // per refunded order (returnLabelCostCents — set in admin Settings; an
   // estimate, since Shopify doesn't expose the real label cost via API).
@@ -707,22 +725,81 @@ export default async function DashboardPage({
         />
       </div>
 
-      {returnOrders > 0 && (
-        <p className="mt-3 text-xs text-zinc-500">
-          Of {returnOrders.toLocaleString()} refunded order
-          {returnOrders === 1 ? "" : "s"}, ~
-          <span className="font-medium text-zinc-700">
-            {exchangeOrders.toLocaleString()}
-          </span>{" "}
-          look like exchanges (same customer rebought the product in a different
-          variant within ~45 days) and{" "}
-          <span className="font-medium text-zinc-700">
-            {pureReturnOrders.toLocaleString()}
-          </span>{" "}
-          like pure returns. Heuristic estimate — Shopify&apos;s real
-          exchange/return-reason data isn&apos;t synced yet.
-        </p>
-      )}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-1.5">
+            Returns Breakdown
+            <InfoTooltip>
+              A heuristic split of refunded orders. A refund counts as a{" "}
+              <em>likely exchange</em> when the same customer rebought one of the
+              order&apos;s products in a <em>different variant</em> within ~45
+              days (the classic size/color swap); otherwise it&apos;s a{" "}
+              <em>pure return</em>. It&apos;s an estimate — Shopify&apos;s real
+              exchange flag and per-line return-reason codes aren&apos;t synced
+              yet, so manual/store-credit/app-driven exchanges won&apos;t be
+              caught.
+            </InfoTooltip>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {returnOrders === 0 ? (
+            <p className="py-6 text-center text-sm text-zinc-400">
+              No returns in this period.
+            </p>
+          ) : (
+            <>
+              {/* Proportion of refund value: exchange (zinc) vs pure (amber). */}
+              <div className="mb-4 flex h-2 overflow-hidden rounded-full bg-zinc-100">
+                <div
+                  className="bg-zinc-800"
+                  style={{
+                    width: `${totalReturns > 0 ? (exchangeValue / totalReturns) * 100 : 0}%`,
+                  }}
+                />
+                <div
+                  className="bg-amber-500"
+                  style={{
+                    width: `${totalReturns > 0 ? (pureReturnValue / totalReturns) * 100 : 0}%`,
+                  }}
+                />
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right">Orders</TableHead>
+                    <TableHead className="text-right">Refund value</TableHead>
+                    <TableHead className="text-right">% of returns</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {returnsBreakdown.map((r) => (
+                    <TableRow key={r.label}>
+                      <TableCell className="font-medium text-zinc-900">
+                        {r.label}{" "}
+                        <span className="text-xs font-normal text-zinc-400">
+                          ({r.hint})
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {r.orders.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Mono>{fmt(r.value)}</Mono>
+                      </TableCell>
+                      <TableCell className="text-right text-zinc-500">
+                        {totalReturns > 0
+                          ? `${Math.round((r.value / totalReturns) * 100)}%`
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="mt-8">
         <CardHeader>
