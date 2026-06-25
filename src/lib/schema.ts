@@ -1132,6 +1132,18 @@ export const prototypeSupplier = pgTable(
     supplierId: text("supplier_id")
       .notNull()
       .references(() => supplier.id, { onDelete: "cascade" }),
+    // RFQ: when we emailed this vendor a request for quote (via the PO email
+    // system). Null = not yet requested through the system.
+    rfqSentAt: timestamp("rfq_sent_at", { mode: "date" }),
+    // The quote we got back. Recorded either when we log a received quote
+    // manually or (future) when a vendor responds. `quoteReceivedAt` set = quoted.
+    quoteUnitCostCents: integer("quote_unit_cost_cents"),
+    quoteLeadTimeDays: integer("quote_lead_time_days"),
+    quoteMoq: integer("quote_moq"),
+    // One-time tooling/sample cost, separate from the per-unit price.
+    quoteSetupCostCents: integer("quote_setup_cost_cents"),
+    quoteNotes: text("quote_notes"),
+    quoteReceivedAt: timestamp("quote_received_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   },
   (t) => [

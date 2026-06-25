@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { InvoiceAttachments } from "@/components/invoicing/invoice-attachments";
 import { PROTOTYPE_STATUS_LABELS, type PrototypeStatus } from "@/lib/prototypes";
-import { VendorInlineCreate } from "@/components/production/vendor-inline-create";
 import { PrototypeStatusBadge } from "../prototype-manager";
 import { PrototypeRounds, type RoundItem } from "./prototype-rounds";
 import { FusionReferences, type ReferenceItem } from "./fusion-references";
+import { PrototypeVendors, type CandidateVendor } from "./prototype-vendors";
 
 interface SupplierOption {
   id: string;
@@ -26,7 +26,7 @@ interface PrototypeDetail {
   finalSku: string | null;
   // Awarded vendor (chosen from `vendors`); `vendors` is the candidate set.
   supplierId: string | null;
-  vendors: SupplierOption[];
+  vendors: CandidateVendor[];
   status: string;
   description: string | null;
   estUnitCostCents: number | null;
@@ -57,149 +57,6 @@ const inputCls =
 
 function centsToInput(cents: number | null): string {
   return cents == null ? "" : (cents / 100).toFixed(2);
-}
-
-// Candidate vendor set (RFQ recipients) for a prototype: add existing vendors,
-// create new ones inline, or remove them. The awarded vendor is marked here and
-// chosen from this set in the Details card above. Server-backed; refreshes the
-// route on every change so the awarded dropdown stays in sync.
-function VendorsManager({
-  prototypeId,
-  vendors,
-  awardedId,
-  allSuppliers,
-}: {
-  prototypeId: string;
-  vendors: SupplierOption[];
-  awardedId: string | null;
-  allSuppliers: SupplierOption[];
-}) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [pickId, setPickId] = useState("");
-
-  const added = new Set(vendors.map((v) => v.id));
-  const available = allSuppliers.filter((s) => !added.has(s.id));
-
-  async function mutate(method: "POST" | "DELETE", supplierId: string) {
-    setError(null);
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/prototypes/${prototypeId}/suppliers`, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierId }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || "Request failed.");
-      }
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Request failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card className="p-6">
-      <h2 className="text-sm font-semibold text-zinc-900">Vendors</h2>
-      <p className="mt-1 text-xs text-zinc-500">
-        Every vendor you’ll request a quote from for this prototype. We’ll send
-        RFQs to each through the system.
-      </p>
-
-      <div className="mt-4 space-y-2">
-        {vendors.length === 0 ? (
-          <p className="rounded-md border border-dashed border-zinc-300 px-3 py-2 text-xs text-zinc-500">
-            No vendors yet.
-          </p>
-        ) : (
-          vendors.map((v) => (
-            <div
-              key={v.id}
-              className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-2"
-            >
-              <span className="text-sm text-zinc-800">
-                {v.name}
-                {v.id === awardedId && (
-                  <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-green-600">
-                    awarded
-                  </span>
-                )}
-              </span>
-              <button
-                type="button"
-                onClick={() => mutate("DELETE", v.id)}
-                disabled={busy}
-                className="text-xs text-zinc-400 underline decoration-zinc-300 underline-offset-2 hover:text-red-600 hover:decoration-red-400 disabled:opacity-50"
-              >
-                Remove
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-
-      <div className="mt-4 space-y-3">
-        {available.length > 0 && (
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <label className={fieldLabel}>Add an existing vendor</label>
-              <select
-                value={pickId}
-                onChange={(e) => setPickId(e.target.value)}
-                className={inputCls}
-                disabled={busy}
-              >
-                <option value="">— Choose a vendor —</option>
-                {available.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy || !pickId}
-              onClick={() => {
-                const id = pickId;
-                setPickId("");
-                mutate("POST", id);
-              }}
-            >
-              Add
-            </Button>
-          </div>
-        )}
-
-        {adding ? (
-          <VendorInlineCreate
-            onCreated={(v) => {
-              setAdding(false);
-              mutate("POST", v.id);
-            }}
-            onCancel={() => setAdding(false)}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="text-xs font-medium text-zinc-600 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
-          >
-            + Create a new vendor
-          </button>
-        )}
-      </div>
-    </Card>
-  );
 }
 
 export function PrototypeDetailView({
@@ -398,8 +255,8 @@ export function PrototypeDetailView({
         </div>
       </Card>
 
-      {/* Candidate vendors (RFQ recipients) */}
-      <VendorsManager
+      {/* Candidate vendors + RFQs + quotes */}
+      <PrototypeVendors
         prototypeId={prototype.id}
         vendors={prototype.vendors}
         awardedId={prototype.supplierId}

@@ -84,6 +84,56 @@ export async function removePrototypeSupplier(
     );
 }
 
+// Stamp that we emailed this vendor a request for quote (via the PO email
+// system). Idempotent — re-sending updates the timestamp.
+export async function markRfqSent(prototypeId: string, supplierId: string) {
+  await db
+    .update(prototypeSupplier)
+    .set({ rfqSentAt: new Date() })
+    .where(
+      and(
+        eq(prototypeSupplier.prototypeId, prototypeId),
+        eq(prototypeSupplier.supplierId, supplierId),
+      ),
+    );
+}
+
+export interface QuoteInput {
+  unitCostCents?: number | null;
+  leadTimeDays?: number | null;
+  moq?: number | null;
+  setupCostCents?: number | null;
+  notes?: string | null;
+}
+
+// Record (or update) the quote a vendor gave for a prototype. Works whether or
+// not the RFQ went through the system. Stamps `quoteReceivedAt` so the vendor
+// reads as "quoted"; clearing it (all fields null) is allowed for corrections.
+export async function recordPrototypeQuote(
+  prototypeId: string,
+  supplierId: string,
+  quote: QuoteInput,
+) {
+  const [updated] = await db
+    .update(prototypeSupplier)
+    .set({
+      quoteUnitCostCents: quote.unitCostCents ?? null,
+      quoteLeadTimeDays: quote.leadTimeDays ?? null,
+      quoteMoq: quote.moq ?? null,
+      quoteSetupCostCents: quote.setupCostCents ?? null,
+      quoteNotes: quote.notes || null,
+      quoteReceivedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(prototypeSupplier.prototypeId, prototypeId),
+        eq(prototypeSupplier.supplierId, supplierId),
+      ),
+    )
+    .returning({ id: prototypeSupplier.id });
+  return updated ?? null;
+}
+
 // Partial update. Caller is responsible for any approval-specific fields
 // (finalSku, approvedAt) — pass them through `extra`.
 export async function updatePrototype(
@@ -290,7 +340,9 @@ export async function getPrototypeDetail(id: string) {
     with: {
       supplier: { columns: { id: true, name: true } },
       candidateVendors: {
-        with: { supplier: { columns: { id: true, name: true } } },
+        with: {
+          supplier: { columns: { id: true, name: true, contactEmail: true } },
+        },
       },
       rounds: {
         orderBy: asc(prototypeRound.roundNumber),

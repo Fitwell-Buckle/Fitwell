@@ -728,21 +728,30 @@ vendors).
 
 #### `prototype_supplier`
 
-Candidate vendors for a prototype — the **RFQ recipient set** (many-to-many).
-A prototype solicits quotes from several vendors; the one finally chosen lands
-in `prototype.supplier_id` (and stays a candidate). Per-vendor RFQ fields
-(sent date, quoted cost, lead time, quote status) will be added here when the
-quote-request flow is built. Removing the awarded vendor clears `supplier_id`.
+Candidate vendors for a prototype — the **RFQ recipient set** (many-to-many),
+and where each vendor's **RFQ + quote** state lives. A prototype solicits quotes
+from several vendors; the one finally chosen lands in `prototype.supplier_id`
+(and stays a candidate). Removing the awarded vendor clears `supplier_id`.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | uuid (text) | PK |
 | `prototype_id` | text | FK → `prototype` (cascade) |
 | `supplier_id` | text | FK → `supplier` (cascade) |
+| `rfq_sent_at` | timestamp | When we emailed this vendor an RFQ (via the PO email path). Null = not requested through the system |
+| `quote_unit_cost_cents` | integer | Quoted per-unit price |
+| `quote_lead_time_days` | integer | Quoted lead time |
+| `quote_moq` | integer | Quoted minimum order quantity |
+| `quote_setup_cost_cents` | integer | One-time tooling/sample cost |
+| `quote_notes` | text | Free-text quote notes |
+| `quote_received_at` | timestamp | Set when a quote is recorded → vendor reads as "quoted" |
 | `created_at` | timestamp | |
 
 Unique on `(prototype_id, supplier_id)` (idempotent membership); indexed on each
 FK. Backfilled from existing `prototype.supplier_id` values on migration.
+Per-vendor status is derived: `quote_received_at` → quoted, else `rfq_sent_at` →
+RFQ sent, else candidate. Migrations `0087_fuzzy_shard` (table),
+`0088_amused_ezekiel_stane` (RFQ/quote columns).
 
 #### `prototype_round`
 

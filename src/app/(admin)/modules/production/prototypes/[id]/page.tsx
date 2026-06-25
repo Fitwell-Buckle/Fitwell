@@ -46,8 +46,23 @@ export default async function PrototypeDetailPage({
           notes: proto.notes,
           approvedAt: proto.approvedAt ? proto.approvedAt.toISOString() : null,
           vendors: proto.candidateVendors
-            .map((cv) => cv.supplier)
-            .filter((s): s is { id: string; name: string } => !!s),
+            .filter((cv) => !!cv.supplier)
+            .map((cv) => ({
+              id: cv.supplier!.id,
+              name: cv.supplier!.name,
+              contactEmail: cv.supplier!.contactEmail ?? null,
+              rfqSentAt: cv.rfqSentAt ? cv.rfqSentAt.toISOString() : null,
+              quote: {
+                unitCostCents: cv.quoteUnitCostCents,
+                leadTimeDays: cv.quoteLeadTimeDays,
+                moq: cv.quoteMoq,
+                setupCostCents: cv.quoteSetupCostCents,
+                notes: cv.quoteNotes,
+                receivedAt: cv.quoteReceivedAt
+                  ? cv.quoteReceivedAt.toISOString()
+                  : null,
+              },
+            })),
           attachments: proto.attachments.map((a) => ({
             id: a.id,
             blobUrl: a.blobUrl,
