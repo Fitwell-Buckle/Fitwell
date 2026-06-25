@@ -3,11 +3,11 @@ import { and, desc, eq } from "drizzle-orm";
 import { put, del } from "@vercel/blob";
 import { db } from "@/lib/db";
 import { cadModel } from "@/lib/schema";
-import { stlToGlb } from "./stl-to-glb";
+import { modelFileToGlb } from "./stl-to-glb";
 import {
   resolveFusionShare,
-  triggerStlExport,
-  findStlExportLink,
+  triggerObjExport,
+  findExportLink,
 } from "./fusion-export";
 
 // Give up waiting for the Autodesk export email after this long.
@@ -72,9 +72,11 @@ export async function deleteCadModel(id: string) {
 }
 
 // ── Fully-automated Fusion → GLB ────────────────────────────────────
-// "Generate from Fusion": fire Autodesk's STL export (server-side GET) to the
+// "Generate from Fusion": fire Autodesk's OBJ export (server-side GET) to the
 // requesting admin's email, then a cron reads the export email back out of
-// their inbox, downloads the STL, and converts it. No manual STL handling.
+// their inbox, downloads the OBJ, and converts it. OBJ (not STL) so Fusion's
+// per-face appearance names survive — that's what drives the satin/cast finishes
+// (an STL is geometry-only and renders everything polished).
 
 export async function requestFusionExport(
   cadModelId: string,
@@ -110,7 +112,7 @@ export async function requestFusionExport(
   if (!share) {
     throw new Error("Couldn't resolve that Fusion link to a share.");
   }
-  await triggerStlExport(share.host, share.shareId, userEmail);
+  await triggerObjExport(share.host, share.shareId, userEmail);
   await db
     .update(cadModel)
     .set({
@@ -125,7 +127,7 @@ export async function requestFusionExport(
 }
 
 // Cron worker: complete every model waiting on its Autodesk export email.
-// Finds the email in the requester's inbox, downloads the STL, converts.
+// Finds the email in the requester's inbox, downloads the OBJ, converts.
 export async function processPendingExports(): Promise<{
   processed: number;
   pending: number;
@@ -144,7 +146,7 @@ export async function processPendingExports(): Promise<{
     const since = m.exportRequestedAt?.getTime() ?? 0;
     try {
       const link = m.exportRequestedByUserId
-        ? await findStlExportLink(m.exportRequestedByUserId, { sinceMs: since })
+        ? await findExportLink(m.exportRequestedByUserId, { sinceMs: since })
         : null;
 
       if (!link) {
@@ -166,13 +168,13 @@ export async function processPendingExports(): Promise<{
       }
 
       const res = await fetch(link);
-      if (!res.ok) throw new Error(`STL download failed (${res.status}).`);
+      if (!res.ok) throw new Error(`OBJ download failed (${res.status}).`);
       const bytes = new Uint8Array(await res.arrayBuffer());
-      const file = new File([bytes], m.expectedFilename ?? `${m.name}.stl`, {
-        type: "model/stl",
+      const file = new File([bytes], m.expectedFilename ?? `${m.name}.obj`, {
+        type: "model/obj",
       });
       // Reuses the same convert + store path as a manual upload.
-      await processStl(m.id, file);
+      await processSourceModel(m.id, file);
       processed++;
     } catch (err) {
       console.error(`Fusion export processing failed for ${m.id}:`, err);
@@ -191,11 +193,13 @@ export async function processPendingExports(): Promise<{
   return { processed, pending: stillPending, failed };
 }
 
-// Upload an STL, convert it to a GLB, and store both in Vercel Blob. This is
-// the automated heart of "Upload Model to Website": no Python/browser/email,
-// just STL bytes → metallic GLB, reusable across every SKU that picks this
-// model. Marks the row `processing` → `ready` (or `failed` with a message).
-export async function processStl(
+// Upload a source model (OBJ or STL), convert it to a GLB, and store both in
+// Vercel Blob. This is the automated heart of "Upload Model to Website": no
+// Python/browser/email, just source bytes → metallic GLB, reusable across every
+// SKU that picks this model. OBJ keeps Fusion's per-face appearance names (satin
+// /cast finishes); STL is geometry-only. Marks the row `processing` → `ready`
+// (or `failed` with a message).
+export async function processSourceModel(
   id: string,
   file: File,
 ): Promise<{ glbUrl: string }> {
@@ -205,13 +209,16 @@ export async function processStl(
     .where(eq(cadModel.id, id));
 
   try {
-    const stlBytes = new Uint8Array(await file.arrayBuffer());
-    const stlBlob = await put(`cad/${id}/${file.name}`, file, {
+    const srcBytes = new Uint8Array(await file.arrayBuffer());
+    const srcBlob = await put(`cad/${id}/${file.name}`, file, {
       access: "public",
       addRandomSuffix: true,
     });
 
-    const { glb, vertexCount, triangleCount } = await stlToGlb(stlBytes);
+    const { glb, vertexCount, triangleCount } = await modelFileToGlb(
+      file.name,
+      srcBytes,
+    );
     const glbBlob = await put(`cad/${id}/model.glb`, Buffer.from(glb), {
       access: "public",
       addRandomSuffix: true,
@@ -221,7 +228,7 @@ export async function processStl(
     await db
       .update(cadModel)
       .set({
-        sourceStlUrl: stlBlob.url,
+        sourceStlUrl: srcBlob.url,
         sourceFilename: file.name,
         glbUrl: glbBlob.url,
         vertexCount,
@@ -243,11 +250,12 @@ export async function processStl(
   }
 }
 
-// Re-run STL → GLB for a model that already has a stored source STL, rebuilding
-// the GLB with the current converter (e.g. after a shading/normals improvement).
-// Reuses the same source bytes — no Fusion export or re-upload needed — and
-// overwrites the model's `glbUrl`. SKUs already linked to this model pick up the
-// new GLB automatically (the link is by id; the URL is read fresh).
+// Re-run source → GLB for a model that already has a stored source file,
+// rebuilding the GLB with the current converter (e.g. after a shading/normals
+// improvement). Reuses the same source bytes — no Fusion export or re-upload
+// needed — and overwrites the model's `glbUrl`. SKUs already linked to this
+// model pick up the new GLB automatically (the link is by id; the URL is read
+// fresh). Honours the stored source type (OBJ keeps finishes; STL is polished).
 export async function reconvertCadModel(id: string): Promise<{ glbUrl: string }> {
   const model = await db.query.cadModel.findFirst({
     where: eq(cadModel.id, id),
@@ -255,7 +263,7 @@ export async function reconvertCadModel(id: string): Promise<{ glbUrl: string }>
   if (!model) throw new Error(`CAD model ${id} not found.`);
   if (!model.sourceStlUrl) {
     throw new Error(
-      `CAD model ${id} has no stored source STL to re-convert from.`,
+      `CAD model ${id} has no stored source file to re-convert from.`,
     );
   }
 
@@ -267,11 +275,14 @@ export async function reconvertCadModel(id: string): Promise<{ glbUrl: string }>
   try {
     const res = await fetch(model.sourceStlUrl);
     if (!res.ok) {
-      throw new Error(`Failed to fetch source STL (${res.status}).`);
+      throw new Error(`Failed to fetch source file (${res.status}).`);
     }
-    const stlBytes = new Uint8Array(await res.arrayBuffer());
+    const srcBytes = new Uint8Array(await res.arrayBuffer());
 
-    const { glb, vertexCount, triangleCount } = await stlToGlb(stlBytes);
+    const { glb, vertexCount, triangleCount } = await modelFileToGlb(
+      model.sourceFilename ?? model.sourceStlUrl,
+      srcBytes,
+    );
     const glbBlob = await put(`cad/${id}/model.glb`, Buffer.from(glb), {
       access: "public",
       addRandomSuffix: true,

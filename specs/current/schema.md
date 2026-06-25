@@ -778,14 +778,20 @@ Resolution + host-allowlist (`a360.co` / `*.autodesk360.com`) live in
 
 ### CAD Models (public 3D viewer)
 
-A reusable CAD library that powers the spinnable 3D product viewer. An uploaded
-**STL** (exported from Autodesk Fusion) is auto-converted **server-side in pure
-Node** to a **GLB** (`src/lib/cad/stl-to-glb.ts` — weld, smooth normals, auto
-lay-flat; no Python/browser). The converter **splits the mesh into connected
-components** and emits **two materials**: `body` (recolorable) and `spring_bar`
-(always silver — the rod through the pin, detected as the elongated non-largest
-piece). **Finishes** (`src/lib/cad/finishes.ts`: Black/Yellow-Gold/Rose-Gold/
-Titanium glossy + Matte Titanium/Steel) recolor the `body` material at runtime in
+A reusable CAD library that powers the spinnable 3D product viewer. A source
+model — **OBJ or STL** (exported from Autodesk Fusion) — is auto-converted
+**server-side in pure Node** to a **GLB** (`src/lib/cad/stl-to-glb.ts` — weld,
+smooth normals, auto lay-flat; no Python/browser). `modelFileToGlb` picks the
+parser by file type (extension, with a byte sniff for extension-less export
+blobs). The converter **splits the mesh into connected components** and emits up
+to four materials: `body` (recolorable polish), `body_brushed` (satin),
+`body_cast` (bumpy cast), and `spring_bar` (always silver — the rod through the
+pin, detected as the elongated non-largest piece). **The satin/cast surfaces come
+from Fusion's per-face appearance names** (`usemtl …Satin`, `…Cast`) carried in
+an OBJ — an STL is geometry-only, so an STL-sourced model renders fully polished
+(only the spring bar is split out, geometrically). **Finishes**
+(`src/lib/cad/finishes.ts`: Black/Yellow-Gold/Rose-Gold/Titanium glossy + Bead
+Blasted Titanium/Steel) recolor `body`/`body_brushed`/`body_cast` at runtime in
 `<model-viewer>`; the spring bar never changes. Geometry is shared: many SKUs
 (color variants) point at one `cad_model`. GLBs are served from Vercel Blob (CSP
 `connect-src` allows `*.public.blob.vercel-storage.com`; `<model-viewer>` needs
@@ -800,8 +806,8 @@ link a model on `/products/[sku]` and push to Shopify 3D media. Migration
 | `id` | uuid (text) | PK |
 | `name` | text | Required |
 | `fusion_url` | text | Optional Fusion share link (reference only; not the conversion source) |
-| `source_stl_url` | text | Uploaded STL (Vercel Blob) |
-| `source_filename` | text | |
+| `source_stl_url` | text | Uploaded source model — OBJ or STL (Vercel Blob). Column name predates OBJ support |
+| `source_filename` | text | Drives the OBJ-vs-STL re-convert decision |
 | `glb_url` | text | Generated GLB (Vercel Blob) |
 | `status` | text | `draft` \| `awaiting_export` (Fusion export fired, waiting on the email) \| `processing` \| `ready` \| `failed`. Default `draft` |
 | `error_message` | text | Set when conversion fails |

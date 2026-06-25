@@ -2,7 +2,25 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { stlToGlb, isSpringBar } from "./stl-to-glb";
+import { stlToGlb, isSpringBar, looksLikeObj } from "./stl-to-glb";
+
+describe("looksLikeObj (source-file type detection)", () => {
+  const empty = new Uint8Array();
+  it("trusts the .obj / .stl extension regardless of content", () => {
+    expect(looksLikeObj("buckle.obj", empty)).toBe(true);
+    expect(looksLikeObj("BUCKLE.OBJ", empty)).toBe(true);
+    expect(looksLikeObj("buckle.stl", empty)).toBe(false);
+  });
+  it("sniffs OBJ text when the name is ambiguous (Autodesk export blob)", () => {
+    const obj = new TextEncoder().encode("# WaveFront *.obj file\nv 0 0 0\n");
+    expect(looksLikeObj("signedresource-xyz", obj)).toBe(true);
+    expect(looksLikeObj("export", new TextEncoder().encode("usemtl Steel\n"))).toBe(true);
+  });
+  it("treats binary STL header bytes as not-OBJ", () => {
+    const stl = new Uint8Array(84); // 80-byte zero header + count — not OBJ text
+    expect(looksLikeObj("export", stl)).toBe(false);
+  });
+});
 
 describe("isSpringBar (spring-bar detection)", () => {
   it("flags true rods (thin in two dims, elongated)", () => {

@@ -22,9 +22,11 @@ export default async function CadModelsPage() {
       <PageHeader title="Products" />
       <SectionTabs tabs={PRODUCTS_TABS} />
       <p className="mt-4 max-w-2xl text-sm text-zinc-500">
-        Your reusable CAD library. Upload an STL once per design — it converts to
-        a 3D web model automatically. Many SKUs (color variants) can share one
-        model, so you only upload each geometry once.
+        Your reusable CAD library. Generate from Fusion (or upload an STL/OBJ)
+        once per design — it converts to a 3D web model automatically. An OBJ
+        keeps Fusion&rsquo;s satin/cast surface finishes; an STL renders fully
+        polished. Many SKUs (color variants) can share one model, so you only
+        upload each geometry once.
       </p>
 
       <CadModelManager

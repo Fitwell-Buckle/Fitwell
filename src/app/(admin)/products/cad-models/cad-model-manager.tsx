@@ -214,7 +214,7 @@ function ModelCard({ model }: { model: CadModelItem }) {
           <input
             ref={inputRef}
             type="file"
-            accept=".stl"
+            accept=".stl,.obj"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -244,7 +244,7 @@ function ModelCard({ model }: { model: CadModelItem }) {
             onClick={() => inputRef.current?.click()}
           >
             <Upload className="h-4 w-4" />
-            {model.glbUrl ? "Replace STL" : "Upload STL"}
+            {model.glbUrl ? "Replace model" : "Upload model"}
           </Button>
           <DeleteButton
             entityKind="CAD model"
@@ -273,7 +273,7 @@ function ModelCard({ model }: { model: CadModelItem }) {
             </div>
           ) : (
             <div className="flex h-full items-center justify-center text-zinc-400">
-              <Box className="mr-2 h-5 w-5" /> Generate from Fusion or upload an STL
+              <Box className="mr-2 h-5 w-5" /> Generate from Fusion or upload an STL/OBJ
             </div>
           )}
         </div>

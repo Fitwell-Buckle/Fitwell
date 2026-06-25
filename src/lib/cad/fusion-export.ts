@@ -1,11 +1,18 @@
 import "server-only";
 import { getGoogleAccount, ensureFreshAccessToken } from "@/lib/gmail/token";
 
-// Server-side automation of the Autodesk Fusion STL export. The "Email me when
+// Server-side automation of the Autodesk Fusion OBJ export. The "Email me when
 // complete" share action is a plain GET to /shares/download — no cookies/CSRF —
 // so a server can trigger it. Autodesk emails a signed download link; we then
 // read it back out of the requester's Gmail (the app already has read access
-// for the CRM inbound feature) and download the STL. No new mailbox/MX needed.
+// for the CRM inbound feature) and download the OBJ. No new mailbox/MX needed.
+//
+// We request OBJ (not STL) because OBJ carries Fusion's per-face appearance
+// names (`usemtl Steel_-_Satin`, `…_Cast`, …) that the converter reads to apply
+// satin/cast finishes — an STL is geometry-only, so it loses them and renders
+// everything polished. Verified empirically: the OBJ export arrives as a single
+// raw `.obj` text file (no zip, no separate .mtl needed — we ignore the .mtl)
+// under the same "Download file" email subject as the old STL export.
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
@@ -37,14 +44,14 @@ export async function resolveFusionShare(
   }
 }
 
-// Kick off the STL export; Autodesk emails the link to `email`. Returns the
+// Kick off the OBJ export; Autodesk emails the link to `email`. Returns the
 // job id from the success response.
-export async function triggerStlExport(
+export async function triggerObjExport(
   host: string,
   shareId: string,
   email: string,
 ): Promise<{ jobId: string }> {
-  const url = `https://${host}/shares/download/${shareId}/?toFormat=stl&email=${encodeURIComponent(email)}`;
+  const url = `https://${host}/shares/download/${shareId}/?toFormat=obj&email=${encodeURIComponent(email)}`;
   const res = await fetch(url, { headers: { "User-Agent": UA } });
   const json = (await res.json().catch(() => null)) as {
     response?: { status?: string; jobId?: number | string };
@@ -80,10 +87,10 @@ function collectBody(part: GmailPart | undefined): string {
 }
 
 // Search the requester's inbox for the Autodesk "Download file" export email and
-// extract the signed STL download link. `expectedFilename` (the Fusion doc
-// name, e.g. "18MM M4 Extension (Assembly).stl") disambiguates when several
-// exports are in flight; pass null to take the newest export email.
-export async function findStlExportLink(
+// extract the signed download link (OBJ export — same email subject as the old
+// STL one). The caller serializes exports per inbox, so "newest export email
+// after the request time" is an exact match.
+export async function findExportLink(
   userId: string,
   opts: { sinceMs?: number } = {},
 ): Promise<string | null> {

@@ -626,3 +626,26 @@ export async function objToGlb(objText: string): Promise<ConvertResult> {
   if (flat.length === 0) throw new Error("OBJ contains no geometry.");
   return meshToGlb(flat, matteFlags, castFlags);
 }
+
+// Decide whether a source model file is a (text) OBJ or a (binary) STL, so the
+// caller can pick objToGlb vs stlToGlb. Filename extension wins; when it's
+// ambiguous (e.g. an Autodesk export blob with no extension) we sniff the first
+// bytes — OBJ is ASCII text that opens with a comment / vertex / material line,
+// while binary STL starts with an 80-byte header that is not this text.
+export function looksLikeObj(name: string, head: Uint8Array): boolean {
+  if (/\.obj$/i.test(name)) return true;
+  if (/\.stl$/i.test(name)) return false;
+  const text = Buffer.from(head.slice(0, 64)).toString("latin1");
+  return /^\s*(#|v\s|vn\s|vt\s|o\s|g\s|usemtl\s|mtllib\s)|wavefront/i.test(text);
+}
+
+// Convert source-model bytes (OBJ or STL) to a GLB, picking the parser by file
+// type. The single entry point for both the manual upload and the Fusion export.
+export async function modelFileToGlb(
+  name: string,
+  bytes: Uint8Array,
+): Promise<ConvertResult> {
+  return looksLikeObj(name, bytes)
+    ? objToGlb(Buffer.from(bytes).toString("utf8"))
+    : stlToGlb(bytes);
+}

@@ -9,8 +9,8 @@ vi.mock("@/lib/gmail/token", () => ({ getGoogleAccount, ensureFreshAccessToken }
 
 import {
   resolveFusionShare,
-  triggerStlExport,
-  findStlExportLink,
+  triggerObjExport,
+  findExportLink,
 } from "./fusion-export";
 
 const SIGNED =
@@ -47,17 +47,19 @@ describe("resolveFusionShare", () => {
   });
 });
 
-describe("triggerStlExport", () => {
-  it("returns the job id on success", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        json: async () => ({ response: { status: "success", jobId: 42 } }),
-      }),
-    );
-    expect(await triggerStlExport("h.autodesk360.com", "SH1", "a@b.co")).toEqual({
+describe("triggerObjExport", () => {
+  it("returns the job id on success and requests OBJ format", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ response: { status: "success", jobId: 42 } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await triggerObjExport("h.autodesk360.com", "SH1", "a@b.co")).toEqual({
       jobId: "42",
     });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("toFormat=obj"),
+      expect.anything(),
+    );
   });
 
   it("throws when Autodesk doesn't return success", async () => {
@@ -65,11 +67,11 @@ describe("triggerStlExport", () => {
       "fetch",
       vi.fn().mockResolvedValue({ json: async () => ({ response: { status: "error" } }) }),
     );
-    await expect(triggerStlExport("h.autodesk360.com", "SH1", "a@b.co")).rejects.toThrow();
+    await expect(triggerObjExport("h.autodesk360.com", "SH1", "a@b.co")).rejects.toThrow();
   });
 });
 
-describe("findStlExportLink", () => {
+describe("findExportLink", () => {
   beforeEach(() => {
     getGoogleAccount.mockResolvedValue({ access_token: "x" });
     ensureFreshAccessToken.mockResolvedValue("token");
@@ -98,16 +100,16 @@ describe("findStlExportLink", () => {
 
   it("extracts the signed STL link from the export email body", async () => {
     stubGmail({ internalDate: "2000000", bodyHtml: `<a href="${SIGNED}">Download</a>` });
-    expect(await findStlExportLink("u1", {})).toBe(SIGNED);
+    expect(await findExportLink("u1", {})).toBe(SIGNED);
   });
 
   it("ignores emails older than sinceMs", async () => {
     stubGmail({ internalDate: "1000", bodyHtml: `<a href="${SIGNED}">x</a>` });
-    expect(await findStlExportLink("u1", { sinceMs: 5000 })).toBeNull();
+    expect(await findExportLink("u1", { sinceMs: 5000 })).toBeNull();
   });
 
   it("returns null when the mailbox isn't connected", async () => {
     getGoogleAccount.mockResolvedValue(null);
-    expect(await findStlExportLink("u1", {})).toBeNull();
+    expect(await findExportLink("u1", {})).toBeNull();
   });
 });
