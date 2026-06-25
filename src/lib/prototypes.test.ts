@@ -2,8 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
   approvePrototype,
   isActivePrototypeStatus,
+  mergeCandidateVendorIds,
   nextRoundNumber,
 } from "./prototypes";
+
+describe("mergeCandidateVendorIds", () => {
+  it("returns the selected ids, de-duplicated", () => {
+    expect(mergeCandidateVendorIds(["a", "b", "a"], null)).toEqual(["a", "b"]);
+  });
+  it("folds the awarded vendor in as a candidate", () => {
+    expect(mergeCandidateVendorIds(["a"], "c")).toEqual(["a", "c"]);
+  });
+  it("doesn't duplicate an awarded vendor already selected", () => {
+    expect(mergeCandidateVendorIds(["a", "b"], "a")).toEqual(["a", "b"]);
+  });
+  it("drops empty/falsy ids and handles missing inputs", () => {
+    expect(mergeCandidateVendorIds(["", "a"], "")).toEqual(["a"]);
+    expect(mergeCandidateVendorIds(undefined, null)).toEqual([]);
+    expect(mergeCandidateVendorIds(undefined, "c")).toEqual(["c"]);
+  });
+});
 
 describe("approvePrototype", () => {
   const now = new Date("2026-06-22T12:00:00Z");

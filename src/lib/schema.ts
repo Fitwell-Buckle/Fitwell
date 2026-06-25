@@ -976,6 +976,7 @@ export const supplierRelations = relations(supplier, ({ many }) => ({
   pos: many(productionPo),
   contacts: many(supplierContact),
   prototypes: many(prototype),
+  prototypeCandidacies: many(prototypeSupplier),
 }));
 
 export const supplierContactRelations = relations(supplierContact, ({ one }) => ({
@@ -1113,15 +1114,58 @@ export const prototypeReference = pgTable(
   (t) => [index("prototype_reference_prototype_id_idx").on(t.prototypeId)],
 );
 
+// Candidate vendors for a prototype — the set we gather quotes from (RFQ
+// recipients). Many-to-many: a prototype can solicit several vendors, and a
+// vendor can be in the running for many prototypes. `prototype.supplierId` is
+// the single vendor finally AWARDED the work (chosen from this set). The
+// per-vendor RFQ fields (sent date, quoted cost, lead time, quote status) will
+// be added to this row when the quote-request flow is built.
+export const prototypeSupplier = pgTable(
+  "prototype_supplier",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    prototypeId: text("prototype_id")
+      .notNull()
+      .references(() => prototype.id, { onDelete: "cascade" }),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => supplier.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    // One row per (prototype, vendor) — idempotent membership.
+    uniqueIndex("prototype_supplier_pair_idx").on(t.prototypeId, t.supplierId),
+    index("prototype_supplier_prototype_id_idx").on(t.prototypeId),
+    index("prototype_supplier_supplier_id_idx").on(t.supplierId),
+  ],
+);
+
 export const prototypeRelations = relations(prototype, ({ one, many }) => ({
   supplier: one(supplier, {
     fields: [prototype.supplierId],
     references: [supplier.id],
   }),
+  candidateVendors: many(prototypeSupplier),
   rounds: many(prototypeRound),
   attachments: many(prototypeAttachment),
   references: many(prototypeReference),
 }));
+
+export const prototypeSupplierRelations = relations(
+  prototypeSupplier,
+  ({ one }) => ({
+    prototype: one(prototype, {
+      fields: [prototypeSupplier.prototypeId],
+      references: [prototype.id],
+    }),
+    supplier: one(supplier, {
+      fields: [prototypeSupplier.supplierId],
+      references: [supplier.id],
+    }),
+  }),
+);
 
 export const prototypeReferenceRelations = relations(
   prototypeReference,

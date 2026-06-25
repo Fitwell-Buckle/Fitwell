@@ -100,3 +100,13 @@ export function nextRoundNumber(existing: { roundNumber: number }[]): number {
   if (existing.length === 0) return 1;
   return Math.max(...existing.map((r) => r.roundNumber)) + 1;
 }
+
+// The candidate vendor ids to attach to a prototype: the selected set plus the
+// awarded vendor (the award is always a candidate by definition), de-duplicated
+// and with empty/falsy ids dropped. Order-preserving (selected first).
+export function mergeCandidateVendorIds(
+  supplierIds: string[] | undefined,
+  awardedId: string | null | undefined,
+): string[] {
+  return [...new Set([...(supplierIds ?? []), awardedId ?? ""].filter(Boolean))];
+}

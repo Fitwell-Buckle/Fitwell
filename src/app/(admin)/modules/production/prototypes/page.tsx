@@ -20,6 +20,9 @@ export default async function PrototypesPage() {
       orderBy: desc(prototype.updatedAt),
       with: {
         supplier: { columns: { id: true, name: true } },
+        candidateVendors: {
+          with: { supplier: { columns: { id: true, name: true } } },
+        },
         rounds: { columns: { id: true, roundNumber: true } },
       },
     }),
@@ -33,8 +36,9 @@ export default async function PrototypesPage() {
     <div>
       <PageHeader title="Prototypes" />
       <p className="mt-1 max-w-2xl text-sm text-zinc-500">
-        Proposed SKUs in the sample phase. Track the vendor and each round of
-        samples until a prototype is approved and promoted to a real product.
+        Proposed SKUs in the sample phase. Track candidate vendors, request
+        quotes, and each round of samples until a prototype is approved and
+        promoted to a real product.
       </p>
 
       <PrototypeManager
@@ -46,6 +50,9 @@ export default async function PrototypesPage() {
           status: p.status,
           supplierId: p.supplierId,
           supplierName: p.supplier?.name ?? null,
+          vendors: p.candidateVendors
+            .map((cv) => cv.supplier)
+            .filter((s): s is { id: string; name: string } => !!s),
           roundCount: p.rounds.length,
           updatedAt: p.updatedAt ? p.updatedAt.toISOString() : null,
         }))}

@@ -696,16 +696,19 @@ supplier portal can scope queries to their own POs (Phase 3).
 
 ### Prototypes
 
-A prototype is a **proposed SKU that doesn't exist in Shopify yet**. A vendor
-(`supplier`) makes physical samples across one or more rounds until it's
-approved, at which point we record the final SKU and create the real product in
-Shopify **manually** (no Shopify write). There is no `product` table — SKU is the
-product identity everywhere — so a prototype just carries the SKU strings.
-Admin-only (suppliers/companies 403). UI at `/modules/production/prototypes`
-(list) + `[id]` (detail w/ rounds), plus a Prototypes section on each supplier
-detail page. Status/round constants + the approval helper live in
-`src/lib/prototypes.ts`; DB writes in `src/lib/prototypes/service.ts`.
-Migration `0081_faulty_professor_monster`.
+A prototype is a **proposed SKU that doesn't exist in Shopify yet**. We gather
+quotes from **multiple candidate vendors** (`prototype_supplier`, many-to-many)
+and eventually **award** one (`prototype.supplier_id`), who makes physical
+samples across one or more rounds until it's approved, at which point we record
+the final SKU and create the real product in Shopify **manually** (no Shopify
+write). There is no `product` table — SKU is the product identity everywhere —
+so a prototype just carries the SKU strings. Admin-only (suppliers/companies
+403). UI at `/modules/production/prototypes` (list) + `[id]` (detail w/ vendor
+management + rounds), plus a Prototypes section on each supplier detail page.
+Status/round constants, the approval helper, and `mergeCandidateVendorIds` live
+in `src/lib/prototypes.ts`; DB writes in `src/lib/prototypes/service.ts`.
+Migrations `0081_faulty_professor_monster`, `0087_fuzzy_shard` (candidate
+vendors).
 
 #### `prototype`
 
@@ -715,13 +718,31 @@ Migration `0081_faulty_professor_monster`.
 | `name` | text | Required. Working name, e.g. "Titanium micro-adjust v2" |
 | `proposed_sku` | text | Nullable. Planned SKU (may be undecided) |
 | `final_sku` | text | Nullable. Recorded on approval — the value to create in Shopify |
-| `supplier_id` | text | Nullable FK → `supplier` (`onDelete: set null`). The vendor making samples |
+| `supplier_id` | text | Nullable FK → `supplier` (`onDelete: set null`). The **awarded** vendor (chosen from the candidate set). Always also present as a `prototype_supplier` row |
 | `status` | text | `concept` \| `in_development` \| `approved` \| `rejected` \| `on_hold`. Default `concept`. `approved` is only reachable via the promote action (requires `final_sku`) |
 | `description` | text | Design intent / spec |
 | `est_unit_cost_cents` | integer | Target unit cost (cents) |
 | `approved_at` | timestamp | Stamped when status → `approved` |
 | `notes` | text | |
 | `created_at` / `updated_at` | timestamp | |
+
+#### `prototype_supplier`
+
+Candidate vendors for a prototype — the **RFQ recipient set** (many-to-many).
+A prototype solicits quotes from several vendors; the one finally chosen lands
+in `prototype.supplier_id` (and stays a candidate). Per-vendor RFQ fields
+(sent date, quoted cost, lead time, quote status) will be added here when the
+quote-request flow is built. Removing the awarded vendor clears `supplier_id`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `prototype_id` | text | FK → `prototype` (cascade) |
+| `supplier_id` | text | FK → `supplier` (cascade) |
+| `created_at` | timestamp | |
+
+Unique on `(prototype_id, supplier_id)` (idempotent membership); indexed on each
+FK. Backfilled from existing `prototype.supplier_id` values on migration.
 
 #### `prototype_round`
 

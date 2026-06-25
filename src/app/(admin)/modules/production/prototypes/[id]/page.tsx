@@ -45,6 +45,9 @@ export default async function PrototypeDetailPage({
           estUnitCostCents: proto.estUnitCostCents,
           notes: proto.notes,
           approvedAt: proto.approvedAt ? proto.approvedAt.toISOString() : null,
+          vendors: proto.candidateVendors
+            .map((cv) => cv.supplier)
+            .filter((s): s is { id: string; name: string } => !!s),
           attachments: proto.attachments.map((a) => ({
             id: a.id,
             blobUrl: a.blobUrl,

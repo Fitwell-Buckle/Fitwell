@@ -1,18 +1,23 @@
 import "server-only";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   prototype,
   prototypeAttachment,
   prototypeReference,
   prototypeRound,
+  prototypeSupplier,
 } from "@/lib/schema";
-import { nextRoundNumber } from "@/lib/prototypes";
+import { mergeCandidateVendorIds, nextRoundNumber } from "@/lib/prototypes";
 
 export interface PrototypeInput {
   name: string;
   proposedSku?: string | null;
+  // The single AWARDED vendor (chosen from the candidate set). Usually set later
+  // on the detail page, not at creation.
   supplierId?: string | null;
+  // The candidate vendor set we'll request quotes from (many-to-many).
+  supplierIds?: string[];
   status?: string;
   description?: string | null;
   estUnitCostCents?: number | null;
@@ -32,7 +37,51 @@ export async function createPrototype(input: PrototypeInput) {
       notes: input.notes || null,
     })
     .returning({ id: prototype.id });
+
+  // Attach the candidate vendors (RFQ recipients). The awarded vendor, if any,
+  // is also a candidate by definition, so fold it in.
+  const ids = mergeCandidateVendorIds(input.supplierIds, input.supplierId);
+  if (ids.length > 0) {
+    await db
+      .insert(prototypeSupplier)
+      .values(ids.map((supplierId) => ({ prototypeId: created.id, supplierId })))
+      .onConflictDoNothing();
+  }
   return created;
+}
+
+// Add a candidate vendor to a prototype (idempotent on the (prototype, vendor)
+// pair). The RFQ flow will send this vendor a quote request.
+export async function addPrototypeSupplier(
+  prototypeId: string,
+  supplierId: string,
+) {
+  await db
+    .insert(prototypeSupplier)
+    .values({ prototypeId, supplierId })
+    .onConflictDoNothing();
+}
+
+// Remove a candidate vendor. If it was also the awarded vendor, clear the award
+// so we never point `supplierId` at a vendor no longer in the running.
+export async function removePrototypeSupplier(
+  prototypeId: string,
+  supplierId: string,
+) {
+  await db
+    .delete(prototypeSupplier)
+    .where(
+      and(
+        eq(prototypeSupplier.prototypeId, prototypeId),
+        eq(prototypeSupplier.supplierId, supplierId),
+      ),
+    );
+  await db
+    .update(prototype)
+    .set({ supplierId: null, updatedAt: new Date() })
+    .where(
+      and(eq(prototype.id, prototypeId), eq(prototype.supplierId, supplierId)),
+    );
 }
 
 // Partial update. Caller is responsible for any approval-specific fields
@@ -65,6 +114,11 @@ export async function updatePrototype(
     })
     .where(eq(prototype.id, id))
     .returning({ id: prototype.id });
+
+  // Awarding a vendor implies it's in the running — keep award ⊆ candidates.
+  if (updated && input.supplierId) {
+    await addPrototypeSupplier(id, input.supplierId);
+  }
   return updated ?? null;
 }
 
@@ -228,13 +282,16 @@ export async function deleteReference(id: string) {
   return deleted ?? null;
 }
 
-// Full prototype with supplier, rounds (ascending), attachments, and CAD
-// reference links — used by the detail page.
+// Full prototype with the awarded supplier, the candidate vendor set, rounds
+// (ascending), attachments, and CAD reference links — used by the detail page.
 export async function getPrototypeDetail(id: string) {
   return db.query.prototype.findFirst({
     where: eq(prototype.id, id),
     with: {
       supplier: { columns: { id: true, name: true } },
+      candidateVendors: {
+        with: { supplier: { columns: { id: true, name: true } } },
+      },
       rounds: {
         orderBy: asc(prototypeRound.roundNumber),
         with: { attachments: true },

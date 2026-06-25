@@ -22,7 +22,13 @@ import {
   PROTOTYPE_STATUS_LABELS,
   type PrototypeStatus,
 } from "@/lib/prototypes";
+import { VendorMultiSelect } from "@/components/production/vendor-inline-create";
 import { cn } from "@/lib/utils";
+
+interface PrototypeVendor {
+  id: string;
+  name: string;
+}
 
 interface PrototypeListItem {
   id: string;
@@ -30,8 +36,10 @@ interface PrototypeListItem {
   proposedSku: string | null;
   finalSku: string | null;
   status: string;
+  // The awarded vendor (if chosen). `vendors` is the full candidate set.
   supplierId: string | null;
   supplierName: string | null;
+  vendors: PrototypeVendor[];
   roundCount: number;
   updatedAt: string | null;
 }
@@ -50,6 +58,48 @@ export function PrototypeStatusBadge({ status }: { status: string }) {
   return <Badge className={cls}>{label}</Badge>;
 }
 
+// The Vendor column: the candidate vendor set, with the awarded one (if any)
+// surfaced first and marked. Shows up to two names, then "+N more".
+function VendorCell({
+  vendors,
+  awardedId,
+}: {
+  vendors: PrototypeVendor[];
+  awardedId: string | null;
+}) {
+  if (vendors.length === 0) return <span className="text-zinc-400">—</span>;
+  // Awarded vendor first, then the rest alphabetically as given.
+  const ordered = [...vendors].sort((a, b) =>
+    a.id === awardedId ? -1 : b.id === awardedId ? 1 : 0,
+  );
+  const shown = ordered.slice(0, 2);
+  const extra = ordered.length - shown.length;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5">
+      {shown.map((v, i) => (
+        <span key={v.id}>
+          <Link
+            href={`/modules/production/suppliers/${v.id}`}
+            className={cn(
+              "underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600",
+              v.id === awardedId && "font-medium text-zinc-900",
+            )}
+          >
+            {v.name}
+          </Link>
+          {v.id === awardedId && (
+            <span className="ml-1 text-[10px] font-medium uppercase tracking-wide text-green-600">
+              awarded
+            </span>
+          )}
+          {i < shown.length - 1 && <span className="text-zinc-300">,</span>}
+        </span>
+      ))}
+      {extra > 0 && <span className="text-zinc-400">+{extra} more</span>}
+    </span>
+  );
+}
+
 function NewPrototypeForm({
   suppliers,
   onClose,
@@ -60,7 +110,9 @@ function NewPrototypeForm({
   const router = useRouter();
   const [name, setName] = useState("");
   const [proposedSku, setProposedSku] = useState("");
-  const [supplierId, setSupplierId] = useState("");
+  // Local copy so inline-created vendors show up immediately in the list.
+  const [vendors, setVendors] = useState<SupplierOption[]>(suppliers);
+  const [supplierIds, setSupplierIds] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,7 +128,7 @@ function NewPrototypeForm({
         body: JSON.stringify({
           name: name.trim(),
           proposedSku: proposedSku.trim() || null,
-          supplierId: supplierId || null,
+          supplierIds,
           description: description.trim() || null,
         }),
       });
@@ -113,20 +165,19 @@ function NewPrototypeForm({
             placeholder="Optional — planned SKU"
           />
         </div>
-        <div>
-          <label className={fieldLabel}>Vendor</label>
-          <select
-            value={supplierId}
-            onChange={(e) => setSupplierId(e.target.value)}
-            className="flex h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950"
-          >
-            <option value="">— No vendor yet —</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+        <div className="sm:col-span-2">
+          <label className={fieldLabel}>
+            Vendors{" "}
+            <span className="font-normal text-zinc-400">
+              — select every vendor you&apos;ll request a quote from
+            </span>
+          </label>
+          <VendorMultiSelect
+            vendors={vendors}
+            selectedIds={supplierIds}
+            onChange={setSupplierIds}
+            onVendorCreated={(v) => setVendors((prev) => [...prev, v])}
+          />
         </div>
         <div className="sm:col-span-2">
           <label className={fieldLabel}>Description / spec</label>
@@ -168,9 +219,13 @@ export function PrototypeManager({
   const filtered = prototypes.filter((p) => {
     if (statusFilter && p.status !== statusFilter) return false;
     if (!q) return true;
-    return [p.name, p.proposedSku, p.finalSku, p.supplierName].some((v) =>
-      v?.toLowerCase().includes(q),
-    );
+    return [
+      p.name,
+      p.proposedSku,
+      p.finalSku,
+      p.supplierName,
+      ...p.vendors.map((v) => v.name),
+    ].some((v) => v?.toLowerCase().includes(q));
   });
 
   return (
@@ -244,16 +299,10 @@ export function PrototypeManager({
                     {p.finalSku ?? p.proposedSku ?? "—"}
                   </TableCell>
                   <TableCell className="text-zinc-500">
-                    {p.supplierId ? (
-                      <Link
-                        href={`/modules/production/suppliers/${p.supplierId}`}
-                        className="underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
-                      >
-                        {p.supplierName}
-                      </Link>
-                    ) : (
-                      "—"
-                    )}
+                    <VendorCell
+                      vendors={p.vendors}
+                      awardedId={p.supplierId}
+                    />
                   </TableCell>
                   <TableCell>
                     <PrototypeStatusBadge status={p.status} />

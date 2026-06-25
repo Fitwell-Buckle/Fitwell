@@ -15,6 +15,8 @@ export const prototypeSchema = z.object({
   // approvePrototype(), not here, so partial PATCHes stay flexible.
   finalSku: z.string().max(100).nullish(),
   supplierId: z.string().max(100).nullish(),
+  // Candidate vendor ids to attach on create (the RFQ recipient set).
+  supplierIds: z.array(z.string().max(100)).max(50).optional(),
   status: z.enum(PROTOTYPE_STATUSES).optional(),
   description: z.string().max(5000).nullish(),
   estUnitCostCents: z.number().int().min(0).nullish(),

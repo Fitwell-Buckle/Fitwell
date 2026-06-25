@@ -72,8 +72,8 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | `/modules/production/supplier-leads/capture` | Mobile-first 3-mode supplier-card capture: photo (Claude vision OCR), live QR, or type manually → review → save. Mirrors `/leads/capture` (reuses its `CardCamera`/`QrScannerView`) but feeds the supplier pipeline |
 | `/modules/production/supplier-leads/[id]` | Supplier lead detail — editable fields + **Create supplier** (promote → real `supplier` row, `status='converted'`, redirects to the supplier) + drop (soft-delete) |
 | `/modules/production/suppliers` | Supplier CRUD. Detail page also lists the vendor's prototypes |
-| `/modules/production/prototypes` | Prototype list — proposed SKUs in the sample phase. Filter by status/vendor, "Add prototype". Rows link to detail |
-| `/modules/production/prototypes/[id]` | Prototype detail — editable fields + vendor, **Promote to product** (records `final_sku`, stamps `approved_at`), concept reference files, and the **sample rounds** timeline (each round: status/dates/qty/cost/feedback + sample photos) |
+| `/modules/production/prototypes` | Prototype list — proposed SKUs in the sample phase. Filter by status/vendor, "Add prototype" (multi-select candidate vendors + create-vendor-inline). Vendor column shows the candidate set with the awarded one marked. Rows link to detail |
+| `/modules/production/prototypes/[id]` | Prototype detail — editable fields, **awarded vendor** picker (from candidates), a **Vendors** card to add/remove candidate vendors (RFQ recipients) or create one inline, **Promote to product** (records `final_sku`, stamps `approved_at`), concept reference files, and the **sample rounds** timeline (each round: status/dates/qty/cost/feedback + sample photos) |
 | `/products/cad-models` | **CAD Models** tab on Products (SectionTabs; no separate nav entry). CAD library — reusable saved CAD models. Add a model, Generate from Fusion (or upload an OBJ/STL) → auto-converts to a metallic GLB (server-side, Node) with an inline 3D preview. OBJ keeps Fusion satin/cast finishes; STL is fully polished. One model shared across many SKUs (color variants) |
 | `/trade-shows` | Trade Shows list (top-level nav) — show cards with a visited-progress bar |
 | `/trade-shows/[id]` | Vendor worklist for one show. Mobile-first: progress bar, search + side (supplier/customer) / visited / priority filters (client-side), **sort** (floor plan / priority [value, then hot] / lead value / temperature), tap-to-toggle visited checkbox per row, indicators for temperature (coloured dot) / lead value (★N) / card scanned / pipeline-linked / follow-up status. Rows link to the vendor detail; **Triage all** link → the bulk triage page |
@@ -169,8 +169,9 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | PATCH | `/api/production/suppliers/[id]` | Update a supplier |
 | POST | `/api/production/suppliers/[id]/contacts` | Add an authorized login email to a supplier |
 | DELETE | `/api/production/supplier-contacts/[id]` | Remove a supplier login email |
-| POST | `/api/prototypes` | Create a prototype (admin-only; suppliers/companies 403) |
-| PATCH / DELETE | `/api/prototypes/[id]` | Update or delete a prototype. Setting `status:"approved"` requires a `final_sku` (in the payload or already on the row) — validated by `approvePrototype()`, stamps `approved_at`. Delete cascades rounds + attachments |
+| POST | `/api/prototypes` | Create a prototype (admin-only; suppliers/companies 403). Accepts `supplierIds[]` — the candidate vendor set, attached via `prototype_supplier` |
+| PATCH / DELETE | `/api/prototypes/[id]` | Update or delete a prototype. Setting `status:"approved"` requires a `final_sku` (in the payload or already on the row) — validated by `approvePrototype()`, stamps `approved_at`. Setting `supplier_id` (awarded) also ensures it's a candidate. Delete cascades rounds + attachments + candidate-vendor rows |
+| POST / DELETE | `/api/prototypes/[id]/suppliers` | Add or remove a candidate vendor (`{ supplierId }`). Idempotent add; removing the awarded vendor clears `supplier_id` (admin-only) |
 | POST | `/api/prototypes/[id]/rounds` | Add a sample round (round number derived server-side) |
 | PATCH / DELETE | `/api/prototypes/rounds/[roundId]` | Update or delete a sample round |
 | POST | `/api/prototypes/[id]/attachments` | Upload a prototype-level file — spec sheets, photos, PDFs (Vercel Blob, 10MB) |
