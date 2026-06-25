@@ -73,7 +73,7 @@ export const BODY_BRUSHED_MATERIAL_NAME = "body_brushed";
 // Matte-finish parameter for the tagged faces — high roughness so they read as a
 // distinctly different, non-reflective metal next to the polish.
 export const BRUSHED = {
-  roughness: 0.6,
+  roughness: 0.42,
 };
 
 // Cast-steel surfaces (Fusion's "Cast" appearance) — a bumpy, always-steel-
