@@ -37,6 +37,7 @@ import { CustomerValueChart } from "@/components/charts/customer-value-chart";
 import { DashboardViewToggle } from "./view-toggle";
 import { SegmentToggle } from "./segment-toggle";
 import { CustomerToggle } from "./customer-toggle";
+import { ReturnsBreakdown } from "./returns-breakdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
@@ -171,6 +172,20 @@ export default async function DashboardPage({
       ),
   );
 
+  // Returns-type scope (clicking a Returns Breakdown row): "exchange", "pure",
+  // or absent (all). Whole-dashboard filter like segment/customer — restricts to
+  // refunded orders of that kind. undefined = all.
+  const returnsFilter =
+    params.returns === "exchange" || params.returns === "pure"
+      ? params.returns
+      : "all";
+  const returnsCond =
+    returnsFilter === "exchange"
+      ? and(sql`${order.totalRefunded} > 0`, likelyExchange)
+      : returnsFilter === "pure"
+        ? and(sql`${order.totalRefunded} > 0`, not(likelyExchange))
+        : undefined;
+
   // Bucket by the STORE timezone so the daily trend lines up with Shopify
   // (whose reports use the store day). Without `AT TIME ZONE`, evening-Pacific
   // orders fall into the next UTC day and the line is off by a day.
@@ -216,13 +231,13 @@ export default async function DashboardPage({
         .select({ total: netSales })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({ count: count() })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       // Distinct customers who actually ordered in the period — consistent with
       // the Sales/Orders cards (both keyed off order.processedAt). The old query
@@ -234,7 +249,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       // Returns: mirrors the headline cards but on refunded value. Same
       // notCancelled/notSample/date filters so it reconciles with Total sales
@@ -253,7 +268,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({
@@ -269,7 +284,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .leftJoin(customer, eq(order.customerId, customer.id))
-        .where(and(notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)))
+        .where(and(notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)))
         .orderBy(desc(order.processedAt))
         .limit(10),
       // Per-customer aggregates for the LTV / retention table, scoped to the
@@ -296,6 +311,7 @@ export default async function DashboardPage({
             notSample,
             segmentCond,
             customerTypeCond,
+            returnsCond,
             sql`${order.customerId} IS NOT NULL`,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
@@ -319,6 +335,7 @@ export default async function DashboardPage({
             notSample,
             segmentCond,
             customerTypeCond,
+            returnsCond,
             sql`${order.customerId} IS NOT NULL`,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
@@ -339,6 +356,7 @@ export default async function DashboardPage({
             notSample,
             segmentCond,
             customerTypeCond,
+            returnsCond,
             sql`${order.customerId} IS NOT NULL`,
             lt(order.processedAt, from),
           ),
@@ -362,12 +380,14 @@ export default async function DashboardPage({
   const pureReturnValue = Math.max(0, totalReturns - exchangeValue);
   const returnsBreakdown = [
     {
+      key: "exchange" as const,
       label: "Likely exchange",
       hint: "wrong size / color",
       orders: exchangeOrders,
       value: exchangeValue,
     },
     {
+      key: "pure" as const,
       label: "Pure return",
       hint: "dissatisfied",
       orders: pureReturnOrders,
@@ -502,7 +522,7 @@ export default async function DashboardPage({
       })
       .from(order)
       .where(
-        and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+        and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
       )
       .groupBy(bucketExpr)
       .orderBy(bucketExpr),
@@ -518,7 +538,7 @@ export default async function DashboardPage({
       })
       .from(order)
       .where(
-        and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+        and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
       )
       .groupBy(bucketExpr, segmentExpr),
     // Per (bucket × segment) product units — separate query because the line-
@@ -532,7 +552,7 @@ export default async function DashboardPage({
       .from(order)
       .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
       .where(
-        and(notCancelled, notSample, segmentCond, customerTypeCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+        and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
       )
       .groupBy(bucketExpr, segmentExpr),
   ]);
@@ -747,56 +767,11 @@ export default async function DashboardPage({
               No returns in this period.
             </p>
           ) : (
-            <>
-              {/* Proportion of refund value: exchange (zinc) vs pure (amber). */}
-              <div className="mb-4 flex h-2 overflow-hidden rounded-full bg-zinc-100">
-                <div
-                  className="bg-zinc-800"
-                  style={{
-                    width: `${totalReturns > 0 ? (exchangeValue / totalReturns) * 100 : 0}%`,
-                  }}
-                />
-                <div
-                  className="bg-amber-500"
-                  style={{
-                    width: `${totalReturns > 0 ? (pureReturnValue / totalReturns) * 100 : 0}%`,
-                  }}
-                />
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-right">Orders</TableHead>
-                    <TableHead className="text-right">Refund value</TableHead>
-                    <TableHead className="text-right">% of returns</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {returnsBreakdown.map((r) => (
-                    <TableRow key={r.label}>
-                      <TableCell className="font-medium text-zinc-900">
-                        {r.label}{" "}
-                        <span className="text-xs font-normal text-zinc-400">
-                          ({r.hint})
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {r.orders.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Mono>{fmt(r.value)}</Mono>
-                      </TableCell>
-                      <TableCell className="text-right text-zinc-500">
-                        {totalReturns > 0
-                          ? `${Math.round((r.value / totalReturns) * 100)}%`
-                          : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </>
+            <ReturnsBreakdown
+              rows={returnsBreakdown}
+              totalReturns={totalReturns}
+              active={returnsFilter}
+            />
           )}
         </CardContent>
       </Card>
