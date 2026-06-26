@@ -41,7 +41,12 @@ export async function handleWebhookTopic(
 
   switch (topic) {
     case "orders/create":
-    case "orders/updated": {
+    case "orders/updated":
+    // A cancellation carries the full order payload (with cancelled_at set), so
+    // the same upsert path captures it. orders/updated usually fires on cancel
+    // too, but subscribing to the dedicated topic closes the gap when it
+    // doesn't — without it we'd wait out the 2h catch-all cron.
+    case "orders/cancelled": {
       const shopifyOrder = payload as unknown as ShopifyOrder;
       await upsertOrder(shopifyOrder);
       // Creator sample logistics: link gifting draft orders to their real
@@ -93,6 +98,46 @@ export async function handleWebhookTopic(
       }
       console.log(
         `Webhook ${topic}: refund for order ${payload.order_id} processed in ${Date.now() - start}ms`,
+      );
+      break;
+    }
+
+    case "fulfillments/create":
+    case "fulfillments/update": {
+      // The fulfillment payload references its parent order but doesn't carry
+      // the full order. Re-fetch and re-run upsertOrder so fulfillment_status
+      // is current, then sync gift logistics — a fulfillment webhook commonly
+      // lands *after* the order webhook, so shipped/delivered stamps for
+      // creator samples need this path to update before the next 2h cron.
+      // Falls back to flipping fulfillment_status if the order fetch fails.
+      const orderId = payload.order_id as number | undefined;
+      if (orderId) {
+        const orderShopifyId = String(orderId);
+        try {
+          const fullOrder = await getShopifyClient().getOrder(orderId);
+          await upsertOrder(fullOrder);
+          try {
+            await syncGiftOrderLogistics(fullOrder as unknown as Record<string, unknown>);
+          } catch (e) {
+            console.error(`Gift logistics sync failed for order ${orderShopifyId}:`, e);
+          }
+        } catch (e) {
+          console.error(
+            `Webhook ${topic}: order ${orderShopifyId} re-sync failed, flipping fulfillment_status only:`,
+            e,
+          );
+          const status = payload.status as string | undefined;
+          await db
+            .update(order)
+            .set({
+              fulfillmentStatus: status ?? "fulfilled",
+              updatedAt: new Date(),
+            })
+            .where(eq(order.shopifyId, orderShopifyId));
+        }
+      }
+      console.log(
+        `Webhook ${topic}: fulfillment for order ${payload.order_id} processed in ${Date.now() - start}ms`,
       );
       break;
     }

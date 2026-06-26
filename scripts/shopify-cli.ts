@@ -89,8 +89,9 @@ Commands:
       List registered webhooks from Shopify API
 
   register-webhooks [--address URL]
-      Register all webhook topics (orders, customers, refunds, products,
-      collections) pointing at our handler. Idempotent — skips existing.
+      Register all webhook topics (orders, cancellations, customers, refunds,
+      fulfillments, products, collections, collection listings, draft orders)
+      pointing at our handler. Idempotent — skips existing.
       Defaults to the production handler URL. Needs the write_webhooks scope.
 
   sync [--since YYYY-MM-DD]
@@ -354,18 +355,30 @@ async function cmdWebhooks(): Promise<void> {
 const WEBHOOK_TOPICS = [
   "orders/create",
   "orders/updated",
+  // Cancellations: the order payload carries cancelled_at. orders/updated
+  // usually fires on cancel too, but the dedicated topic guarantees it.
+  "orders/cancelled",
   // Portal pay-link payments: a paid draft-order invoice flips to "completed";
   // the handler reconciles it to the B2B invoice (auto-mark paid + notify).
   "draft_orders/update",
   "customers/create",
   "customers/update",
   "refunds/create",
+  // Fulfillments: re-fetch the order so fulfillment_status + creator-sample
+  // shipped/delivered stamps update in real time, not on the next 2h cron.
+  "fulfillments/create",
+  "fulfillments/update",
   "products/create",
   "products/update",
   "products/delete",
   "collections/create",
   "collections/update",
   "collections/delete",
+  // Catalog-cache invalidation for collection membership changes. The handler
+  // already covers these; they just weren't being registered.
+  "collection_listings/add",
+  "collection_listings/remove",
+  "collection_listings/update",
 ];
 const DEFAULT_WEBHOOK_ADDRESS =
   "https://portal.fitwellbuckle.co/api/webhooks/shopify";

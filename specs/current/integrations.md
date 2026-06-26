@@ -27,9 +27,17 @@ App config — scopes, embed flag, app URL, declared webhooks — lives in `shop
 - `POST /admin/api/2024-10/graphql.json` — bulk operations for full syncs
 
 ### Webhooks
+
+Registered via `npx tsx scripts/shopify-cli.ts register-webhooks` (idempotent; needs the `write_webhooks` scope). The full topic list lives in `WEBHOOK_TOPICS` in that script and must stay in sync with the `handleWebhookTopic` switch in `src/lib/shopify/webhooks.ts`. Every topic re-runs the same idempotent upsert logic as the 2h `extract-shopify` cron, which remains the catch-all behind them.
+
 - `orders/create` — new order notification
 - `orders/updated` — order status changes (fulfillment, refund)
-- `customers/update` — customer profile changes
+- `orders/cancelled` — cancellation; the payload carries `cancelled_at`, so the same `upsertOrder` path captures it. `orders/updated` usually fires on cancel too, but the dedicated topic closes the gap when it doesn't (otherwise we'd wait out the 2h cron).
+- `customers/create` + `customers/update` — customer profile changes
+- `refunds/create` — re-fetches the full order and re-runs `upsertOrder` so `total_refunded` and per-product refund lines (`order_refund_line`) are captured at refund time
+- `fulfillments/create` + `fulfillments/update` — re-fetch the parent order (via `order_id`) and re-run `upsertOrder` + `syncGiftOrderLogistics`, so `fulfillment_status` and creator-sample `shipped_at`/`delivered_at` update in real time instead of waiting for the next cron. A fulfillment webhook commonly lands *after* the order webhook, which is the gap this closes. Falls back to flipping `fulfillment_status` only if the order fetch fails.
+- `draft_orders/update` — a paid portal pay-link draft order flips to `completed`; the handler reconciles it to the B2B invoice (auto-mark paid + notify)
+- `collections/create|update|delete` + `collection_listings/add|remove|update` — invalidate the catalog cache so the item chooser reflects membership changes without waiting out the TTL
 - `products/create` + `products/update` — invalidate the catalog cache, then call `syncProductBarcodes()` (`src/lib/shopify/sku-barcode-sync.ts`) to keep each variant's `barcode` field equal to its SKU. The Code 128 we print on packaging labels encodes the SKU; mirroring it into Shopify's `barcode` field means admin/POS/Google Shopping all see the same scannable code. Plan is pure + no-op when every variant is already in sync, so the `products/update` Shopify fires in response to our own barcode write terminates the loop. Requires the `write_products` scope. One-shot backfill: `npm run sync:sku-to-barcode` (dry-run by default; pass `-- --apply` to write)
 
 ### Webhook Verification
