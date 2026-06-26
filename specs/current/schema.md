@@ -101,6 +101,11 @@ Synced from Shopify. One row per Shopify order.
 | `source_name` | text | web, pos, api, etc. |
 | `landing_site` | text | URL customer arrived on |
 | `referring_site` | text | External referrer |
+| `shipping_city` | text | Per-order shipping destination, snapshotted from `shipping_address` at sync time. Migration `0091`. |
+| `shipping_province` | text | Shipping state/province name. Migration `0091`. |
+| `shipping_province_code` | text | Shipping state/province code (e.g. `CA`, `TX`). Migration `0091`. |
+| `shipping_country` | text | Shipping country name. Migration `0091`. |
+| `shipping_country_code` | text | Shipping country code (e.g. `US`). Indexed for geographic rollups (e.g. return rate by country). Migration `0091`. |
 | `processed_at` | timestamptz | Shopify `processed_at` (falls back to `created_at`) |
 | `cancelled_at` | timestamptz | Shopify cancellation time; null otherwise. Excluded from "Total sales" |
 | `is_sample` | boolean | Default false. Set from the Shopify `sample` tag on every sync (`hasSampleTag` in `lib/shopify/order-tags.ts`) — re-derived each sync, so removing the tag re-includes the order. Tagged $0 orders (B2B samples + influencer gifts) are **excluded from all revenue/customer/attribution reporting**. Migration `0055`. |

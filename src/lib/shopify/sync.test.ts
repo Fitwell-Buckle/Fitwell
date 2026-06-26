@@ -37,6 +37,7 @@ vi.mock("./client", () => ({
 import {
   parseUtmParams,
   refundLineRows,
+  shippingFields,
   sumRefundedCents,
   upsertCustomer,
 } from "@/lib/shopify/sync";
@@ -237,6 +238,43 @@ describe("refundLineRows", () => {
     // Missing nested line_item → null product fields, still a valid row.
     expect(rows[0].shopifyProductId).toBeNull();
     expect(rows[0].sku).toBeNull();
+  });
+});
+
+describe("shippingFields", () => {
+  it("maps the order shipping_address to shipping_* columns", () => {
+    const fields = shippingFields({
+      shipping_address: {
+        first_name: "A",
+        last_name: "B",
+        address1: "1 Main",
+        address2: null,
+        city: "Austin",
+        province: "Texas",
+        province_code: "TX",
+        country: "United States",
+        country_code: "US",
+        zip: "78701",
+        phone: null,
+      },
+    } as unknown as ShopifyOrder);
+    expect(fields).toEqual({
+      shippingCity: "Austin",
+      shippingProvince: "Texas",
+      shippingProvinceCode: "TX",
+      shippingCountry: "United States",
+      shippingCountryCode: "US",
+    });
+  });
+
+  it("returns all-null when the order has no shipping address", () => {
+    expect(shippingFields({} as unknown as ShopifyOrder)).toEqual({
+      shippingCity: null,
+      shippingProvince: null,
+      shippingProvinceCode: null,
+      shippingCountry: null,
+      shippingCountryCode: null,
+    });
   });
 });
 

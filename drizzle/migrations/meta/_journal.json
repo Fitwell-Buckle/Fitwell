@@ -638,6 +638,13 @@
       "when": 1782442786293,
       "tag": "0090_perpetual_hellion",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1782490945212,
+      "tag": "0091_supreme_boomer",
+      "breakpoints": true
     }
   ]
 }

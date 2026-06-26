@@ -101,6 +101,8 @@ export interface ShopifyOrder {
   source_name: string | null;
   landing_site: string | null;
   referring_site: string | null;
+  /** Per-order shipping destination. Absent on digital/pickup orders. */
+  shipping_address?: ShopifyAddress | null;
   note: string | null;
   note_attributes: Array<{ name: string; value: string }>;
   tags: string;

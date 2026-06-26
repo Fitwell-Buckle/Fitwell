@@ -189,6 +189,16 @@ export const order = pgTable(
     sourceName: text("source_name"),
     landingSite: text("landing_site"),
     referringSite: text("referring_site"),
+    // Shipping destination, snapshotted from the order's shipping_address at
+    // sync time (Shopify is source of truth). Per-order (not the customer's
+    // saved address) so geographic analysis — e.g. return rate by country/
+    // state — reflects where each order actually shipped. Null for orders
+    // with no shipping address (digital/pickup/legacy).
+    shippingCity: text("shipping_city"),
+    shippingProvince: text("shipping_province"),
+    shippingProvinceCode: text("shipping_province_code"),
+    shippingCountry: text("shipping_country"),
+    shippingCountryCode: text("shipping_country_code"),
     // PostHog distinct_id carried from the storefront snippet via the
     // _fw_distinct_id checkout note attribute. (DB column name kept as
     // fw_distinct_id; rename queued — see customer.posthogDistinctId.)
@@ -223,6 +233,7 @@ export const order = pgTable(
     // list view (which orders by processed_at within is_sample = true).
     index("order_is_sample_idx").on(t.isSample, t.processedAt),
     index("order_lead_id_idx").on(t.leadId),
+    index("order_shipping_country_idx").on(t.shippingCountryCode),
   ],
 );
 

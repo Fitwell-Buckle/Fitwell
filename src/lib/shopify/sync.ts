@@ -220,6 +220,21 @@ export function refundLineRows(shopifyOrder: ShopifyOrder, orderId: string) {
   return rows;
 }
 
+/**
+ * Per-order shipping destination, snapshotted from the order's shipping_address.
+ * Null fields when the order has no shipping address (digital/pickup/legacy).
+ */
+export function shippingFields(shopifyOrder: ShopifyOrder) {
+  const a = shopifyOrder.shipping_address;
+  return {
+    shippingCity: a?.city ?? null,
+    shippingProvince: a?.province ?? null,
+    shippingProvinceCode: a?.province_code ?? null,
+    shippingCountry: a?.country ?? null,
+    shippingCountryCode: a?.country_code ?? null,
+  };
+}
+
 export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
   // Upsert the customer first if present
   let customerId: string | null = null;
@@ -259,6 +274,7 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
     sourceName: shopifyOrder.source_name,
     landingSite: shopifyOrder.landing_site,
     referringSite: shopifyOrder.referring_site,
+    ...shippingFields(shopifyOrder),
     processedAt: shopifyOrder.processed_at
       ? new Date(shopifyOrder.processed_at)
       : new Date(shopifyOrder.created_at),
@@ -293,6 +309,11 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
         sourceName: orderValues.sourceName,
         landingSite: orderValues.landingSite,
         referringSite: orderValues.referringSite,
+        shippingCity: orderValues.shippingCity,
+        shippingProvince: orderValues.shippingProvince,
+        shippingProvinceCode: orderValues.shippingProvinceCode,
+        shippingCountry: orderValues.shippingCountry,
+        shippingCountryCode: orderValues.shippingCountryCode,
         processedAt: orderValues.processedAt,
         cancelledAt: orderValues.cancelledAt,
         isSample: orderValues.isSample,
