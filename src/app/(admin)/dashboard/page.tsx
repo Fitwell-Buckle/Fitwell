@@ -38,6 +38,8 @@ import { DashboardViewToggle } from "./view-toggle";
 import { SegmentToggle } from "./segment-toggle";
 import { CustomerToggle } from "./customer-toggle";
 import { ReturnsBreakdown } from "./returns-breakdown";
+import { ReturnDriversCard } from "./return-drivers";
+import { getReturnDrivers } from "@/lib/dashboard/return-drivers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
@@ -650,6 +652,10 @@ export default async function DashboardPage({
     b2b: segPoint(key, "b2b"),
   }));
 
+  // Return Drivers — all-time D2C unit-level return rates; independent of the
+  // range/segment toggles (per-segment rates need full history to be stable).
+  const returnDrivers = await getReturnDrivers();
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -772,6 +778,44 @@ export default async function DashboardPage({
               totalReturns={totalReturns}
               active={returnsFilter}
             />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-1.5">
+            Return Drivers
+            <InfoTooltip>
+              Unit-level return rate (units returned ÷ units sold) across the
+              dimensions that predict returns, from the per-product
+              <code> order_refund_line</code> data. <strong>All-time, D2C
+              only</strong> (excludes POS, B2B/wholesale, and samples) — unlike
+              the cards above, this ignores the date range and segment toggles,
+              because per-segment return rates need full history to be stable.
+              Cells are tinted relative to the {returnDrivers.baseline.pct}%
+              overall rate (red ≥1.5×, amber ≥1.15×, green ≤0.6×); thin samples
+              stay neutral. Color/finish merges “Silver” and “Natural (silver)”.
+            </InfoTooltip>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-zinc-500">
+            Overall D2C return rate:{" "}
+            <span className="font-medium text-zinc-900">
+              {returnDrivers.baseline.pct}%
+            </span>{" "}
+            <span className="text-zinc-400">
+              ({returnDrivers.baseline.unitsReturned.toLocaleString()} of{" "}
+              {returnDrivers.baseline.unitsSold.toLocaleString()} units returned)
+            </span>
+          </p>
+          {returnDrivers.baseline.unitsSold === 0 ? (
+            <p className="py-6 text-center text-sm text-zinc-400">
+              No return data yet.
+            </p>
+          ) : (
+            <ReturnDriversCard data={returnDrivers} />
           )}
         </CardContent>
       </Card>

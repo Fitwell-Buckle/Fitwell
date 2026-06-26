@@ -119,6 +119,13 @@ Built with Recharts. Used in admin dashboard.
 | `bar-chart` | Category comparison (channels, products) |
 | `funnel-chart` | Conversion funnel visualization |
 
+## Dashboard (`app/(admin)/dashboard/`)
+
+| Component | Usage |
+|-----------|-------|
+| `returns-breakdown` | Heuristic split of refunded orders into *likely exchange* (same customer rebought a different variant within ~45 days) vs *pure return*. Clicking a row scopes the whole dashboard via the `returns` URL param. Respects the date range + segment toggle |
+| `return-drivers` | **Return Drivers** card — small-multiples of the unit-level return rate (units returned ÷ units sold, from `order_refund_line` vs `order_line_item`) across nine dimensions: product family, size, color, products-in-order, time-to-refund, signal/came-from, time of day, day of week, order country. **All-time, D2C only** (independent of the range/segment toggles — per-segment rates need full history to be stable). Cells tinted vs the overall baseline (red ≥1.5×, amber ≥1.15×, green ≤0.6×); thin samples (<25 units) stay neutral. Data from `lib/dashboard/return-drivers.ts`; pure tone/format helpers + types in `lib/dashboard/return-drivers-format.ts` (unit-tested) |
+
 ## Production Module (`app/(admin)/modules/production/`)
 
 Client components colocated with their routes. Server pages fetch with Drizzle
