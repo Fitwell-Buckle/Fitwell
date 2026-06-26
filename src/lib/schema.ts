@@ -1244,6 +1244,46 @@ export const prototypeSupplierRelations = relations(
   }),
 );
 
+// ─── Product ideas (the road-map / idea funnel) ─────────────────────
+// A rough product concept — the stage BEFORE a prototype. Ideas are cheap and
+// many; the promising ones pass a gate ("Promote to prototype") and graduate
+// into a `prototype` (an investment). ICE prioritization (impact × confidence ×
+// ease, each 1–10) floats the best ideas to the top. Dead ideas are parked, not
+// deleted. Mirrors the prototype → product promotion one stage earlier.
+export const productIdea = pgTable(
+  "product_idea",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    description: text("description"),
+    // idea | under_review | approved | promoted | parked
+    status: text("status").notNull().default("idea"),
+    // ICE score components (each 1–10). Combined score = product, computed in code.
+    impact: integer("impact"),
+    confidence: integer("confidence"),
+    ease: integer("ease"),
+    notes: text("notes"),
+    // Lineage: set when the idea is promoted into a prototype.
+    promotedPrototypeId: text("promoted_prototype_id").references(
+      () => prototype.id,
+      { onDelete: "set null" },
+    ),
+    promotedAt: timestamp("promoted_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("product_idea_status_idx").on(t.status)],
+);
+
+export const productIdeaRelations = relations(productIdea, ({ one }) => ({
+  promotedPrototype: one(prototype, {
+    fields: [productIdea.promotedPrototypeId],
+    references: [prototype.id],
+  }),
+}));
+
 export const prototypeReferenceRelations = relations(
   prototypeReference,
   ({ one }) => ({

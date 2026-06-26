@@ -89,7 +89,7 @@ const navItems: NavItem[] = [
       { href: "/modules/production/suppliers", label: "Suppliers" },
       // Proposed SKUs in the sample/prototype phase with their vendor, before
       // they become real Shopify products.
-      { href: "/modules/production/prototypes", label: "Prototypes" },
+      { href: "/modules/production/prototypes", label: "Road Map & Prototypes" },
       // CAD library lives as a tab on Products (/products/cad-models), not its
       // own nav entry.
       { href: "/products", label: "Products" },

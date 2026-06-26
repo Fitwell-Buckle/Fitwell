@@ -6,16 +6,18 @@ import { db } from "@/lib/db";
 import { prototype, supplier } from "@/lib/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { PrototypeManager } from "./prototype-manager";
+import { ProductIdeasManager } from "./product-ideas-manager";
+import { listIdeas } from "@/lib/product-ideas/service";
 
 export const metadata: Metadata = {
-  title: "Prototypes | Fitwell Admin",
+  title: "Road Map & Prototypes | Fitwell Admin",
 };
 
 export default async function PrototypesPage() {
   const session = await auth();
   if (!session) redirect("/auth/login");
 
-  const [rows, suppliers] = await Promise.all([
+  const [rows, suppliers, ideas] = await Promise.all([
     db.query.prototype.findMany({
       orderBy: desc(prototype.updatedAt),
       with: {
@@ -30,17 +32,37 @@ export default async function PrototypesPage() {
       columns: { id: true, name: true },
       orderBy: asc(supplier.name),
     }),
+    listIdeas(),
   ]);
 
   return (
     <div>
-      <PageHeader title="Prototypes" />
+      <PageHeader title="Road Map & Prototypes" />
       <p className="mt-1 max-w-2xl text-sm text-zinc-500">
-        Proposed SKUs in the sample phase. Track candidate vendors, request
-        quotes, and each round of samples until a prototype is approved and
-        promoted to a real product.
+        Capture rough product ideas, score and vet them, then promote the strong
+        ones to prototypes — through sampling, vendor quotes, and approval into a
+        real product.
       </p>
 
+      <div className="mt-6">
+        <ProductIdeasManager
+          ideas={ideas.map((i) => ({
+            id: i.id,
+            name: i.name,
+            description: i.description,
+            status: i.status,
+            impact: i.impact,
+            confidence: i.confidence,
+            ease: i.ease,
+            notes: i.notes,
+            promotedPrototypeId: i.promotedPrototypeId,
+            promotedPrototypeName: i.promotedPrototype?.name ?? null,
+            createdAtMs: i.createdAt ? i.createdAt.getTime() : 0,
+          }))}
+        />
+      </div>
+
+      <h2 className="mt-8 text-sm font-semibold text-zinc-900">Prototypes</h2>
       <PrototypeManager
         prototypes={rows.map((p) => ({
           id: p.id,

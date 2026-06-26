@@ -731,6 +731,33 @@ holds the blob URL + metadata.
 Nullable text column added to `user`; set for users with `role='supplier'` so the
 supplier portal can scope queries to their own POs (Phase 3).
 
+### Product ideas (road map)
+
+The stage **before** a prototype — a rough product concept in the idea funnel.
+Ideas are cheap and many; the strong ones pass a gate ("Promote to prototype")
+and graduate into a `prototype`. Prioritized by **ICE** (impact × confidence ×
+ease, each 1–10, combined in code — `src/lib/product-ideas.ts`). Dead ideas are
+parked, not deleted. UI: the **Road Map & Prototypes** page
+(`/modules/production/prototypes`), above the prototypes list. Admin-only.
+Migration `0092_sparkling_pretty_boy`.
+
+#### `product_idea`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `name` | text | Required. The idea |
+| `description` | text | The rough concept / problem |
+| `status` | text | `idea` \| `under_review` \| `approved` \| `promoted` \| `parked`. Default `idea`. `promoted` only via the promote action |
+| `impact` / `confidence` / `ease` | integer | ICE components, each 1–10 (nullable) |
+| `notes` | text | |
+| `promoted_prototype_id` | text | FK → `prototype` (`onDelete: set null`). Lineage — set when promoted |
+| `promoted_at` | timestamp | Stamped on promotion |
+| `created_at` / `updated_at` | timestamp | |
+
+Indexed on `status`. Promotion creates a `prototype` (carrying name + concept)
+and links it here — mirrors the prototype → product gate one stage earlier.
+
 ### Prototypes
 
 A prototype is a **proposed SKU that doesn't exist in Shopify yet**. We gather
