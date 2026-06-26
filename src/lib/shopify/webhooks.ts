@@ -10,6 +10,7 @@ import {
   paymentAmountCents,
 } from "@/lib/invoicing/payment-reconcile";
 import { upsertOrder, upsertCustomer } from "./sync";
+import { getShopifyClient } from "./client";
 import { syncProductBarcodes } from "./sku-barcode-sync";
 import { syncGiftOrderLogistics } from "@/lib/creators/gift-logistics";
 import { CATALOG_CACHE_TAG } from "@/lib/catalog/load";
@@ -68,17 +69,27 @@ export async function handleWebhookTopic(
     }
 
     case "refunds/create": {
-      // A refund payload includes order_id referencing the parent order
+      // The refund payload references its parent order. Re-fetch the full order
+      // and re-run upsertOrder so total_refunded AND the per-product refund
+      // lines (order_refund_line) are captured at refund time, rather than
+      // waiting for the orders/updated webhook or the 2h catch-all cron. Falls
+      // back to a financial-status flip if the order fetch fails.
       const orderId = payload.order_id as number | undefined;
       if (orderId) {
         const orderShopifyId = String(orderId);
-        await db
-          .update(order)
-          .set({
-            financialStatus: "refunded",
-            updatedAt: new Date(),
-          })
-          .where(eq(order.shopifyId, orderShopifyId));
+        try {
+          const fullOrder = await getShopifyClient().getOrder(orderId);
+          await upsertOrder(fullOrder);
+        } catch (e) {
+          console.error(
+            `Webhook ${topic}: order ${orderShopifyId} re-sync failed, flipping status only:`,
+            e,
+          );
+          await db
+            .update(order)
+            .set({ financialStatus: "refunded", updatedAt: new Date() })
+            .where(eq(order.shopifyId, orderShopifyId));
+        }
       }
       console.log(
         `Webhook ${topic}: refund for order ${payload.order_id} processed in ${Date.now() - start}ms`,

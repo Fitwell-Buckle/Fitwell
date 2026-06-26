@@ -149,6 +149,38 @@ stored. See `specs/work-plans/completed/discount-code-visibility.md`.
 
 Unique on `(order_id, code)`; indexed on `code` for rollups.
 
+### `order_refund_line`
+
+Per-product return detail from Shopify's `refunds[].refund_line_items[]`
+(captured by `upsertOrder()`, delete-and-reinsert on re-sync like line items).
+The order's `total_refunded` column nets all refunds into one dollar figure;
+this table preserves **which** product/variant came back, **how many** units,
+and **when** — enabling true per-SKU/per-unit return rates and return latency
+instead of estimating from refund dollar shares. Product fields are
+denormalized off the nested refund `line_item`, so analysis never has to join
+back through `shopify_line_item_id`. Shipping refunds (`order_adjustments`) are
+excluded here (not product returns) but remain folded into `total_refunded`.
+Backfill: `scripts/backfill-refund-lines.ts` (refunds are embedded in the order
+payload; the script re-fetches full order detail for orders with refunds).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid | PK |
+| `order_id` | text | FK → order, cascade delete |
+| `shopify_refund_id` | text | Shopify refund id (one refund groups many lines) |
+| `shopify_line_item_id` | text | The order line item this refund returns |
+| `shopify_product_id` | text | Denormalized from nested `line_item` |
+| `shopify_variant_id` | text | Denormalized from nested `line_item` |
+| `title` | text | Product title of the returned line |
+| `variant_title` | text | Variant (size/finish) of the returned line |
+| `sku` | text | |
+| `quantity` | integer | Units returned on this line — real count, not estimated |
+| `subtotal_cents` | integer | Returned merchandise value (item subtotal) |
+| `tax_cents` | integer | Returned tax on this line |
+| `refunded_at` | timestamp | Refund `created_at` — the true return date |
+
+Indexed on `order_id`, `shopify_product_id`, and `refunded_at`.
+
 ## Attribution
 
 ### `utm_attribution`

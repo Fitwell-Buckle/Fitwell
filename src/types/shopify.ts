@@ -74,7 +74,23 @@ export interface ShopifyOrder {
     id: number;
     created_at: string;
     transactions?: Array<{ amount: string; kind: string; status: string }>;
-    refund_line_items?: Array<{ subtotal: string; total_tax?: string }>;
+    refund_line_items?: Array<{
+      subtotal: string;
+      total_tax?: string;
+      /** The order line item this refund line returns. */
+      line_item_id?: number;
+      /** Units returned on this line. */
+      quantity?: number;
+      /** Nested copy of the returned line item — carries product identity so
+       *  we don't have to join back through line_item_id. */
+      line_item?: {
+        product_id: number | null;
+        variant_id: number | null;
+        sku: string | null;
+        title: string | null;
+        variant_title: string | null;
+      } | null;
+    }>;
     order_adjustments?: Array<{ amount: string; tax_amount?: string }>;
   }>;
   processed_at: string;

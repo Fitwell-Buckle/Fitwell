@@ -36,6 +36,7 @@ vi.mock("./client", () => ({
 
 import {
   parseUtmParams,
+  refundLineRows,
   sumRefundedCents,
   upsertCustomer,
 } from "@/lib/shopify/sync";
@@ -148,6 +149,94 @@ describe("sumRefundedCents", () => {
       ),
     );
     expect(cents).toBe(13226);
+  });
+});
+
+describe("refundLineRows", () => {
+  it("is empty when there are no refunds", () => {
+    expect(refundLineRows(orderWithRefunds([]), "ord-1")).toEqual([]);
+  });
+
+  it("is empty when a refund carries no line items (e.g. shipping-only)", () => {
+    const rows = refundLineRows(
+      orderWithRefunds([
+        {
+          id: 9,
+          created_at: "2026-01-02T00:00:00Z",
+          order_adjustments: [{ amount: "-7.00" }],
+        },
+      ]),
+      "ord-1",
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("flattens one row per refunded line with product identity, units, value and date", () => {
+    const rows = refundLineRows(
+      orderWithRefunds([
+        {
+          id: 555,
+          created_at: "2026-03-04T12:00:00Z",
+          refund_line_items: [
+            {
+              subtotal: "59.00",
+              total_tax: "4.72",
+              line_item_id: 111,
+              quantity: 1,
+              line_item: {
+                product_id: 22,
+                variant_id: 33,
+                sku: "M1-RG-18",
+                title: "Fitwell M1 Rose Gold Buckle",
+                variant_title: "18mm Width / Rose Gold",
+              },
+            },
+          ],
+        },
+      ]),
+      "ord-1",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      orderId: "ord-1",
+      shopifyRefundId: "555",
+      shopifyLineItemId: "111",
+      shopifyProductId: "22",
+      shopifyVariantId: "33",
+      sku: "M1-RG-18",
+      title: "Fitwell M1 Rose Gold Buckle",
+      variantTitle: "18mm Width / Rose Gold",
+      quantity: 1,
+      subtotalCents: 5900,
+      taxCents: 472,
+    });
+    expect(rows[0].refundedAt).toEqual(new Date("2026-03-04T12:00:00Z"));
+  });
+
+  it("emits a row per line across multiple refunds and tolerates missing nested product fields", () => {
+    const rows = refundLineRows(
+      orderWithRefunds([
+        {
+          id: 1,
+          created_at: "2026-03-04T00:00:00Z",
+          refund_line_items: [
+            { subtotal: "30.00", quantity: 1, line_item_id: 1 },
+            { subtotal: "30.00", quantity: 2, line_item_id: 2 },
+          ],
+        },
+        {
+          id: 2,
+          created_at: "2026-03-10T00:00:00Z",
+          refund_line_items: [{ subtotal: "30.00", quantity: 1, line_item_id: 3 }],
+        },
+      ]),
+      "ord-1",
+    );
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.quantity)).toEqual([1, 2, 1]);
+    // Missing nested line_item → null product fields, still a valid row.
+    expect(rows[0].shopifyProductId).toBeNull();
+    expect(rows[0].sku).toBeNull();
   });
 });
 

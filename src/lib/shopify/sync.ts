@@ -5,6 +5,7 @@ import {
   order,
   orderDiscountCode,
   orderLineItem,
+  orderRefundLine,
   utmAttribution,
 } from "@/lib/schema";
 import { getShopifyClient, toCents } from "./client";
@@ -181,6 +182,44 @@ export function sumRefundedCents(shopifyOrder: ShopifyOrder): number {
   return Math.min(Math.max(0, cents), total);
 }
 
+/**
+ * Flattens Shopify's refunds[].refund_line_items[] into per-product return rows
+ * for the order_refund_line table. One row per refunded line item, carrying the
+ * returned product's identity, unit count, value, and the refund date. Shipping
+ * refunds (`order_adjustments`) are intentionally excluded — they aren't product
+ * returns — but remain folded into order.total_refunded via sumRefundedCents().
+ */
+export function refundLineRows(shopifyOrder: ShopifyOrder, orderId: string) {
+  const rows: Array<typeof orderRefundLine.$inferInsert> = [];
+  for (const refund of shopifyOrder.refunds ?? []) {
+    const refundedAt = refund.created_at ? new Date(refund.created_at) : null;
+    for (const li of refund.refund_line_items ?? []) {
+      rows.push({
+        orderId,
+        shopifyRefundId: String(refund.id),
+        shopifyLineItemId:
+          li.line_item_id != null ? String(li.line_item_id) : null,
+        shopifyProductId:
+          li.line_item?.product_id != null
+            ? String(li.line_item.product_id)
+            : null,
+        shopifyVariantId:
+          li.line_item?.variant_id != null
+            ? String(li.line_item.variant_id)
+            : null,
+        title: li.line_item?.title ?? null,
+        variantTitle: li.line_item?.variant_title ?? null,
+        sku: li.line_item?.sku ?? null,
+        quantity: li.quantity ?? 0,
+        subtotalCents: toCents(li.subtotal),
+        taxCents: toCents(li.total_tax ?? "0"),
+        refundedAt,
+      });
+    }
+  }
+  return rows;
+}
+
 export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
   // Upsert the customer first if present
   let customerId: string | null = null;
@@ -324,6 +363,15 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
         type: dc.type ?? null,
       })),
     );
+  }
+
+  // Replace per-product return detail: delete existing, then bulk insert.
+  // Idempotent on re-sync, mirroring line items / discount codes above.
+  await db.delete(orderRefundLine).where(eq(orderRefundLine.orderId, orderId));
+
+  const refundRows = refundLineRows(shopifyOrder, orderId);
+  if (refundRows.length > 0) {
+    await db.insert(orderRefundLine).values(refundRows);
   }
 
   // Deterministic (pixel) / fallback link to a pre-purchase attribution touch

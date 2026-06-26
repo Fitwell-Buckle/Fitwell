@@ -275,6 +275,48 @@ export const orderDiscountCode = pgTable(
   ],
 );
 
+// Per-product return detail, from Shopify's refunds[].refund_line_items[].
+// The order's total_refunded column nets refunds into one dollar figure; this
+// table preserves which product/variant came back, how many units, and when —
+// so we can compute true per-SKU/per-unit return rates and return latency
+// instead of estimating from refund dollar shares. Populated delete-and-replace
+// per order on every sync (idempotent), mirroring order_line_item. The product
+// fields are denormalized off the nested refund line_item so analysis never
+// has to join back through shopify_line_item_id.
+export const orderRefundLine = pgTable(
+  "order_refund_line",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => order.id, { onDelete: "cascade" }),
+    // Shopify refund id (one refund groups many refunded lines) and the
+    // order line item it refunds. Together unique within an order.
+    shopifyRefundId: text("shopify_refund_id"),
+    shopifyLineItemId: text("shopify_line_item_id"),
+    shopifyProductId: text("shopify_product_id"),
+    shopifyVariantId: text("shopify_variant_id"),
+    title: text("title"),
+    variantTitle: text("variant_title"),
+    sku: text("sku"),
+    // Units returned on this refund line — the real count, not an estimate.
+    quantity: integer("quantity").default(0),
+    // Returned merchandise value (item subtotal + tax), cents — matches the
+    // components sumRefundedCents() folds into order.total_refunded.
+    subtotalCents: integer("subtotal_cents").default(0),
+    taxCents: integer("tax_cents").default(0),
+    // When the refund was created in Shopify — the true return date.
+    refundedAt: timestamp("refunded_at", { mode: "date" }),
+  },
+  (t) => [
+    index("order_refund_line_order_id_idx").on(t.orderId),
+    index("order_refund_line_product_id_idx").on(t.shopifyProductId),
+    index("order_refund_line_refunded_at_idx").on(t.refundedAt),
+  ],
+);
+
 export const utmAttribution = pgTable(
   "utm_attribution",
   {
@@ -946,11 +988,19 @@ export const orderRelations = relations(order, ({ one, many }) => ({
     references: [lead.id],
   }),
   lineItems: many(orderLineItem),
+  refundLines: many(orderRefundLine),
 }));
 
 export const orderLineItemRelations = relations(orderLineItem, ({ one }) => ({
   order: one(order, {
     fields: [orderLineItem.orderId],
+    references: [order.id],
+  }),
+}));
+
+export const orderRefundLineRelations = relations(orderRefundLine, ({ one }) => ({
+  order: one(order, {
+    fields: [orderRefundLine.orderId],
     references: [order.id],
   }),
 }));
