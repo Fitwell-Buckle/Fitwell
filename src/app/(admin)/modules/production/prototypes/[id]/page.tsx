@@ -61,6 +61,8 @@ export default async function PrototypeDetailPage({
                 receivedAt: cv.quoteReceivedAt
                   ? cv.quoteReceivedAt.toISOString()
                   : null,
+                fileUrl: cv.quoteFileUrl,
+                fileName: cv.quoteFileName,
               },
             })),
           attachments: proto.attachments.map((a) => ({

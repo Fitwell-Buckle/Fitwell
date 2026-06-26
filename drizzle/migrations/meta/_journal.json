@@ -631,6 +631,13 @@
       "when": 1782428212613,
       "tag": "0089_wakeful_bug",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1782442786293,
+      "tag": "0090_perpetual_hellion",
+      "breakpoints": true
     }
   ]
 }

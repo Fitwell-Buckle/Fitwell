@@ -98,6 +98,33 @@ export async function markRfqSent(prototypeId: string, supplierId: string) {
     );
 }
 
+// Set (or clear, with null) the uploaded quote document for a vendor. Returns
+// whether the row existed + the previous file URL so the caller can delete the
+// old blob. Doesn't touch `quoteReceivedAt` — attaching a file isn't a quote.
+export async function setPrototypeQuoteFile(
+  prototypeId: string,
+  supplierId: string,
+  file: { url: string; name: string } | null,
+): Promise<{ found: boolean; previousUrl: string | null }> {
+  const where = and(
+    eq(prototypeSupplier.prototypeId, prototypeId),
+    eq(prototypeSupplier.supplierId, supplierId),
+  );
+  const [row] = await db
+    .select({ url: prototypeSupplier.quoteFileUrl })
+    .from(prototypeSupplier)
+    .where(where);
+  if (!row) return { found: false, previousUrl: null };
+  await db
+    .update(prototypeSupplier)
+    .set({
+      quoteFileUrl: file?.url ?? null,
+      quoteFileName: file?.name ?? null,
+    })
+    .where(where);
+  return { found: true, previousUrl: row.url };
+}
+
 export interface QuoteInput {
   unitCostCents?: number | null;
   leadTimeDays?: number | null;

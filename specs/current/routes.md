@@ -174,6 +174,7 @@ Cross-party notifications: **every PO write** fires an in-app notification + ema
 | POST / DELETE | `/api/prototypes/[id]/suppliers` | Add or remove a candidate vendor (`{ supplierId }`). Idempotent add; removing the awarded vendor clears `supplier_id` (admin-only) |
 | PATCH | `/api/prototypes/[id]/suppliers/[supplierId]` | Record/update a vendor's quote (`unitCostCents`, `leadTimeDays`, `moq`, `setupCostCents`, `notes`) — stamps `quote_received_at`. Works whether or not the RFQ went through the system (admin-only) |
 | POST | `/api/prototypes/[id]/suppliers/[supplierId]/rfq` | Email a candidate vendor a Request for Quote (`{ to, cc?, message? }`) — reuses the PO email path (Resend, auto-CC sender + vendor contacts, reply-to sender), includes the spec + CAD links, stamps `rfq_sent_at` (admin-only) |
+| POST / DELETE | `/api/prototypes/[id]/suppliers/[supplierId]/quote-file` | Upload (multipart, max 10MB → Vercel Blob) or remove the vendor's quote document, stored on the `prototype_supplier` row (`quote_file_url`/`name`). Replacing drops the old blob (admin-only) |
 | POST | `/api/prototypes/[id]/rounds` | Add a sample round (round number derived server-side) |
 | PATCH / DELETE | `/api/prototypes/rounds/[roundId]` | Update or delete a sample round |
 | POST | `/api/prototypes/[id]/attachments` | Upload a prototype-level file — spec sheets, photos, PDFs (Vercel Blob, 10MB) |

@@ -777,13 +777,16 @@ from several vendors; the one finally chosen lands in `prototype.supplier_id`
 | `quote_setup_cost_cents` | integer | One-time tooling/sample cost |
 | `quote_notes` | text | Free-text quote notes |
 | `quote_received_at` | timestamp | Set when a quote is recorded → vendor reads as "quoted" |
+| `quote_file_url` | text | The vendor's quote document (PDF/image) in Vercel Blob — one per quote |
+| `quote_file_name` | text | Original filename for display |
 | `created_at` | timestamp | |
 
 Unique on `(prototype_id, supplier_id)` (idempotent membership); indexed on each
 FK. Backfilled from existing `prototype.supplier_id` values on migration.
 Per-vendor status is derived: `quote_received_at` → quoted, else `rfq_sent_at` →
 RFQ sent, else candidate. Migrations `0087_fuzzy_shard` (table),
-`0088_amused_ezekiel_stane` (RFQ/quote columns).
+`0088_amused_ezekiel_stane` (RFQ/quote columns), `0090_perpetual_hellion`
+(quote file).
 
 #### `prototype_round`
 

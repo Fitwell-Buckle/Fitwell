@@ -19,6 +19,8 @@ export interface CandidateVendor {
     setupCostCents: number | null;
     notes: string | null;
     receivedAt: string | null;
+    fileUrl: string | null;
+    fileName: string | null;
   };
 }
 
@@ -139,6 +141,98 @@ function RfqForm({
   );
 }
 
+// The vendor's uploaded quote document — immediate upload/remove (one file per
+// quote), mirroring the prototype attachment pattern.
+function QuoteFileControl({
+  prototypeId,
+  vendor,
+}: {
+  prototypeId: string;
+  vendor: CandidateVendor;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const base = `/api/prototypes/${prototypeId}/suppliers/${vendor.id}/quote-file`;
+
+  async function upload(file: File) {
+    setError(null);
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(base, { method: "POST", body: fd });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Upload failed.");
+      }
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(base, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Remove failed.");
+      }
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Remove failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (vendor.quote.fileUrl) {
+    return (
+      <div className="flex items-center gap-3 text-sm">
+        <a
+          href={vendor.quote.fileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="truncate text-zinc-800 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+        >
+          {vendor.quote.fileName || "Quote file"}
+        </a>
+        <button
+          type="button"
+          onClick={remove}
+          disabled={busy}
+          className="shrink-0 text-xs text-zinc-400 underline decoration-zinc-300 underline-offset-2 hover:text-red-600 hover:decoration-red-400 disabled:opacity-50"
+        >
+          {busy ? "…" : "Remove"}
+        </button>
+        {error && <span className="text-xs text-red-600">{error}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-sm">
+      <input
+        type="file"
+        disabled={busy}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) upload(f);
+        }}
+        className="block w-full text-xs text-zinc-600 file:mr-3 file:rounded-md file:border file:border-zinc-200 file:bg-white file:px-3 file:py-1.5 file:text-xs file:font-medium hover:file:bg-zinc-50"
+      />
+      {busy && <span className="text-xs text-zinc-400">Uploading…</span>}
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 // ── Record / edit a received quote ───────────────────────────────────────────
 function QuoteForm({
   prototypeId,
@@ -248,6 +342,10 @@ function QuoteForm({
           placeholder="Terms, validity, caveats…"
           className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950"
         />
+      </div>
+      <div className="mt-2">
+        <label className={fieldLabel}>Quote file (optional)</label>
+        <QuoteFileControl prototypeId={prototypeId} vendor={vendor} />
       </div>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
       <div className="mt-2 flex justify-end gap-2">
@@ -420,27 +518,43 @@ export function PrototypeVendors({
                 </div>
 
                 {/* Quote summary */}
-                {v.quote.receivedAt && (
+                {(v.quote.receivedAt || v.quote.fileUrl) && (
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-600">
-                    <span
-                      className={
-                        isLowest ? "font-semibold text-green-700" : "font-medium text-zinc-800"
-                      }
-                    >
-                      {fmtMoney(v.quote.unitCostCents)}/unit
-                      {isLowest && (
-                        <span className="ml-1 text-[10px] uppercase">lowest</span>
-                      )}
-                    </span>
-                    {v.quote.leadTimeDays != null && (
-                      <span>{v.quote.leadTimeDays}d lead</span>
+                    {v.quote.receivedAt && (
+                      <>
+                        <span
+                          className={
+                            isLowest
+                              ? "font-semibold text-green-700"
+                              : "font-medium text-zinc-800"
+                          }
+                        >
+                          {fmtMoney(v.quote.unitCostCents)}/unit
+                          {isLowest && (
+                            <span className="ml-1 text-[10px] uppercase">lowest</span>
+                          )}
+                        </span>
+                        {v.quote.leadTimeDays != null && (
+                          <span>{v.quote.leadTimeDays}d lead</span>
+                        )}
+                        {v.quote.moq != null && <span>MOQ {v.quote.moq}</span>}
+                        {v.quote.setupCostCents != null && (
+                          <span>{fmtMoney(v.quote.setupCostCents)} tooling</span>
+                        )}
+                        {v.quote.notes && (
+                          <span className="text-zinc-400">· {v.quote.notes}</span>
+                        )}
+                      </>
                     )}
-                    {v.quote.moq != null && <span>MOQ {v.quote.moq}</span>}
-                    {v.quote.setupCostCents != null && (
-                      <span>{fmtMoney(v.quote.setupCostCents)} tooling</span>
-                    )}
-                    {v.quote.notes && (
-                      <span className="text-zinc-400">· {v.quote.notes}</span>
+                    {v.quote.fileUrl && (
+                      <a
+                        href={v.quote.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+                      >
+                        📎 {v.quote.fileName || "Quote file"}
+                      </a>
                     )}
                   </div>
                 )}

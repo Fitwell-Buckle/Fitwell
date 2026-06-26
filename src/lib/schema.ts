@@ -1194,6 +1194,10 @@ export const prototypeSupplier = pgTable(
     quoteSetupCostCents: integer("quote_setup_cost_cents"),
     quoteNotes: text("quote_notes"),
     quoteReceivedAt: timestamp("quote_received_at", { mode: "date" }),
+    // The vendor's quote document (PDF/image), uploaded to Vercel Blob. One file
+    // per quote; more general prototype docs go to `prototype_attachment`.
+    quoteFileUrl: text("quote_file_url"),
+    quoteFileName: text("quote_file_name"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   },
   (t) => [
