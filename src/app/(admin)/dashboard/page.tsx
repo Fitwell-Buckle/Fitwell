@@ -663,9 +663,10 @@ export default async function DashboardPage({
     b2b: segPoint(key, "b2b"),
   }));
 
-  // Return Drivers — all-time D2C unit-level return rates; independent of the
-  // range/segment toggles (per-segment rates need full history to be stable).
-  const returnDrivers = await getReturnDrivers();
+  // Return Drivers — unit-level return rates, scoped to the same date range +
+  // segment toggle as every other card (not the click-filters; it's the
+  // selector for the `rd` filter).
+  const returnDrivers = await getReturnDrivers({ from, to, segment });
 
   return (
     <div>
@@ -796,47 +797,6 @@ export default async function DashboardPage({
       <Card className="mt-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-1.5">
-            Return Drivers
-            <InfoTooltip>
-              Unit-level return rate (units returned ÷ units sold) across the
-              dimensions that predict returns, from the per-product
-              <code> order_refund_line</code> data. <strong>All-time, D2C
-              only</strong> (excludes POS, B2B/wholesale, and samples) — unlike
-              the cards above, this ignores the date range and segment toggles,
-              because per-segment return rates need full history to be stable.
-              Cells are tinted relative to the {returnDrivers.baseline.pct}%
-              overall rate (red ≥1.5×, amber ≥1.15×, green ≤0.6×); thin samples
-              stay neutral. Color/finish merges “Silver” and “Natural (silver)”.
-              <strong> Click any segment</strong> to scope the whole dashboard to
-              that cohort (click it again to clear); this card itself stays
-              all-time as the selector.
-            </InfoTooltip>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-zinc-500">
-            Overall D2C return rate:{" "}
-            <span className="font-medium text-zinc-900">
-              {returnDrivers.baseline.pct}%
-            </span>{" "}
-            <span className="text-zinc-400">
-              ({returnDrivers.baseline.unitsReturned.toLocaleString()} of{" "}
-              {returnDrivers.baseline.unitsSold.toLocaleString()} units returned)
-            </span>
-          </p>
-          {returnDrivers.baseline.unitsSold === 0 ? (
-            <p className="py-6 text-center text-sm text-zinc-400">
-              No return data yet.
-            </p>
-          ) : (
-            <ReturnDriversCard data={returnDrivers} activeRd={activeRd} />
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-1.5">
             Customer Value &amp; Retention
             <InfoTooltip>
               Everything here reflects the <em>selected date range</em>, so the
@@ -913,6 +873,47 @@ export default async function DashboardPage({
               ))}
             </TableBody>
           </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-1.5">
+            Return Drivers
+            <InfoTooltip>
+              Unit-level return rate (units returned ÷ units sold) across the
+              dimensions that predict returns, from the per-product
+              <code> order_refund_line</code> data. Scoped to the{" "}
+              <strong>selected date range and segment toggle</strong> like every
+              other card. Cells are tinted relative to the{" "}
+              {returnDrivers.baseline.pct}% overall rate (red ≥1.5×, amber ≥1.15×,
+              green ≤0.6×); thin samples stay neutral. Color/finish merges
+              “Silver” and “Natural (silver)”.
+              <strong> Click any segment</strong> to scope the whole dashboard to
+              that cohort (click it again to clear); this card itself stays the
+              selector and isn’t narrowed by the click.
+            </InfoTooltip>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-zinc-500">
+            Overall return rate:{" "}
+            <span className="font-medium text-zinc-900">
+              {returnDrivers.baseline.pct}%
+            </span>{" "}
+            <span className="text-zinc-400">
+              ({returnDrivers.baseline.unitsReturned.toLocaleString()} of{" "}
+              {returnDrivers.baseline.unitsSold.toLocaleString()} units returned
+              in range)
+            </span>
+          </p>
+          {returnDrivers.baseline.unitsSold === 0 ? (
+            <p className="py-6 text-center text-sm text-zinc-400">
+              No orders in this range / segment.
+            </p>
+          ) : (
+            <ReturnDriversCard data={returnDrivers} activeRd={activeRd} />
           )}
         </CardContent>
       </Card>
