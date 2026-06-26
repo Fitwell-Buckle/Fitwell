@@ -6,6 +6,15 @@ import type {
   ReturnRow,
   LatencyRow,
 } from "./return-drivers-format";
+import {
+  FAMILY,
+  COLOR,
+  SOURCE,
+  TOD,
+  LAT,
+  BASKET,
+  NO_SIZE,
+} from "./return-drivers-labels";
 
 /**
  * Powers the dashboard "Return Drivers" card. Computes unit-level return rates
@@ -27,17 +36,17 @@ const D2C = sql`
 
 // Normalization expressions shared by the product-attribute metrics.
 const widthOf = (c: string) =>
-  sql`COALESCE(substring(${sql.raw(c)} from '[0-9]+ ?mm'), '(no size)')`;
+  sql`COALESCE(substring(${sql.raw(c)} from '[0-9]+ ?mm'), ${NO_SIZE})`;
 const colorOf = (c: string) => sql`CASE
-  WHEN ${sql.raw(c)} ILIKE '%rose gold%' THEN 'Rose Gold'
-  WHEN ${sql.raw(c)} ILIKE '%yellow gold%' OR ${sql.raw(c)} ILIKE '%/ gold%' THEN 'Yellow Gold'
-  WHEN ${sql.raw(c)} ILIKE '%black%' THEN 'Black'
-  ELSE 'Silver' END`;
+  WHEN ${sql.raw(c)} ILIKE '%rose gold%' THEN ${COLOR.rose}
+  WHEN ${sql.raw(c)} ILIKE '%yellow gold%' OR ${sql.raw(c)} ILIKE '%/ gold%' THEN ${COLOR.yellow}
+  WHEN ${sql.raw(c)} ILIKE '%black%' THEN ${COLOR.black}
+  ELSE ${COLOR.silver} END`;
 const familyOf = (c: string) => sql`CASE
-  WHEN ${sql.raw(c)} ILIKE '%M4%' THEN 'M4 Universal Link'
-  WHEN ${sql.raw(c)} ILIKE '%tang%' THEN 'Tang (accessory)'
-  WHEN ${sql.raw(c)} ILIKE '%M1%' OR ${sql.raw(c)} ILIKE '%model one%' THEN 'M1 Buckle'
-  ELSE 'Other' END`;
+  WHEN ${sql.raw(c)} ILIKE '%M4%' THEN ${FAMILY.m4}
+  WHEN ${sql.raw(c)} ILIKE '%tang%' THEN ${FAMILY.tang}
+  WHEN ${sql.raw(c)} ILIKE '%M1%' OR ${sql.raw(c)} ILIKE '%model one%' THEN ${FAMILY.m1}
+  ELSE ${FAMILY.other} END`;
 
 const num = (v: unknown) => Number(v ?? 0);
 const toRows = (rows: Record<string, unknown>[]): ReturnRow[] =>
@@ -80,13 +89,13 @@ const ORD = sql`
       EXTRACT(HOUR FROM (o.processed_at AT TIME ZONE ${STORE_TZ})) AS hr,
       TO_CHAR(o.processed_at AT TIME ZONE ${STORE_TZ}, 'ID-Dy') AS dow,
       CASE
-        WHEN c.utm_source ILIKE '%instagram%' OR c.utm_source = 'ig' OR o.referring_site ILIKE '%instagram%' THEN 'Instagram'
-        WHEN c.utm_source ILIKE '%klaviyo%' OR c.utm_medium ILIKE '%email%' OR c.utm_source ILIKE '%email%' THEN 'Email'
-        WHEN c.utm_source = 'fb' OR c.utm_source ILIKE '%meta%' OR c.utm_source ILIKE '%facebook%' OR o.referring_site ILIKE '%facebook%' THEN 'Facebook/Meta'
-        WHEN c.utm_source ILIKE '%google%' OR o.referring_site ILIKE '%google%' THEN 'Google'
-        WHEN o.referring_site ILIKE '%youtube%' THEN 'YouTube'
-        WHEN (c.utm_source IS NULL OR c.utm_source = '') AND NULLIF(o.referring_site,'') IS NULL THEN 'Direct'
-        ELSE 'Other' END AS came_from
+        WHEN c.utm_source ILIKE '%instagram%' OR c.utm_source = 'ig' OR o.referring_site ILIKE '%instagram%' THEN ${SOURCE.instagram}
+        WHEN c.utm_source ILIKE '%klaviyo%' OR c.utm_medium ILIKE '%email%' OR c.utm_source ILIKE '%email%' THEN ${SOURCE.email}
+        WHEN c.utm_source = 'fb' OR c.utm_source ILIKE '%meta%' OR c.utm_source ILIKE '%facebook%' OR o.referring_site ILIKE '%facebook%' THEN ${SOURCE.facebook}
+        WHEN c.utm_source ILIKE '%google%' OR o.referring_site ILIKE '%google%' THEN ${SOURCE.google}
+        WHEN o.referring_site ILIKE '%youtube%' THEN ${SOURCE.youtube}
+        WHEN (c.utm_source IS NULL OR c.utm_source = '') AND NULLIF(o.referring_site,'') IS NULL THEN ${SOURCE.direct}
+        ELSE ${SOURCE.other} END AS came_from
     FROM "order" o LEFT JOIN customer c ON c.id = o.customer_id
     WHERE ${D2C}
   )`;
@@ -125,8 +134,8 @@ export async function getReturnDrivers(): Promise<ReturnDrivers> {
     productMetric(widthOf, "oli.variant_title", "rl.variant_title"),
     productMetric(colorOf, "oli.variant_title", "rl.variant_title"),
     orderMetric(
-      sql`CASE WHEN lines<=1 THEN '1 product' WHEN lines=2 THEN '2 products'
-               WHEN lines=3 THEN '3 products' ELSE '4+ products' END`,
+      sql`CASE WHEN lines<=1 THEN ${BASKET.one} WHEN lines=2 THEN ${BASKET.two}
+               WHEN lines=3 THEN ${BASKET.three} ELSE ${BASKET.four} END`,
       1,
     ),
     // Time-to-refund: each band as a share of ALL units sold (sums to overall).
@@ -138,11 +147,11 @@ export async function getReturnDrivers(): Promise<ReturnDrivers> {
         WHERE ${D2C} AND rl.refunded_at IS NOT NULL GROUP BY o.id, o.processed_at
       ), tot AS (SELECT SUM(units) AS total_units FROM ord)
       SELECT CASE
-          WHEN days <= 7 THEN '≤ 7 days'
-          WHEN days <= 14 THEN '8–14 days'
-          WHEN days <= 30 THEN '15–30 days'
-          WHEN days <= 60 THEN '31–60 days'
-          ELSE '60+ days' END AS band,
+          WHEN days <= 7 THEN ${LAT.d7}
+          WHEN days <= 14 THEN ${LAT.d14}
+          WHEN days <= 30 THEN ${LAT.d30}
+          WHEN days <= 60 THEN ${LAT.d60}
+          ELSE ${LAT.d61} END AS band,
         SUM(ru) AS units_returned,
         ROUND(100.0 * SUM(ru) / NULLIF((SELECT total_units FROM tot), 0), 1) AS pct_of_all
       FROM lat GROUP BY 1
@@ -150,10 +159,10 @@ export async function getReturnDrivers(): Promise<ReturnDrivers> {
     `),
     orderMetric(sql`came_from`, 30),
     orderMetric(
-      sql`CASE WHEN hr BETWEEN 5 AND 11 THEN 'Morning (5–12)'
-               WHEN hr BETWEEN 12 AND 16 THEN 'Afternoon (12–5)'
-               WHEN hr BETWEEN 17 AND 21 THEN 'Evening (5–10)'
-               ELSE 'Late night (10–5)' END`,
+      sql`CASE WHEN hr BETWEEN 5 AND 11 THEN ${TOD.morning}
+               WHEN hr BETWEEN 12 AND 16 THEN ${TOD.afternoon}
+               WHEN hr BETWEEN 17 AND 21 THEN ${TOD.evening}
+               ELSE ${TOD.late} END`,
       30,
     ),
     orderMetric(sql`dow`, 30),

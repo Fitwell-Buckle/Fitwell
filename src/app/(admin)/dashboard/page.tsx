@@ -40,6 +40,8 @@ import { CustomerToggle } from "./customer-toggle";
 import { ReturnsBreakdown } from "./returns-breakdown";
 import { ReturnDriversCard } from "./return-drivers";
 import { getReturnDrivers } from "@/lib/dashboard/return-drivers";
+import { returnDriverFilter } from "@/lib/dashboard/return-drivers-filter";
+import { parseRd } from "@/lib/dashboard/return-drivers-labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
@@ -188,6 +190,15 @@ export default async function DashboardPage({
         ? and(sql`${order.totalRefunded} > 0`, not(likelyExchange))
         : undefined;
 
+  // Return-driver scope (clicking a Return Drivers segment): scopes every order
+  // metric to that cohort via the `rd` URL param. undefined = no driver filter.
+  // Like segment/returns, a single condition threaded into every order query.
+  const returnDriver = parseRd(params.rd);
+  const returnDriverCond = returnDriver
+    ? returnDriverFilter(returnDriver.dim, returnDriver.value)
+    : undefined;
+  const activeRd = returnDriver ? (params.rd as string) : null;
+
   // Bucket by the STORE timezone so the daily trend lines up with Shopify
   // (whose reports use the store day). Without `AT TIME ZONE`, evening-Pacific
   // orders fall into the next UTC day and the line is off by a day.
@@ -233,13 +244,13 @@ export default async function DashboardPage({
         .select({ total: netSales })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, returnDriverCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({ count: count() })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, returnDriverCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       // Distinct customers who actually ordered in the period — consistent with
       // the Sales/Orders cards (both keyed off order.processedAt). The old query
@@ -251,7 +262,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, returnDriverCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       // Returns: mirrors the headline cards but on refunded value. Same
       // notCancelled/notSample/date filters so it reconciles with Total sales
@@ -270,7 +281,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .where(
-          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+          and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, returnDriverCond, gte(order.processedAt, from), lte(order.processedAt, to)),
         ),
       db
         .select({
@@ -286,7 +297,7 @@ export default async function DashboardPage({
         })
         .from(order)
         .leftJoin(customer, eq(order.customerId, customer.id))
-        .where(and(notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)))
+        .where(and(notSample, segmentCond, customerTypeCond, returnsCond, returnDriverCond, gte(order.processedAt, from), lte(order.processedAt, to)))
         .orderBy(desc(order.processedAt))
         .limit(10),
       // Per-customer aggregates for the LTV / retention table, scoped to the
@@ -313,7 +324,7 @@ export default async function DashboardPage({
             notSample,
             segmentCond,
             customerTypeCond,
-            returnsCond,
+            returnsCond, returnDriverCond,
             sql`${order.customerId} IS NOT NULL`,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
@@ -337,7 +348,7 @@ export default async function DashboardPage({
             notSample,
             segmentCond,
             customerTypeCond,
-            returnsCond,
+            returnsCond, returnDriverCond,
             sql`${order.customerId} IS NOT NULL`,
             gte(order.processedAt, from),
             lte(order.processedAt, to),
@@ -358,7 +369,7 @@ export default async function DashboardPage({
             notSample,
             segmentCond,
             customerTypeCond,
-            returnsCond,
+            returnsCond, returnDriverCond,
             sql`${order.customerId} IS NOT NULL`,
             lt(order.processedAt, from),
           ),
@@ -524,7 +535,7 @@ export default async function DashboardPage({
       })
       .from(order)
       .where(
-        and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+        and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, returnDriverCond, gte(order.processedAt, from), lte(order.processedAt, to)),
       )
       .groupBy(bucketExpr)
       .orderBy(bucketExpr),
@@ -540,7 +551,7 @@ export default async function DashboardPage({
       })
       .from(order)
       .where(
-        and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+        and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, returnDriverCond, gte(order.processedAt, from), lte(order.processedAt, to)),
       )
       .groupBy(bucketExpr, segmentExpr),
     // Per (bucket × segment) product units — separate query because the line-
@@ -554,7 +565,7 @@ export default async function DashboardPage({
       .from(order)
       .innerJoin(orderLineItem, eq(orderLineItem.orderId, order.id))
       .where(
-        and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, gte(order.processedAt, from), lte(order.processedAt, to)),
+        and(notCancelled, notSample, segmentCond, customerTypeCond, returnsCond, returnDriverCond, gte(order.processedAt, from), lte(order.processedAt, to)),
       )
       .groupBy(bucketExpr, segmentExpr),
   ]);
@@ -796,6 +807,9 @@ export default async function DashboardPage({
               Cells are tinted relative to the {returnDrivers.baseline.pct}%
               overall rate (red ≥1.5×, amber ≥1.15×, green ≤0.6×); thin samples
               stay neutral. Color/finish merges “Silver” and “Natural (silver)”.
+              <strong> Click any segment</strong> to scope the whole dashboard to
+              that cohort (click it again to clear); this card itself stays
+              all-time as the selector.
             </InfoTooltip>
           </CardTitle>
         </CardHeader>
@@ -815,7 +829,7 @@ export default async function DashboardPage({
               No return data yet.
             </p>
           ) : (
-            <ReturnDriversCard data={returnDrivers} />
+            <ReturnDriversCard data={returnDrivers} activeRd={activeRd} />
           )}
         </CardContent>
       </Card>
