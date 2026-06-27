@@ -15,6 +15,7 @@ import {
   iceScore,
   type IdeaStatus,
 } from "@/lib/product-ideas";
+import { isAllowedFusionUrl } from "@/lib/prototypes/fusion";
 import { cn } from "@/lib/utils";
 
 export interface IdeaItem {
@@ -26,6 +27,8 @@ export interface IdeaItem {
   confidence: number | null;
   ease: number | null;
   notes: string | null;
+  fusionUrl: string | null;
+  fusionEmbedUrl: string | null;
   promotedPrototypeId: string | null;
   promotedPrototypeName: string | null;
   createdAtMs: number;
@@ -81,6 +84,7 @@ function IdeaForm({
   const [ease, setEase] = useState(
     initial?.ease == null ? "" : String(initial.ease),
   );
+  const [fusionUrl, setFusionUrl] = useState(initial?.fusionUrl ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,6 +95,12 @@ function IdeaForm({
   async function save() {
     setError(null);
     if (!name.trim()) return setError("Name is required.");
+    const link = fusionUrl.trim();
+    if (link && !isAllowedFusionUrl(link)) {
+      return setError(
+        "That doesn’t look like a Fusion share link (a360.co or autodesk360.com). Leave it blank to skip.",
+      );
+    }
     setBusy(true);
     try {
       const body = {
@@ -100,6 +110,7 @@ function IdeaForm({
         impact: intOrNull(impact),
         confidence: intOrNull(confidence),
         ease: intOrNull(ease),
+        fusionUrl: link || null,
       };
       const res = await fetch(
         editing ? `/api/product-ideas/${initial!.id}` : "/api/product-ideas",
@@ -173,6 +184,19 @@ function IdeaForm({
           />
           <ScoreInput label="Ease" value={ease} onChange={setEase} />
         </div>
+        <div className="sm:col-span-2">
+          <label className={fieldLabel}>
+            Fusion / CAD link{" "}
+            <span className="font-normal text-zinc-400">
+              — optional; an early 3D sketch renders inline
+            </span>
+          </label>
+          <Input
+            value={fusionUrl}
+            onChange={(e) => setFusionUrl(e.target.value)}
+            placeholder="https://a360.co/…"
+          />
+        </div>
       </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       <div className="mt-3 flex justify-end gap-2">
@@ -190,10 +214,12 @@ function IdeaForm({
 function IdeaRow({ idea }: { idea: IdeaItem }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
+  const [showModel, setShowModel] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const score = iceScore(idea);
   const promoted = idea.status === "promoted";
+  const hasModel = !!idea.fusionUrl;
 
   async function setStatus(status: string) {
     setBusy(true);
@@ -257,81 +283,119 @@ function IdeaRow({ idea }: { idea: IdeaItem }) {
   }
 
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-zinc-100 py-2.5 last:border-0">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-zinc-900">{idea.name}</span>
-          <Badge className={IDEA_STATUS_BADGE[idea.status as IdeaStatus] ?? "bg-zinc-100 text-zinc-600"}>
-            {IDEA_STATUS_LABELS[idea.status as IdeaStatus] ?? idea.status}
-          </Badge>
-          {score != null && (
-            <span
-              className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600"
-              title={`Impact ${idea.impact} × Confidence ${idea.confidence} × Ease ${idea.ease}`}
-            >
-              ICE {score}
-            </span>
+    <div className="border-b border-zinc-100 py-2.5 last:border-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-zinc-900">{idea.name}</span>
+            <Badge className={IDEA_STATUS_BADGE[idea.status as IdeaStatus] ?? "bg-zinc-100 text-zinc-600"}>
+              {IDEA_STATUS_LABELS[idea.status as IdeaStatus] ?? idea.status}
+            </Badge>
+            {score != null && (
+              <span
+                className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600"
+                title={`Impact ${idea.impact} × Confidence ${idea.confidence} × Ease ${idea.ease}`}
+              >
+                ICE {score}
+              </span>
+            )}
+            {hasModel && (
+              <button
+                type="button"
+                onClick={() => setShowModel((s) => !s)}
+                className="rounded bg-zinc-900/5 px-1.5 py-0.5 text-[10px] font-medium text-zinc-700 hover:bg-zinc-900/10"
+              >
+                {showModel ? "Hide 3D model" : "◆ 3D model"}
+              </button>
+            )}
+            {promoted && idea.promotedPrototypeId && (
+              <Link
+                href={`/modules/production/prototypes/${idea.promotedPrototypeId}`}
+                className="text-xs text-violet-700 underline decoration-violet-300 underline-offset-2 hover:decoration-violet-600"
+              >
+                → {idea.promotedPrototypeName ?? "prototype"}
+              </Link>
+            )}
+          </div>
+          {idea.description && (
+            <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">
+              {idea.description}
+            </p>
           )}
-          {promoted && idea.promotedPrototypeId && (
-            <Link
-              href={`/modules/production/prototypes/${idea.promotedPrototypeId}`}
-              className="text-xs text-violet-700 underline decoration-violet-300 underline-offset-2 hover:decoration-violet-600"
-            >
-              → {idea.promotedPrototypeName ?? "prototype"}
-            </Link>
-          )}
+          {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
         </div>
-        {idea.description && (
-          <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">
-            {idea.description}
-          </p>
-        )}
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-      </div>
 
-      <div className="flex shrink-0 items-center gap-2 text-xs">
-        {!promoted && (
-          <select
-            value={idea.status}
-            onChange={(e) => setStatus(e.target.value)}
-            disabled={busy}
-            className={selectCls}
-            aria-label="Status"
-          >
-            {EDITABLE_IDEA_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {IDEA_STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        )}
-        {!promoted && (
+        <div className="flex shrink-0 items-center gap-2 text-xs">
+          {!promoted && (
+            <select
+              value={idea.status}
+              onChange={(e) => setStatus(e.target.value)}
+              disabled={busy}
+              className={selectCls}
+              aria-label="Status"
+            >
+              {EDITABLE_IDEA_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {IDEA_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          )}
+          {!promoted && (
+            <button
+              type="button"
+              onClick={promote}
+              disabled={busy}
+              className="font-medium text-violet-700 underline decoration-violet-300 underline-offset-2 hover:decoration-violet-600 disabled:opacity-50"
+            >
+              Promote
+            </button>
+          )}
           <button
             type="button"
-            onClick={promote}
+            onClick={() => setEditing(true)}
             disabled={busy}
-            className="font-medium text-violet-700 underline decoration-violet-300 underline-offset-2 hover:decoration-violet-600 disabled:opacity-50"
+            className="text-zinc-600 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600 disabled:opacity-50"
           >
-            Promote
+            Edit
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          disabled={busy}
-          className="text-zinc-600 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600 disabled:opacity-50"
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={remove}
-          disabled={busy}
-          className="text-zinc-400 underline decoration-zinc-300 underline-offset-2 hover:text-red-600 hover:decoration-red-400 disabled:opacity-50"
-        >
-          Delete
-        </button>
+          <button
+            type="button"
+            onClick={remove}
+            disabled={busy}
+            className="text-zinc-400 underline decoration-zinc-300 underline-offset-2 hover:text-red-600 hover:decoration-red-400 disabled:opacity-50"
+          >
+            Delete
+          </button>
+        </div>
       </div>
+
+      {showModel && hasModel && (
+        <div className="mt-2 overflow-hidden rounded-lg border border-zinc-200">
+          {idea.fusionEmbedUrl ? (
+            <iframe
+              src={idea.fusionEmbedUrl}
+              title={`${idea.name} — 3D model`}
+              loading="lazy"
+              allowFullScreen
+              className="h-[28rem] w-full border-0 bg-zinc-50"
+            />
+          ) : (
+            <div className="px-3 py-6 text-sm text-zinc-500">
+              Couldn&apos;t load an inline preview.{" "}
+              <a
+                href={idea.fusionUrl!}
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600"
+              >
+                Open in Fusion
+              </a>
+              .
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

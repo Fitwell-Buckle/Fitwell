@@ -751,12 +751,17 @@ Migration `0092_sparkling_pretty_boy`.
 | `status` | text | `idea` \| `under_review` \| `approved` \| `promoted` \| `parked`. Default `idea`. `promoted` only via the promote action |
 | `impact` / `confidence` / `ease` | integer | ICE components, each 1–10 (nullable) |
 | `notes` | text | |
+| `fusion_url` | text | Optional Autodesk Fusion share link for an early CAD sketch |
+| `fusion_embed_url` | text | Resolved `?mode=embed` viewer URL for the inline 3D preview (carried forward to a `prototype_reference` on promotion) |
 | `promoted_prototype_id` | text | FK → `prototype` (`onDelete: set null`). Lineage — set when promoted |
 | `promoted_at` | timestamp | Stamped on promotion |
 | `created_at` / `updated_at` | timestamp | |
 
 Indexed on `status`. Promotion creates a `prototype` (carrying name + concept)
-and links it here — mirrors the prototype → product gate one stage earlier.
+and links it here — mirrors the prototype → product gate one stage earlier. An
+idea can carry an optional Fusion CAD link (`fusion_url`/`fusion_embed_url`),
+which graduates into a `prototype_reference` on promotion. Migration
+`0093_brown_quasar` (Fusion link).
 
 ### Prototypes
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { deleteIdea, updateIdea } from "@/lib/product-ideas/service";
 import { ideaSchema } from "../_schema";
+import { resolveIdeaFusion } from "../_fusion";
 
 export async function PATCH(
   req: Request,
@@ -34,8 +35,14 @@ export async function PATCH(
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
+  const fusion = await resolveIdeaFusion(input.fusionUrl);
+  if (!fusion.ok) {
+    return NextResponse.json({ error: fusion.error }, { status: 400 });
+  }
+  const { fusionUrl: _raw, ...rest } = input;
+
   try {
-    const updated = await updateIdea(id, input);
+    const updated = await updateIdea(id, { ...rest, ...fusion.fields });
     if (!updated) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

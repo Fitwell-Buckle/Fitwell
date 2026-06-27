@@ -55,6 +55,8 @@ export default async function PrototypesPage() {
             confidence: i.confidence,
             ease: i.ease,
             notes: i.notes,
+            fusionUrl: i.fusionUrl,
+            fusionEmbedUrl: i.fusionEmbedUrl,
             promotedPrototypeId: i.promotedPrototypeId,
             promotedPrototypeName: i.promotedPrototype?.name ?? null,
             createdAtMs: i.createdAt ? i.createdAt.getTime() : 0,

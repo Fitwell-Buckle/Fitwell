@@ -11,4 +11,6 @@ export const ideaSchema = z.object({
   confidence: score,
   ease: score,
   notes: z.string().max(5000).nullish(),
+  // Raw Fusion share link; the route validates the host + resolves the embed URL.
+  fusionUrl: z.string().max(2000).nullish().or(z.literal("")),
 });

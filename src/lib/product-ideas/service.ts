@@ -2,7 +2,7 @@ import "server-only";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { productIdea } from "@/lib/schema";
-import { createPrototype } from "@/lib/prototypes/service";
+import { addReference, createPrototype } from "@/lib/prototypes/service";
 
 export interface IdeaInput {
   name: string;
@@ -12,6 +12,10 @@ export interface IdeaInput {
   confidence?: number | null;
   ease?: number | null;
   notes?: string | null;
+  // Raw Fusion share link + its resolved embed URL (resolution happens in the
+  // route, mirroring prototype references).
+  fusionUrl?: string | null;
+  fusionEmbedUrl?: string | null;
 }
 
 export async function createIdea(input: IdeaInput) {
@@ -25,6 +29,8 @@ export async function createIdea(input: IdeaInput) {
       confidence: input.confidence ?? null,
       ease: input.ease ?? null,
       notes: input.notes || null,
+      fusionUrl: input.fusionUrl || null,
+      fusionEmbedUrl: input.fusionEmbedUrl || null,
     })
     .returning({ id: productIdea.id });
   return created;
@@ -45,6 +51,12 @@ export async function updateIdea(id: string, input: Partial<IdeaInput>) {
         : {}),
       ...(input.ease !== undefined ? { ease: input.ease ?? null } : {}),
       ...(input.notes !== undefined ? { notes: input.notes || null } : {}),
+      ...(input.fusionUrl !== undefined
+        ? { fusionUrl: input.fusionUrl || null }
+        : {}),
+      ...(input.fusionEmbedUrl !== undefined
+        ? { fusionEmbedUrl: input.fusionEmbedUrl || null }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(productIdea.id, id))
@@ -85,6 +97,16 @@ export async function promoteIdeaToPrototype(
     description: idea.description,
     status: "concept",
   });
+  // Carry the idea's CAD sketch forward to the prototype as a reference (embed
+  // already resolved on the idea, so no re-fetch).
+  if (idea.fusionUrl) {
+    await addReference({
+      prototypeId: created.id,
+      url: idea.fusionUrl,
+      embedUrl: idea.fusionEmbedUrl ?? null,
+      title: null,
+    });
+  }
   await db
     .update(productIdea)
     .set({

@@ -1265,6 +1265,11 @@ export const productIdea = pgTable(
     confidence: integer("confidence"),
     ease: integer("ease"),
     notes: text("notes"),
+    // Optional Autodesk Fusion ("AutoCAD Fusion") share link for an early CAD
+    // sketch — the raw link plus the resolved `?mode=embed` viewer URL for the
+    // inline 3D preview. One model per idea (ideas are rough single concepts).
+    fusionUrl: text("fusion_url"),
+    fusionEmbedUrl: text("fusion_embed_url"),
     // Lineage: set when the idea is promoted into a prototype.
     promotedPrototypeId: text("promoted_prototype_id").references(
       () => prototype.id,

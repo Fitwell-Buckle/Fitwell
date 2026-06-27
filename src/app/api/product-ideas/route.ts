@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { createIdea } from "@/lib/product-ideas/service";
 import { ideaSchema } from "./_schema";
+import { resolveIdeaFusion } from "./_fusion";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -26,8 +27,14 @@ export async function POST(req: Request) {
     );
   }
 
+  const fusion = await resolveIdeaFusion(input.fusionUrl);
+  if (!fusion.ok) {
+    return NextResponse.json({ error: fusion.error }, { status: 400 });
+  }
+  const { fusionUrl: _raw, ...rest } = input;
+
   try {
-    const created = await createIdea(input);
+    const created = await createIdea({ ...rest, ...fusion.fields });
     return NextResponse.json({ data: { id: created.id } }, { status: 201 });
   } catch (err) {
     console.error("Create product idea failed:", err);
