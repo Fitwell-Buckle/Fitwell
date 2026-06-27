@@ -1,6 +1,27 @@
 # Priorities
 
-Last updated: 2026-06-22
+Last updated: 2026-06-27
+
+## 🚀 Active (2026-06-27) — D2C 360 growth push: GO
+
+Decision made to move forward with the H2 D2C push (5–8 → 30–40 orders/day).
+**Source of truth: `specs/work-plans/todo/d2c-360-growth-push.md`**; full plan +
+financial model in `specs/strategy/sessions/2026-06-24-d2c-360-growth-planning.md`.
+
+Decisions:
+- **Lucas — go** (part-time social & email; campaigns *and* flows).
+- **VA + ops/enthusiast/integrator — defer (not cut)**; bring on as soon as there's
+  signal it's working and headcount is the bottleneck — *when*, not *if*.
+- **Signal-then-invest** — launch Meta/Google/creators, scale spend *and the deferred
+  hires* behind returns; kill-switch = blended ROAS < 2 or no path to $3–5k/day in 90 days.
+- **Greg** — attribution work + review/optimize the creator app (capped eng hours).
+- Content-first; big paid (incl. Google/YouTube ≥$7k/mo) starts ~August.
+
+Deferring the VA + ops/integrator lifts the near-term cash trough above the
+modeled ~$120k (Feb '27); they come back in as returns prove out. Next: onboard
+Lucas, content blitz, verify conversion
+tracking, Shopify audit, creator import + Wave 1 outreach, TikTok Shop standup.
+Open (Oliver): wholesale/OEM ramp, TikTok Shop fulfillment, deployant timing.
 
 ## 🧹 Ops note (2026-06-22) — harmless orphan row in prod `__drizzle_migrations`
 

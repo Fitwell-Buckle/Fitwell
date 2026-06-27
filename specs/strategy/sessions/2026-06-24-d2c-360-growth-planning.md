@@ -1,9 +1,13 @@
 # Session: D2C 360 Growth Planning — 2026-06-24
 
-> **Status: exploratory. No decisions finalized.** This captures a long planning
-> conversation (Tom + Claude) that produced a draft plan, a financial model, a
-> deck, and a marketing-spend spreadsheet. It is a thinking artifact, not a
-> committed work plan. Decisions still pending are listed at the bottom.
+> **Status: DECIDED 2026-06-27 — proceeding.** Captured as exploratory; on
+> 2026-06-27 Tom decided to move forward. Execution now tracked in
+> [[../../work-plans/todo/d2c-360-growth-push]]. Decisions: **Lucas — go**;
+> **VA + ops/integrator — defer (not cut)** until there's signal it's working and
+> headcount is the bottleneck; **signal-then-invest** (launch Meta/Google/creators,
+> scale spend + the deferred hires behind returns); **Greg** on attribution +
+> creator-app optimization review. This doc remains the source of truth for the
+> plan rationale and the financial model.
 >
 > Consumes / relates to: [[../360-campaign]], [[../funnel]], [[../personas]],
 > [[../creator-program]], [[../retention-loop]], [[../../current/newsletter-engine]],
