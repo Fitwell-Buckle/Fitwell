@@ -58,6 +58,7 @@ Before starting work, read the relevant specs. This prevents re-inventing decisi
 | Setting up a new machine, installing CLIs, or troubleshooting service permissions | `specs/ops/contributor-setup.md` |
 | Data sync behavior | `specs/invariants/data-sync.md` |
 | Attribution logic | `specs/invariants/attribution.md` |
+| **Any marketing, sales, pricing, offer, campaign, email, ad, or customer-facing copy work** | **`fitwell-brand` skill** first (brand identity, positioning, voice & commercial guardrails — the non-negotiables; never discount to convert, never lead with price), then the specific docs below |
 | Writing marketing copy or landing pages | `specs/strategy/personas.md` + `specs/strategy/funnel.md` + `specs/strategy/landing-page-goals.md` |
 | Adding/modifying PostHog event tracking | `specs/strategy/event-taxonomy.md` + `specs/strategy/funnel.md` |
 | Designing an A/B test or experiment | `specs/strategy/hypotheses.md` |
