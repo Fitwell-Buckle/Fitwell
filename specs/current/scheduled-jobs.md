@@ -125,8 +125,24 @@ Requests without valid secret return `401`.
 
 1. Verify database connection (simple SELECT)
 2. Verify Shopify API access (lightweight endpoint)
-3. Check last sync timestamps — alert if stale (>6h for Shopify, >36h for daily jobs)
-4. Report status to Sentry or log
+3. Check analytics pipeline freshness — `MAX(date)` per daily table vs a
+   per-pipeline age threshold (`src/lib/analytics/pipeline-health.ts`):
+   GA4 / Google Ads / Meta / PostHog allow 72h (daily extracts fetch *yesterday*,
+   so a healthy row is already 24–55h old); GSC allows 144h (its 2–3 day
+   reporting lag). A pipeline past its threshold is reported `fresh: false`.
+4. Pipelines marked `expectLive` that are stale flip `checks.pipelines` (and so
+   the overall status) to `degraded` **and** raise an admin notification
+   (in-app inbox + Web Push, via `createAdminNotification`), deduped to at most
+   one alert per ~20h so a long outage doesn't spam every 4h run. GSC is
+   currently `expectLive: false` (never configured — see
+   `specs/work-plans/todo/gsc-pipeline-setup.md`), so it's reported but does not
+   alert until stood up.
+5. Response includes a `pipelines[]` array with each pipeline's last date, age,
+   threshold, and fresh flag.
+
+> Rationale: GA4 (~05-22), Google Ads (v20 block ~06-16) and GSC (never
+> configured) each broke silently for weeks in 2026 because the health cron only
+> checked DB + Shopify. This freshness check is what closes that gap.
 
 ## Error Handling
 
