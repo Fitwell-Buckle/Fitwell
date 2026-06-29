@@ -115,6 +115,10 @@ export interface ShopifyOrder {
     updated_at?: string;
     status?: string | null;
     shipment_status?: string | null;
+    /** Carrier name, e.g. "USPS", "UPS®", "DHL Express". */
+    tracking_company?: string | null;
+    /** Fulfillment service handle, e.g. "manual". */
+    service?: string | null;
     tracking_number?: string | null;
     tracking_numbers?: string[];
     tracking_url?: string | null;

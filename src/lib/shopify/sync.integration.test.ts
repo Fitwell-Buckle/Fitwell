@@ -178,6 +178,76 @@ describe.skipIf(noDb)("shopify sync dedupe (real DB)", () => {
     expect(items).toHaveLength(1); // replaced, not 3
   });
 
+  it("upserts shipments on fulfillment id — refreshes tracking, never duplicates", async () => {
+    const baseOrder: ShopifyOrder = {
+      id: orderShopifyId as unknown as number,
+      order_number: 1001,
+      email: "itest@example.com",
+      total_price: "100.00",
+      subtotal_price: "100.00",
+      total_discounts: "0.00",
+      total_tax: "0.00",
+      currency: "USD",
+      financial_status: "paid",
+      fulfillment_status: "fulfilled",
+      discount_codes: [],
+      refunds: [],
+      processed_at: "2026-03-01T00:00:00.000Z",
+      created_at: "2026-03-01T00:00:00.000Z",
+      updated_at: "2026-03-01T00:00:00.000Z",
+      customer: makeCustomer(),
+      source_name: "web",
+      landing_site: null,
+      referring_site: null,
+      note: null,
+      note_attributes: [],
+      tags: "",
+      line_items: [],
+      fulfillments: [
+        {
+          id: 7001,
+          created_at: "2026-03-02T00:00:00.000Z",
+          status: "success",
+          shipment_status: "in_transit",
+          tracking_company: "USPS",
+          service: "manual",
+          tracking_number: "TRACK-1",
+        },
+      ],
+    };
+    baseOrder.customer.id = custShopifyId as unknown as number;
+
+    const oid = await upsertOrder(baseOrder);
+
+    let ships = await db
+      .select()
+      .from(schema.shipment)
+      .where(eq(schema.shipment.orderId, oid));
+    expect(ships).toHaveLength(1);
+    expect(ships[0].carrier).toBe("USPS");
+    expect(ships[0].trackingNumber).toBe("TRACK-1");
+
+    // Re-sync the order with updated tracking — row is upserted, not duplicated.
+    await upsertOrder({
+      ...baseOrder,
+      fulfillments: [
+        {
+          ...baseOrder.fulfillments![0],
+          shipment_status: "delivered",
+          tracking_number: "TRACK-1-UPDATED",
+        },
+      ],
+    });
+
+    ships = await db
+      .select()
+      .from(schema.shipment)
+      .where(eq(schema.shipment.orderId, oid));
+    expect(ships).toHaveLength(1); // upserted, not duplicated
+    expect(ships[0].shipmentStatus).toBe("delivered"); // tracking refreshed
+    expect(ships[0].trackingNumber).toBe("TRACK-1-UPDATED");
+  });
+
   it("inserts the order-derived UTM touch once, not on every re-sync", async () => {
     const utmOrder: ShopifyOrder = {
       id: orderShopifyId as unknown as number,

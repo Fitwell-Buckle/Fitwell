@@ -6,6 +6,7 @@ import {
   orderDiscountCode,
   orderLineItem,
   orderRefundLine,
+  shipment,
   utmAttribution,
 } from "@/lib/schema";
 import { getShopifyClient, toCents } from "./client";
@@ -395,11 +396,75 @@ export async function upsertOrder(shopifyOrder: ShopifyOrder): Promise<string> {
     await db.insert(orderRefundLine).values(refundRows);
   }
 
+  // Shipments (one per Shopify fulfillment / purchased label). Unlike the
+  // delete-replace children above, shipments are UPSERT on the fulfillment id:
+  // their label_cost_cents is imported separately from the billing CSV and must
+  // survive every 2h resync, so the conflict-update set touches only the
+  // Shopify-sourced tracking columns. See shipping-costs.md.
+  await syncShipments(shopifyOrder, orderId);
+
   // Deterministic (pixel) / fallback link to a pre-purchase attribution touch
   // + PostHog person enrichment. Best-effort; never throws. Caller flushes.
   await linkOrderToAttribution(orderId, customerId, shopifyOrder);
 
   return orderId;
+}
+
+/**
+ * Pure: map an order's Shopify fulfillments to `shipment` tracking columns.
+ * Carrier comes from `tracking_company`; tracking number falls back from the
+ * singular field to the first of the plural array. Exported for unit testing,
+ * mirroring refundLineRows. `updatedAt` is stamped by the caller so this stays
+ * deterministic.
+ */
+export function shipmentTrackingRows(
+  shopifyOrder: ShopifyOrder,
+): Array<{
+  shopifyFulfillmentId: string;
+  carrier: string | null;
+  service: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  status: string | null;
+  shipmentStatus: string | null;
+  shippedAt: Date | null;
+}> {
+  return (shopifyOrder.fulfillments ?? []).map((f) => ({
+    shopifyFulfillmentId: String(f.id),
+    carrier: f.tracking_company ?? null,
+    service: f.service ?? null,
+    trackingNumber: f.tracking_number ?? f.tracking_numbers?.[0] ?? null,
+    trackingUrl: f.tracking_url ?? f.tracking_urls?.[0] ?? null,
+    status: f.status ?? null,
+    shipmentStatus: f.shipment_status ?? null,
+    shippedAt: f.created_at ? new Date(f.created_at) : null,
+  }));
+}
+
+/**
+ * Upsert a row in `shipment` for each Shopify fulfillment / purchased label.
+ * Dedup key is the fulfillment id. The conflict-update set is restricted to the
+ * Shopify-sourced tracking columns so an imported `labelCostCents` (from the
+ * billing CSV) is never clobbered by the every-2h order resync — the same
+ * protection order.leadId gets. Additive: cancelled fulfillments are recorded,
+ * never deleted.
+ */
+async function syncShipments(
+  shopifyOrder: ShopifyOrder,
+  orderId: string,
+): Promise<void> {
+  for (const row of shipmentTrackingRows(shopifyOrder)) {
+    const { shopifyFulfillmentId, ...trackingColumns } = row;
+    const setColumns = { ...trackingColumns, updatedAt: new Date() };
+    await db
+      .insert(shipment)
+      .values({ orderId, shopifyFulfillmentId, ...setColumns })
+      .onConflictDoUpdate({
+        target: shipment.shopifyFulfillmentId,
+        // Tracking columns only — cost columns are CSV-sourced and protected.
+        set: setColumns,
+      });
+  }
 }
 
 // ── Incremental sync ────────────────────────────────────────────────

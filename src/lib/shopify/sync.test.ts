@@ -37,6 +37,7 @@ vi.mock("./client", () => ({
 import {
   parseUtmParams,
   refundLineRows,
+  shipmentTrackingRows,
   shippingFields,
   sumRefundedCents,
   upsertCustomer,
@@ -96,6 +97,83 @@ describe("parseUtmParams", () => {
 
   it("returns empty object for an empty string (base URL, no params)", () => {
     expect(parseUtmParams("")).toEqual({});
+  });
+});
+
+describe("shipmentTrackingRows", () => {
+  const order = (
+    fulfillments: ShopifyOrder["fulfillments"],
+  ): ShopifyOrder => ({ fulfillments }) as unknown as ShopifyOrder;
+
+  it("returns [] when the order has no fulfillments", () => {
+    expect(shipmentTrackingRows(order(undefined))).toEqual([]);
+    expect(shipmentTrackingRows(order([]))).toEqual([]);
+  });
+
+  it("maps carrier from tracking_company and parses shippedAt", () => {
+    const [row] = shipmentTrackingRows(
+      order([
+        {
+          id: 555,
+          created_at: "2026-06-29T20:36:34.000Z",
+          status: "success",
+          shipment_status: "in_transit",
+          tracking_company: "USPS",
+          service: "manual",
+          tracking_number: "9200190267",
+          tracking_url: "https://track/9200190267",
+        },
+      ]),
+    );
+    expect(row).toEqual({
+      shopifyFulfillmentId: "555",
+      carrier: "USPS",
+      service: "manual",
+      trackingNumber: "9200190267",
+      trackingUrl: "https://track/9200190267",
+      status: "success",
+      shipmentStatus: "in_transit",
+      shippedAt: new Date("2026-06-29T20:36:34.000Z"),
+    });
+  });
+
+  it("falls back to the first plural tracking number/url", () => {
+    const [row] = shipmentTrackingRows(
+      order([
+        {
+          id: 1,
+          tracking_numbers: ["A1", "A2"],
+          tracking_urls: ["https://u/A1", "https://u/A2"],
+        },
+      ]),
+    );
+    expect(row.trackingNumber).toBe("A1");
+    expect(row.trackingUrl).toBe("https://u/A1");
+  });
+
+  it("returns one row per fulfillment (multi-label order)", () => {
+    const rows = shipmentTrackingRows(
+      order([
+        { id: 1, tracking_company: "UPS®" },
+        { id: 2, tracking_company: "DHL Express" },
+      ]),
+    );
+    expect(rows.map((r) => r.shopifyFulfillmentId)).toEqual(["1", "2"]);
+    expect(rows.map((r) => r.carrier)).toEqual(["UPS®", "DHL Express"]);
+  });
+
+  it("nulls missing tracking fields and shippedAt", () => {
+    const [row] = shipmentTrackingRows(order([{ id: 9 }]));
+    expect(row).toEqual({
+      shopifyFulfillmentId: "9",
+      carrier: null,
+      service: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      status: null,
+      shipmentStatus: null,
+      shippedAt: null,
+    });
   });
 });
 

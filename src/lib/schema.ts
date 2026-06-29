@@ -328,6 +328,94 @@ export const orderRefundLine = pgTable(
   ],
 );
 
+// One row per Shopify fulfillment — i.e. per shipment. Tracking columns
+// (carrier, tracking #, ship date) ride in the existing REST order payload's
+// fulfillments[] and are refreshed on every 2h Shopify resync (upserted on
+// shopify_fulfillment_id). This table is tracking ONLY: shipping COST lives in
+// `shipping_charge`, because Shopify's billing CSV (the only source of label
+// cost — the Admin API doesn't expose it) is keyed by order, not by fulfillment,
+// and ~8% of orders carry multiple label charges with no tracking number to
+// disambiguate. See specs/work-plans/todo/shipping-costs.md.
+export const shipment = pgTable(
+  "shipment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => order.id, { onDelete: "cascade" }),
+    // Shopify fulfillment identity — dedup key for the auto sync (upsert target).
+    shopifyFulfillmentId: text("shopify_fulfillment_id").unique(),
+    // ── Shopify-sourced tracking (refreshed every 2h) ──
+    carrier: text("carrier"), // tracking_company: "USPS", "UPS®", "DHL Express"
+    service: text("service"), // service level if present ("Manual" when hand-fulfilled)
+    trackingNumber: text("tracking_number"),
+    trackingUrl: text("tracking_url"),
+    status: text("status"), // fulfillment status: success/cancelled/…
+    shipmentStatus: text("shipment_status"), // in_transit/delivered/…
+    shippedAt: timestamp("shipped_at", { mode: "date" }), // fulfillment created_at
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("shipment_shopify_fulfillment_id_idx").on(t.shopifyFulfillmentId),
+    index("shipment_order_id_idx").on(t.orderId),
+    index("shipment_tracking_number_idx").on(t.trackingNumber),
+  ],
+);
+
+// One row per shipping charge line in Shopify's billing CSV export
+// (Settings → Billing → Export bills). This is the ONLY source of what we paid
+// to ship — the Shopify Admin API does not expose label cost. Grain = a single
+// billed shipping charge, matched to an `order` by the numeric part of the
+// order name ("FBC1490" → order_number 1490). An order can have several charges
+// (reships, corrections, split labels) — shipping cost per order is therefore a
+// SUM over this table, never a single column. The CSV carries no tracking
+// number, so charges cannot be tied to a specific `shipment`.
+//
+// Idempotency: a bill is immutable once issued, so re-import deletes all rows
+// for each Bill # present in the file and reinserts them (delete-replace scoped
+// by bill) — overlapping date-range exports stay correct and never double-count.
+//
+// NOTE: order.total_shipping is shipping CHARGED to the customer (revenue) — a
+// different number from amount_cents here (what we paid the carrier).
+export const shippingCharge = pgTable(
+  "shipping_charge",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Nullable: a charge for an order we haven't synced yet is still recorded
+    // (orderName is always kept); a re-import after the order syncs links it.
+    orderId: text("order_id").references(() => order.id, {
+      onDelete: "set null",
+    }),
+    // The Shopify bill this charge appeared on — the delete-replace scope key.
+    billNumber: text("bill_number").notNull(),
+    // Order name exactly as the CSV carried it, e.g. "FBC1490".
+    orderName: text("order_name").notNull(),
+    // CSV "Charge category": "shipping_fee" (others like managed_markets_*
+    // shipping have no order on the export and are not imported here).
+    chargeCategory: text("charge_category").notNull(),
+    // CSV "Description", e.g. "Ground Advantage to Oceanside, California".
+    description: text("description"),
+    // Parsed from description: service before " to ", destination after.
+    service: text("service"),
+    destination: text("destination"),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    chargedAt: timestamp("charged_at", { mode: "date" }), // CSV "Date"
+    source: text("source").notNull().default("shopify_billing_csv"),
+    importedAt: timestamp("imported_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("shipping_charge_order_id_idx").on(t.orderId),
+    index("shipping_charge_bill_number_idx").on(t.billNumber),
+    index("shipping_charge_order_name_idx").on(t.orderName),
+  ],
+);
+
 export const utmAttribution = pgTable(
   "utm_attribution",
   {
@@ -1000,6 +1088,22 @@ export const orderRelations = relations(order, ({ one, many }) => ({
   }),
   lineItems: many(orderLineItem),
   refundLines: many(orderRefundLine),
+  shipments: many(shipment),
+  shippingCharges: many(shippingCharge),
+}));
+
+export const shipmentRelations = relations(shipment, ({ one }) => ({
+  order: one(order, {
+    fields: [shipment.orderId],
+    references: [order.id],
+  }),
+}));
+
+export const shippingChargeRelations = relations(shippingCharge, ({ one }) => ({
+  order: one(order, {
+    fields: [shippingCharge.orderId],
+    references: [order.id],
+  }),
 }));
 
 export const orderLineItemRelations = relations(orderLineItem, ({ one }) => ({

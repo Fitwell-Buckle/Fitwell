@@ -186,6 +186,76 @@ payload; the script re-fetches full order detail for orders with refunds).
 
 Indexed on `order_id`, `shopify_product_id`, and `refunded_at`.
 
+### `shipment`
+
+One row per Shopify fulfillment — i.e. per shipment — captured by `upsertOrder()`
+from the order payload's `fulfillments[]`. **Upserted** on
+`shopify_fulfillment_id` (not delete-and-reinsert), so the every-2h order resync
+refreshes tracking without duplicating rows. **Tracking only** — these columns
+are all the Shopify Admin API exposes about a label. Shipping *cost* lives in
+`shipping_charge` (see below), because the only cost source is keyed by order,
+not by fulfillment.
+
+> `order.total_shipping` is shipping **charged to the customer** (revenue) — a
+> different number from shipping cost (`shipping_charge.amount_cents`, what we
+> paid the carrier).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid | PK |
+| `order_id` | text | FK → order, cascade delete |
+| `shopify_fulfillment_id` | text | **unique** — dedup key for the auto sync |
+| `carrier` | text | `tracking_company`: "USPS", "UPS®", "DHL Express" |
+| `service` | text | Service level ("Manual" when hand-fulfilled) |
+| `tracking_number` | text | falls back to `tracking_numbers[0]` |
+| `tracking_url` | text | falls back to `tracking_urls[0]` |
+| `status` | text | Fulfillment status: success/cancelled/… |
+| `shipment_status` | text | in_transit/delivered/… |
+| `shipped_at` | timestamp | Fulfillment `created_at` |
+| `created_at` / `updated_at` | timestamp | |
+
+Indexed (unique) on `shopify_fulfillment_id`; indexed on `order_id` and
+`tracking_number`. Migration `0095_happy_drax`.
+
+### `shipping_charge`
+
+What we **paid to ship** — one row per shipping charge line in Shopify's billing
+CSV export (Settings → Billing → Export bills). This is the **only** source of
+label cost: the Shopify Admin API does not expose it. Imported by
+`scripts/import-shipping-costs.ts` (parser/importer in
+`src/lib/shopify/billing-csv.ts`); **not** part of the automatic Shopify sync.
+
+Grain is a single billed charge, matched to an `order` by the numeric part of the
+order name (`"FBC1490"` → `order_number` 1490). An order can have several charges
+(reships, corrections, split labels — ~8% of orders), and the CSV carries **no
+tracking number**, so a charge can't be tied to a specific `shipment`. **Shipping
+cost per order = `SUM(amount_cents)` over this table**, never a single column.
+
+Only `shipping_fee` rows are imported. Other billing categories
+(`managed_markets_shipping_fee`, duties, insurance) have no order on the export.
+
+**Idempotency:** scoped by `bill_number` — re-import deletes all rows for each
+bill present in the file and reinserts them. Bills are immutable, so overlapping
+date-range exports never double-count.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid | PK |
+| `order_id` | text | FK → order, **nullable** (null = order not yet synced), `ON DELETE set null` |
+| `bill_number` | text | Shopify bill the charge appeared on — delete-replace scope key |
+| `order_name` | text | As the CSV carried it, e.g. `FBC1490` |
+| `charge_category` | text | `shipping_fee` |
+| `description` | text | e.g. "Ground Advantage to Oceanside, California" |
+| `service` | text | Parsed from description before " to " |
+| `destination` | text | Parsed from description after " to " |
+| `amount_cents` | integer | What we paid for this label (cents) |
+| `currency` | text | default `USD` |
+| `charged_at` | timestamp | CSV `Date` |
+| `source` | text | default `shopify_billing_csv` |
+| `imported_at` | timestamp | |
+
+Indexed on `order_id`, `bill_number`, `order_name`. Migration `0095_happy_drax`.
+
 ## Attribution
 
 ### `utm_attribution`
