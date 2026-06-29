@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { ChartView, type ChartSpec } from "./chart-view";
 
 interface Step {
   tool: string;
@@ -13,6 +14,7 @@ interface Step {
   rows?: Record<string, unknown>[];
   rowCount?: number;
   truncated?: boolean;
+  chart?: ChartSpec;
 }
 
 interface ChatMessage {
@@ -230,11 +232,18 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     );
   }
 
+  const charts = (message.steps ?? []).filter(
+    (s): s is Step & { chart: ChartSpec } => !!s.chart,
+  );
+
   return (
     <div className="flex flex-col gap-2">
       <div className="max-w-[95%] whitespace-pre-wrap rounded-lg bg-gray-100 px-4 py-3 text-sm text-gray-900">
         {message.content || "(no answer)"}
       </div>
+      {charts.map((s, i) => (
+        <ChartView key={i} spec={s.chart} />
+      ))}
       {message.stoppedAtStepLimit && (
         <p className="text-xs text-amber-600">
           Stopped at the query limit — answer may be partial.
@@ -248,17 +257,20 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 }
 
 function QueriesPanel({ steps }: { steps: Step[] }) {
-  const queries = steps.filter(
+  // render_chart is shown as an actual chart in the answer, not as a "work" step.
+  const shown = steps.filter((s) => s.tool !== "render_chart");
+  const queries = shown.filter(
     (s) => s.tool === "query_database" || s.tool === "query_posthog",
   );
+  if (shown.length === 0) return null;
   return (
     <details className="rounded-lg border border-gray-200 bg-white">
       <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-gray-600">
-        Show work — {steps.length} step{steps.length === 1 ? "" : "s"}
+        Show work — {shown.length} step{shown.length === 1 ? "" : "s"}
         {queries.length > 0 && ` (${queries.length} quer${queries.length === 1 ? "y" : "ies"})`}
       </summary>
       <div className="space-y-3 border-t border-gray-100 px-3 py-3">
-        {steps.map((s, i) => (
+        {shown.map((s, i) => (
           <div key={i} className="text-xs">
             <div className="mb-1 flex items-center gap-2">
               <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-gray-700">

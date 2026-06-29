@@ -104,6 +104,64 @@ describe("runAssistantTurn", () => {
     expect(r.steps[0].rows).toEqual([{ non_buyers: 3120 }]);
   });
 
+  it("captures a render_chart step's validated spec on the turn", async () => {
+    __setReadOnlyExecutorForTesting(async () => ({
+      rows: [
+        { month: "Mar", revenue: "1000" },
+        { month: "Apr", revenue: "2000" },
+      ],
+      fields: [{ name: "month" }, { name: "revenue" }],
+    }));
+    __setAssistantAnthropicForTesting(
+      fakeClient([
+        {
+          stop_reason: "tool_use",
+          content: [
+            {
+              type: "tool_use",
+              id: "q1",
+              name: "query_database",
+              input: { sql: "SELECT month, revenue FROM x" },
+            },
+          ],
+        },
+        {
+          stop_reason: "tool_use",
+          content: [
+            {
+              type: "tool_use",
+              id: "c1",
+              name: "render_chart",
+              input: {
+                type: "bar",
+                title: "Revenue by month",
+                xKey: "month",
+                series: [{ key: "revenue" }],
+                data: [
+                  { month: "Mar", revenue: "1000" },
+                  { month: "Apr", revenue: "2000" },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "Revenue doubled from Mar to Apr." }],
+        },
+      ]),
+    );
+
+    const r = await runAssistantTurn({
+      messages: [{ role: "user", content: "show revenue by month" }],
+    });
+
+    const chartStep = r.steps.find((s) => s.tool === "render_chart");
+    expect(chartStep?.chart?.type).toBe("bar");
+    expect(chartStep?.chart?.data[1]).toEqual({ month: "Apr", revenue: 2000 });
+    expect(r.answer).toMatch(/doubled/);
+  });
+
   it("surfaces a guard rejection as a recoverable tool error", async () => {
     __setAssistantAnthropicForTesting(
       fakeClient([

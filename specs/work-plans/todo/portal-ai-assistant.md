@@ -1,6 +1,6 @@
 # Portal AI Assistant ("Talk to your data")
 
-## Status: LIVE IN PRODUCTION (2026-06-29) — Phases 1–3
+## Status: LIVE IN PRODUCTION (2026-06-29) — Phases 1–4
 Shipped to prod for internal use + evaluation. Prod read-only role + `DATABASE_URL_READONLY` (Vercel) provisioned; migration `0094` applied to prod; `/assistant` auth-gated and serving; live PostHog (Phase 3) answering visitor/funnel questions. Docs updated (Rule 11): `schema.md`, `routes.md`, `integrations.md`, `components.md`, `contributor-setup.md` (§7 read-only-role step). Remaining: streaming (deferred), Phases 4–6, and Greg/Oliver each running `scripts/setup-readonly-role.ts` on their own dev branch (now documented; can't be done for them).
 
 ## Context
@@ -78,14 +78,15 @@ Shipped to prod for internal use + evaluation. Prod read-only role + `DATABASE_U
 - [x] Unit: agent routes a "visited but didn't buy" question to `query_posthog` and tags `source=posthog` (`agent.test.ts`).
 - [x] Live verification: dev smoke returned 5,231 person-level non-buyers with correct source disclosure.
 
-### Phase 4: Charts
-- [ ] Structured chart-spec output from the agent (chartType, x, y/series, title); Zod-validated.
-- [ ] Recharts renderer in the answer view; data table always available as fallback.
-- [ ] Persist the chart spec with the message so reopened conversations re-render the chart.
+### Phase 4: Charts — COMPLETE (2026-06-29)
+- [x] `render_chart` tool — agent emits a structured spec (type line/bar/area/pie, title, data, xKey, series). Validated/normalized in `chart.ts` (coerces string→number, caps 100 points). No migration: the spec rides in the existing `steps_json`.
+- [x] Recharts renderer (`chart-view.tsx`) in the answer view; the "Show work" panel still shows the underlying query + a data table as the fallback. `render_chart` steps are excluded from the work list (shown as the chart instead).
+- [x] Persisted with the message via `steps_json` → reopening a conversation re-renders the chart.
 
 #### Tests
-- Unit: chart-spec validation; renderer maps spec → Recharts props.
-- E2E: a "revenue by month" question renders a chart + a table toggle.
+- [x] Unit: chart-spec validation/normalization — coercion, point cap, rejects bad type/empty/missing-key (`chart.test.ts`, 7 cases).
+- [x] Unit: agent captures a `render_chart` step's validated spec on the turn (`agent.test.ts`).
+- [x] Live dev smoke: "total sales by month" produced a valid bar-chart spec + concise text answer.
 
 ### Phase 5: COGS / margin
 - [ ] Expose `getCogs(range)` to the agent (a `product_margin` tool).
