@@ -20,7 +20,7 @@ import { derivePoStage, type ProductionStage } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { supplierForStage } from "@/lib/production/stage-owners";
 import { formatPoNumber } from "@/lib/production/sub-po";
-import { fmtDate } from "@/lib/production/display";
+import { fmtDate, isOpenPoStatus } from "@/lib/production/display";
 import { cn } from "@/lib/utils";
 import { parseDateRange } from "@/lib/date-range";
 import { getStageEstimates } from "@/lib/production/cycle-time-data";
@@ -270,7 +270,9 @@ export default async function ProductionPage({
       .filter((r) => !supplierId || r.po.supplierId === supplierId)
       .filter((r) => !stage || r.derivedStage === stage)
       .filter((r) => skuSet.size === 0 || r.po.lineItems.some((li) => skuSet.has(li.sku)))
-      .filter((r) => dateFiltered(r.po.issuedDate));
+      // Open POs always show; the issued-date window only constrains historical
+      // (completed) ones — so an active PO never ages out of the default view.
+      .filter((r) => isOpenPoStatus(r.po.status) || dateFiltered(r.po.issuedDate));
   })();
 
   // Map Master rows into PoExpandableList's row shape so the Inventory Master
@@ -361,7 +363,9 @@ export default async function ProductionPage({
         !supplierId ||
         po.lineItems.some((li) => lineOwner(po, li.currentStage).ownerId === supplierId),
     )
-    .filter((po) => dateFiltered(po.issuedDate));
+    // Open POs always show; the issued-date window only constrains historical
+    // (completed) ones — so an active PO never ages out of the default view.
+    .filter((po) => isOpenPoStatus(po.status) || dateFiltered(po.issuedDate));
 
   const cards: KanbanCard[] = filtered.flatMap((po) =>
     po.lineItems

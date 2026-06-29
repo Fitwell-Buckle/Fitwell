@@ -10,6 +10,14 @@ export const STATUS_LABELS: Record<PoStatus, string> = {
   cancelled: "Cancelled",
 };
 
+// An "open" PO is still in flight — active or on hold. The production board
+// always shows open POs regardless of the issued-date window (so a long-running
+// PO never silently ages out of the default view); the date filter applies only
+// to completed/historical POs.
+export function isOpenPoStatus(status: string): boolean {
+  return status === "active" || status === "on_hold";
+}
+
 export function statusBadgeClass(status: string): string {
   switch (status) {
     case "active":
