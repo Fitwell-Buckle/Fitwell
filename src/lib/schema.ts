@@ -3597,3 +3597,103 @@ export const tradeShowVendorVoiceNoteRelations = relations(
     }),
   }),
 );
+
+// ─── AI Assistant ("talk to your data") ─────────────────────────────
+// Conversation history + query catalog for the in-portal assistant.
+// IMPORTANT: these tables are written ONLY by trusted app code (the admin `db`
+// connection), never by the assistant's read-only role. The read-only role has
+// SELECT on them (harmless — lets the assistant answer "what gets asked most"
+// once the catalog ships in a later phase).
+
+export const assistantConversation = pgTable(
+  "assistant_conversation",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // Short label for the history list — derived from the first question.
+    title: text("title"),
+    // The model the conversation last ran on ('sonnet' | 'opus').
+    model: text("model"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("assistant_conversation_user_id_idx").on(t.userId)],
+);
+
+export const assistantMessage = pgTable(
+  "assistant_message",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => assistantConversation.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // 'user' | 'assistant'
+    content: text("content").notNull(),
+    // Trimmed tool steps (SQL + a small row sample) so reopening a conversation
+    // faithfully replays the "show work" panel. Null for user messages. Rows are
+    // capped at persist time so this stays small.
+    stepsJson: jsonb("steps_json"),
+    // True when the assistant hit the query/step cap (answer may be partial).
+    stoppedAtStepLimit: boolean("stopped_at_step_limit").notNull().default(false),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("assistant_message_conversation_id_idx").on(t.conversationId)],
+);
+
+export const assistantQuery = pgTable(
+  "assistant_query",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => assistantMessage.id, { onDelete: "cascade" }),
+    // Denormalized so team-wide catalog rollups are a cheap aggregate, no join.
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // 'postgres' (Phase 1) | 'posthog' (Phase 3) | 'cogs' (Phase 5)
+    source: text("source").notNull().default("postgres"),
+    queryText: text("query_text").notNull(),
+    // Self-tagged by the agent:
+    // revenue|customers|production|crm|margin|funnel|marketing|other
+    category: text("category"),
+    // Table names this query referenced (parsed from the SQL) — powers the
+    // catalog's "hot tables" view later.
+    tablesTouched: text("tables_touched").array(),
+    rowCount: integer("row_count"),
+    durationMs: integer("duration_ms"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [
+    index("assistant_query_message_id_idx").on(t.messageId),
+    index("assistant_query_user_id_idx").on(t.userId),
+    index("assistant_query_category_idx").on(t.category),
+  ],
+);
+
+export const assistantConversationRelations = relations(
+  assistantConversation,
+  ({ many }) => ({
+    messages: many(assistantMessage),
+  }),
+);
+
+export const assistantMessageRelations = relations(
+  assistantMessage,
+  ({ one, many }) => ({
+    conversation: one(assistantConversation, {
+      fields: [assistantMessage.conversationId],
+      references: [assistantConversation.id],
+    }),
+    queries: many(assistantQuery),
+  }),
+);
