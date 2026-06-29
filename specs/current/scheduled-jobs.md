@@ -133,10 +133,10 @@ Requests without valid secret return `401`.
 4. Pipelines marked `expectLive` that are stale flip `checks.pipelines` (and so
    the overall status) to `degraded` **and** raise an admin notification
    (in-app inbox + Web Push, via `createAdminNotification`), deduped to at most
-   one alert per ~20h so a long outage doesn't spam every 4h run. GSC is
-   currently `expectLive: false` (never configured — see
-   `specs/work-plans/todo/gsc-pipeline-setup.md`), so it's reported but does not
-   alert until stood up.
+   one alert per ~20h so a long outage doesn't spam every 4h run. All five
+   pipelines (GA4, Google Ads, Meta, PostHog, GSC) are `expectLive: true` as of
+   2026-06-29, when GSC was stood up (see
+   `specs/work-plans/completed/gsc-pipeline-setup.md`).
 5. Response includes a `pipelines[]` array with each pipeline's last date, age,
    threshold, and fresh flag.
 

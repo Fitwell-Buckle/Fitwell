@@ -39,9 +39,10 @@ export const PIPELINE_SPECS: PipelineSpec[] = [
   { key: "google_ads_daily", label: "Google Ads", maxAgeHours: 72, expectLive: true },
   { key: "meta_ads_daily", label: "Meta Ads", maxAgeHours: 72, expectLive: true },
   { key: "posthog_daily", label: "PostHog events", maxAgeHours: 72, expectLive: true },
-  // GSC has never produced a row — see specs/work-plans/todo/gsc-pipeline-setup.md.
-  // Reported but not alerting until configured; then set expectLive: true.
-  { key: "gsc_daily", label: "Search Console", maxAgeHours: 144, expectLive: false },
+  // GSC stood up 2026-06-29 (API enabled, property verified, SA granted,
+  // GSC_SITE_URL set, history backfilled). 144h threshold covers its 2-3 day
+  // reporting lag.
+  { key: "gsc_daily", label: "Search Console", maxAgeHours: 144, expectLive: true },
 ];
 
 export interface PipelineFreshness {

@@ -271,3 +271,34 @@
     - src/lib/notifications/admin-notify.ts
     - src/app/api/push/subscribe/route.ts
     - src/app/(admin)/settings/push-notification-settings.tsx
+
+- date: "2026-06-29"
+  title: "Analytics extract repairs + pipeline staleness monitoring; GSC stood up"
+  priority: 6
+  layer: 1
+  notes: |
+    Diagnosed why several analytics pipelines had silently died for weeks.
+    GA4 had already self-recovered in prod. Fixes shipped:
+    - Google Ads extract API v20→v24 (deprecated v20 blocked ~06-16, which
+      stopped ingestion); pinned via an ADS_API_VERSION constant, verified
+      live against all three GAQL queries.
+    - google/auth.ts token cache keyed by scope set (was one global token,
+      so a warm instance could hand a GA4-scoped token to the Ads extract →
+      ACCESS_TOKEN_SCOPE_INSUFFICIENT).
+    - Health cron now checks per-pipeline freshness (MAX(date) vs cadence-aware
+      thresholds: 72h daily extracts, 144h GSC) and raises a deduped admin
+      notification (in-app + Web Push) when an expectLive pipeline goes stale —
+      closes the silent-failure gap that hid all of the above.
+    - GSC stood up end-to-end (had never produced a row): Search Console API
+      enabled in GCP 992120641760, sc-domain:fitwellbuckle.co Domain property
+      verified via Shopify DNS TXT, service account granted Restricted access,
+      GSC_SITE_URL set in Vercel prod, 90 days backfilled (7,661 rows), live
+      daily cron confirmed (extract-gsc?days=1 → 61 rows).
+    Commits 5340004, cb028f0, 3eb8a44 (+ monitoring flip).
+  artifacts:
+    - specs/work-plans/completed/gsc-pipeline-setup.md
+    - src/lib/analytics/google-ads.ts
+    - src/lib/google/auth.ts
+    - src/lib/analytics/pipeline-health.ts
+    - src/app/api/cron/health/route.ts
+    - specs/current/scheduled-jobs.md

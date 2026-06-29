@@ -1,5 +1,14 @@
 # Work Plan: Stand up the Google Search Console (GSC) pipeline
 
+> **✅ COMPLETED 2026-06-29.** Search Console API enabled in GCP project
+> `992120641760`; `sc-domain:fitwellbuckle.co` Domain property verified (DNS TXT
+> via Shopify); service account `fitwell-analytics@fitwell-496020.iam.gserviceaccount.com`
+> granted Restricted access; `GSC_SITE_URL=sc-domain:fitwellbuckle.co` set in
+> Vercel Production; 90 days backfilled (7,661 rows, 2026-03-29 → 06-26); live
+> daily cron verified (`extract-gsc?days=1` → 61 rows); GSC flipped to
+> `expectLive: true` in pipeline-health monitoring. Full ~16-month backfill not
+> yet run (optional — see Phase 4).
+
 ## Context
 
 GSC (Google Search Console) reports how fitwellbuckle.co performs in Google's
