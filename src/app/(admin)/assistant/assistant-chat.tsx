@@ -248,7 +248,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 }
 
 function QueriesPanel({ steps }: { steps: Step[] }) {
-  const queries = steps.filter((s) => s.tool === "query_database");
+  const queries = steps.filter(
+    (s) => s.tool === "query_database" || s.tool === "query_posthog",
+  );
   return (
     <details className="rounded-lg border border-gray-200 bg-white">
       <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-gray-600">

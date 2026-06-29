@@ -132,7 +132,9 @@ async function logQueries(
   userId: string,
   steps: AssistantStep[],
 ): Promise<void> {
-  const queries = steps.filter((s) => s.tool === "query_database");
+  const queries = steps.filter(
+    (s) => s.tool === "query_database" || s.tool === "query_posthog",
+  );
   if (queries.length === 0) return;
   await db.insert(assistantQuery).values(
     queries.map((s) => ({

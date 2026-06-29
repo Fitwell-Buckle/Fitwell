@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { runAssistantTurn } from "./agent";
 import { __setAssistantAnthropicForTesting } from "./client";
 import { __setReadOnlyExecutorForTesting } from "./readonly-db";
+import { __setHogQLExecutorForTesting } from "./posthog";
 
 // Minimal fake Anthropic client: returns scripted responses in order.
 function fakeClient(responses: unknown[]) {
@@ -16,6 +17,7 @@ function fakeClient(responses: unknown[]) {
 afterEach(() => {
   __setAssistantAnthropicForTesting(null);
   __setReadOnlyExecutorForTesting(null);
+  __setHogQLExecutorForTesting(null);
 });
 
 describe("runAssistantTurn", () => {
@@ -54,6 +56,52 @@ describe("runAssistantTurn", () => {
     expect(r.steps[0].ok).toBe(true);
     expect(r.steps[0].rows).toEqual([{ count: "42" }]);
     expect(r.model).toBe("sonnet");
+  });
+
+  it("routes a PostHog question and tags the step source=posthog", async () => {
+    __setHogQLExecutorForTesting(async () => ({
+      columns: ["non_buyers"],
+      results: [[3120]],
+    }));
+    __setAssistantAnthropicForTesting(
+      fakeClient([
+        {
+          stop_reason: "tool_use",
+          content: [
+            {
+              type: "tool_use",
+              id: "t1",
+              name: "query_posthog",
+              input: {
+                query:
+                  "SELECT count() FROM (SELECT person_id FROM events GROUP BY person_id)",
+                category: "funnel",
+              },
+            },
+          ],
+        },
+        {
+          stop_reason: "end_turn",
+          content: [
+            {
+              type: "text",
+              text: "About 3,120 people visited but didn't purchase (PostHog persons).",
+            },
+          ],
+        },
+      ]),
+    );
+
+    const r = await runAssistantTurn({
+      messages: [
+        { role: "user", content: "how many people visited but didn't buy?" },
+      ],
+    });
+
+    expect(r.answer).toMatch(/3,120|3120/);
+    expect(r.steps[0].tool).toBe("query_posthog");
+    expect(r.steps[0].source).toBe("posthog");
+    expect(r.steps[0].rows).toEqual([{ non_buyers: 3120 }]);
   });
 
   it("surfaces a guard rejection as a recoverable tool error", async () => {

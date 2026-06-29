@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { listTables, describeTable } from "./schema-catalog";
 import { runReadOnlyQuery } from "./readonly-db";
+import { runAssistantHogQL } from "./posthog";
 import { parseTablesTouched } from "./catalog-helpers";
 
 /**
@@ -88,6 +89,42 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "query_posthog",
+    description:
+      "Run a read-only HogQL query against PostHog for PERSON-LEVEL web " +
+      "analytics that are NOT in Postgres — who visited, funnel drop-off, " +
+      "entry pages, 'visited but didn't buy'. Query the `events` table; key " +
+      "events: $pageview, product_viewed, product_added_to_cart, " +
+      "checkout_started, purchase_completed. PostHog counts PEOPLE (person_id), " +
+      "which differs from Postgres order counts and GA4 sessions — say which.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "A read-only HogQL SELECT query." },
+        purpose: {
+          type: "string",
+          description: "One short line on what this query is for (for the log).",
+        },
+        category: {
+          type: "string",
+          enum: [
+            "revenue",
+            "customers",
+            "production",
+            "crm",
+            "margin",
+            "funnel",
+            "marketing",
+            "other",
+          ],
+          description: "Best-fit category (usually 'funnel' or 'marketing').",
+        },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 function asRecord(input: unknown): Record<string, unknown> {
@@ -143,6 +180,38 @@ export async function executeTool(
           source: "postgres",
           category: typeof category === "string" ? category : undefined,
           tablesTouched: parseTablesTouched(r.sql),
+          durationMs,
+        },
+      };
+    }
+
+    if (name === "query_posthog") {
+      const query = String(asRecord(input).query ?? "");
+      const category = asRecord(input).category;
+      const started = Date.now();
+      const r = await runAssistantHogQL(query);
+      const durationMs = Date.now() - started;
+      const forModel = {
+        query: r.query,
+        columns: r.columns,
+        rowCount: r.rowCount,
+        truncated: r.truncated,
+        rows: r.rows.slice(0, ROWS_TO_MODEL),
+      };
+      return {
+        resultText: JSON.stringify(forModel),
+        step: {
+          tool: name,
+          input,
+          ok: true,
+          sql: r.query,
+          columns: r.columns,
+          rows: r.rows,
+          rowCount: r.rowCount,
+          truncated: r.truncated,
+          source: "posthog",
+          category: typeof category === "string" ? category : undefined,
+          tablesTouched: ["posthog:events"],
           durationMs,
         },
       };

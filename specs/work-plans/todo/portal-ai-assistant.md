@@ -1,5 +1,8 @@
 # Portal AI Assistant ("Talk to your data")
 
+## Status: LIVE IN PRODUCTION (2026-06-29) — Phases 1–3
+Shipped to prod for internal use + evaluation. Prod read-only role + `DATABASE_URL_READONLY` (Vercel) provisioned; migration `0094` applied to prod; `/assistant` auth-gated and serving; live PostHog (Phase 3) answering visitor/funnel questions. Remaining: streaming (deferred), Phases 4–6, doc updates (Rule 11), and replicating the read-only role on Greg's/Oliver's dev branches (`scripts/setup-readonly-role.ts`) + documenting it in `specs/ops/contributor-setup.md`.
+
 ## Context
 - Tom wants to ask the portal questions about Fitwell's data in plain English and get answered by an LLM running inside the portal — e.g. *"how many people visited but didn't purchase in the last 90 days?"*, *"where's the most recent M1 production order and does it need follow-up?"*, *"did we hear back from the prototyper for the M5?"*, *"when did I last touch base with Harrison from Marathon?"*, *"what was our product margin for April?"*.
 - The value is the **open-ended** question — the one nobody pre-built a report for. So this is a **tool-calling agent** that writes its own read-only queries, not a fixed library of canned metrics.
@@ -65,14 +68,15 @@
 - [x] Unit: catalog helpers — category normalization, title derivation, `parseTablesTouched`, steps trimming (`catalog-helpers.test.ts`, 9 cases).
 - [x] Live dev-DB smoke (run + removed): multi-turn persist → list → load-with-replay → catalog rows (category/tablesTouched) → rename → delete-cascade, all green.
 
-### Phase 3: PostHog (live visitor/funnel questions)
-- [ ] `query_posthog` tool wrapping `runHogQL` from `src/lib/admin/funnel.ts`.
-- [ ] Extend system prompt with PostHog event taxonomy + Postgres-vs-PostHog routing (person-level visitor questions → PostHog; aggregates/business data → Postgres).
-- [ ] Source-disclosure: answers name the source + definition used (PostHog persons vs GA4 sessions vs `utmAttribution` touches) since they disagree.
+### Phase 3: PostHog (live visitor/funnel questions) — COMPLETE (2026-06-29), live in prod
+- [x] `query_posthog` tool + dedicated `posthog.ts` HogQL runner (captures column names, which `funnel.ts`'s helper drops; injectable executor test seam). Array-rows keyed by column for uniform rendering.
+- [x] System prompt: PostHog event taxonomy + Postgres-vs-PostHog routing (person-level web behaviour → PostHog; business/aggregate → Postgres).
+- [x] Source-disclosure rule: answers name source + unit (PostHog persons vs Postgres orders vs GA4 sessions) since they disagree. Catalog logs `source='posthog'`.
 
 #### Tests
-- Unit: routing fixture — "visited but didn't purchase" picks the PostHog tool.
-- Integration: HogQL pageview-minus-purchase question returns a plausible count (mocked `runHogQL`).
+- [x] Unit: HogQL result shaping — array-rows → named columns, truncation, missing-columns fallback (`posthog.test.ts`, 3 cases).
+- [x] Unit: agent routes a "visited but didn't buy" question to `query_posthog` and tags `source=posthog` (`agent.test.ts`).
+- [x] Live verification: dev smoke returned 5,231 person-level non-buyers with correct source disclosure.
 
 ### Phase 4: Charts
 - [ ] Structured chart-spec output from the agent (chartType, x, y/series, title); Zod-validated.
