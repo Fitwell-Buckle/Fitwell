@@ -5,6 +5,14 @@ import { sql } from "drizzle-orm";
 
 const ADS_SCOPES = ["https://www.googleapis.com/auth/adwords"];
 
+// Google Ads API version. Google blocks deprecated versions outright (a 400
+// `UNSUPPORTED_VERSION`, not a soft warning), so this must track a currently-
+// supported release. v20 was blocked ~2026-06-16, which silently stopped
+// ingestion. Bump to the newest supported version to maximise runway before
+// the next forced deprecation; verify the new version still accepts the
+// queries below before shipping.
+const ADS_API_VERSION = "v24";
+
 interface GoogleAdsRow {
   campaign: { name: string; id: string };
   adGroup: { name: string; id: string };
@@ -76,7 +84,7 @@ export async function extractGoogleAdsDaily(date: Date): Promise<number> {
   };
 
   const res = await fetch(
-    `https://googleads.googleapis.com/v20/customers/${customerId}/googleAds:searchStream`,
+    `https://googleads.googleapis.com/${ADS_API_VERSION}/customers/${customerId}/googleAds:searchStream`,
     {
       method: "POST",
       headers,
@@ -175,7 +183,7 @@ async function runGAQL<T>(
   developerToken: string,
 ): Promise<T[]> {
   const res = await fetch(
-    `https://googleads.googleapis.com/v20/customers/${customerId}/googleAds:searchStream`,
+    `https://googleads.googleapis.com/${ADS_API_VERSION}/customers/${customerId}/googleAds:searchStream`,
     {
       method: "POST",
       headers: {
