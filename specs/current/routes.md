@@ -31,6 +31,7 @@ All routes require authenticated admin session. Middleware redirects to `/auth/l
 | Path | Description |
 |------|-------------|
 | `/dashboard` | Overview — revenue, orders, traffic KPIs |
+| `/assistant` | **AI data assistant** ("talk to your data") — ask questions in plain English; the agent writes **read-only** SQL (Postgres, via a dedicated read-only role) or HogQL (PostHog) and shows its work (every query + rows). Self-discloses source/units; refuses to fabricate missing data. Sonnet default with an Opus toggle. Two-pane: multi-session history sidebar (reopen/rename/delete) + chat. Admin-only |
 | `/leads` | CRM lead list ("B2B Leads") — name/company/stage/source/captured, filters (stage, source, status, search). Tabbed with Messages to Send (SectionTabs) |
 | `/leads/new` | Manual lead entry form |
 | `/leads/capture` | Mobile-first 3-mode capture: photo (Claude vision OCR), live QR (vCard / MeCard / URL → fields), or type manually |
@@ -127,6 +128,9 @@ Magic-link auth; middleware requires `role='company'` (else → `/portal/login`)
 | GET | `/api/admin/attribution` | Attribution breakdown |
 | GET | `/api/admin/campaigns` | Campaign performance list |
 | GET | `/api/admin/campaigns/[id]` | Campaign detail with daily metrics |
+| POST | `/api/admin/assistant` | Ask the AI assistant (`{ conversationId?, message, model? }`). Runs the read-only agent loop (Postgres + PostHog tools), persists the turn (history + query catalog), returns `{ conversationId, answer, steps, stoppedAtStepLimit, model }`. Admin-only |
+| GET | `/api/admin/assistant/conversations` | List the signed-in admin's assistant conversations (newest first). Admin-only |
+| GET / PATCH / DELETE | `/api/admin/assistant/conversations/[id]` | Load a conversation (messages + replay steps) / rename / delete. Ownership-scoped to the signed-in admin. Admin-only |
 
 ### Production API (each handler checks `auth()`)
 

@@ -147,6 +147,25 @@ npm run db:studio         # browser UI against YOUR dev branch
 npm run dev               # boots on http://localhost:30100
 ```
 
+### Assistant read-only role (one extra step)
+
+The in-portal AI assistant (`/assistant`) runs model-generated SQL through a
+dedicated **read-only** Postgres role — never your `DATABASE_URL`. After your dev
+branch + `.env.local` work, provision the role on your branch and wire
+`DATABASE_URL_READONLY`:
+
+```bash
+node --env-file=.env.local --import tsx/esm scripts/setup-readonly-role.ts
+```
+
+This creates `fitwell_assistant_ro` on your branch (idempotent), smoke-tests that
+reads work and writes are **denied**, and appends `DATABASE_URL_READONLY` to
+`.env.local`. Until it's set the assistant returns a clear "DATABASE_URL_READONLY
+is not set" error; the rest of the app is unaffected. Production is already
+provisioned (same role on the prod branch + the Vercel env var); runbook is
+`scripts/create-readonly-role.sql`. Background: `specs/current/integrations.md` →
+*AI Assistant*.
+
 ---
 
 ## 8. Permissions cheat sheet
@@ -159,6 +178,7 @@ What each action requires, for when something fails:
 | Run `shopify app deploy && shopify app release` | Partner org membership (§5) |
 | Approve scope re-auth in Shopify Admin | Store admin/owner (§6) |
 | Run `npm run db:migrate:prod` | Vercel env access (§3) |
+| Use the AI assistant locally (`/assistant`) | `DATABASE_URL_READONLY` set — run `scripts/setup-readonly-role.ts` (§7) |
 | Push to `main` (auto-deploys to Vercel) | Repo write |
 | Trigger a Vercel redeploy (e.g. to flush cached Shopify token) | Vercel project member (§3) |
 

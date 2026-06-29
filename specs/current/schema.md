@@ -1170,6 +1170,59 @@ registered devices via `broadcastWebPush()`. Supplier-bound notification types
 1:1. Requires the `VAPID_*` env vars; unset → push silently no-ops. Suppliers and
 B2B-company users can't register subscriptions (the subscribe route 403s them).
 
+## AI Assistant ("talk to your data")
+
+Conversation history + the query catalog for the in-portal assistant (`/assistant`).
+Migration `0094`. **Written only by trusted app code** (the admin `db` connection),
+never by the assistant's read-only role — that role can SELECT these (harmless) but
+the agent's generated SQL physically cannot write anywhere. See
+`specs/current/integrations.md` → *AI Assistant* for the read-only-role design.
+
+### `assistant_conversation`
+
+One row per chat thread. Per-user (each admin sees their own history).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `user_id` | text | FK → `user` (cascade delete) — the admin who owns the thread |
+| `title` | text | Short label derived from the first question |
+| `model` | text | `sonnet` \| `opus` — last model used |
+| `created_at` / `updated_at` | timestamptz | `updated_at` bumped per turn (drives history order) |
+
+### `assistant_message`
+
+One row per turn message (user question or assistant answer), ordered by `created_at`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `conversation_id` | text | FK → `assistant_conversation` (cascade delete) |
+| `role` | text | `user` \| `assistant` |
+| `content` | text | The question, or the assistant's final answer |
+| `steps_json` | jsonb | Trimmed tool steps (SQL + small row sample) so reopening replays the "show work" panel. Null for user messages |
+| `stopped_at_step_limit` | boolean | True when the agent hit the step cap (answer may be partial) |
+| `created_at` | timestamptz | |
+
+### `assistant_query`
+
+The **query catalog substrate** — one row per `query_database` / `query_posthog`
+the agent ran. The raw material for the future catalog/promotion view (Phase 6):
+rank questions by frequency, promote the common ones into real dashboard widgets.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | uuid (text) | PK |
+| `message_id` | text | FK → `assistant_message` (cascade delete) |
+| `user_id` | text | FK → `user` (cascade). **Denormalized** so team-wide rollups are a cheap aggregate, no join |
+| `source` | text | `postgres` \| `posthog` \| `cogs` |
+| `query_text` | text | The exact SQL/HogQL run |
+| `category` | text | Self-tagged by the agent: `revenue`/`customers`/`production`/`crm`/`margin`/`funnel`/`marketing`/`other` |
+| `tables_touched` | text[] | Tables referenced (parsed from the SQL) — powers a "hot tables" rollup |
+| `row_count` / `duration_ms` | integer | Result size + execution time |
+| `error` | text | Set if the query failed |
+| `created_at` | timestamptz | |
+
 ## Open Questions
 
 - [ ] Do we need a `product` table, or is Shopify sufficient as source of truth for product catalog?

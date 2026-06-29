@@ -447,6 +447,60 @@ Captures unhandled errors in both client and server. Source maps uploaded during
 | Preview Deployments | PR-based previews |
 | Speed Insights | Core Web Vitals monitoring |
 
+## AI Assistant ("talk to your data")
+
+**Purpose**: An admin-only conversational assistant (`/assistant`) that answers
+plain-English questions about the business by writing **read-only** queries and
+explaining the result — designed to be honest about data gaps rather than
+fabricate. Code in `src/lib/ai/assistant/`.
+
+| Detail | Value |
+|--------|-------|
+| Models | `claude-sonnet-4-5` (default) / `claude-opus-4-8` (per-conversation toggle); `ANTHROPIC_API_KEY` (shared with the business-card OCR + email drafting in `src/lib/ai/anthropic.ts`) |
+| Agent loop | `agent.ts` — multi-turn tool use with a step cap (cost guard) |
+| Tools | `list_tables` / `describe_schema` (on-demand introspection of ~90 tables), `query_database` (Postgres), `query_posthog` (live HogQL) |
+| System prompt | `glossary.ts` — domain glossary, business rules (cents, total-sales formula, sample/cancelled exclusions, model-code text-match), and the **honesty rules** |
+
+### Read-only safety (the core guarantee)
+
+The agent runs model-generated SQL, so the guarantee that it can only ever READ
+is enforced at the database, not by prompt instructions:
+
+- A dedicated Postgres role **`fitwell_assistant_ro`** holds `SELECT` on the
+  business tables and nothing else (no INSERT/UPDATE/DELETE/DDL), with the
+  NextAuth secret tables (`account`, `session`, `verificationToken`) explicitly
+  revoked. An 8s `statement_timeout` is baked into the role.
+- The assistant connects **only** through this role via **`DATABASE_URL_READONLY`**
+  (separate from the app's `DATABASE_URL`). `readonly-db.ts`.
+- Belt-and-suspenders in app code: `sql-guard.ts` validates single-statement
+  SELECT/WITH, blocks DML/DDL (incl. comment-smuggling), and injects a row `LIMIT`.
+- Provisioning runbook: `scripts/create-readonly-role.sql`; one-shot script
+  `scripts/setup-readonly-role.ts` (dev → `.env.local`; prod → Vercel env). Each
+  dev provisions it on their own Neon branch — see
+  `specs/ops/contributor-setup.md` §7.
+
+The assistant's **own** tables (`assistant_conversation` / `_message` / `_query`,
+the history + query catalog) are written by the normal app `db` connection, never
+by the read-only role. See `specs/current/schema.md` → *AI Assistant*.
+
+### Sources & disclosure
+
+`query_database` → Postgres (system of record). `query_posthog` → live HogQL for
+person-level web behaviour not in Postgres (visited-but-didn't-buy, funnel
+drop-off; uses `POSTHOG_PROJECT_ID` + `POSTHOG_PERSONAL_API_KEY`, same as the
+funnel page). PostHog counts **people**, Postgres counts **orders**, GA4 rollups
+count **sessions** — they disagree, so the assistant always names the source + unit.
+
+### Known data-gap behaviour (deliberate)
+
+The assistant refuses to invent missing components — e.g. it will **not** answer
+"margin including shipping" by netting shipping *revenue* against COGS, because the
+DB stores shipping *charged* but not carrier cost *paid*. It discloses the gap and
+offers an explicit-assumption path. Gross product margin is reported on costed
+SKUs only, with coverage stated (`src/lib/cogs/`).
+
+---
+
 ## Open Questions
 
 - [ ] Shopify GraphQL bulk operations for initial historical sync — how far back?

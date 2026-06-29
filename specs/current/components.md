@@ -179,6 +179,18 @@ JSON-LD structured data for marketing pages.
 |-----------|-------|
 | `posthog-provider` | Wraps app with PostHog client initialization |
 
+## AI Assistant (`app/(admin)/assistant/`)
+
+The "talk to your data" chat. Server page renders a client workspace; all data
+flows through `/api/admin/assistant`. See `specs/current/integrations.md` →
+*AI Assistant* for the agent/read-only-role design.
+
+| Component | Usage |
+|-----------|-------|
+| `assistant/page` | Server page — header + `<AssistantWorkspace>` |
+| `assistant/assistant-workspace` | Two-pane layout: conversation history sidebar (New chat, inline rename, inline delete-confirm — no blocking `confirm()`/`prompt()` dialogs) + the chat. Fetches `/conversations`; selecting one loads it. Per-user history |
+| `assistant/assistant-chat` | The chat itself — model toggle (Sonnet/Opus), example prompts, send. Renders each answer with a collapsible **"Show work"** panel (every `query_database`/`query_posthog` step: the SQL/HogQL + a result table). Reopening a saved conversation replays answers + panels from `steps_json` |
+
 ## Open Questions
 
 - [ ] Toast/notification component — Sonner is installed, need wrapper?

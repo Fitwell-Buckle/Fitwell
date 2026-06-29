@@ -1,7 +1,7 @@
 # Portal AI Assistant ("Talk to your data")
 
 ## Status: LIVE IN PRODUCTION (2026-06-29) — Phases 1–3
-Shipped to prod for internal use + evaluation. Prod read-only role + `DATABASE_URL_READONLY` (Vercel) provisioned; migration `0094` applied to prod; `/assistant` auth-gated and serving; live PostHog (Phase 3) answering visitor/funnel questions. Remaining: streaming (deferred), Phases 4–6, doc updates (Rule 11), and replicating the read-only role on Greg's/Oliver's dev branches (`scripts/setup-readonly-role.ts`) + documenting it in `specs/ops/contributor-setup.md`.
+Shipped to prod for internal use + evaluation. Prod read-only role + `DATABASE_URL_READONLY` (Vercel) provisioned; migration `0094` applied to prod; `/assistant` auth-gated and serving; live PostHog (Phase 3) answering visitor/funnel questions. Docs updated (Rule 11): `schema.md`, `routes.md`, `integrations.md`, `components.md`, `contributor-setup.md` (§7 read-only-role step). Remaining: streaming (deferred), Phases 4–6, and Greg/Oliver each running `scripts/setup-readonly-role.ts` on their own dev branch (now documented; can't be done for them).
 
 ## Context
 - Tom wants to ask the portal questions about Fitwell's data in plain English and get answered by an LLM running inside the portal — e.g. *"how many people visited but didn't purchase in the last 90 days?"*, *"where's the most recent M1 production order and does it need follow-up?"*, *"did we hear back from the prototyper for the M5?"*, *"when did I last touch base with Harrison from Marathon?"*, *"what was our product margin for April?"*.
