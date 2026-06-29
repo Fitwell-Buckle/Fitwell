@@ -1,11 +1,19 @@
 import { SignJWT, importPKCS8 } from "jose";
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
+// Cache one token per scope SET, NOT one global token. Google issues a token
+// scoped to exactly the scopes requested, so a single shared slot would hand
+// (e.g.) the GA4 `analytics.readonly` token to the Google Ads caller, which the
+// Ads API rejects with ACCESS_TOKEN_SCOPE_INSUFFICIENT. This bites whenever one
+// warm (Fluid Compute) instance serves more than one extract cron in its
+// lifetime. Key = the requested scopes, sorted so order doesn't matter.
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 export async function getGoogleAccessToken(scopes: string[]): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  if (cachedToken && now < cachedToken.expiresAt - 60) {
-    return cachedToken.token;
+  const cacheKey = [...scopes].sort().join(" ");
+  const cached = tokenCache.get(cacheKey);
+  if (cached && now < cached.expiresAt - 60) {
+    return cached.token;
   }
 
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -48,6 +56,9 @@ export async function getGoogleAccessToken(scopes: string[]): Promise<string> {
     access_token: string;
     expires_in: number;
   };
-  cachedToken = { token: data.access_token, expiresAt: now + data.expires_in };
+  tokenCache.set(cacheKey, {
+    token: data.access_token,
+    expiresAt: now + data.expires_in,
+  });
   return data.access_token;
 }
