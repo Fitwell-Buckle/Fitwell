@@ -1,0 +1,11 @@
+# Summer heat — last-chance reminder to engaged openers of the Jun 24 customer
+# send (opened, not yet purchased; Apple-privacy opens excluded). Same offer,
+# deadline drawing close. Draft only; never auto-sends. Review + send in Klaviyo.
+subject: "The strap feels a little off in the heat"
+preview_text: "The summer sale closes June 30 — 20% off three or more."
+from_email: info@fitwellbuckle.co
+from_label: "Fitwell Buckle Co."
+reply_to_email: info@fitwellbuckle.co
+audiences:
+  included:
+    - "XtZJXY" # Segment: "Summer Heat Customers - Openers"

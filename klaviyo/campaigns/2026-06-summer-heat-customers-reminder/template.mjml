@@ -1,0 +1,63 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif" />
+      <mj-text font-size="16px" line-height="1.6" color="#ffffff" />
+      <mj-section background-color="#2a3641" />
+    </mj-attributes>
+    <mj-style>
+      a.inline { color: #ffffff !important; text-decoration: underline; }
+    </mj-style>
+    <mj-preview>The summer sale closes June 30 — 20% off three or more.</mj-preview>
+  </mj-head>
+
+  <mj-body background-color="#2a3641" width="600px">
+    <!-- Header: white wordmark -->
+    <mj-section padding="22px 0 6px">
+      <mj-column>
+        <mj-image src="https://d3k81ch9hvuctc.cloudfront.net/company/R3gvvz/images/15eda511-48d4-4287-88ba-464ecfa6db1a.png" alt="Fitwell Buckle Co." width="168px" align="center" />
+      </mj-column>
+    </mj-section>
+
+    <!-- Hero product GIF (same asset + size as the daily newsletter ad) -->
+    <mj-section padding="14px 0 4px">
+      <mj-column>
+        <mj-image src="https://u7unnafmnzoxkkki.public.blob.vercel-storage.com/newsletter/fitwell-buckle.gif?v=3" alt="Fitwell micro-adjust buckle" width="220px" border-radius="6px" align="center" />
+      </mj-column>
+    </mj-section>
+
+    <!-- Body (Option 2 — Seth) -->
+    <mj-section padding="20px 28px 8px">
+      <mj-column>
+        <mj-text>A watch in a drawer isn't just a watch. It's a decision you keep postponing.</mj-text>
+        <mj-text>The strap fits a little off in the heat — tight on one hole, loose on the next — so a piece you chose with care sits in the dark.</mj-text>
+        <mj-text>Fitwell is the small thing that ends the postponing: the fit that lives between two holes, finally reachable. The <a class="inline" href="https://fitwellbuckle.co/pages/m1-micro-adjust-buckle">M1 Buckle</a> replaces your buckle; the <a class="inline" href="https://fitwellbuckle.co/products/fitwell-universal-micro-adjust-link">M4 Universal Link</a> adds the same to deployants and the buckles you'd rather keep.</mj-text>
+        <mj-text padding-top="8px">The summer sale — <strong>20% off three or more</strong> with code <a class="inline" href="https://www.fitwellbuckle.co/discount/SUMMER20">SUMMER20</a> — closes June 30. Not a reason to buy. Just a good moment to stop putting it off.</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- CTA (last element) -->
+    <mj-section padding="8px 28px 28px">
+      <mj-column>
+        <mj-button href="https://www.fitwellbuckle.co/discount/SUMMER20?redirect=/collections/all" background-color="#c08a4d" color="#ffffff" font-family="Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif" font-size="16px" font-weight="bold" border-radius="7px" inner-padding="16px 40px" align="center">Outfit the rest →</mj-button>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer: social + unsubscribe -->
+    <mj-section padding="20px 0 6px">
+      <mj-column>
+        <mj-social mode="horizontal" icon-size="28px" align="center" padding="0">
+          <mj-social-element name="instagram" href="https://www.instagram.com/fitwellbuckles/" src="https://d3k81ch9hvuctc.cloudfront.net/assets/email/buttons/subtleinverse/instagram_96.png" background-color="transparent" />
+          <mj-social-element name="facebook" href="https://www.facebook.com/fitwellbuckle" src="https://d3k81ch9hvuctc.cloudfront.net/assets/email/buttons/subtleinverse/facebook_96.png" background-color="transparent" />
+          <mj-social-element name="tiktok" href="https://www.tiktok.com/@fitwellbuckles" src="https://d3k81ch9hvuctc.cloudfront.net/assets/email/buttons/subtleinverse/tiktok_96.png" background-color="transparent" />
+          <mj-social-element name="youtube" href="https://www.youtube.com/@FitwellBuckleCo" src="https://d3k81ch9hvuctc.cloudfront.net/assets/email/buttons/subtleinverse/youtube_96.png" background-color="transparent" />
+        </mj-social>
+      </mj-column>
+    </mj-section>
+    <mj-section padding="0 0 24px">
+      <mj-column>
+        <mj-text color="#ffffff" font-size="12px" align="center" line-height="1.6" font-family="'Courier New', Courier, monospace">No longer want to receive these emails? <a href="{% unsubscribe_link %}" style="color:#ffffff;">Unsubscribe</a>.<br /><br />{{ organization.name }}<br />{{ organization.full_address }}</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>
