@@ -34,7 +34,12 @@ const inputCls =
   "flex h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950";
 
 function fmtMoney(cents: number | null): string {
-  return cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
+  return cents == null
+    ? "—"
+    : `$${(cents / 100).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
 }
 function centsToInput(cents: number | null): string {
   return cents == null ? "" : (cents / 100).toFixed(2);
@@ -537,7 +542,9 @@ export function PrototypeVendors({
                         {v.quote.leadTimeDays != null && (
                           <span>{v.quote.leadTimeDays}d lead</span>
                         )}
-                        {v.quote.moq != null && <span>MOQ {v.quote.moq}</span>}
+                        {v.quote.moq != null && (
+                          <span>MOQ {v.quote.moq.toLocaleString("en-US")}</span>
+                        )}
                         {v.quote.setupCostCents != null && (
                           <span>{fmtMoney(v.quote.setupCostCents)} tooling</span>
                         )}
