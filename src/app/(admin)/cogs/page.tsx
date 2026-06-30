@@ -196,6 +196,13 @@ export default async function CogsPage({
           excluded; payment fees and tax not included. Blended coverage:{" "}
           {Math.round(cogsCoverage * 100)}%.
         </p>
+        <p className="mt-2 max-w-3xl rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <strong>B2B margin is approximate — caveat any B2B pull.</strong>{" "}
+          Wholesale discounts sit at the order level and ~7% of B2B revenue is
+          custom-money lines (tooling, deposits) with no product cost, so B2B
+          margin is directional, not exact. <strong>D2C is the reliable channel</strong>
+          {" "}and the focus for profitability/ROAS work.
+        </p>
 
         {cogsCoverage < MARGIN_COVERAGE_THRESHOLD && (
           <p className="mt-3 max-w-3xl rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
