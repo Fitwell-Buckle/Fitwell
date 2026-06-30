@@ -55,6 +55,7 @@ export async function extractJudgeme(): Promise<ExtractJudgemeSummary> {
           productId: r.productId,
           productHandle: r.productHandle,
           location: r.location,
+          imageUrls: r.imageUrls,
           reviewDate: r.reviewDate,
           // capturedAt is set on first insert via DEFAULT now(); updatedAt is
           // refreshed below on every upsert so we can see when a row was
@@ -74,6 +75,7 @@ export async function extractJudgeme(): Promise<ExtractJudgemeSummary> {
           productId: sql`excluded.product_id`,
           productHandle: sql`excluded.product_handle`,
           location: sql`excluded.location`,
+          imageUrls: sql`excluded.image_urls`,
           reviewDate: sql`excluded.review_date`,
           updatedAt: sql`now()`,
         },

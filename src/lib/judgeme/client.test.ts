@@ -104,4 +104,20 @@ describe("normalizeReview", () => {
   it("sets location to null — API doesn't expose it (CSV export does)", () => {
     expect(normalizeReview({ id: 1 }).location).toBeNull();
   });
+
+  it("flattens picture urls into imageUrls (largest size first), null when none", () => {
+    expect(normalizeReview({ id: 1 }).imageUrls).toBeNull();
+    expect(normalizeReview({ id: 1, pictures: [] }).imageUrls).toBeNull();
+    const n = normalizeReview({
+      id: 1,
+      pictures: [
+        { urls: { huge: "https://cdn/huge1.jpg", original: "https://cdn/o1.jpg" } },
+        { urls: { compact: "https://cdn/c2.jpg" } },
+        { urls: null },
+        null,
+      ],
+    });
+    // prefers huge over original; falls back to compact; skips null urls/pictures
+    expect(n.imageUrls).toEqual(["https://cdn/huge1.jpg", "https://cdn/c2.jpg"]);
+  });
 });

@@ -3301,6 +3301,9 @@ export const review = pgTable(
     productId: text("product_id"),
     productHandle: text("product_handle"),
     location: text("location"),
+    // Customer-uploaded review photos (Judge.me CDN URLs). Array so a review
+    // with multiple pictures keeps them all; null/empty when none.
+    imageUrls: jsonb("image_urls").$type<string[]>(),
     reviewDate: timestamp("review_date", { mode: "date" }),
     capturedAt: timestamp("captured_at", { mode: "date" })
       .notNull()

@@ -1,0 +1,1 @@
+ALTER TABLE "review" ADD COLUMN "image_urls" jsonb;

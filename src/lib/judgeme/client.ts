@@ -36,6 +36,15 @@ export interface JudgemeReviewRaw {
   // Some Judge.me responses also include these:
   ip_address?: string | null;
   source?: string | null;
+  // Customer-uploaded photos. Each picture exposes a `urls` map of sizes.
+  pictures?: Array<{
+    urls?: {
+      original?: string | null;
+      huge?: string | null;
+      compact?: string | null;
+      small?: string | null;
+    } | null;
+  } | null> | null;
 }
 
 export interface NormalizedReview {
@@ -51,6 +60,7 @@ export interface NormalizedReview {
   productHandle: string | null;
   location: string | null;
   reviewDate: Date | null;
+  imageUrls: string[] | null;
 }
 
 export interface JudgemeListResponse {
@@ -109,6 +119,18 @@ export function normalizeReview(raw: JudgemeReviewRaw): NormalizedReview {
     if (Number.isFinite(r)) rating = r;
   }
 
+  // Customer-uploaded photos → flat list of CDN URLs, preferring larger sizes.
+  const pictureUrls = (raw.pictures ?? [])
+    .map(
+      (p) =>
+        p?.urls?.huge ??
+        p?.urls?.original ??
+        p?.urls?.compact ??
+        p?.urls?.small ??
+        null,
+    )
+    .filter((u): u is string => typeof u === "string" && u.length > 0);
+
   return {
     externalId: String(raw.id),
     source: "judgeme",
@@ -125,6 +147,7 @@ export function normalizeReview(raw: JudgemeReviewRaw): NormalizedReview {
     // export-driven backfill can populate it.
     location: null,
     reviewDate,
+    imageUrls: pictureUrls.length > 0 ? pictureUrls : null,
   };
 }
 
