@@ -1,6 +1,6 @@
 # Portal AI Assistant ("Talk to your data")
 
-## Status: LIVE IN PRODUCTION (2026-06-29) — Phases 1–4
+## Status: LIVE IN PRODUCTION — Phases 1–5 (margin incl. shipping works; only Phase 6 catalog view + streaming remain)
 Shipped to prod for internal use + evaluation. Prod read-only role + `DATABASE_URL_READONLY` (Vercel) provisioned; migration `0094` applied to prod; `/assistant` auth-gated and serving; live PostHog (Phase 3) answering visitor/funnel questions. Docs updated (Rule 11): `schema.md`, `routes.md`, `integrations.md`, `components.md`, `contributor-setup.md` (§7 read-only-role step). Remaining: streaming (deferred), Phases 4–6, and Greg/Oliver each running `scripts/setup-readonly-role.ts` on their own dev branch (now documented; can't be done for them).
 
 ## Context
@@ -88,13 +88,32 @@ Shipped to prod for internal use + evaluation. Prod read-only role + `DATABASE_U
 - [x] Unit: agent captures a `render_chart` step's validated spec on the turn (`agent.test.ts`).
 - [x] Live dev smoke: "total sales by month" produced a valid bar-chart spec + concise text answer.
 
-### Phase 5: COGS / margin
-- [ ] Expose `getCogs(range)` to the agent (a `product_margin` tool).
-- [ ] Mandatory disclosures: report margin on **costed revenue** only, state coverage % + uncosted-SKU count, and **never** present "margin including shipping" as fact — carrier-paid shipping cost is not in the DB. Offer the explicit-assumption path instead.
-- [ ] Glossary note: "M5" resolves to nothing today; model rollups are M1/M4 via title/SKU heuristics.
+### Phase 5: COGS / margin — COMPLETE (2026-06-30), via the merged shipping-cost layer
+The shipping-cost layer merged (separate work by Greg/Tom): `shipping_charge` table
+(carrier cost *paid*, migration `0095_happy_drax`), a COGS engine with PO +
+standard-cost fallback (`src/lib/cogs/cost-basis.ts`, `standard-cost.ts`), and the
+margin rules baked into `glossary.ts`. The team chose a **glossary-driven SQL**
+approach over a separate `product_margin` tool — the agent computes contribution
+margin via `query_database` against the new tables. So Phase 5 was delivered by
+that merge; this phase's work was wiring + verification:
+- [x] Read-only role can read `shipping_charge` — confirmed on dev (live), and
+  `GRANT SELECT ON ALL TABLES` re-run on prod as insurance for the new table.
+- [x] Glossary encodes: per-channel (`source_name`), net revenue = `subtotal_price`,
+  contribution = net revenue − COGS − carrier shipping − refunds, standard-cost
+  fallback with coverage disclosure, B2B-approximate caveat.
+- [x] Docs corrected: `integrations.md` now describes full contribution margin
+  (the old "cannot answer margin including shipping" claim was stale).
+- [x] UI: added a margin example prompt so the capability is discoverable.
 
-#### Tests
-- Unit: margin answer includes coverage disclosure; "including shipping" triggers the gap disclaimer rather than netting shipping revenue.
+#### Verification (live, dev)
+- [x] "D2C contribution margin including shipping, last 3 months" → answered fully:
+  net revenue (subtotal) − standard-cost COGS − actual `shipping_charge` carrier
+  cost, per channel, with COGS coverage disclosed. The exact question the assistant
+  *refused* in Phase 1 now answers truthfully — the data-gap loop closed.
+
+> Note: margin is computed by the model's SQL guided by the glossary, not a
+> deterministic tool. If we ever see wrong margin SQL in the catalog, revisit
+> wrapping `src/lib/cogs/` as a `product_margin` tool for the canonical number.
 
 ### Phase 6: Catalog view + promotion loop
 - [ ] Catalog page `src/app/(admin)/assistant/catalog/page.tsx`: **"mine" / "everyone" scope toggle**; questions ranked by frequency/recency, grouped by category, with the generated query + run stats. Team-rollup view shows per-question asker count (how many distinct admins asked it) to drive promotion decisions.

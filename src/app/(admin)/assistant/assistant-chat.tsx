@@ -27,9 +27,10 @@ interface ChatMessage {
 type ModelKey = "sonnet" | "opus";
 
 const EXAMPLES = [
-  "How many customers placed more than one order in the last 90 days?",
+  "What was our D2C contribution margin (incl. shipping) last month?",
   "What was our total sales for April, excluding samples?",
   "Which 5 products sold the most units last month?",
+  "How many people visited but didn't buy in the last 90 days?",
   "Where are we in the most recent M1 production order?",
 ];
 

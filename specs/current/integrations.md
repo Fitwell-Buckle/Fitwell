@@ -491,13 +491,31 @@ drop-off; uses `POSTHOG_PROJECT_ID` + `POSTHOG_PERSONAL_API_KEY`, same as the
 funnel page). PostHog counts **people**, Postgres counts **orders**, GA4 rollups
 count **sessions** — they disagree, so the assistant always names the source + unit.
 
-### Known data-gap behaviour (deliberate)
+### Margin (full contribution margin, per channel)
 
-The assistant refuses to invent missing components — e.g. it will **not** answer
-"margin including shipping" by netting shipping *revenue* against COGS, because the
-DB stores shipping *charged* but not carrier cost *paid*. It discloses the gap and
-offers an explicit-assumption path. Gross product margin is reported on costed
-SKUs only, with coverage stated (`src/lib/cogs/`).
+Since the shipping-cost layer landed (`shipping_charge` = carrier cost **paid**,
+migration `0095`), the assistant computes real **contribution margin including
+shipping**, per the rules baked into `glossary.ts`:
+
+- **Per channel always** — `source_name`: `web` = D2C, `pos` = trade show,
+  everything else = B2B; samples are their own bucket. A blended average is never
+  quoted as the D2C figure.
+- **Net revenue = `order.subtotal_price`** (net of discounts), not summed line
+  `price × qty` (wholesale discounts apply at the order level, so line prices are
+  retail and would overstate B2B ~2×).
+- **Contribution = net revenue − COGS − carrier shipping − refunds.** COGS =
+  recognized production-PO cost where available (`src/lib/cogs/`), else a
+  per-material standard cost (`standard-cost.ts`); coverage is disclosed. Shipping
+  cost = `shipping_charge.amount_cents` (paid), **not** `order.total_shipping`
+  (charged). Payment fees + tax are excluded.
+- **B2B margin is directional only** (order-level discounts + custom-money lines)
+  — the assistant caveats it on every pull. D2C is the reliable channel.
+
+### Honesty still holds
+
+The assistant continues to refuse to invent what isn't there (it discloses COGS
+coverage, names the source/unit, reports zero honestly). The margin gap is now
+*closed by data*, not papered over — exactly the loop the assistant surfaced.
 
 ---
 
