@@ -155,6 +155,57 @@ describe("linkOrderToAttribution", () => {
     expect(db.set).not.toHaveBeenCalled();
   });
 
+  it("email_match path: stamps the touch's distinct_id and emits the purchase", async () => {
+    // No pixel id on the cart, but the customer's prior touch carries one.
+    setSelectRows([
+      {
+        linkMethod: null,
+        posthogDistinctId: "ph_email",
+        source: "instagram",
+        medium: "social",
+        campaign: "june",
+        convertedAt: null,
+      },
+    ]);
+    const res = await linkOrderToAttribution("ord1", "cust1", order());
+    expect(res.linkMethod).toBe("email_match");
+    // Order is stamped with the distinct_id (previously left null — the gap).
+    expect(db.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        linkMethod: "email_match",
+        posthogDistinctId: "ph_email",
+      }),
+    );
+    // And the purchase is now visible in PostHog, attributed to that id.
+    expect(identify).toHaveBeenCalledWith(
+      "ph_email",
+      expect.objectContaining({ email: "buyer@example.com" }),
+      expect.objectContaining({ utm_source: "instagram" }),
+    );
+    expect(captureEvent).toHaveBeenCalledWith(
+      "ph_email",
+      "purchase_completed",
+      expect.objectContaining({ order_id: 555, order_value: 40 }),
+    );
+  });
+
+  it("email_match path: links but does not emit when the touch has no distinct_id", async () => {
+    setSelectRows([
+      {
+        linkMethod: null,
+        posthogDistinctId: null,
+        source: "direct",
+        medium: null,
+        campaign: null,
+        convertedAt: null,
+      },
+    ]);
+    const res = await linkOrderToAttribution("ord1", "cust1", order());
+    expect(res.linkMethod).toBe("email_match"); // still links the order
+    expect(captureEvent).not.toHaveBeenCalled(); // but nothing to attribute to
+    expect(identify).not.toHaveBeenCalled();
+  });
+
   it("no pixel id and no customer → null, no PostHog", async () => {
     const res = await linkOrderToAttribution("ord1", null, order());
     expect(res.linkMethod).toBeNull();

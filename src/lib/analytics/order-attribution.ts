@@ -18,10 +18,56 @@ export function extractFwDistinctId(o: ShopifyOrder): string | null {
 }
 
 /**
- * Link a synced order to its pre-purchase attribution touch and, when the
- * deterministic pixel id is present, enrich the PostHog person with the
- * purchase. Best-effort: never throws into the caller (a webhook/cron),
- * because attribution must not break order ingestion.
+ * Enrich the PostHog person with the purchase: identity stitch + a
+ * `purchase_completed` event + first-touch UTMs. Shared by the pixel and
+ * email_match paths so an email-matched conversion is just as visible in
+ * PostHog as a pixel one. Callers guard on first-link (no re-emission on the
+ * 2-hourly re-sync) and supply the distinct_id to attribute against.
+ */
+function enrichPersonWithPurchase(
+  distinctId: string,
+  shopifyOrder: ShopifyOrder,
+  touch?: {
+    source: string | null;
+    medium: string | null;
+    campaign: string | null;
+  },
+): void {
+  const email = shopifyOrder.email ?? undefined;
+  identify(
+    distinctId,
+    {
+      ...(email ? { email } : {}),
+      last_order_at: shopifyOrder.processed_at ?? shopifyOrder.created_at,
+    },
+    {
+      first_order_at: shopifyOrder.processed_at ?? shopifyOrder.created_at,
+      ...(touch?.source ? { utm_source: touch.source } : {}),
+      ...(touch?.medium ? { utm_medium: touch.medium } : {}),
+      ...(touch?.campaign ? { utm_campaign: touch.campaign } : {}),
+    },
+  );
+  captureEvent(distinctId, "purchase_completed", {
+    order_id: shopifyOrder.id,
+    order_number: shopifyOrder.order_number,
+    order_value: Number(shopifyOrder.total_price),
+    currency: shopifyOrder.currency,
+    line_items: shopifyOrder.line_items?.map((li) => ({
+      title: li.title,
+      sku: li.sku,
+      quantity: li.quantity,
+    })),
+    utm_source: touch?.source ?? null,
+    utm_campaign: touch?.campaign ?? null,
+  });
+}
+
+/**
+ * Link a synced order to its pre-purchase attribution touch and, when a
+ * distinct_id is available (pixel id on the cart, or one carried by the
+ * matched touch), enrich the PostHog person with the purchase. Best-effort:
+ * never throws into the caller (a webhook/cron), because attribution must not
+ * break order ingestion.
  *
  * Does NOT flush PostHog — the caller (webhook route / cron) owns the flush.
  */
@@ -110,34 +156,7 @@ export async function linkOrderToAttribution(
       // First link only — see the re-sync note above.
       if (!firstLink) return { linkMethod };
 
-      const email = shopifyOrder.email ?? undefined;
-      identify(
-        fwDistinctId,
-        {
-          ...(email ? { email } : {}),
-          last_order_at: shopifyOrder.processed_at ?? shopifyOrder.created_at,
-        },
-        {
-          first_order_at:
-            shopifyOrder.processed_at ?? shopifyOrder.created_at,
-          ...(touch?.source ? { utm_source: touch.source } : {}),
-          ...(touch?.medium ? { utm_medium: touch.medium } : {}),
-          ...(touch?.campaign ? { utm_campaign: touch.campaign } : {}),
-        },
-      );
-      captureEvent(fwDistinctId, "purchase_completed", {
-        order_id: shopifyOrder.id,
-        order_number: shopifyOrder.order_number,
-        order_value: Number(shopifyOrder.total_price),
-        currency: shopifyOrder.currency,
-        line_items: shopifyOrder.line_items?.map((li) => ({
-          title: li.title,
-          sku: li.sku,
-          quantity: li.quantity,
-        })),
-        utm_source: touch?.source ?? null,
-        utm_campaign: touch?.campaign ?? null,
-      });
+      enrichPersonWithPurchase(fwDistinctId, shopifyOrder, touch);
 
       return { linkMethod };
     }
@@ -164,14 +183,37 @@ export async function linkOrderToAttribution(
 
       if (touch) {
         linkMethod = "email_match";
+        const touchDistinctId = touch.posthogDistinctId ?? null;
         await db
           .update(order)
-          .set({ linkMethod })
+          .set({
+            linkMethod,
+            // Stamp the order with the touch's distinct_id so email-matched
+            // conversions are no longer invisible to PostHog-side joins (this
+            // was previously left null, the root of the email_match gap).
+            ...(touchDistinctId ? { posthogDistinctId: touchDistinctId } : {}),
+          })
           .where(eq(order.id, orderId));
         await db
           .update(utmAttribution)
           .set({ converted: true, convertedAt: new Date() })
           .where(eq(utmAttribution.id, touch.id));
+
+        // Mirror the pixel path: emit purchase_completed so this conversion
+        // counts in PostHog too. Only possible when the touch carried a
+        // distinct_id (the anonymous id captured at touch time); a touch with
+        // none still links the order, it just can't be attributed to a person.
+        if (touchDistinctId) {
+          if (customerId) {
+            await db
+              .update(customer)
+              .set({
+                posthogDistinctId: sql`COALESCE(${customer.posthogDistinctId}, ${touchDistinctId})`,
+              })
+              .where(eq(customer.id, customerId));
+          }
+          enrichPersonWithPurchase(touchDistinctId, shopifyOrder, touch);
+        }
       }
     }
 
