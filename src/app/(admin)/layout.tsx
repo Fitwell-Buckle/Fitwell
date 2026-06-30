@@ -13,7 +13,11 @@ import { StageLabelsProvider } from "@/components/production/stage-labels-provid
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { ShippingCostReminder } from "@/components/shipping/shipping-cost-reminder";
-import { getShippingImportStatus, daysSince } from "@/lib/shipping/import-status";
+import {
+  getShippingImportStatus,
+  daysSince,
+  shouldSeeShippingReminder,
+} from "@/lib/shipping/import-status";
 
 export default async function AdminLayout({
   children,
@@ -26,13 +30,14 @@ export default async function AdminLayout({
     redirect("/auth/login");
   }
 
-  const isSupplier = session.user.role === "supplier";
+  // The weekly upload nag is scoped to whoever owns exporting the bill (Tom).
+  const showShippingReminder = shouldSeeShippingReminder(session.user.email);
 
   const [logoUrl, stageLabels, stageOrder, shippingStatus] = await Promise.all([
     getStoreLogoUrl(),
     getStageLabels(),
     getStageOrder(),
-    isSupplier ? Promise.resolve(null) : getShippingImportStatus(),
+    showShippingReminder ? getShippingImportStatus() : Promise.resolve(null),
   ]);
 
   return (

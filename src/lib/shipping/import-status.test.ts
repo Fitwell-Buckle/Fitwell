@@ -4,7 +4,11 @@ import { describe, it, expect, vi } from "vitest";
 // helpers under test don't touch it.
 vi.mock("@/lib/db", () => ({ db: {} }));
 
-import { daysSince, isShippingImportStale } from "./import-status";
+import {
+  daysSince,
+  isShippingImportStale,
+  shouldSeeShippingReminder,
+} from "./import-status";
 
 const NOW = new Date("2026-06-30T12:00:00.000Z");
 
@@ -34,5 +38,20 @@ describe("isShippingImportStale", () => {
   it("respects a custom window", () => {
     expect(isShippingImportStale(7, 14)).toBe(false);
     expect(isShippingImportStale(14, 14)).toBe(true);
+  });
+});
+
+describe("shouldSeeShippingReminder", () => {
+  it("shows only to the owner (Tom), case-insensitively", () => {
+    expect(shouldSeeShippingReminder("tom@fitwellbuckle.co")).toBe(true);
+    expect(shouldSeeShippingReminder("Tom@Fitwellbuckle.co")).toBe(true);
+  });
+
+  it("hides from other admins and missing emails", () => {
+    expect(shouldSeeShippingReminder("oliver@fitwellbuckle.co")).toBe(false);
+    expect(shouldSeeShippingReminder("greg@fitwellbuckle.co")).toBe(false);
+    expect(shouldSeeShippingReminder(null)).toBe(false);
+    expect(shouldSeeShippingReminder(undefined)).toBe(false);
+    expect(shouldSeeShippingReminder("")).toBe(false);
   });
 });
