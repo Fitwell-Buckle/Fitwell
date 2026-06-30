@@ -1,7 +1,7 @@
 import { and, eq, gte, lte, sql, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { order, orderLineItem } from "@/lib/schema";
-import { getAverageUnitCostBySku } from "./average-cost";
+import { getCostBasisBySku } from "./cost-basis";
 import { computeCogsRows, type CogsReport, type SkuSales } from "./compute";
 
 export type { CogsReport, CogsRow, SkuSales } from "./compute";
@@ -34,7 +34,7 @@ export async function getCogs(range: {
     )
     .groupBy(orderLineItem.sku);
 
-  const costBySku = await getAverageUnitCostBySku();
+  const costBySku = await getCostBasisBySku();
 
   const sales: SkuSales[] = salesRows
     .filter((r): r is typeof r & { sku: string } => Boolean(r.sku))

@@ -124,17 +124,15 @@ export → out of scope (documented gap; can't attribute per-order).
 channel — a single B2B order had a $246.24 freight charge; D2C ground labels are
 ~$5. A blended "avg shipping cost $12.28/order" is misleading and must never be
 shown as a D2C figure. Every shipping-cost / margin metric in this phase is
-reported **per channel** (and the blended total kept only as an explicit "all
-orders" line, never the headline D2C number). **Channel-derivation rule (confirmed):** no B2B order tag / `order.company_id`
-exists — the signal is `order.source_name` (matches the dashboard's `segmentExpr`):
-`shopify_draft_order`=B2B, `pos`=trade show, else (`web`/NULL/legacy)=D2C; plus
-`is_sample=true` as its own bucket. Canonical helper: `src/lib/orders/channel.ts`
-(`classifyChannel()` + `orderChannelSql`). Existing dashboards still inline their
-own CASE — adopting this helper across them is a separate cleanup (not in scope).
+reported **per channel** (blended kept only as an explicit "all orders" line).
 
-**Real prod split (validated 2026-06-29):** D2C avg $10.98/order, B2B $19.63,
-trade show $5.40 — blended $12.28 overstates D2C ~12% and hides B2B being ~80%
-pricier. Confirms the segmentation requirement.
+**Channel-derivation rule (corrected 2026-06-30, per Tom):** wholesale & OEM
+orders begin as Shopify draft orders before converting, so the rule is **online
+store (`web`) = D2C, `pos` = trade show, EVERYTHING ELSE = B2B** (draft orders,
+app/channel sources, etc.) — not just `shopify_draft_order`. `is_sample` is its
+own bucket. Canonical helper: `src/lib/orders/channel.ts`. (Earlier draft-only
+rule under-counted B2B.) Existing dashboards still inline their own CASE —
+adopting this helper across them is a separate cleanup.
 
 - [x] Channel classifier `src/lib/orders/channel.ts` (pure `classifyChannel` +
       `orderChannelSql`), unit-tested (5 cases).
@@ -170,10 +168,22 @@ pricier. Confirms the segmentation requirement.
         received / invoices paid. Open decision for Tom/Greg: keep strict
         recognition (wait for receipt) vs add a per-SKU **standard cost** for margin
         analysis on already-shipped orders. No code change until decided.
-      - Revenue counts all line items incl. null-SKU ones (as uncosted), so the
-        per-channel revenue total is slightly higher than the COGS card's Revenue
-        (which drops null-SKU rows) — intentional; margin should count all product
-        revenue.
+- [x] **Standard cost wired in (2026-06-30, Tom's costs):** stainless buckle
+      $3.60, titanium $4.50, tang $1.00, spring bar $0.01, bundle 3×. Classifier
+      `src/lib/cogs/standard-cost.ts` keys off product TITLE (codes are
+      inconsistent — `-SB-` is a bead-blast buckle or a spring bar depending on the
+      SKU). `src/lib/cogs/cost-basis.ts` blends recognized PO cost (wins) with
+      standard cost; used by both `getCogs` and the margin loader. Prod coverage
+      D2C 100% / B2B ~93% / TS 100%.
+- [x] **Net-revenue fix (2026-06-30 — the big one):** B2B wholesale discounts are
+      applied at the ORDER level, so summing retail line prices overstated B2B
+      revenue 2.3× ($309k vs the real $138k subtotal). Margin now uses
+      `order.subtotal_price` (net of discounts), computed at order grain with
+      per-order COGS. **Result: B2B 59% contribution / 75.9% gross vs D2C 70.5% /
+      90.5%** — B2B correctly below D2C, matching the wholesale economics. Margin %
+      gate lowered to 90% coverage (B2B has ~7% custom-money/tooling lines).
+      NOTE: the per-SKU COGS table still uses gross line revenue (per-SKU grain
+      can't net order-level discounts) — a known remaining inconsistency to flag.
 - [ ] Carrier-mix + ship-time analytics from `shipment` (lower priority).
 - [ ] Verify the assistant's read-only DB role has SELECT on `shipment` /
       `shipping_charge` (else AI shipping queries error). Update

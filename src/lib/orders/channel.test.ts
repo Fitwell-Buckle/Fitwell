@@ -2,22 +2,22 @@ import { describe, it, expect } from "vitest";
 import { classifyChannel } from "@/lib/orders/channel";
 
 describe("classifyChannel", () => {
-  it("classifies wholesale draft orders as b2b", () => {
-    expect(classifyChannel("shopify_draft_order", false)).toBe("b2b");
+  it("classifies only web as d2c", () => {
+    expect(classifyChannel("web", false)).toBe("d2c");
   });
 
   it("classifies POS as tradeshow", () => {
     expect(classifyChannel("pos", false)).toBe("tradeshow");
   });
 
-  it("classifies web as d2c", () => {
-    expect(classifyChannel("web", false)).toBe("d2c");
+  it("classifies draft orders as b2b (wholesale/OEM convert from drafts)", () => {
+    expect(classifyChannel("shopify_draft_order", false)).toBe("b2b");
   });
 
-  it("treats NULL/legacy source_name as d2c", () => {
-    expect(classifyChannel(null, false)).toBe("d2c");
-    expect(classifyChannel(undefined, false)).toBe("d2c");
-    expect(classifyChannel("some_future_source", false)).toBe("d2c");
+  it("treats any other / app / NULL source as b2b (not POS, not online store)", () => {
+    expect(classifyChannel("3890849", false)).toBe("b2b"); // an app/channel id
+    expect(classifyChannel(null, false)).toBe("b2b");
+    expect(classifyChannel(undefined, false)).toBe("b2b");
   });
 
   it("sample takes precedence over every source_name", () => {

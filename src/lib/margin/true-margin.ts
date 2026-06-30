@@ -8,27 +8,29 @@
  * economics differ sharply (see src/lib/orders/channel.ts).
  *
  * Definitions / caveats (surface these wherever this is shown):
- * - Revenue = gross product line-item revenue (price × qty), matching getCogs.
- *   It does NOT include tax or shipping charged to the customer.
- * - COGS = recognized per-SKU PO cost. SKUs without a cost basis contribute no
- *   cost; their revenue is tracked as `uncostedRevenueCents` so coverage is
- *   visible (margin % on an uncosted-heavy channel reads high).
+ * - Revenue = order **subtotal** (net of discounts), NOT retail line prices.
+ *   This matters enormously for B2B: wholesale/OEM orders carry retail line
+ *   prices with the wholesale discount applied at the ORDER level, so summing
+ *   line price × qty overstates B2B revenue ~2×. Subtotal excludes tax and
+ *   shipping charged to the customer.
+ * - COGS = unit cost × quantity per line (recognized PO cost, else standard
+ *   cost). An order is "costed" if it has ≥1 costed unit; orders with no
+ *   costable products (e.g. custom-money tooling/deposit lines) are uncosted
+ *   and their revenue is tracked separately so coverage is visible.
  * - Shipping = what we PAID carriers (shipping_charge), not what we charged.
  * - Refunds = order.total_refunded (nets all refunds incl. any refunded
  *   shipping/tax — a slight over-subtraction vs pure product refunds).
- * - Excludes payment-processing fees and tax remittance. Samples excluded
- *   (matching getCogs); cancelled orders are NOT excluded (also matching getCogs)
- *   so these figures reconcile with the COGS cards.
+ * - Excludes payment-processing fees and tax remittance. Samples excluded.
  */
 import { db } from "@/lib/db";
 import { order, orderLineItem, shippingCharge } from "@/lib/schema";
-import { getAverageUnitCostBySku } from "@/lib/cogs/average-cost";
+import { getCostBasisBySku } from "@/lib/cogs/cost-basis";
 import { orderChannelSql } from "@/lib/orders/channel";
 import { rollUpMarginByChannel, type ChannelMargin } from "./compute";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 
 export type { ChannelMargin, MarginRollupInputs } from "./compute";
-export { rollUpMarginByChannel } from "./compute";
+export { rollUpMarginByChannel, MARGIN_COVERAGE_THRESHOLD } from "./compute";
 
 /**
  * Load contribution margin per channel over an order-date range. Same filters as
@@ -44,11 +46,14 @@ export async function getMarginByChannel(range: {
     eq(order.isSample, false),
   );
 
-  const [orders, lineItems, shipRows, costBySkuFull] = await Promise.all([
+  const [orderRows, lineItems, shipRows, costBasis] = await Promise.all([
     db
       .select({
         id: order.id,
         channel: orderChannelSql,
+        // Net product revenue — subtotal, after discounts (wholesale discounts
+        // live here, not in the line prices).
+        revenueCents: sql<number>`coalesce(${order.subtotalPrice}, 0)`.mapWith(Number),
         refundCents: sql<number>`coalesce(${order.totalRefunded}, 0)`.mapWith(Number),
       })
       .from(order)
@@ -58,7 +63,6 @@ export async function getMarginByChannel(range: {
         orderId: orderLineItem.orderId,
         sku: orderLineItem.sku,
         quantity: sql<number>`coalesce(${orderLineItem.quantity}, 0)`.mapWith(Number),
-        priceCents: sql<number>`coalesce(${orderLineItem.price}, 0)`.mapWith(Number),
       })
       .from(orderLineItem)
       .innerJoin(order, eq(order.id, orderLineItem.orderId))
@@ -73,14 +77,33 @@ export async function getMarginByChannel(range: {
       .innerJoin(order, eq(order.id, shippingCharge.orderId))
       .where(baseWhere)
       .groupBy(shippingCharge.orderId),
-    getAverageUnitCostBySku(),
+    getCostBasisBySku(),
   ]);
 
   const shippingByOrder = new Map<string, number>();
   for (const r of shipRows) if (r.orderId) shippingByOrder.set(r.orderId, r.cents);
 
-  const costBySku = new Map<string, number>();
-  for (const [sku, c] of costBySkuFull) costBySku.set(sku, c.avgUnitCostCents);
+  // Per-order COGS from line items: unit cost × quantity. An order is "costed"
+  // when it has at least one costed unit (so custom-money / no-product orders
+  // stay uncosted and don't fake a 100%-margin order).
+  const cogsByOrder = new Map<string, number>();
+  const costedOrders = new Set<string>();
+  for (const li of lineItems) {
+    if (li.quantity <= 0) continue;
+    const cost = li.sku ? costBasis.get(li.sku)?.avgUnitCostCents : undefined;
+    if (cost == null) continue;
+    cogsByOrder.set(li.orderId, (cogsByOrder.get(li.orderId) ?? 0) + Math.round(cost * li.quantity));
+    costedOrders.add(li.orderId);
+  }
 
-  return rollUpMarginByChannel({ orders, lineItems, shippingByOrder, costBySku });
+  const orders = orderRows.map((o) => ({
+    channel: o.channel,
+    revenueCents: o.revenueCents,
+    cogsCents: cogsByOrder.get(o.id) ?? 0,
+    costed: costedOrders.has(o.id),
+    shippingCents: shippingByOrder.get(o.id) ?? 0,
+    refundCents: o.refundCents,
+  }));
+
+  return rollUpMarginByChannel({ orders });
 }

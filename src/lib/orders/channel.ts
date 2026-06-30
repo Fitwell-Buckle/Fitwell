@@ -32,28 +32,29 @@ export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
 
 /**
  * Classify an order's channel from the signals we store. `sample` takes
- * precedence (a sample order can also carry `source_name='shopify_draft_order'`,
- * but a free sample is not a wholesale sale). Otherwise: draft order → b2b,
- * POS → tradeshow, everything else (web, NULL/legacy, other) → d2c.
+ * precedence (a free sample/creator order is not a sale). Then, per Tom: only
+ * the online store (`web`) is D2C and `pos` is in-person; **everything else is
+ * B2B**, because wholesale and OEM orders begin as Shopify draft orders (and
+ * other non-storefront sources) before converting. A rare drafted D2C reship
+ * is a known, immaterial exception.
  */
 export function classifyChannel(
   sourceName: string | null | undefined,
   isSample: boolean,
 ): OrderChannel {
   if (isSample) return "sample";
-  if (sourceName === "shopify_draft_order") return "b2b";
+  if (sourceName === "web") return "d2c";
   if (sourceName === "pos") return "tradeshow";
-  return "d2c";
+  return "b2b";
 }
 
 /**
  * SQL form of `classifyChannel`, for SELECT + GROUP BY. Only column references
- * and literals (no bound params), so it's safe to reuse across both clauses —
- * same constraint the dashboard's segmentExpr relies on.
+ * and literals (no bound params), so it's safe to reuse across both clauses.
  */
 export const orderChannelSql = sql<OrderChannel>`CASE
   WHEN ${order.isSample} = true THEN 'sample'
-  WHEN ${order.sourceName} = 'shopify_draft_order' THEN 'b2b'
+  WHEN ${order.sourceName} = 'web' THEN 'd2c'
   WHEN ${order.sourceName} = 'pos' THEN 'tradeshow'
-  ELSE 'd2c'
+  ELSE 'b2b'
 END`;

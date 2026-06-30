@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { parseDateRange } from "@/lib/date-range";
 import { getCogs } from "@/lib/cogs/cogs";
-import { getMarginByChannel } from "@/lib/margin/true-margin";
+import { getMarginByChannel, MARGIN_COVERAGE_THRESHOLD } from "@/lib/margin/true-margin";
 import { ORDER_CHANNEL_LABELS } from "@/lib/orders/channel";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,10 +92,17 @@ export default async function CogsPage({
 
       <p className="mt-3 text-xs text-zinc-500">
         Units sold in the selected range, valued at each SKU&apos;s
-        quantity-weighted average cost from received (or prepaid) purchase
-        orders. Sample orders are excluded. Margin&nbsp;% is computed on costed
+        quantity-weighted average cost from received (or prepaid) purchase orders,
+        falling back to a per-material standard cost where no PO cost is
+        recognized. Sample orders are excluded. Margin&nbsp;% is computed on costed
         revenue only.
       </p>
+      {marginByChannel.length > 0 && uncosted.length === 0 ? (
+        <p className="mt-1 text-xs text-zinc-400">
+          (Standard cost: stainless buckle $3.60, titanium $4.50, tang $1.00,
+          spring bar $0.01, bundle 3×. Recognized PO cost overrides it.)
+        </p>
+      ) : null}
 
       <DataTable className="mt-6">
         <Table>
@@ -177,31 +184,27 @@ export default async function CogsPage({
           True margin by channel
         </h2>
         <p className="mt-1 max-w-3xl text-xs text-zinc-500">
-          Contribution = product revenue − COGS − carrier shipping cost (what we
-          paid, from Shopify billing) − refunds, per channel. Reported per channel
-          because D2C and B2B economics differ sharply — never read the blended
-          row as the D2C number. Samples excluded; payment fees and tax not
-          included.
+          Contribution = net product revenue − COGS − carrier shipping cost (what
+          we paid, from Shopify billing) − refunds, per channel. Revenue is the
+          order <strong>subtotal</strong> (after discounts) — so B2B/wholesale
+          shows its true discounted price, not retail line prices. Channel: online
+          store = D2C, POS = trade show, everything else (draft/wholesale/OEM) =
+          B2B. COGS uses recognized production-PO cost where available, else a
+          per-material standard cost (stainless $3.60 / titanium $4.50 buckle; tang
+          $1.00; spring bar $0.01; bundle 3×). Margin % is withheld below{" "}
+          {Math.round(MARGIN_COVERAGE_THRESHOLD * 100)}% COGS coverage. Samples
+          excluded; payment fees and tax not included. Blended coverage:{" "}
+          {Math.round(cogsCoverage * 100)}%.
         </p>
 
-        {cogsCoverage === 0 ? (
+        {cogsCoverage < MARGIN_COVERAGE_THRESHOLD && (
           <p className="mt-3 max-w-3xl rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            <strong>Margin can&apos;t be computed yet.</strong> No SKU has a
-            recognized product cost ({Math.round(cogsCoverage * 100)}% of revenue
-            costed), so <strong>Contribution and Margin %&nbsp;are withheld</strong>{" "}
-            — showing them would misrank channels (B2B sells at a lower price for
-            the same unit cost, so it must end up <em>below</em> D2C, not above).
-            Revenue, Shipping and Refunds below are accurate. COGS is recognized
-            from production POs once they&apos;re marked received or paid by
-            invoice — none are yet.
+            <strong>Low COGS coverage ({Math.round(cogsCoverage * 100)}%).</strong>{" "}
+            Margin % is withheld for any channel below{" "}
+            {Math.round(MARGIN_COVERAGE_THRESHOLD * 100)}% costed — showing it would
+            overstate margin and could misrank channels.
           </p>
-        ) : cogsCoverage < 0.999 ? (
-          <p className="mt-3 max-w-3xl rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            Partial COGS coverage ({Math.round(cogsCoverage * 100)}% of revenue
-            costed). Margin&nbsp;% is shown only for channels whose revenue is
-            fully costed; others are blank to avoid overstating.
-          </p>
-        ) : null}
+        )}
 
         <DataTable className="mt-4">
           <Table>
@@ -256,7 +259,15 @@ export default async function CogsPage({
                       {r.marginPct == null ? (
                         <Muted>—</Muted>
                       ) : (
-                        <Mono>{pct(r.marginPct)}</Mono>
+                        <span>
+                          <Mono>{pct(r.marginPct)}</Mono>
+                          {r.costedRevenueCents < r.revenueCents && (
+                            <span className="ml-1 text-[10px] text-zinc-400">
+                              ({Math.round((r.costedRevenueCents / r.revenueCents) * 100)}%
+                              costed)
+                            </span>
+                          )}
+                        </span>
                       )}
                     </TableCell>
                   </TableRow>
@@ -289,7 +300,7 @@ export default async function CogsPage({
                   </TableCell>
                   <TableCell className="text-right">
                     <Muted>
-                      {cogsCoverage >= 0.999 && marginBlended.revenue > 0
+                      {cogsCoverage >= MARGIN_COVERAGE_THRESHOLD && marginBlended.revenue > 0
                         ? pct((marginBlended.contribution / marginBlended.revenue) * 100)
                         : "—"}
                     </Muted>
