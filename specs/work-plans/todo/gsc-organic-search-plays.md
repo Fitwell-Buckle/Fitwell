@@ -65,13 +65,23 @@ collision, 0 clicks — ignore).
 - [ ] Audit the brand SERP: what shows for "fitwell" / "fitwell buckle" /
       "fitwell buckle review" / "fitwell buckle reddit". Homepage title/meta,
       sitelinks, structured data.
-- [ ] Build a **reviews / social-proof page** to own `fitwell buckle review`
-      (currently pos 9.3) — proof-led, full-price conviction, NOT a discount
-      (guardrail #1). Persona P5/P2, funnel stage `converting`. Pull from the
-      Judge.me corpus (`review` table) + vocabulary-map language.
-- [ ] Add it to `landing-page-goals.md` with persona/stage; instrument with
-      PostHog `data-section`/`data-cta` tags.
-- [ ] Tests/QA per the theme-edit + instrumentation recipes.
+- [x] **Built the reviews / social-proof page 2026-06-30.** Native Craft
+      custom-liquid section (scheme-2, fw tokens, real fonts), template
+      `templates/page.fitwell-buckle-reviews.json` pushed to the live theme +
+      verified. Source checked in at `shopify/page-fitwell-buckle-reviews.html`.
+      All 97-review / 4.6★ corpus quotes verbatim; proof-led, full-price, no
+      discount, no caveats section (per Tom). Sections hero → problem →
+      comparison → finish → service → collectors → cta. P5/P2, `converting`.
+- [x] Added to `landing-page-goals.md`; instrumented with `data-section`
+      (hero/problem/comparison/finish/service/collectors/cta — new ids
+      registered in `event-taxonomy.md`) + `data-cta="reviews_find_your_fit"`.
+- [ ] **Tom: create the Page record in admin** (Online Store → Pages → Add page
+      → handle `fitwell-buckle-reviews`, Theme template = `fitwell-buckle-reviews`),
+      **preview**, then **publish**. The template is live but no page renders it
+      until the record exists. App only has `read_content`, so this can't be done
+      via API.
+- [ ] Tom (or follow-up): the brand-SERP audit above (homepage title/meta,
+      sitelinks, structured data) — separate from the page, still open.
 
 ### Phase 2: `/collections/buckles` on-page optimization (defend + extend)
 - [ ] We own `adjustable watch buckle` (pos 2.6); the gap is `watch buckle`

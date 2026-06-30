@@ -129,7 +129,8 @@ mid-funnel stage progression beyond what Shopify exposes.
 
 - **`section_scrolled_into_view`** — major page sections (`hero`,
   `problem`, `how_it_works`, `specs`, `comparison`, `story`, `faq`,
-  `cta`, `footer`) report when they enter the viewport. Property:
+  `cta`, `footer`, plus reviews-page proof sections `finish`, `service`,
+  `collectors`) report when they enter the viewport. Property:
   `section_id`.
 - **`section_dwelled`** — section was in viewport for ≥N seconds.
   Properties: `section_id`, `dwell_seconds`.
