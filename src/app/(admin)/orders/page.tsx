@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { order, customer, orderLineItem } from "@/lib/schema";
 import { desc, eq, and, gte, lte, count, exists, inArray } from "drizzle-orm";
 import { parseDateRange } from "@/lib/date-range";
+import { getShippingCostByOrderIds } from "@/lib/shipping/shipping-cost";
+import { classifyChannel, ORDER_CHANNEL_LABELS } from "@/lib/orders/channel";
 import { ListFilters } from "@/components/catalog/list-filters";
 import {
   Table,
@@ -83,6 +85,8 @@ export default async function OrdersPage({
         totalPrice: order.totalPrice,
         financialStatus: order.financialStatus,
         fulfillmentStatus: order.fulfillmentStatus,
+        sourceName: order.sourceName,
+        isSample: order.isSample,
         processedAt: order.processedAt,
         customerFirstName: customer.firstName,
         customerLastName: customer.lastName,
@@ -121,6 +125,8 @@ export default async function OrdersPage({
     if (l.sku) cur.skus.push(l.sku);
     linesByOrder.set(l.orderId, cur);
   }
+  // Per-order shipping cost (what we paid carriers) for this page of orders.
+  const shippingByOrder = await getShippingCostByOrderIds(pageOrderIds);
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -165,9 +171,11 @@ export default async function OrdersPage({
               <TableHead>Order #</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Customer</TableHead>
+              <TableHead>Channel</TableHead>
               <TableHead className="text-right">Qty</TableHead>
               <TableHead>SKUs</TableHead>
-              <TableHead>Total</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-right">Shipping cost</TableHead>
               <TableHead>Financial Status</TableHead>
               <TableHead>Fulfillment</TableHead>
             </TableRow>
@@ -176,7 +184,7 @@ export default async function OrdersPage({
             {orders.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={10}
                   className="py-8 text-center text-zinc-400"
                 >
                   {status
@@ -188,6 +196,8 @@ export default async function OrdersPage({
               orders.map((o) => {
                 const li = linesByOrder.get(o.id) ?? { qty: 0, skus: [] };
                 const skuList = li.skus.join(", ");
+                const channel = classifyChannel(o.sourceName, o.isSample);
+                const shippingCents = shippingByOrder.get(o.id);
                 return (
                 <TableRow key={o.id}>
                   <TableCell>
@@ -214,6 +224,9 @@ export default async function OrdersPage({
                       "—"
                     )}
                   </TableCell>
+                  <TableCell>
+                    <Badge>{ORDER_CHANNEL_LABELS[channel]}</Badge>
+                  </TableCell>
                   <TableCell className="text-right text-zinc-500">
                     {li.qty}
                   </TableCell>
@@ -223,8 +236,15 @@ export default async function OrdersPage({
                   >
                     <div className="truncate">{skuList || "—"}</div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-right">
                     <Mono>{fmt(o.totalPrice ?? 0)}</Mono>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {shippingCents == null ? (
+                      <Muted>—</Muted>
+                    ) : (
+                      <Mono>{fmt(shippingCents)}</Mono>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge>{o.financialStatus ?? "—"}</Badge>

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { parseDateRange } from "@/lib/date-range";
 import { getCogs } from "@/lib/cogs/cogs";
+import { getMarginByChannel } from "@/lib/margin/true-margin";
+import { ORDER_CHANNEL_LABELS } from "@/lib/orders/channel";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
@@ -41,6 +43,20 @@ export default async function CogsPage({
   const params = await searchParams;
   const { from, to } = parseDateRange(params);
   const { rows, totals, uncosted } = await getCogs({ from, to });
+
+  // Contribution margin per channel (already in canonical channel order).
+  const marginByChannel = await getMarginByChannel({ from, to });
+  const marginBlended = marginByChannel.reduce(
+    (a, r) => ({
+      orders: a.orders + r.orders,
+      revenue: a.revenue + r.revenueCents,
+      cogs: a.cogs + r.cogsCents,
+      shipping: a.shipping + r.shippingCostCents,
+      refunds: a.refunds + r.refundsCents,
+      contribution: a.contribution + r.contributionCents,
+    }),
+    { orders: 0, revenue: 0, cogs: 0, shipping: 0, refunds: 0, contribution: 0 },
+  );
 
   const stats = [
     { label: "Revenue", value: fmt(totals.revenueCents) },
@@ -149,6 +165,109 @@ export default async function CogsPage({
           {uncosted.map((u) => u.sku).join(", ")}
         </p>
       )}
+
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold text-zinc-900">
+          True margin by channel
+        </h2>
+        <p className="mt-1 max-w-3xl text-xs text-zinc-500">
+          Contribution = product revenue − COGS − carrier shipping cost (what we
+          paid, from Shopify billing) − refunds, per channel. Reported per channel
+          because D2C and B2B economics differ sharply — never read the blended
+          row as the D2C number. Samples excluded; payment fees and tax not
+          included; SKUs without a PO cost basis contribute no COGS (so a channel
+          heavy in uncosted SKUs reads high).
+        </p>
+
+        <DataTable className="mt-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Channel</TableHead>
+                <TableHead className="text-right">Orders</TableHead>
+                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead className="text-right">COGS</TableHead>
+                <TableHead className="text-right">Shipping</TableHead>
+                <TableHead className="text-right">Refunds</TableHead>
+                <TableHead className="text-right">Contribution</TableHead>
+                <TableHead className="text-right">Margin %</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {marginByChannel.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-zinc-400">
+                    No orders in this range.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                marginByChannel.map((r) => (
+                  <TableRow key={r.channel}>
+                    <TableCell className="font-medium text-zinc-900">
+                      {ORDER_CHANNEL_LABELS[r.channel]}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{r.orders}</Mono>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{fmt(r.revenueCents)}</Mono>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{fmt(r.cogsCents)}</Mono>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{fmt(r.shippingCostCents)}</Mono>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{fmt(r.refundsCents)}</Mono>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{fmt(r.contributionCents)}</Mono>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Mono>{pct(r.marginPct)}</Mono>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+              {marginBlended.orders > 0 && (
+                <TableRow className="border-t-2 border-zinc-200">
+                  <TableCell className="text-zinc-500">
+                    <Muted>Blended (all channels)</Muted>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Muted>{marginBlended.orders}</Muted>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Muted>{fmt(marginBlended.revenue)}</Muted>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Muted>{fmt(marginBlended.cogs)}</Muted>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Muted>{fmt(marginBlended.shipping)}</Muted>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Muted>{fmt(marginBlended.refunds)}</Muted>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Muted>{fmt(marginBlended.contribution)}</Muted>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Muted>
+                      {pct(
+                        marginBlended.revenue > 0
+                          ? (marginBlended.contribution / marginBlended.revenue) * 100
+                          : null,
+                      )}
+                    </Muted>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </DataTable>
+      </section>
     </div>
   );
 }

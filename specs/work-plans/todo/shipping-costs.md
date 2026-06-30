@@ -118,16 +118,57 @@ export → out of scope (documented gap; can't attribute per-order).
       **$14,826.41** total. (Dev is a stale/partial branch so only 660 orders
       matched there = $7,713.64; real match rate to be measured on prod.)
 
-### Phase 4: Surface + true margin (not started)
-- [ ] Admin order view: shipment(s) — carrier, tracking link, ship date — plus the
-      order's shipping cost = `SUM(shipping_charge.amount_cents)`.
-- [ ] Carrier-mix + ship-time analytics from `shipment`; shipping-cost column from
-      `shipping_charge`.
-- [ ] Wire shipping cost into the margin calc alongside COGS (`src/lib/cogs/`):
-      revenue − COGS − `SUM(shipping_charge)` − refunds.
-- [ ] Update the AI assistant glossary (`src/lib/ai/assistant/glossary.ts:78` says
-      "shipping cost isn't recorded" — no longer true once the prod import lands).
-- [ ] Update `specs/current/integrations.md` + `data-flows.md`.
+### Phase 4: Surface + true margin (in progress)
+
+**MUST segment B2B vs D2C (Tom, 2026-06-29).** Shipping economics differ wildly by
+channel — a single B2B order had a $246.24 freight charge; D2C ground labels are
+~$5. A blended "avg shipping cost $12.28/order" is misleading and must never be
+shown as a D2C figure. Every shipping-cost / margin metric in this phase is
+reported **per channel** (and the blended total kept only as an explicit "all
+orders" line, never the headline D2C number). **Channel-derivation rule (confirmed):** no B2B order tag / `order.company_id`
+exists — the signal is `order.source_name` (matches the dashboard's `segmentExpr`):
+`shopify_draft_order`=B2B, `pos`=trade show, else (`web`/NULL/legacy)=D2C; plus
+`is_sample=true` as its own bucket. Canonical helper: `src/lib/orders/channel.ts`
+(`classifyChannel()` + `orderChannelSql`). Existing dashboards still inline their
+own CASE — adopting this helper across them is a separate cleanup (not in scope).
+
+**Real prod split (validated 2026-06-29):** D2C avg $10.98/order, B2B $19.63,
+trade show $5.40 — blended $12.28 overstates D2C ~12% and hides B2B being ~80%
+pricier. Confirms the segmentation requirement.
+
+- [x] Channel classifier `src/lib/orders/channel.ts` (pure `classifyChannel` +
+      `orderChannelSql`), unit-tested (5 cases).
+- [x] Shipping-cost loader `src/lib/shipping/shipping-cost.ts`:
+      `getShippingCostByChannel(range)` (sums per order_id, then groups by channel
+      — no line-item fan-out) + `getShippingCostByOrderIds(ids)`. Integration-tested
+      vs real Postgres (channel grouping, per-order sums, multi-charge orders).
+- [x] Admin orders list (`(admin)/orders/page.tsx`): Channel badge + per-order
+      "Shipping cost" column.
+- [x] Margin page (`(admin)/cogs/page.tsx`): "Shipping cost by channel" table
+      (orders / total / avg-per-order per channel + a muted blended row with a
+      "don't quote as D2C" caption).
+- [x] AI assistant glossary updated (`glossary.ts`): shipping cost now recorded;
+      instructs the assistant to report it per channel, never blended as D2C.
+- [x] **True (contribution) margin per channel** — `src/lib/margin/` (`compute.ts`
+      pure rollup + `true-margin.ts` loader, mirroring the cogs split). Order-grain:
+      revenue − COGS − shipping − refunds, grouped by channel. Surfaced as the
+      "True margin by channel" table on `/cogs` (replaced the shipping-only table).
+      Tests: 4 unit + 1 integration vs real Postgres.
+      - **CAVEAT (data state, not a bug):** `getAverageUnitCostBySku()` returns 0
+        SKUs with a cost basis on prod, so COGS = $0 in the margin table today —
+        exactly like the existing COGS page (84 sold SKUs, all uncosted). The
+        margin is wired correctly and COGS flows in automatically once production
+        POs are received / paid-invoiced. The `uncosted revenue` column + caption
+        make the gap explicit. Until then, contribution ≈ revenue − shipping −
+        refunds and reads high (D2C 81%, B2B 92%).
+      - Revenue counts all line items incl. null-SKU ones (as uncosted), so the
+        per-channel revenue total is slightly higher than the COGS card's Revenue
+        (which drops null-SKU rows) — intentional; margin should count all product
+        revenue.
+- [ ] Carrier-mix + ship-time analytics from `shipment` (lower priority).
+- [ ] Verify the assistant's read-only DB role has SELECT on `shipment` /
+      `shipping_charge` (else AI shipping queries error). Update
+      `specs/current/integrations.md` + `data-flows.md`.
 
 ### Phase 2.5: Historical backfill (small, do alongside Phase 3)
 - [ ] The auto-sync only writes shipments when an order is (re)synced, so only
