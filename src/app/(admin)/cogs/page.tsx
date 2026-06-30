@@ -51,12 +51,18 @@ export default async function CogsPage({
       orders: a.orders + r.orders,
       revenue: a.revenue + r.revenueCents,
       cogs: a.cogs + r.cogsCents,
+      costedRevenue: a.costedRevenue + r.costedRevenueCents,
       shipping: a.shipping + r.shippingCostCents,
       refunds: a.refunds + r.refundsCents,
       contribution: a.contribution + r.contributionCents,
     }),
-    { orders: 0, revenue: 0, cogs: 0, shipping: 0, refunds: 0, contribution: 0 },
+    { orders: 0, revenue: 0, cogs: 0, costedRevenue: 0, shipping: 0, refunds: 0, contribution: 0 },
   );
+  // Share of revenue we can actually attribute a product cost to. Until this is
+  // meaningful, contribution/margin are withheld (a margin without COGS would
+  // misrank channels — e.g. B2B, sold cheaper per unit, would read higher).
+  const cogsCoverage =
+    marginBlended.revenue > 0 ? marginBlended.costedRevenue / marginBlended.revenue : 0;
 
   const stats = [
     { label: "Revenue", value: fmt(totals.revenueCents) },
@@ -175,9 +181,27 @@ export default async function CogsPage({
           paid, from Shopify billing) − refunds, per channel. Reported per channel
           because D2C and B2B economics differ sharply — never read the blended
           row as the D2C number. Samples excluded; payment fees and tax not
-          included; SKUs without a PO cost basis contribute no COGS (so a channel
-          heavy in uncosted SKUs reads high).
+          included.
         </p>
+
+        {cogsCoverage === 0 ? (
+          <p className="mt-3 max-w-3xl rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <strong>Margin can&apos;t be computed yet.</strong> No SKU has a
+            recognized product cost ({Math.round(cogsCoverage * 100)}% of revenue
+            costed), so <strong>Contribution and Margin %&nbsp;are withheld</strong>{" "}
+            — showing them would misrank channels (B2B sells at a lower price for
+            the same unit cost, so it must end up <em>below</em> D2C, not above).
+            Revenue, Shipping and Refunds below are accurate. COGS is recognized
+            from production POs once they&apos;re marked received or paid by
+            invoice — none are yet.
+          </p>
+        ) : cogsCoverage < 0.999 ? (
+          <p className="mt-3 max-w-3xl rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Partial COGS coverage ({Math.round(cogsCoverage * 100)}% of revenue
+            costed). Margin&nbsp;% is shown only for channels whose revenue is
+            fully costed; others are blank to avoid overstating.
+          </p>
+        ) : null}
 
         <DataTable className="mt-4">
           <Table>
@@ -222,10 +246,18 @@ export default async function CogsPage({
                       <Mono>{fmt(r.refundsCents)}</Mono>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Mono>{fmt(r.contributionCents)}</Mono>
+                      {r.costedRevenueCents > 0 ? (
+                        <Mono>{fmt(r.contributionCents)}</Mono>
+                      ) : (
+                        <Muted>—</Muted>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Mono>{pct(r.marginPct)}</Mono>
+                      {r.marginPct == null ? (
+                        <Muted>—</Muted>
+                      ) : (
+                        <Mono>{pct(r.marginPct)}</Mono>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -251,15 +283,15 @@ export default async function CogsPage({
                     <Muted>{fmt(marginBlended.refunds)}</Muted>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Muted>{fmt(marginBlended.contribution)}</Muted>
+                    <Muted>
+                      {cogsCoverage > 0 ? fmt(marginBlended.contribution) : "—"}
+                    </Muted>
                   </TableCell>
                   <TableCell className="text-right">
                     <Muted>
-                      {pct(
-                        marginBlended.revenue > 0
-                          ? (marginBlended.contribution / marginBlended.revenue) * 100
-                          : null,
-                      )}
+                      {cogsCoverage >= 0.999 && marginBlended.revenue > 0
+                        ? pct((marginBlended.contribution / marginBlended.revenue) * 100)
+                        : "—"}
                     </Muted>
                   </TableCell>
                 </TableRow>

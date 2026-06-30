@@ -154,13 +154,22 @@ pricier. Confirms the segmentation requirement.
       revenue − COGS − shipping − refunds, grouped by channel. Surfaced as the
       "True margin by channel" table on `/cogs` (replaced the shipping-only table).
       Tests: 4 unit + 1 integration vs real Postgres.
-      - **CAVEAT (data state, not a bug):** `getAverageUnitCostBySku()` returns 0
-        SKUs with a cost basis on prod, so COGS = $0 in the margin table today —
-        exactly like the existing COGS page (84 sold SKUs, all uncosted). The
-        margin is wired correctly and COGS flows in automatically once production
-        POs are received / paid-invoiced. The `uncosted revenue` column + caption
-        make the gap explicit. Until then, contribution ≈ revenue − shipping −
-        refunds and reads high (D2C 81%, B2B 92%).
+      - **COGS-coverage gating (added after Tom caught inverted margins):** with
+        COGS=$0, contribution = revenue − shipping − refunds and the margin % just
+        measures shipping/refund efficiency — which ranked B2B (92%) *above* D2C
+        (81%), the opposite of reality (B2B sells the same buckle at a lower price,
+        so its true margin MUST be lower). Fix: `marginPct` is now **null unless a
+        channel's revenue is FULLY costed**, and the page withholds Contribution +
+        Margin % entirely when COGS coverage is 0 (amber banner explains; Revenue/
+        Shipping/Refunds still shown — those are real). Unit test asserts that once
+        costed, a lower B2B price yields a lower margin% than D2C.
+      - **COGS recognition is the real blocker (prod):** 13 production POs exist,
+        11 PO lines carry unit costs — but **0 POs are marked received and 0 source
+        POs are paid-invoiced**, so `getAverageUnitCostBySku()` (received-or-paid
+        only) recognizes nothing. COGS lights up automatically once POs are marked
+        received / invoices paid. Open decision for Tom/Greg: keep strict
+        recognition (wait for receipt) vs add a per-SKU **standard cost** for margin
+        analysis on already-shipped orders. No code change until decided.
       - Revenue counts all line items incl. null-SKU ones (as uncosted), so the
         per-channel revenue total is slightly higher than the COGS card's Revenue
         (which drops null-SKU rows) — intentional; margin should count all product

@@ -14,13 +14,20 @@ export interface ChannelMargin {
   orders: number;
   revenueCents: number;
   cogsCents: number;
+  /** Revenue from SKUs that DO have a PO cost basis. */
+  costedRevenueCents: number;
   /** Revenue from SKUs that have no PO cost basis (excluded from COGS). */
   uncostedRevenueCents: number;
   shippingCostCents: number;
   refundsCents: number;
-  /** revenue − cogs − shipping − refunds. */
+  /** revenue − cogs − shipping − refunds. Only meaningful once COGS is costed. */
   contributionCents: number;
-  /** contribution / revenue, %. Null when revenue is 0. */
+  /**
+   * contribution / revenue, %. **Null unless ALL of the channel's revenue is
+   * costed** — a partially- or un-costed channel has no trustworthy margin (the
+   * missing product cost would only lower it), so we refuse to show a number
+   * rather than mislead. `costedRevenueCents` vs `revenueCents` is the coverage.
+   */
   marginPct: number | null;
 }
 
@@ -44,6 +51,7 @@ function emptyMargin(channel: OrderChannel): ChannelMargin {
     orders: 0,
     revenueCents: 0,
     cogsCents: 0,
+    costedRevenueCents: 0,
     uncostedRevenueCents: 0,
     shippingCostCents: 0,
     refundsCents: 0,
@@ -84,15 +92,25 @@ export function rollUpMarginByChannel(inp: MarginRollupInputs): ChannelMargin[] 
     const rev = li.priceCents * li.quantity;
     m.revenueCents += rev;
     const cost = li.sku ? inp.costBySku.get(li.sku) : undefined;
-    if (cost != null) m.cogsCents += Math.round(cost * li.quantity);
-    else m.uncostedRevenueCents += rev;
+    if (cost != null) {
+      m.cogsCents += Math.round(cost * li.quantity);
+      m.costedRevenueCents += rev;
+    } else {
+      m.uncostedRevenueCents += rev;
+    }
   }
 
   for (const m of acc.values()) {
     m.contributionCents =
       m.revenueCents - m.cogsCents - m.shippingCostCents - m.refundsCents;
-    m.marginPct =
-      m.revenueCents > 0 ? (m.contributionCents / m.revenueCents) * 100 : null;
+    // Margin % only when the channel is FULLY costed — otherwise the absent
+    // product cost would make any % an overstatement (the exact trap where B2B,
+    // sold cheaper per unit, would otherwise read higher than D2C).
+    const fullyCosted =
+      m.revenueCents > 0 && m.costedRevenueCents === m.revenueCents;
+    m.marginPct = fullyCosted
+      ? (m.contributionCents / m.revenueCents) * 100
+      : null;
   }
 
   // Stable display order.
