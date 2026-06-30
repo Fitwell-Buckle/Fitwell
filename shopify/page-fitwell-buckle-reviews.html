@@ -37,13 +37,39 @@
     }
     .fw-reviews__rating strong{ color:var(--fw-gold); }
 
+    .fw-reviews__gallery{
+      display:grid;
+      grid-template-columns:repeat(6,1fr);
+      gap:12px;
+      margin:24px 0 4px;
+    }
+    .fw-reviews__gallery figure{ margin:0; }
+    .fw-reviews__gallery img{
+      width:100%;
+      aspect-ratio:1/1;
+      object-fit:cover;
+      border-radius:12px;
+      border:1px solid var(--fw-line);
+      display:block;
+    }
+    .fw-reviews__gallery figcaption{
+      margin-top:6px;
+      font-size:12px;
+      opacity:.7;
+      text-align:center;
+    }
+    @media (max-width:760px){
+      .fw-reviews__gallery{ grid-template-columns:repeat(3,1fr); gap:8px; }
+    }
+
     .fw-reviews__section{ margin-top:48px; }
     .fw-reviews__label{
-      font-size:12px;
-      letter-spacing:.14em;
+      font-size:16px;
+      font-weight:700;
+      letter-spacing:.08em;
       text-transform:uppercase;
       color:var(--fw-gold);
-      margin-bottom:6px;
+      margin-bottom:10px;
       text-align:center;
     }
     .fw-reviews__heading{
@@ -96,6 +122,12 @@
       line-height:1.5;
       opacity:.9;
     }
+    .fw-reviews__btnRow{
+      display:flex;
+      gap:14px;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
     .fw-reviews__btn{
       display:inline-flex;
       padding:14px 26px;
@@ -106,6 +138,12 @@
       text-decoration:none;
       box-shadow:0 14px 32px rgba(21,38,44,.45);
     }
+    .fw-reviews__btn--alt{
+      background:transparent;
+      color:var(--fw-text);
+      border:1px solid var(--fw-gold);
+      box-shadow:none;
+    }
 
     @media (max-width:760px){
       .fw-reviews__grid{ grid-template-columns:1fr; gap:14px; }
@@ -115,15 +153,28 @@
 
   <!-- HERO -->
   <div class="fw-reviews__hero">
-    <h1 class="fw-reviews__headline">Your in-between-holes problem — finally solved</h1>
-    <p class="fw-reviews__subhead">The watch you stopped wearing because it was just too tight, or too loose? Wearable again.</p>
+    <h1 class="fw-reviews__headline">Your in-between holes problem. Finally solved</h1>
+    <p class="fw-reviews__subhead">The watch you stopped wearing because it was just too tight, or too loose... Back on your wrist.</p>
     <div class="fw-reviews__rating">⭐ <strong>4.6★</strong> from 97 verified owners</div>
+  </div>
+
+  <!-- PHOTO GALLERY (real customer photos from Judge.me) -->
+  <div class="fw-reviews__section">
+    <div class="fw-reviews__label">Real owners, real watches</div>
+    <div class="fw-reviews__gallery">
+      <figure><img loading="lazy" alt="A Fitwell owner's watch" src="https://review-images.judge.me/fitwell-buckle-co/1778893575__1000024040__original.jpg?quality=80&amp;width=800"><figcaption>Andrew B.</figcaption></figure>
+      <figure><img loading="lazy" alt="A Fitwell owner's watch" src="https://review-images.judge.me/fitwell-buckle-co/1777402830__14429__original.jpg?quality=80&amp;width=800"><figcaption>Geof</figcaption></figure>
+      <figure><img loading="lazy" alt="A Fitwell owner's watch" src="https://review-images.judge.me/fitwell-buckle-co/1776451249__img_8549__original.jpeg?quality=80&amp;width=800"><figcaption>James S.</figcaption></figure>
+      <figure><img loading="lazy" alt="A Fitwell owner's watch" src="https://review-images.judge.me/fitwell-buckle-co/1770840736__img_3461__original.jpeg?quality=80&amp;width=800"><figcaption>Olukayode D.</figcaption></figure>
+      <figure><img loading="lazy" alt="A Fitwell owner's watch" src="https://review-images.judge.me/fitwell-buckle-co/1753797118__0__myDuk95___1751429870__img_4059__original__original.jpeg?quality=80&amp;width=800"><figcaption>Brandon S.</figcaption></figure>
+      <figure><img loading="lazy" alt="A Fitwell owner's watch" src="https://review-images.judge.me/fitwell-buckle-co/1728682854__pxl_20241011_213925028__original.jpg?quality=80&amp;width=800"><figcaption>Keith</figcaption></figure>
+    </div>
   </div>
 
   <!-- 2. THE PROBLEM, IN OWNERS' WORDS -->
   <div class="fw-reviews__section" data-section="problem">
-    <div class="fw-reviews__label">The tweener problem</div>
-    <h2 class="fw-reviews__heading">“At their best in between two holes”</h2>
+    <div class="fw-reviews__label">The in-between problem</div>
+    <h2 class="fw-reviews__heading">“The half-a-hole adjustment we never had”</h2>
     <div class="fw-reviews__grid">
       <div class="fw-reviews__card">
         <div class="fw-reviews__stars">★★★★★</div>
@@ -233,7 +284,10 @@
   <!-- 7. CTA -->
   <div class="fw-reviews__cta" data-section="cta">
     <h2 class="fw-reviews__ctaHead">Find your fit</h2>
-    <p class="fw-reviews__ctaSub">M1 replaces your buckle on pin-and-tang straps. M4 adds a micro-adjust link to deployants and closures you can’t swap. Set it once — and finally wear the watch you’d shelved.</p>
-    <a class="fw-reviews__btn" data-cta="reviews_find_your_fit" href="/collections/buckles">Shop the buckles</a>
+    <p class="fw-reviews__ctaSub">The M1 replaces your existing buckle to add micro-adjust. The M4 adds a micro-adjust link to deployants or buckles you don’t want to swap. Set your fit — and finally wear the watch you’d shelved.</p>
+    <div class="fw-reviews__btnRow">
+      <a class="fw-reviews__btn" data-cta="reviews_shop_m1" href="/collections/buckles">Shop The M1</a>
+      <a class="fw-reviews__btn fw-reviews__btn--alt" data-cta="reviews_shop_m4" href="/collections/fitwell-universal-micro-adjust-link">Shop The M4</a>
+    </div>
   </div>
 </div>

@@ -117,8 +117,8 @@ visual demonstration matters for P2.
 **Target persona:** mixed (P5 wasted-watch / P2 casual-owner primary)
 **Target funnel stage:** `considering` → `converting`
 **Page goal in one sentence:** Convert a brand-aware buyer (typically Meta/creator-exposed, now searching "fitwell buckle review" to validate) with real owner proof, organized around the between-holes outcome — no discount.
-**Primary CTA:** `reviews_find_your_fit` → `/collections/buckles`
-**Success signal (PostHog):** `cta_clicked` (`reviews_find_your_fit`); `section_scrolled_into_view` on `comparison`/`service`; downstream `product_viewed` → `purchase_completed`.
+**Primary CTA:** dual — `reviews_shop_m1` → `/collections/buckles` and `reviews_shop_m4` → `/collections/fitwell-universal-micro-adjust-link`
+**Success signal (PostHog):** `cta_clicked` (`reviews_shop_m1` / `reviews_shop_m4`); `section_scrolled_into_view` on `comparison`/`service`; downstream `product_viewed` → `purchase_completed`.
 **Testing hypothesis:** — (also captures the GSC "fitwell buckle review" SERP gap, pos 9.3 → page 1; see `work-plans/todo/gsc-organic-search-plays.md` Phase 1)
 **Variant of:** —
 **Last reviewed:** 2026-06-30
