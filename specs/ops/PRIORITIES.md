@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-06-27
+Last updated: 2026-06-29
 
 ## 🚀 Active (2026-06-27) — D2C 360 growth push: GO
 
@@ -22,6 +22,49 @@ modeled ~$120k (Feb '27); they come back in as returns prove out. Next: onboard
 Lucas, content blitz, verify conversion
 tracking, Shopify audit, creator import + Wave 1 outreach, TikTok Shop standup.
 Open (Oliver): wholesale/OEM ramp, TikTok Shop fulfillment, deployant timing.
+
+## 🔧 Shipped 2026-06-29 — Analytics pipelines repaired + GSC stood up + staleness monitoring
+
+A "visitors/conversions over the past 90 days" question surfaced that several
+analytics extracts had silently died or were never configured. Diagnosed and
+fixed end-to-end. All pushed to main (commits `5340004`, `cb028f0`, `3eb8a44`,
+`3c3aa27`, `60d727f`); release logged in `releases.yaml` (2026-06-29).
+
+- **Google Ads — fixed.** API `v20` was deprecated and **blocked** by Google
+  (400 `UNSUPPORTED_VERSION`) ~06-16, silently halting `google_ads_daily`.
+  Bumped to `v24` via an `ADS_API_VERSION` constant, verified live, gap
+  backfilled.
+- **GSC — stood up from zero** (had never produced a row). Enabled the Search
+  Console API (GCP project `992120641760`), verified the
+  `sc-domain:fitwellbuckle.co` Domain property via Shopify DNS TXT, granted the
+  service account (`fitwell-analytics@…`) Restricted access, set `GSC_SITE_URL`
+  in Vercel prod (marked sensitive — pulls back empty, works at runtime),
+  backfilled the full ~16-month window (**20,867 rows**, 2025-02-27 →
+  2026-06-26), confirmed the live daily cron. Work plan moved to
+  `completed/gsc-pipeline-setup.md`.
+- **Pipeline staleness monitoring — NEW.** The health cron (`/api/cron/health`,
+  every 4h) now checks `MAX(date)` freshness per pipeline (72h for daily
+  extracts, 144h for GSC's lag) and raises a deduped admin notification (in-app
+  + Web Push, ≤1/20h) when an `expectLive` pipeline goes stale. This closes the
+  gap that let GA4/Ads/GSC sit dead for weeks unnoticed (the cron only checked
+  DB + Shopify before). `src/lib/analytics/pipeline-health.ts`.
+- **Google token cache — fixed.** `getGoogleAccessToken` cached one global token
+  ignoring requested scopes, so a warm Fluid-Compute instance could hand a
+  GA4-scoped token to the Ads extract (`ACCESS_TOKEN_SCOPE_INSUFFICIENT`). Now
+  keyed by the (sorted) scope set.
+- **email_match attribution — fixed** (closes the WS6 backfill-adjacent gap).
+  The fallback linked orders in the DB but never emitted `purchase_completed`
+  or stamped `posthog_distinct_id`, so email-matched conversions counted toward
+  `link_method` coverage yet stayed invisible to PostHog — why the PostHog
+  purchase count sat below DB linkage. Now mirrors the pixel path when the
+  matched touch carries a distinct_id. `attribution.md` §4 updated.
+
+**Data note:** GA4 itself had already self-recovered in prod (broke ~05-22,
+fixed + backfilled before this session). The original question's first answer
+leaned on a stale personal dev branch and understated things — corrected
+prod 90-day read: **756 orders**, ~79% recent pixel linkage (post-06-04), not
+the alarming 1.5%. All five extracts (GA4, Google Ads, Meta, PostHog, GSC) are
+now live, current, and monitored.
 
 ## 🧹 Ops note (2026-06-22) — harmless orphan row in prod `__drizzle_migrations`
 
@@ -335,39 +378,39 @@ All pages functional with real data, shared UI components (PageHeader, Badge, Da
 
 ---
 
-### 4. 🔨 Analytics Extraction Pipeline (Google + Meta)
-**Last worked**: 2026-05-13
+### 4. ✅ Analytics Extraction Pipeline (Google + Meta + GSC) — all live + monitored
+**Last worked**: 2026-06-29
 **Source of truth**: `specs/work-plans/todo/google-integrations.md`
 **Owner**: Greg
 
-**GA4 — LIVE ✅**
+**All five extracts (GA4, Google Ads, Meta, PostHog, GSC) are live, current,
+and guarded by the new health-cron staleness monitor as of 2026-06-29 — see the
+"Shipped 2026-06-29" section at the top of this doc.** Sub-status below.
+
+**GA4 — LIVE ✅** (broke ~05-22, self-recovered + backfilled in prod before 06-29)
 - [x] Service account created + credentials in Vercel + .env.local
 - [x] Service account added to GA4 via Analytics Admin API (OAuth Playground workaround for Google UI bug)
 - [x] GA4 extraction verified working
 - [x] 30-day backfill complete (752 rows)
 - [x] Campaigns page shows real GA4 traffic data
 
-**Google Search Console — code ready, needs access grant**
-- [ ] Add service account to GSC via OAuth Playground (same workaround as GA4)
-- [ ] Test extraction, backfill
+**Google Search Console — LIVE ✅ (2026-06-29)**
+- [x] Search Console API enabled (GCP `992120641760`); `sc-domain:fitwellbuckle.co` Domain property verified via Shopify DNS TXT; service account granted Restricted access; `GSC_SITE_URL` set in Vercel prod (sensitive)
+- [x] Live daily cron verified + full ~16-month backfill (20,867 rows, 2025-02-27 → 2026-06-26). Work plan → `completed/gsc-pipeline-setup.md`
 
-**Google Ads — pending API approval**
+**Google Ads — LIVE ✅** (deprecated-version outage fixed 2026-06-29)
 - [x] Manager Account created (272-385-8162), linked to Fitwell Ads (293-513-7197)
 - [x] Developer token obtained, set in Vercel + .env.local
 - [x] Google Ads API enabled on GCP project
-- [x] Basic access application submitted (2026-05-14) — expect ~3 business days
-- Check approval status: Google Ads → switch to manager account 272-385-8162 → Tools (wrench) → Setup → API Center → "Access level" (Test → Basic → Standard). Google also emails the application contact on status change. Definitive test: a real extraction fails with DEVELOPER_TOKEN_NOT_APPROVED until Basic is granted.
-- [ ] Once approved: test extraction, backfill 30 days
+- [x] Basic access approved; extraction live in `google_ads_daily`
+- [x] **2026-06-29:** API `v20` deprecated/blocked by Google ~06-16 (silent 400 `UNSUPPORTED_VERSION`) — bumped to `v24`, gap backfilled. Pin lives in `ADS_API_VERSION` (`src/lib/analytics/google-ads.ts`); Google forces a version bump roughly yearly, so the staleness monitor will catch the next one.
 
-**Meta Ads — pending token approval**
+**Meta Ads — LIVE ✅**
 - [x] Ad Account ID: 821060387465001
 - [x] Meta App "Ad Manager" created, connected to Fitwell Buckles business
 - [x] System user "Fitwell Analytics" created (Employee access — upgrade to Admin after 7 days for write access / inventory management)
 - [x] Ad Manager app assigned with full control
-- [ ] **Token generation pending team approval** — Oliver or Tom needs to approve in Meta Business Settings
-- [ ] Once token is available: set META_ACCESS_TOKEN in Vercel + .env.local
-- [ ] Add `meta_ads_daily` table migration
-- [ ] Test extraction, backfill
+- [x] Token generated + `META_ACCESS_TOKEN` set in Vercel; `meta_ads_daily` table live; extraction current (66 days as of 06-28)
 
 **Future: upgrade Meta system user to Admin** for inventory-aware ad management (pause ads when products go out of stock). Requires 7 days from system user creation (~2026-05-21).
 
@@ -411,7 +454,7 @@ event taxonomy flowing since: pageview/product/cart/checkout events plus
 
 **Remaining:**
 - [ ] Future: identify admin staff in the admin posthog-provider (so staff Persons aren't created backwards via test purchases — Greg's admin events were back-stitched onto his email Person during the Phase 0 test).
-- [ ] Future: backfill pre-pixel orders via email-match for historical attribution (overlaps `utm-linking-gap.md` backfill). Not load-bearing — defer until the live funnel is settled.
+- [x] **2026-06-29: email_match now emits `purchase_completed` + stamps `posthog_distinct_id`** when the matched touch carries a distinct_id — previously it linked the order in the DB but emitted nothing, leaving those conversions invisible to PostHog (why the PostHog purchase count sat below DB link coverage). Mirrors the pixel path now (`60d727f`; `attribution.md` §4). This fixes the *forward* path; retroactively replaying historical email_match orders into PostHog stays deferred (back-dating events is messy + low-value — advised against).
 
 **Why this matters now:** every dollar of additional ad spend without instrumentation is a dollar we can't learn from. Until the funnel is observable, scaling top-of-funnel is throwing darts.
 
