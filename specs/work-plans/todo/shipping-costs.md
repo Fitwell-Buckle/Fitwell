@@ -207,8 +207,22 @@ adopting this helper across them is a separate cleanup.
    `dotenv -e .env.production.local -- tsx scripts/import-shipping-costs.ts <csv>`
    (use `--dry` first to read the real match rate — dev's 660/1207 understates it
    because dev is a partial branch).
-5. Establish a cadence: re-export the bill CSV monthly and re-run the importer
-   (idempotent, so re-importing an overlapping range is safe).
+5. Establish a cadence: re-export the bill CSV weekly and re-import.
+
+### In-app upload + weekly reminder (2026-06-30, Tom's request)
+- `POST /api/shipping-costs/import` — admin-auth route; accepts the billing CSV
+  (multipart), runs the same `parseBillingCsv` + `importShippingCharges` lib as the
+  CLI (idempotent, delete-replace by Bill #). Returns the import summary.
+- Upload modal (`src/components/shipping/shipping-cost-upload-modal.tsx`) — file
+  picker → POST → result. Shared by:
+  - **Weekly reminder banner** in the admin layout — shows when the last import is
+    ≥ `SHIPPING_IMPORT_STALE_DAYS` (7) old (or never), measured from
+    `max(shipping_charge.imported_at)` so it clears on upload. Dismissible per
+    session. `src/lib/shipping/import-status.ts` + `shipping-cost-reminder.tsx`.
+  - **Anytime "Upload shipping costs" button** on `/cogs` (so mid-week uploads
+    don't depend on the banner). `shipping-cost-upload-button.tsx`.
+- So Tom no longer needs the CLI; the `scripts/import-shipping-costs.ts` path
+  remains for bulk/historical backfills.
 
 ## Notes
 

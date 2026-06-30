@@ -5,6 +5,8 @@ import { parseDateRange } from "@/lib/date-range";
 import { getCogs } from "@/lib/cogs/cogs";
 import { getMarginByChannel, MARGIN_COVERAGE_THRESHOLD } from "@/lib/margin/true-margin";
 import { ORDER_CHANNEL_LABELS } from "@/lib/orders/channel";
+import { getShippingImportStatus } from "@/lib/shipping/import-status";
+import { ShippingCostUploadButton } from "@/components/shipping/shipping-cost-upload-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, Mono, Muted } from "@/components/ui/data-table";
@@ -46,6 +48,7 @@ export default async function CogsPage({
 
   // Contribution margin per channel (already in canonical channel order).
   const marginByChannel = await getMarginByChannel({ from, to });
+  const shippingImport = await getShippingImportStatus();
   const marginBlended = marginByChannel.reduce(
     (a, r) => ({
       orders: a.orders + r.orders,
@@ -180,9 +183,14 @@ export default async function CogsPage({
       )}
 
       <section className="mt-10">
-        <h2 className="text-lg font-semibold text-zinc-900">
-          True margin by channel
-        </h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold text-zinc-900">
+            True margin by channel
+          </h2>
+          <ShippingCostUploadButton
+            lastImportedAt={shippingImport.lastImportedAt?.toISOString() ?? null}
+          />
+        </div>
         <p className="mt-1 max-w-3xl text-xs text-zinc-500">
           Contribution = net product revenue − COGS − carrier shipping cost (what
           we paid, from Shopify billing) − refunds, per channel. Revenue is the

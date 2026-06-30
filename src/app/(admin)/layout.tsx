@@ -12,6 +12,8 @@ import { PosthogAdminIdentify } from "@/components/providers/posthog-admin-ident
 import { StageLabelsProvider } from "@/components/production/stage-labels-provider";
 import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
+import { ShippingCostReminder } from "@/components/shipping/shipping-cost-reminder";
+import { getShippingImportStatus, daysSince } from "@/lib/shipping/import-status";
 
 export default async function AdminLayout({
   children,
@@ -24,10 +26,13 @@ export default async function AdminLayout({
     redirect("/auth/login");
   }
 
-  const [logoUrl, stageLabels, stageOrder] = await Promise.all([
+  const isSupplier = session.user.role === "supplier";
+
+  const [logoUrl, stageLabels, stageOrder, shippingStatus] = await Promise.all([
     getStoreLogoUrl(),
     getStageLabels(),
     getStageOrder(),
+    isSupplier ? Promise.resolve(null) : getShippingImportStatus(),
   ]);
 
   return (
@@ -48,6 +53,14 @@ export default async function AdminLayout({
                 <MobileHeader />
               </Suspense>
             </div>
+            {shippingStatus && (
+              <div className="print:hidden">
+                <ShippingCostReminder
+                  daysSince={daysSince(shippingStatus.lastImportedAt, new Date())}
+                  lastImportedAt={shippingStatus.lastImportedAt?.toISOString() ?? null}
+                />
+              </div>
+            )}
             <main className="flex-1 overflow-auto bg-[#fafafa] px-4 py-8 md:px-10 print:overflow-visible print:bg-white print:p-0">
               <BreadcrumbProvider>
                 <Breadcrumbs />
