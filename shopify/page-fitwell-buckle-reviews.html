@@ -34,7 +34,12 @@
       border:1px solid var(--fw-line);
       background:var(--fw-card);
       font-size:14px;
+      color:inherit;
+      text-decoration:none;
+      cursor:pointer;
+      transition:border-color .15s;
     }
+    .fw-reviews__rating:hover{ border-color:var(--fw-gold); }
     .fw-reviews__rating strong{ color:var(--fw-gold); }
 
     .fw-reviews__section{ margin-top:46px; }
@@ -124,7 +129,7 @@
   <div class="fw-reviews__hero">
     <h1 class="fw-reviews__headline">Your in-between holes problem. Finally solved</h1>
     <p class="fw-reviews__subhead">The watch you stopped wearing because it was just too tight, or too loose... Back on your wrist.</p>
-    <div class="fw-reviews__rating">⭐ <strong>4.6★</strong> from 97 verified owners</div>
+    <a class="fw-reviews__rating" href="/pages/customer-reviews">⭐ <strong>4.6★</strong> from 97 verified owners ›</a>
     <div class="fw-reviews__btnRow" style="margin-top:22px;">
       <a class="fw-reviews__btn" data-cta="reviews_hero_shop_m1" href="/collections/buckles">Shop The M1</a>
       <a class="fw-reviews__btn" data-cta="reviews_hero_shop_m4" href="/collections/fitwell-universal-micro-adjust-link">Shop The M4</a>
