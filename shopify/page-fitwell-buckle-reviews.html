@@ -10,17 +10,18 @@
       padding:8px 20px 40px;
       color:var(--fw-text);
     }
+    .fw-reviews *{ box-sizing:border-box; }
     .fw-reviews__hero{ text-align:center; padding:24px 0 8px; }
     .fw-reviews__headline{
       margin:0 0 14px;
-      font-size:clamp(30px, 3vw, 48px);
+      font-size:clamp(28px, 3vw, 48px);
       line-height:1.08;
       letter-spacing:-.02em;
     }
     .fw-reviews__subhead{
       margin:0 auto 18px;
       max-width:640px;
-      font-size:17px;
+      font-size:clamp(15px,1.6vw,17px);
       line-height:1.5;
       opacity:.92;
     }
@@ -36,9 +37,9 @@
     }
     .fw-reviews__rating strong{ color:var(--fw-gold); }
 
-    .fw-reviews__section{ margin-top:48px; }
+    .fw-reviews__section{ margin-top:46px; }
     .fw-reviews__label{
-      font-size:16px;
+      font-size:clamp(14px,1.5vw,16px);
       font-weight:700;
       letter-spacing:.08em;
       text-transform:uppercase;
@@ -63,52 +64,36 @@
       border:1px solid var(--fw-line);
       background:var(--fw-card);
       border-radius:16px;
-      padding:22px 22px 18px;
+      padding:20px;
       display:flex;
-      flex-direction:column;
+      gap:16px;
+      align-items:stretch;
     }
     .fw-reviews__cardImg{
-      width:100%;
-      aspect-ratio:4/3;
+      flex:0 0 auto;
+      width:112px;
+      height:112px;
       object-fit:cover;
       border-radius:10px;
-      margin:0 0 16px;
       border:1px solid var(--fw-line);
-      display:block;
       background:#0b0f14;
+      display:block;
     }
-    .fw-reviews__stars{ color:var(--fw-gold); font-size:14px; letter-spacing:2px; margin-bottom:10px; }
-    .fw-reviews__quote{
-      font-size:16px;
-      line-height:1.55;
-      margin:0 0 14px;
+    .fw-reviews__cardBody{
+      display:flex;
+      flex-direction:column;
+      flex:1 1 auto;
+      min-width:0;
     }
-    .fw-reviews__by{
-      margin-top:auto;
-      font-size:13.5px;
-      opacity:.85;
-    }
+    .fw-reviews__stars{ color:var(--fw-gold); font-size:14px; letter-spacing:2px; margin-bottom:8px; }
+    .fw-reviews__quote{ font-size:15.5px; line-height:1.5; margin:0 0 12px; }
+    .fw-reviews__by{ margin-top:auto; font-size:13.5px; opacity:.85; }
     .fw-reviews__by b{ color:var(--fw-gold); font-weight:600; opacity:1; }
 
     .fw-reviews__cta{ margin-top:52px; text-align:center; }
-    .fw-reviews__ctaHead{
-      margin:0 0 8px;
-      font-size:clamp(24px, 2.2vw, 34px);
-      line-height:1.12;
-    }
-    .fw-reviews__ctaSub{
-      margin:0 auto 20px;
-      max-width:600px;
-      font-size:16px;
-      line-height:1.5;
-      opacity:.9;
-    }
-    .fw-reviews__btnRow{
-      display:flex;
-      gap:14px;
-      justify-content:center;
-      flex-wrap:wrap;
-    }
+    .fw-reviews__ctaHead{ margin:0 0 8px; font-size:clamp(24px, 2.2vw, 34px); line-height:1.12; }
+    .fw-reviews__ctaSub{ margin:0 auto 20px; max-width:600px; font-size:16px; line-height:1.5; opacity:.9; }
+    .fw-reviews__btnRow{ display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
     .fw-reviews__btn{
       display:inline-flex;
       padding:14px 26px;
@@ -120,18 +105,18 @@
       box-shadow:0 14px 32px rgba(21,38,44,.45);
     }
     .fw-reviews__midcta{
-      display:flex;
-      gap:14px;
-      justify-content:center;
-      flex-wrap:wrap;
-      margin-top:44px;
-      padding-top:40px;
-      border-top:1px solid var(--fw-line);
+      display:flex; gap:14px; justify-content:center; flex-wrap:wrap;
+      margin-top:44px; padding-top:40px; border-top:1px solid var(--fw-line);
     }
 
+    /* Mobile: one column, smaller photo, but keep photo-left so heights stay even */
     @media (max-width:760px){
+      .fw-reviews{ padding:8px 16px 32px; }
       .fw-reviews__grid{ grid-template-columns:1fr; gap:14px; }
-      .fw-reviews__section{ margin-top:38px; }
+      .fw-reviews__section{ margin-top:36px; }
+      .fw-reviews__card{ padding:16px; gap:13px; }
+      .fw-reviews__cardImg{ width:84px; height:84px; }
+      .fw-reviews__btn{ flex:1 1 auto; justify-content:center; }
     }
   </style>
 
@@ -152,25 +137,41 @@
     <h2 class="fw-reviews__heading">“The half-a-hole adjustment we never had”</h2>
     <div class="fw-reviews__grid">
       <div class="fw-reviews__card">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">So many great straps I’ve had are at their best in between two holes…it gets frustrating. This is the solution! No more hole punching!</p>
-        <div class="fw-reviews__by"><b>Ben Stein</b> · M1 Stainless</div>
+        <img class="fw-reviews__cardImg" loading="lazy" alt="James S.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1776451249__img_8549__original.jpeg?quality=80&amp;width=420">
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">It’s working amazing. Helps my watch fit without having to stretch to the next hole. Very easy to adjust when it’s off the wrist, and got to keep the band I liked.</p>
+          <div class="fw-reviews__by"><b>James Sheehy</b> · M1 Stainless</div>
+        </div>
       </div>
       <div class="fw-reviews__card">
-        <img class="fw-reviews__cardImg" loading="lazy" alt="James S.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1776451249__img_8549__original.jpeg?quality=80&amp;width=900">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">It’s working amazing. Helps my watch fit without having to stretch to the next hole. Very easy to adjust when it’s off the wrist, and got to keep the band I liked.</p>
-        <div class="fw-reviews__by"><b>James Sheehy</b> · M1 Stainless</div>
+        <img class="fw-reviews__cardImg" loading="lazy" alt="Keith's watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1728682854__pxl_20241011_213925028__original.jpg?quality=80&amp;width=420">
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">It’s a great solution to a common problem. So far loving it!</p>
+          <div class="fw-reviews__by"><b>Keith</b> · M1 Stainless</div>
+        </div>
       </div>
       <div class="fw-reviews__card">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">On two of my favorite leather straps, my wrist size was exactly between two holes. Not anymore!</p>
-        <div class="fw-reviews__by"><b>Ryan O’Leary</b> · M1 Stainless</div>
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">So many great straps I’ve had are at their best in between two holes…it gets frustrating. This is the solution! No more hole punching!</p>
+          <div class="fw-reviews__by"><b>Ben Stein</b> · M1 Stainless</div>
+        </div>
       </div>
       <div class="fw-reviews__card">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">It made the watch I didn’t wear anymore — because the strap didn’t fit well — a favourite again.</p>
-        <div class="fw-reviews__by"><b>John de Raaf</b> · M4 Universal Link</div>
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">On two of my favorite leather straps, my wrist size was exactly between two holes. Not anymore!</p>
+          <div class="fw-reviews__by"><b>Ryan O’Leary</b> · M1 Stainless</div>
+        </div>
+      </div>
+      <div class="fw-reviews__card">
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">It made the watch I didn’t wear anymore — because the strap didn’t fit well — a favourite again.</p>
+          <div class="fw-reviews__by"><b>John de Raaf</b> · M4 Universal Link</div>
+        </div>
       </div>
     </div>
   </div>
@@ -181,25 +182,41 @@
     <h2 class="fw-reviews__heading">“As comfortable as my metal bracelets”</h2>
     <div class="fw-reviews__grid">
       <div class="fw-reviews__card">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">My leather straps are now as comfortable as my metal bracelets… one on a standard pin buckle as well as 3 on deployant clasps. Now that I have half-sizes, I can always find the right fit.</p>
-        <div class="fw-reviews__by"><b>Markus Dinkel</b> · M4 Universal Link</div>
+        <img class="fw-reviews__cardImg" loading="lazy" alt="Daniel A.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1753797114__0__zPRYJCIy__1743202797__img_1023__original__original.jpeg?quality=80&amp;width=420">
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">I cannot believe no one has ever thought of micro-adjustment for a basic watch buckle before. This is essential in getting the right fit when my wrist expands and contracts due to the weather. Well-made, looks first class, and most importantly, works!</p>
+          <div class="fw-reviews__by"><b>Daniel A.</b> · M1 Stainless</div>
+        </div>
       </div>
       <div class="fw-reviews__card">
-        <img class="fw-reviews__cardImg" loading="lazy" alt="Daniel A.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1753797114__0__zPRYJCIy__1743202797__img_1023__original__original.jpeg?quality=80&amp;width=900">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">I cannot believe no one has ever thought of micro-adjustment for a basic watch buckle before. This is essential in getting the right fit when my wrist expands and contracts due to the weather. Well-made, looks first class, and most importantly, works!</p>
-        <div class="fw-reviews__by"><b>Daniel A.</b> · M1 Stainless</div>
+        <img class="fw-reviews__cardImg" loading="lazy" alt="Geof's watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1777402830__14429__original.jpg?quality=80&amp;width=420">
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">The metal-lined holes don’t allow for any adjustment — I could only get a too-loose or too-tight fit. It’s performed admirably and keeps the watch from sliding around my wrist without being too tight.</p>
+          <div class="fw-reviews__by"><b>Geof</b> · M1 Stainless</div>
+        </div>
       </div>
       <div class="fw-reviews__card">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">Deployant has a charm to it, but the lack of adjustability does not bring joy. With Fitwell, I can use normal straps and get them just so, adjusting through the day as needed. Perfect.</p>
-        <div class="fw-reviews__by"><b>PK</b> · M1 Stainless</div>
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">My leather straps are now as comfortable as my metal bracelets… one on a standard pin buckle as well as 3 on deployant clasps. Now that I have half-sizes, I can always find the right fit.</p>
+          <div class="fw-reviews__by"><b>Markus Dinkel</b> · M4 Universal Link</div>
+        </div>
       </div>
       <div class="fw-reviews__card">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">I have a smaller wrist and could not get a comfortable fit. This buckle allows me to get that proper fit. I can wear this watch now!!</p>
-        <div class="fw-reviews__by"><b>BpF</b> · M1 Titanium</div>
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">Deployant has a charm to it, but the lack of adjustability does not bring joy. With Fitwell, I can use normal straps and get them just so, adjusting through the day as needed. Perfect.</p>
+          <div class="fw-reviews__by"><b>PK</b> · M1 Stainless</div>
+        </div>
+      </div>
+      <div class="fw-reviews__card">
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">I have a smaller wrist and could not get a comfortable fit. This buckle allows me to get that proper fit. I can wear this watch now!!</p>
+          <div class="fw-reviews__by"><b>BpF</b> · M1 Titanium</div>
+        </div>
       </div>
     </div>
     <!-- MID-PAGE CTA -->
@@ -215,15 +232,19 @@
     <h2 class="fw-reviews__heading">“Finished like a piece of jewellery”</h2>
     <div class="fw-reviews__grid">
       <div class="fw-reviews__card">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">Made of very fine quality material and of exceptional construction. Built strong, but also finished like a piece of jewellery. An excellent product from a superlative company.</p>
-        <div class="fw-reviews__by"><b>stephen fitzsimmons</b> · M1 Stainless</div>
+        <img class="fw-reviews__cardImg" loading="lazy" alt="Andrew B.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1778893579__1000024039__original.jpg?quality=80&amp;width=420">
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">Now my leather bracelet actually fits, and the buckle looks better than the stock one. I don’t know of any better way to make a fabric strap fit better.</p>
+          <div class="fw-reviews__by"><b>Andrew Borstein</b> · M1 Rose Gold</div>
+        </div>
       </div>
       <div class="fw-reviews__card">
-        <img class="fw-reviews__cardImg" loading="lazy" alt="Andrew B.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1778893579__1000024039__original.jpg?quality=80&amp;width=900">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">Now my leather bracelet actually fits, and the buckle looks better than the stock one. I don’t know of any better way to make a fabric strap fit better.</p>
-        <div class="fw-reviews__by"><b>Andrew Borstein</b> · M1 Rose Gold</div>
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">Made of very fine quality material and of exceptional construction. Built strong, but also finished like a piece of jewellery. An excellent product from a superlative company.</p>
+          <div class="fw-reviews__by"><b>stephen fitzsimmons</b> · M1 Stainless</div>
+        </div>
       </div>
     </div>
   </div>
@@ -234,15 +255,19 @@
     <h2 class="fw-reviews__heading">“Customer service is second to none”</h2>
     <div class="fw-reviews__grid">
       <div class="fw-reviews__card">
-        <img class="fw-reviews__cardImg" loading="lazy" alt="Olukayode D.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1770840736__img_3461__original.jpeg?quality=80&amp;width=900">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">When I experienced a shipment delay, they immediately sent replacement items with expedited shipping, and Tom even covered the clearing fees. That level of service speaks volumes.</p>
-        <div class="fw-reviews__by"><b>Olukayode Disu</b> · M1 Black</div>
+        <img class="fw-reviews__cardImg" loading="lazy" alt="Olukayode D.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1770840736__img_3461__original.jpeg?quality=80&amp;width=420">
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">When I experienced a shipment delay, they immediately sent replacement items with expedited shipping, and Tom even covered the clearing fees. That level of service speaks volumes.</p>
+          <div class="fw-reviews__by"><b>Olukayode Disu</b> · M1 Black</div>
+        </div>
       </div>
       <div class="fw-reviews__card">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">I was recently diagnosed with a wrist injury and switched to straps, but almost every strap felt too loose or too tight. The Fitwell buckles completely solved that. A fantastic design, really well made — plus their customer service is second to none.</p>
-        <div class="fw-reviews__by"><b>Verified owner</b> · M1 Bead-Blasted</div>
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">I was recently diagnosed with a wrist injury and switched to straps, but almost every strap felt too loose or too tight. The Fitwell buckles completely solved that. A fantastic design, really well made — plus their customer service is second to none.</p>
+          <div class="fw-reviews__by"><b>Verified owner</b> · M1 Bead-Blasted</div>
+        </div>
       </div>
     </div>
   </div>
@@ -253,15 +278,19 @@
     <h2 class="fw-reviews__heading">“Own 6 and ordering 6 more”</h2>
     <div class="fw-reviews__grid">
       <div class="fw-reviews__card">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">These buckles should be up for invention of the century. Makes every band I own fit properly. Own 6 and I’m fixing to make another order for 6 more.</p>
-        <div class="fw-reviews__by"><b>Sean Maher</b> · M4 Universal Link</div>
+        <img class="fw-reviews__cardImg" loading="lazy" alt="Brandon S.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1753797118__0__myDuk95___1751429870__img_4059__original__original.jpeg?quality=80&amp;width=420">
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">I love Fitwell buckles. I own nearly a dozen of them. They’re quite useful when you need a little breathing room with your strap but don’t need to move to the next hole. You shouldn’t sleep on the fact the buckles themselves are very good looking… my favorite being the titanium.</p>
+          <div class="fw-reviews__by"><b>Brandon Skinner</b> · M1 Stainless</div>
+        </div>
       </div>
       <div class="fw-reviews__card">
-        <img class="fw-reviews__cardImg" loading="lazy" alt="Brandon S.'s watch with a Fitwell buckle" src="https://review-images.judge.me/fitwell-buckle-co/1753797118__0__myDuk95___1751429870__img_4059__original__original.jpeg?quality=80&amp;width=900">
-        <div class="fw-reviews__stars">★★★★★</div>
-        <p class="fw-reviews__quote">I love Fitwell buckles. I own nearly a dozen of them. They’re quite useful when you need a little breathing room with your strap but don’t need to move to the next hole. You shouldn’t sleep on the fact the buckles themselves are very good looking… my favorite being the titanium.</p>
-        <div class="fw-reviews__by"><b>Brandon Skinner</b> · M1 Stainless</div>
+        <div class="fw-reviews__cardBody">
+          <div class="fw-reviews__stars">★★★★★</div>
+          <p class="fw-reviews__quote">These buckles should be up for invention of the century. Makes every band I own fit properly. Own 6 and I’m fixing to make another order for 6 more.</p>
+          <div class="fw-reviews__by"><b>Sean Maher</b> · M4 Universal Link</div>
+        </div>
       </div>
     </div>
   </div>
