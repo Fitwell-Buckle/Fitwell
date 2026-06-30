@@ -66,6 +66,14 @@ prod 90-day read: **756 orders**, ~79% recent pixel linkage (post-06-04), not
 the alarming 1.5%. All five extracts (GA4, Google Ads, Meta, PostHog, GSC) are
 now live, current, and monitored.
 
+**Next (todo): `specs/work-plans/todo/gsc-organic-search-plays.md`** — turn the
+new GSC data into action. First read: organic is **~93% branded**, i.e. a
+*closer/measurement* channel, not an acquisition engine (quantifies "Google is
+the closer"). Plays, in priority order: tighten the branded SERP + a reviews/proof
+page (`fitwell buckle review` ranks pos 9.3), optimize `/collections/buckles` for
+the head terms stuck on page 2, a Fitwell-vs-Delugs comparison page, and a
+recurring GSC cut. Not a big SEO bet — closer-channel hygiene.
+
 ## 🧹 Ops note (2026-06-22) — harmless orphan row in prod `__drizzle_migrations`
 
 `npm run db:pending:prod` prints `(DB has 1 migration not in local journal)`.
