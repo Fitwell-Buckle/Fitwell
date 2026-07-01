@@ -38,6 +38,8 @@ export interface CreatorListRow {
   source: string | null;
   /** Affiliate offer tier (seed | partner | anchor); null until assigned. */
   offerTier: string | null;
+  /** "Pass for now": approved but not being worked this pass (creator.parkedAt). */
+  parked: boolean;
   platforms: {
     platform: string;
     handle: string;
@@ -66,6 +68,8 @@ export interface CreatorListParams {
   source?: string;
   /** Affiliate offer tier filter: seed | partner | anchor. */
   tier?: string;
+  /** "1" shows ONLY parked ("pass for now") creators; hidden everywhere else. */
+  parked?: string;
   /** substring match on name or any handle */
   q?: string;
   /** fit | followers | er | lastpost | name */
@@ -99,6 +103,14 @@ export function filterCreators(
   } else if (params.all !== "1") {
     out = out.filter((r) => !r.outOfMarket);
   }
+  // Parked ("pass for now"): approved creators you're not working this pass.
+  // Hidden from every default view; surfaced only via the Parked pill or
+  // "Everything" — mirrors the out-of-market bench.
+  if (params.parked === "1") {
+    out = out.filter((r) => r.parked);
+  } else if (params.all !== "1") {
+    out = out.filter((r) => !r.parked);
+  }
   if (params.all !== "1" && !params.status) {
     out = out.filter(
       (r) => r.status !== "burned" && r.status !== "archived",
@@ -120,6 +132,7 @@ export function filterCreators(
     !params.stage &&
     !params.source &&
     !params.tier &&
+    params.parked !== "1" &&
     params.market !== "out" &&
     params.mismatch !== "1"
   ) {

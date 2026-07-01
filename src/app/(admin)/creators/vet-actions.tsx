@@ -14,10 +14,12 @@ export function VetActions({
   creatorId,
   vettingStatus,
   scoreBoost,
+  parked,
 }: {
   creatorId: string;
   vettingStatus: string;
   scoreBoost: number;
+  parked: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -84,6 +86,25 @@ export function VetActions({
           className={cn(btn, "bg-zinc-100 text-zinc-500 hover:bg-zinc-200")}
         >
           ↺
+        </button>
+      )}
+      {vettingStatus === "approved" && (
+        <button
+          title={
+            parked
+              ? "Un-park — return to your active queue"
+              : "Park — pass for now (stays approved, drops out of working views)"
+          }
+          disabled={busy}
+          onClick={() => patch({ parked: !parked })}
+          className={cn(
+            btn,
+            parked
+              ? "bg-amber-500 text-white"
+              : "bg-amber-50 text-amber-700 hover:bg-amber-100",
+          )}
+        >
+          {parked ? "▶" : "⏸"}
         </button>
       )}
       <button

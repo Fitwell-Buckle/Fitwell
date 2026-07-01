@@ -30,6 +30,7 @@ import { CreatorActions } from "./creator-actions";
 import { CreatorEditor } from "./creator-editor";
 import { EmailsEditor } from "./emails-editor";
 import { OutreachPanel } from "./outreach-panel";
+import { ParkButton } from "./park-button";
 import { PlatformEditor } from "./platform-editor";
 import { StatsChart } from "./stats-chart";
 import { VetButtons } from "./vet-buttons";
@@ -287,6 +288,9 @@ export default async function CreatorDetailPage({
               : record.vettingStatus}
           </Badge>
           <Badge>{record.status}</Badge>
+          {record.parkedAt != null && (
+            <Badge className="bg-amber-100 text-amber-700">⏸ parked</Badge>
+          )}
           {record.crossPlatformFit != null && (
             <Badge className="bg-zinc-900 text-white">
               fit {record.crossPlatformFit.toFixed(1)}
@@ -318,10 +322,18 @@ export default async function CreatorDetailPage({
       )}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <VetButtons
-          creatorId={record.id}
-          vettingStatus={record.vettingStatus}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <VetButtons
+            creatorId={record.id}
+            vettingStatus={record.vettingStatus}
+          />
+          {record.vettingStatus === "approved" && (
+            <ParkButton
+              creatorId={record.id}
+              parked={record.parkedAt != null}
+            />
+          )}
+        </div>
         <CreatorActions creatorId={record.id} />
       </div>
 

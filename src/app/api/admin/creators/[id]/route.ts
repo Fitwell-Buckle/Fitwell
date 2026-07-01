@@ -26,6 +26,9 @@ const patchSchema = z
     commissionRatePct: z.number().min(0).max(100).nullable().optional(),
     payoutEmail: z.string().email().max(200).nullable().optional(),
     taxFormStatus: z.enum(TAX_FORM_STATUSES).optional(),
+    // "Pass for now": true stamps parkedAt=now, false clears it (+ the reason).
+    parked: z.boolean().optional(),
+    parkedReason: z.string().max(500).nullable().optional(),
   })
   .refine((b) => Object.keys(b).length > 0, { message: "Empty patch" });
 
@@ -64,6 +67,13 @@ export async function PATCH(
     updates.payoutEmail = parsed.data.payoutEmail?.trim() || null;
   if (parsed.data.taxFormStatus !== undefined)
     updates.taxFormStatus = parsed.data.taxFormStatus;
+  if (parsed.data.parked !== undefined) {
+    updates.parkedAt = parsed.data.parked ? new Date() : null;
+    // Unparking clears the reason too, so a stale note can't linger.
+    if (!parsed.data.parked) updates.parkedReason = null;
+  }
+  if (parsed.data.parkedReason !== undefined)
+    updates.parkedReason = parsed.data.parkedReason?.trim() || null;
 
   // Burned creators get a 12-month cool-off (creator-program.md Phase 3 rule).
   if (parsed.data.status === "burned") {

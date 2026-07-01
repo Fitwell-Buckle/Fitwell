@@ -185,6 +185,7 @@ export default async function CreatorsPage({
       crossPlatformFit: c.crossPlatformFit,
       source: c.source,
       offerTier: c.offerTier,
+      parked: c.parkedAt != null,
       platforms: c.platforms.map((p) => ({
         platform: p.platform,
         handle: p.handle,
@@ -219,6 +220,11 @@ export default async function CreatorsPage({
   // Count of fixable bad-merge suspects (in-market, not dumped).
   const mismatchCount = rows.filter(
     (r) => r.possibleMismatch && !r.outOfMarket && r.vettingStatus !== "rejected",
+  ).length;
+
+  // Approved creators parked for a later pass ("pass for now").
+  const parkedCount = rows.filter(
+    (r) => r.parked && r.vettingStatus !== "rejected",
   ).length;
 
   // Pill-link helper preserving other params.
@@ -305,6 +311,7 @@ export default async function CreatorsPage({
             (r) =>
               r.stage === stage &&
               !r.outOfMarket &&
+              !r.parked &&
               r.vettingStatus !== "rejected",
           ).length;
           const active = params.stage === stage;
@@ -362,6 +369,13 @@ export default async function CreatorsPage({
           </Link>
         )}
         {pill("Out of market", "market", "out", params.market === "out")}
+        {parkedCount > 0 &&
+          pill(
+            `⏸ Parked ${parkedCount}`,
+            "parked",
+            "1",
+            params.parked === "1",
+          )}
         {mismatchCount > 0 &&
           pill(
             `⚠ Mismatch ${mismatchCount}`,
@@ -527,6 +541,7 @@ export default async function CreatorsPage({
                       creatorId={r.id}
                       vettingStatus={r.vettingStatus}
                       scoreBoost={r.scoreBoost}
+                      parked={r.parked}
                     />
                   </TableCell>
                 </ClickableRow>

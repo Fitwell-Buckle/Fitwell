@@ -20,6 +20,7 @@ function row(partial: Partial<CreatorListRow> & { id: string }): CreatorListRow 
     crossPlatformFit: 50,
     source: null,
     offerTier: null,
+    parked: false,
     platforms: [{ platform: "ig", handle: partial.id, fitScore: 50, watchConfidence: "medium" }],
     followersTotal: 10_000,
     bestErPct: 2,
@@ -72,6 +73,33 @@ describe("filterCreators", () => {
 
   it("q matches name or handle", () => {
     expect(filterCreators(ROWS, { q: "watchd" }).map((r) => r.id)).toEqual(["d"]);
+  });
+
+  it("hides parked creators from default views but reveals them under Everything", () => {
+    const rows = [
+      row({ id: "active1", vettingStatus: "approved" }),
+      row({ id: "parked1", vettingStatus: "approved", parked: true }),
+    ];
+    // Under the Approved pill the parked one drops out...
+    expect(
+      filterCreators(rows, { vetting: "approved" }).map((r) => r.id),
+    ).toEqual(["active1"]);
+    // ...but "Everything" reveals it, same as burned/rejected/out-of-market.
+    expect(
+      filterCreators(rows, { all: "1" }).map((r) => r.id).sort(),
+    ).toEqual(["active1", "parked1"]);
+  });
+
+  it("parked=1 shows only parked creators, incl. already-approved", () => {
+    const rows = [
+      row({ id: "active1", vettingStatus: "approved" }),
+      row({ id: "parked1", vettingStatus: "approved", parked: true }),
+      row({ id: "parked2", vettingStatus: "unreviewed", parked: true }),
+    ];
+    expect(filterCreators(rows, { parked: "1" }).map((r) => r.id).sort()).toEqual([
+      "parked1",
+      "parked2",
+    ]);
   });
 
   it("tier filters by offer tier and overrides the to-vet default", () => {
