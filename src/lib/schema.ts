@@ -2236,6 +2236,23 @@ export const creator = pgTable(
     // email OR a phone; emails live in creator_email, the phone lives here.
     phone: text("phone"),
     notes: text("notes"),
+    // --- Affiliate program (creator-outreach-campaign.md Phase 1) ---
+    // Offer band that sets commission + rights ask: seed | partner | anchor.
+    // Assigned during outreach; drives the tier filter/rollups in /creators.
+    offerTier: text("offer_tier"),
+    // Affiliate commission rate in percent (10 seed / 15 partner / 20 anchor,
+    // tunable per creator). Paid to the CREATOR — never a customer discount.
+    // Commission owed = attributed_revenue × rate − recorded payouts.
+    commissionRatePct: real("commission_rate_pct"),
+    // Manual payout destination (PayPal/Wise handle). Payout is manual v1 (D4);
+    // the app only computes owed + records what was paid (creator_payout).
+    payoutEmail: text("payout_email"),
+    // W-9 collection state, gathered at first payout over the floor (D5):
+    // none | requested | received.
+    taxFormStatus: text("tax_form_status").notNull().default("none"),
+    // Set on the creator's first attributed sale — activation metric;
+    // time-to-first-sale is the engagement layer's north star (Phase 6).
+    firstSaleAt: timestamp("first_sale_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },
@@ -2244,6 +2261,7 @@ export const creator = pgTable(
     index("creator_source_idx").on(t.source),
     index("creator_vetting_status_idx").on(t.vettingStatus),
     index("creator_cross_platform_fit_idx").on(t.crossPlatformFit),
+    index("creator_offer_tier_idx").on(t.offerTier),
     index("creator_customer_id_idx").on(t.customerId),
     index("creator_lead_id_idx").on(t.leadId),
     index("creator_company_id_idx").on(t.companyId),
@@ -2400,6 +2418,38 @@ export const creatorDiscountCode = pgTable(
   ],
 );
 
+// Record of commission actually PAID to a creator. Payout is manual v1 (D4 —
+// PayPal/Wise); this table is the ledger so "owed" = earned (from the
+// discount-code → order revenue join) − sum(paid). A ~$25 floor gates a payout
+// (D3). Money in cents (Shopify convention).
+export const creatorPayout = pgTable(
+  "creator_payout",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    creatorId: text("creator_id")
+      .notNull()
+      .references(() => creator.id, { onDelete: "cascade" }),
+    // Free-form period the payout covers, e.g. "2026-07" or "Q3-2026".
+    period: text("period"),
+    amountCents: integer("amount_cents").notNull(),
+    method: text("method"), // paypal | wise | other
+    paidAt: timestamp("paid_at", { mode: "date" }),
+    note: text("note"),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  },
+  (t) => [index("creator_payout_creator_id_idx").on(t.creatorId)],
+);
+
+export const creatorPayoutRelations = relations(creatorPayout, ({ one }) => ({
+  creator: one(creator, {
+    fields: [creatorPayout.creatorId],
+    references: [creator.id],
+  }),
+}));
+
 // Edited/raw deliverables a creator sends back. storage_url is a pointer
 // (Drive/Dropbox) — MVP decision in creator-program.md; rights_expires_at
 // is computed at insert from rights_tier (src/lib/creators/assets.ts) and
@@ -2523,6 +2573,7 @@ export const creatorRelations = relations(creator, ({ one, many }) => ({
   discountCodes: many(creatorDiscountCode),
   outreach: many(creatorOutreach),
   assets: many(creatorAsset),
+  payouts: many(creatorPayout),
 }));
 
 export const creatorPlatformRelations = relations(

@@ -680,6 +680,13 @@
       "when": 1782856593161,
       "tag": "0096_square_edwin_jarvis",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1782937870668,
+      "tag": "0097_smart_power_man",
+      "breakpoints": true
     }
   ]
 }
