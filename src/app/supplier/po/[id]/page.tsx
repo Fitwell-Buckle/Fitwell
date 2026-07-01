@@ -15,7 +15,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { derivePoStage, terminalStage } from "@/lib/production/stages";
+import { derivePoStage, terminalStage, type ProductionStage } from "@/lib/production/stages";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { supplierHasAnyStage, stagesOwnedBySupplier } from "@/lib/production/stage-owners";
 import { subPoStageTargets } from "@/lib/production/service";
@@ -132,6 +132,19 @@ export default async function SupplierPoDetailPage({
     po.supplierId,
     scope.supplierId,
   ).filter((s) => s !== terminal);
+  // "Accepted = started": the internal supplier_po kickoff collapses into the
+  // supplier's first owned work stage on every surface the supplier sees (header
+  // badge + timeline). The stage dropdown already lists only work stages, so this
+  // makes the badge and bar read consistently with it. Matches the admin sub-PO
+  // detail page.
+  const workStages = ownedStages.filter((s) => s !== order[0]);
+  const firstWorkStage = workStages[0] ?? null;
+  // Only the supplier that actually owns the kickoff collapses it — a downstream
+  // supplier viewing a not-yet-started PO should still read "PO Acceptance", not
+  // pretend its own first stage is underway.
+  const ownsKickoff = ownedStages.includes(order[0] as ProductionStage);
+  const presentStage = (s: ProductionStage): ProductionStage =>
+    s === order[0] && ownsKickoff && firstWorkStage ? firstWorkStage : s;
   // Suppliers see only their own work stages + a single "Complete" (hand off to
   // the next team) — never the next team's stage name or the kickoff state.
   const stageOptions = subPoStageTargets(order, ownedStages)
@@ -212,7 +225,9 @@ export default async function SupplierPoDetailPage({
             <div className="mt-1">
               {derivedStage ? (
                 <Badge className={cn(stageBadgeClass(derivedStage))}>
-                  {derivedStage === "mixed" ? "Mixed" : stageLabels[derivedStage]}
+                  {derivedStage === "mixed"
+                    ? "Mixed"
+                    : stageLabels[presentStage(derivedStage)]}
                 </Badge>
               ) : (
                 "—"
@@ -274,18 +289,28 @@ export default async function SupplierPoDetailPage({
             stageTargets: mySubPo?.stageEtas ?? po.stageEtas,
             stageEstimates: perPoStageEstimates,
             lineItems: sortedLineItems.map((li) => {
+              // Work stages only — supplier_po is collapsed into the first work
+              // stage ("accepted = started"), so it's not a segment or legend chip.
               const scopedStages = [
-                ...ownedStages.filter(
+                ...workStages.filter(
                   (s) => !li.stages || li.stages.length === 0 || li.stages.includes(s),
                 ),
                 terminal,
               ];
               const lastOwned = scopedStages[scopedStages.length - 2]; // skip terminal
+              // Remap a line still at the kickoff (and its supplier_po stage_event)
+              // onto its first owned work stage. Remapping the event rather than
+              // dropping it keeps the bar anchored to the PO issue date — the
+              // acceptance span folds into raw material instead of collapsing to a
+              // today-anchored sliver.
+              const lineFirstWork = scopedStages[0] ?? terminal;
+              const remapStage = (s: ProductionStage): ProductionStage =>
+                s === order[0] ? lineFirstWork : s;
               return {
                 id: li.id,
                 sku: li.sku,
                 title: li.title,
-                currentStage: li.currentStage,
+                currentStage: remapStage(li.currentStage),
                 // Walk only the supplier's owned stages (+ terminal so the
                 // projector knows when to stop). Intersect with the line's
                 // own subset so a spring-bar line that skips the supplier's
@@ -315,7 +340,7 @@ export default async function SupplierPoDetailPage({
                     .filter((ev) => order.indexOf(ev.stage) <= currentIdx)
                     .map((ev) => ({
                       id: ev.id,
-                      stage: ev.stage,
+                      stage: remapStage(ev.stage),
                       enteredAt: ev.enteredAt,
                       exitedAt: ev.exitedAt,
                     }));
@@ -326,7 +351,7 @@ export default async function SupplierPoDetailPage({
         ]}
         estimates={estimates}
         stageLabels={stageLabels}
-        order={[...ownedStages, terminal]}
+        order={[...workStages, terminal]}
         estimateSaveRouteBase="/api/supplier/po"
       />
 

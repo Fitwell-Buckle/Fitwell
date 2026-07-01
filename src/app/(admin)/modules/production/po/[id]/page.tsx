@@ -166,6 +166,16 @@ export default async function PoDetailPage({
   // "Complete" that hands the batch to the next team (they don't see the next
   // team's stage name). supplier_po is the internal kickoff — never shown.
   const subWorkStages = subStageKeys.filter((s) => s !== order[0]);
+  // "Accepted = started": a sub-PO's internal `supplier_po` kickoff isn't a stage
+  // the supplier tracks — once the PO is issued the batch is already in its first
+  // owned work stage. Collapse supplier_po → that first work stage on every sub-PO
+  // display surface (header badge, dropdown, timeline) so they read consistently.
+  // The dropdown already showed the first work stage; this aligns the badge and
+  // timeline to match. The sub-PO timeline block below remaps the kickoff
+  // stage_event the same way so the bar keeps its issue-date start.
+  const subFirstWorkStage = subWorkStages[0] ?? null;
+  const presentSubStage = (s: ProductionStage): ProductionStage =>
+    s === order[0] && subFirstWorkStage ? subFirstWorkStage : s;
   const subHandoffStage = subStageKeys.length
     ? nextStage(order, subStageKeys[subStageKeys.length - 1])
     : null;
@@ -175,13 +185,11 @@ export default async function PoDetailPage({
         ...(subHandoffStage ? [{ value: subHandoffStage as string, label: "Complete" }] : []),
       ]
     : [];
-  // The select's current value: the not-started (supplier_po) batch shows the
-  // supplier's first work stage so the dropdown always has a matching option.
+  // The select's current value: a not-started (supplier_po) batch presents as its
+  // first work stage — the same collapse the badge and timeline apply.
   const subCurrentStageValue =
-    isSubPo && subState
-      ? subState.currentStage === order[0]
-        ? subWorkStages[0] ?? subState.currentStage
-        : subState.currentStage
+    isSubPo && subState?.currentStage
+      ? presentSubStage(subState.currentStage)
       : null;
   let subCoverRows: SubPoCoverRow[] = [];
   if (isSubPo && subMaster) {
@@ -238,7 +246,9 @@ export default async function PoDetailPage({
   // A sub-PO has no line items of its own, so its header stage comes from the
   // master's lines that this supplier currently holds.
   const displayStage: ProductionStage | "mixed" | null = isSubPo
-    ? subState?.currentStage ?? null
+    ? subState?.currentStage
+      ? presentSubStage(subState.currentStage)
+      : null
     : derivedStage;
   // Sub-POs listed in pipeline (route) order, not by suffix letter.
   const subPoRank = new Map(plan.map((p, i) => [p.supplierId, i]));
@@ -475,8 +485,11 @@ export default async function PoDetailPage({
                       // its last owned stage to the per-line ETA — the same shape
                       // the supplier portal renders.
                       lineItems: subItems.map((li) => {
+                        // Work stages only — supplier_po is collapsed into the
+                        // first work stage ("accepted = started"), so it's not a
+                        // segment or legend chip on the sub-PO timeline.
                         const scopedStages = [
-                          ...subStageKeys.filter(
+                          ...subWorkStages.filter(
                             (s) =>
                               !li.stages ||
                               li.stages.length === 0 ||
@@ -485,12 +498,20 @@ export default async function PoDetailPage({
                           subTerminal,
                         ];
                         const lastOwned = scopedStages[scopedStages.length - 2];
+                        // Remap a line still at the kickoff (and its supplier_po
+                        // stage_event) onto its first owned work stage. Remapping
+                        // the event rather than dropping it keeps the bar's start
+                        // anchored to the PO issue date — the acceptance span folds
+                        // into raw material instead of collapsing to a today sliver.
+                        const lineFirstWork = scopedStages[0] ?? subTerminal;
+                        const remapStage = (s: ProductionStage): ProductionStage =>
+                          s === order[0] ? lineFirstWork : s;
                         const currentIdx = order.indexOf(li.currentStage);
                         return {
                           id: li.id,
                           sku: li.sku,
                           title: li.title,
-                          currentStage: li.currentStage,
+                          currentStage: remapStage(li.currentStage),
                           stages: scopedStages,
                           stageTargets:
                             lastOwned && li.expectedCompletionDate
@@ -506,7 +527,7 @@ export default async function PoDetailPage({
                             .filter((ev) => order.indexOf(ev.stage) <= currentIdx)
                             .map((ev) => ({
                               id: ev.id,
-                              stage: ev.stage,
+                              stage: remapStage(ev.stage),
                               enteredAt: ev.enteredAt,
                               exitedAt: ev.exitedAt,
                             })),
@@ -516,7 +537,7 @@ export default async function PoDetailPage({
                   ]}
                   estimates={estimates}
                   stageLabels={stageLabels}
-                  order={[...subStageKeys, subTerminal]}
+                  order={[...subWorkStages, subTerminal]}
                   estimateSaveRouteBase="/api/production/po"
                 />
               ),

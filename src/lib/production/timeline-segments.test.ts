@@ -138,6 +138,71 @@ describe("buildLineSegments — per-line stages", () => {
     }
   });
 
+  // The sub-PO detail page collapses the internal `supplier_po` kickoff into the
+  // supplier's first owned work stage ("accepted = started"): it feeds the
+  // timeline a line whose currentStage AND kickoff stage_event are remapped to
+  // that work stage, and whose scoped `stages` omit supplier_po. These two cases
+  // pin the resulting segment shape so a revert of that page glue fails here.
+  describe("sub-PO kickoff collapse (accepted = started)", () => {
+    const SUB = ["stamping", "complete"]; // supplier_po dropped from scope
+
+    it("not-started kickoff line shows raw-material in progress from the issue date", () => {
+      // Issued 5 days ago, never advanced. The page remaps the supplier_po event
+      // (entered at issue) onto `stamping`, so the bar is a single in-progress
+      // stamping segment anchored to the issue date and spanning today.
+      const issued = today - 5 * MS_PER_DAY;
+      const segs = buildLineSegments(
+        {
+          currentStage: "stamping",
+          stages: SUB,
+          stageEvents: [
+            { stage: "stamping", enteredAt: new Date(issued), exitedAt: null },
+          ],
+        },
+        today,
+        "2026-06-09",
+        SUB,
+        ESTIMATES,
+      );
+      expect(segs).toHaveLength(1);
+      const seg = segs[0];
+      expect(seg.stage).toBe("stamping");
+      expect(seg.projected).toBe(true); // current/in-progress, not past history
+      expect(seg.startMs).toBe(issued); // keeps the issue-date start, not today
+      expect(seg.endMs).toBeGreaterThan(today); // projects into the future
+      // The today line falls inside the bar — raw material is underway now.
+      expect(seg.startMs).toBeLessThanOrEqual(today);
+      expect(seg.endMs).toBeGreaterThanOrEqual(today);
+    });
+
+    it("folds the acceptance span into raw material after a real advance", () => {
+      // Already advanced: a supplier_po event (entered at issue, exited at advance)
+      // AND a stamping event both remap to `stamping`. They consolidate into one
+      // ongoing stamping segment from the issue date — no separate kickoff bar.
+      const issued = today - 5 * MS_PER_DAY;
+      const advanced = today - 2 * MS_PER_DAY;
+      const segs = buildLineSegments(
+        {
+          currentStage: "stamping",
+          stages: SUB,
+          stageEvents: [
+            // Both were supplier_po + stamping; the page remapped both to stamping.
+            { stage: "stamping", enteredAt: new Date(issued), exitedAt: new Date(advanced) },
+            { stage: "stamping", enteredAt: new Date(advanced), exitedAt: null },
+          ],
+        },
+        today,
+        "2026-06-09",
+        SUB,
+        ESTIMATES,
+      );
+      expect(segs).toHaveLength(1);
+      expect(segs[0].stage).toBe("stamping");
+      expect(segs[0].startMs).toBe(issued);
+      expect(segs[0].endMs).toBeGreaterThan(today);
+    });
+  });
+
   it("consolidates multiple events for the same stage (advance-then-move-back)", () => {
     // A line that was advanced from supplier_po → stamping and then moved
     // back to supplier_po should produce ONE supplier_po segment spanning
