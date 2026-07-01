@@ -14,10 +14,10 @@ import { getStoreLogoUrl } from "@/lib/shopify/brand";
 import { getStageLabels, getStageOrder } from "@/lib/production/stage-labels";
 import { ShippingCostReminder } from "@/components/shipping/shipping-cost-reminder";
 import {
-  getShippingImportStatus,
   daysSince,
   shouldSeeShippingReminder,
 } from "@/lib/shipping/import-status";
+import { getShippingImportStatus } from "@/lib/shipping/import-status-query";
 
 export default async function AdminLayout({
   children,

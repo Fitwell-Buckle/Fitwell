@@ -5,7 +5,7 @@ import { parseDateRange } from "@/lib/date-range";
 import { getCogs } from "@/lib/cogs/cogs";
 import { getMarginByChannel, MARGIN_COVERAGE_THRESHOLD } from "@/lib/margin/true-margin";
 import { ORDER_CHANNEL_LABELS } from "@/lib/orders/channel";
-import { getShippingImportStatus } from "@/lib/shipping/import-status";
+import { getShippingImportStatus } from "@/lib/shipping/import-status-query";
 import { ShippingCostUploadButton } from "@/components/shipping/shipping-cost-upload-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
