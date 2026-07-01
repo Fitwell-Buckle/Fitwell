@@ -28,6 +28,8 @@ import {
   sampleDeliveredDraft,
 } from "./lifecycle";
 import { EXPIRY_WARNING_DAYS } from "./assets";
+import { getCreatorCommissions } from "./commission-queries";
+import { PAYOUT_FLOOR_CENTS } from "./commission";
 
 export interface ActionSummary {
   followupsDue: number;
@@ -35,6 +37,7 @@ export interface ActionSummary {
   postsOverdue: number;
   autoBurned: number;
   rightsExpiring: number;
+  w9Requests: number;
 }
 
 const DEDUPE_WINDOW_DAYS = 7;
@@ -67,6 +70,7 @@ export async function runCreatorActions(): Promise<ActionSummary> {
     postsOverdue: 0,
     autoBurned: 0,
     rightsExpiring: 0,
+    w9Requests: 0,
   };
 
   // ── 1. Follow-ups due ─────────────────────────────────────────────
@@ -247,6 +251,22 @@ export async function runCreatorActions(): Promise<ActionSummary> {
       href: `/creators/${a.creatorId}`,
     });
     if (created) summary.rightsExpiring++;
+  }
+
+  // ── 6. Commission over the payout floor with no W-9 on file ───────
+  const commissions = await getCreatorCommissions();
+  for (const c of commissions) {
+    if (!c.payable || c.taxFormStatus !== "none") continue;
+    const created = await notifyOnce({
+      type: "creator_w9_needed",
+      title: `Request a W-9 from ${c.name}`,
+      body:
+        `${c.name} crossed the $${PAYOUT_FLOOR_CENTS / 100} commission payout floor ` +
+        `(owed $${(c.owedCents / 100).toLocaleString()}). Collect a W-9 before paying, ` +
+        `then mark it received on their page.`,
+      href: `/creators/${c.creatorId}`,
+    });
+    if (created) summary.w9Requests++;
   }
 
   return summary;
