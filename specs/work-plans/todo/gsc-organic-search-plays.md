@@ -84,13 +84,24 @@ collision, 0 clicks — ignore).
       sitelinks, structured data) — separate from the page, still open.
 
 ### Phase 2: `/collections/buckles` on-page optimization (defend + extend)
-- [ ] We own `adjustable watch buckle` (pos 2.6); the gap is `watch buckle`
-      (pos 11) / `watch strap buckle` (pos 13) on page 2 landing here with zero
-      clicks. Rewrite the collection's title + on-page copy in the customer's
-      own language ("between holes", "tweener", "finally fits") — lead with the
-      outcome, surface finish + founder/service (the defensible secondary
-      benefits), don't lead with the on-wrist mechanism. Persona P5/P3, stage
-      `solution_aware`.
+- [x] **Done 2026-07-01.** The page already had strong conversion copy (a
+      custom-liquid `col-hero` section in `templates/collection.json`), so the
+      work was surgical SEO, not a rewrite:
+      - **SEO title** → `Adjustable Watch Buckles: Micro-Adjust for Any Strap | Fitwell` (Tom, via collection Edit-website-SEO).
+      - **Meta description** (was empty) → added (Tom).
+      - **Subhead** keyword-weave (CLI): now "The adjustable watch buckle that
+        adds on-the-fly, half-hole adjustment to your leather, rubber, and
+        fabric straps" — works in `adjustable watch buckle` (owned, pos 2.6).
+      - **H1 fix** (CLI): page had **zero** H1s (banner renders none); promoted
+        the `col-hero` headline "Stop settling…" from `<h2>` to `<h1>`.
+      - **SEO body paragraph** (CLI): added a custom-liquid section
+        (`fw_seo_copy`, scheme-2) below the Judge.me reviews carousel with
+        "watch strap buckle" / "micro-adjust watch buckles" body text for the
+        page-2 head terms. Verified live. Note: edits are on the shared default
+        `collection.json`, so they show on all default-template collections
+        (fine — Fitwell-generic + the hero was already global).
+- [ ] **M4 page title/meta** (`/pages/micro-adjust-for-your-existing-watch-straps`,
+      325 impr / 2 clicks, near-invisible) — still to do.
 - [ ] Re-check positions after ~2-4 weeks of GSC data (the staleness monitor
       keeps the feed live).
 
