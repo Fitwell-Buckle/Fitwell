@@ -129,18 +129,20 @@ rewards are product/status, not cash/discount races.
 
 ### Phase 1: Affiliate program config + commission tracking (build #2)
 
-Schema deltas (all additive; Greg sign-off before generate/migrate):
-- [ ] `creator.offerTier` (enum seed|partner|anchor), `creator.commissionRatePct` (int)
-- [ ] `creator.payoutEmail` (nullable), `creator.taxFormStatus` (enum none|requested|received)
-- [ ] `creator.firstSaleAt` (nullable timestamp — activation metric, reused in Phase 6)
-- [ ] New table `creatorPayout` — creator_id FK, period, amount_cents, method, paid_at,
+Schema deltas (all additive; signed off by Tom) — **DONE: migration 0097, dev + prod (commit 3a4cdac)**:
+- [x] `creator.offerTier` (enum seed|partner|anchor), `creator.commissionRatePct` (real)
+- [x] `creator.payoutEmail` (nullable), `creator.taxFormStatus` (enum none|requested|received)
+- [x] `creator.firstSaleAt` (nullable timestamp — activation metric, reused in Phase 6)
+- [x] New table `creatorPayout` — creator_id FK, period, amount_cents, method, paid_at,
       note (records what's been *paid*, so owed = earned − paid)
-- [ ] `npm run db:generate`, review, `npm run db:migrate` (dev first)
-- [ ] Default `creatorDiscountCode` generation to **15%** (matches the standing floor)
-- [ ] Commission-owed computation: `attributed_revenue_cents × commissionRatePct` minus
-      recorded payouts; expose on `creators/[id]` + a "commission owed ≥ $25" admin view
+- [x] `npm run db:generate`, review, `npm run db:migrate` (dev + prod at parity)
+- [x] Default `creatorDiscountCode` generation to **15%** (already in place — discount-code route)
+- [x] Commission-owed computation (`commission.ts` + `commission-queries.ts`, 9 unit tests)
+      exposed on `creators/[id]` (commit 37263df); offer tier/rate/payout editable (commit 035ec55)
+- [ ] "Commission owed ≥ $25" roll-up admin view (`getCreatorCommissions()` is built — needs a page)
 - [ ] W-9 request surfaced in the action engine when a creator first crosses the payout floor
-- [ ] Update `specs/current/schema.md`
+- [ ] `offer_tier` filter on the `/creators` list (nice-to-have for managing the wave)
+- [x] Update `specs/current/schema.md`
 
 #### Tests
 - Unit: commission-owed math (earned − paid, floor gating at $25)
