@@ -104,6 +104,15 @@ collision, 0 clicks — ignore).
       title "Micro-Adjust Link for Watch Straps and Deployants | Fitwell M4" +
       meta description aimed at deployant / universal-link intent (distinct from
       the buckle collection to avoid cannibalization).
+- [x] **M4 collection** (`/collections/fitwell-universal-micro-adjust-link`,
+      template `collection.fitwell-dtc.json`) given parity 2026-07-01: SEO title
+      + meta (Tom); promoted the `m4-hero` headline h2→h1 (page had zero H1s);
+      removed 2 user-facing em dashes from the hero ("Your watch, now with
+      micro-adjust." + the screw-attached-deployants note); added an M4-specific
+      SEO paragraph (`fw_seo_copy_m4`) below the reviews carousel with
+      micro-adjust-link / deployant language. NOTE: the size-finder widget on
+      this template still has em dashes in its step labels (Tom's copy, appears
+      on multiple pages — left alone; flag for a separate cleanup if wanted).
 - [ ] Re-check positions after ~2-4 weeks of GSC data (the staleness monitor
       keeps the feed live).
 
