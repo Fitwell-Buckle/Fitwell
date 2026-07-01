@@ -1,0 +1,36 @@
+/*
+ * Fitwell dark-theme override for the Judge.me all-reviews widget.
+ * INJECTED LIVE as a custom-liquid section (id: fw_darkfix) in
+ * templates/page.opinew_all_reviews.json on the live theme (via Shopify CLI),
+ * NOT auto-applied from this repo. Powers /pages/customer-reviews.
+ * The theme has only dark color schemes, so Judge.me's default dark text is
+ * invisible; this forces cream text (#F8F6F3) + gold stars/accents (#C08A4D).
+ * To edit: shopify theme pull --live, change the fw_darkfix block, push --only.
+ */
+
+/* Fitwell dark-theme override for the Judge.me all-reviews widget */
+.jdgm-widget{ color:#F8F6F3 !important; }
+.jdgm-widget h1,.jdgm-widget h2,.jdgm-widget h3,.jdgm-widget h4,.jdgm-widget p,
+.jdgm-widget span,.jdgm-widget a,.jdgm-widget div,.jdgm-widget label,
+.jdgm-widget li,.jdgm-widget td,.jdgm-widget strong,.jdgm-widget b{
+  color:#F8F6F3 !important;
+}
+/* Stars gold (higher specificity than the broad text rule above) */
+.jdgm-widget .jdgm-star,.jdgm-widget span.jdgm-star{ color:#C08A4D !important; }
+.jdgm-widget .jdgm-star.jdgm--off{ color:rgba(248,246,243,.28) !important; }
+.jdgm-histogram__bar-content{ background:#C08A4D !important; }
+.jdgm-histogram__bar{ background:rgba(248,246,243,.12) !important; }
+.jdgm-rev,.jdgm-histogram,.jdgm-all-reviews__header,.jdgm-rev-widg__reviews,
+.jdgm-rev-widg{ border-color:rgba(248,246,243,.16) !important; }
+/* Keep the Write-a-review button gold with dark text */
+.jdgm-write-rev-link,a.jdgm-write-rev-link,.jdgm-all-reviews__button{
+  background:#C08A4D !important; color:#2a3641 !important; border:none !important;
+}
+.jdgm-write-rev-link *{ color:#2a3641 !important; }
+/* Filter / sort controls */
+.jdgm-rev-widg__sort-wrapper select,select.jdgm-sort-dropdown{
+  color:#F8F6F3 !important; background:transparent !important;
+  border-color:rgba(248,246,243,.24) !important;
+}
+/* Product-link chip + media wrappers subtle on dark */
+.jdgm-rev__prod-link,.jdgm-rev__product-link{ background:rgba(248,246,243,.05) !important; }
