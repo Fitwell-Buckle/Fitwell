@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   company,
+  creatorPayout,
   creatorPost,
   creatorStatsDaily,
   customer,
@@ -15,6 +16,7 @@ import {
   order,
   orderDiscountCode,
 } from "@/lib/schema";
+import { computeCommission } from "@/lib/creators/commission";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -144,7 +146,8 @@ export default async function CreatorDetailPage({
 
   const codeStrings = record.discountCodes.map((c) => c.code);
 
-  const [latestStats, posts, giftOrders, redemptions] = await Promise.all([
+  const [latestStats, posts, giftOrders, redemptions, payoutAgg] =
+    await Promise.all([
     platformIds.length
       ? db
           .select()
@@ -195,9 +198,26 @@ export default async function CreatorDetailPage({
           .where(inArray(orderDiscountCode.code, codeStrings))
           .groupBy(orderDiscountCode.code)
       : Promise.resolve([]),
+    // Commission already paid out — owed = earned − this.
+    db
+      .select({ total: sum(creatorPayout.amountCents) })
+      .from(creatorPayout)
+      .where(eq(creatorPayout.creatorId, id)),
   ]);
 
   const redemptionByCode = new Map(redemptions.map((r) => [r.code, r]));
+
+  // Affiliate commission: attributed net revenue across this creator's codes,
+  // × the creator's rate, − payouts already recorded (commission.ts).
+  const attributedNetRevenueCents = redemptions.reduce(
+    (acc, r) => acc + (Number(r.grossCents ?? 0) - Number(r.refundedCents ?? 0)),
+    0,
+  );
+  const commission = computeCommission({
+    attributedNetRevenueCents,
+    commissionRatePct: record.commissionRatePct,
+    paidCents: Number(payoutAgg[0]?.total ?? 0),
+  });
 
   // Newest snapshot per platform (latestStats is ordered desc).
   const latestByPlatform = new Map<string, (typeof latestStats)[number]>();
@@ -564,14 +584,52 @@ export default async function CreatorDetailPage({
             />
           </DataTable>
 
+          {/* Commission */}
+          <DataTable className="p-4">
+            <div className="mb-2 flex items-center gap-2 font-medium">
+              Commission
+              {record.offerTier && (
+                <Badge className="capitalize">{record.offerTier}</Badge>
+              )}
+              {commission.ratePct > 0 && <Badge>{commission.ratePct}%</Badge>}
+            </div>
+            {commission.ratePct === 0 ? (
+              <Muted>
+                No commission rate set — assign an offer tier / rate to start
+                tracking earnings.
+              </Muted>
+            ) : (
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+                <Stat
+                  label="Attributed revenue"
+                  value={`$${(commission.attributedNetRevenueCents / 100).toLocaleString()}`}
+                />
+                <Stat
+                  label="Earned"
+                  value={`$${(commission.earnedCents / 100).toLocaleString()}`}
+                />
+                <Stat
+                  label="Paid"
+                  value={`$${(commission.paidCents / 100).toLocaleString()}`}
+                />
+                <Stat
+                  label="Owed"
+                  value={
+                    <span className="flex items-center gap-1.5">
+                      ${(commission.owedCents / 100).toLocaleString()}
+                      {commission.payable && <Badge>ready to pay</Badge>}
+                    </span>
+                  }
+                />
+              </div>
+            )}
+          </DataTable>
+
           {/* Discount codes */}
           <DataTable className="p-4">
             <div className="mb-2 font-medium">Discount codes</div>
             {record.discountCodes.length === 0 ? (
-              <Muted>
-                None issued. Code generation ships with Phase 4 (needs the
-                write_discounts scope).
-              </Muted>
+              <Muted>None issued yet.</Muted>
             ) : (
               <ul className="space-y-1.5">
                 {record.discountCodes.map((dc) => {
