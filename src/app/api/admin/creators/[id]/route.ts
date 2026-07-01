@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { creator } from "@/lib/schema";
 import { CREATOR_STATUSES, VETTING_STATUSES } from "@/lib/creators/list";
+import { OFFER_TIERS, TAX_FORM_STATUSES } from "@/lib/creators/commission";
 
 // Middleware already gates /api/admin/* to signed-in non-portal users.
 
@@ -21,6 +22,10 @@ const patchSchema = z
       .optional(),
     phone: z.string().max(50).nullable().optional(),
     notes: z.string().max(10_000).nullable().optional(),
+    offerTier: z.enum(OFFER_TIERS).nullable().optional(),
+    commissionRatePct: z.number().min(0).max(100).nullable().optional(),
+    payoutEmail: z.string().email().max(200).nullable().optional(),
+    taxFormStatus: z.enum(TAX_FORM_STATUSES).optional(),
   })
   .refine((b) => Object.keys(b).length > 0, { message: "Empty patch" });
 
@@ -51,6 +56,14 @@ export async function PATCH(
   if (parsed.data.phone !== undefined)
     updates.phone = parsed.data.phone?.trim() || null;
   if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
+  if (parsed.data.offerTier !== undefined)
+    updates.offerTier = parsed.data.offerTier;
+  if (parsed.data.commissionRatePct !== undefined)
+    updates.commissionRatePct = parsed.data.commissionRatePct;
+  if (parsed.data.payoutEmail !== undefined)
+    updates.payoutEmail = parsed.data.payoutEmail?.trim() || null;
+  if (parsed.data.taxFormStatus !== undefined)
+    updates.taxFormStatus = parsed.data.taxFormStatus;
 
   // Burned creators get a 12-month cool-off (creator-program.md Phase 3 rule).
   if (parsed.data.status === "burned") {

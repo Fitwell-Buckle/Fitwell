@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CREATOR_STATUSES } from "@/lib/creators/list";
+import { OFFER_TIERS, TIER_DEFAULT_RATE_PCT } from "@/lib/creators/commission";
 
 const inputCls =
   "rounded-lg border border-zinc-200 bg-white px-2 py-1 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400";
@@ -17,6 +18,9 @@ export function CreatorEditor({
   notes,
   country,
   phone,
+  offerTier,
+  commissionRatePct,
+  payoutEmail,
 }: {
   creatorId: string;
   name: string;
@@ -26,12 +30,17 @@ export function CreatorEditor({
   notes: string | null;
   country: string | null;
   phone: string | null;
+  offerTier: string | null;
+  commissionRatePct: number | null;
+  payoutEmail: string | null;
 }) {
   const router = useRouter();
   const [nameDraft, setNameDraft] = useState(name);
   const [noteDraft, setNoteDraft] = useState(notes ?? "");
   const [countryDraft, setCountryDraft] = useState(country ?? "");
   const [phoneDraft, setPhoneDraft] = useState(phone ?? "");
+  const [rateDraft, setRateDraft] = useState(commissionRatePct?.toString() ?? "");
+  const [payoutDraft, setPayoutDraft] = useState(payoutEmail ?? "");
   const [saving, setSaving] = useState(false);
 
   async function patch(body: Record<string, unknown>) {
@@ -180,6 +189,83 @@ export function CreatorEditor({
         >
           Save
         </button>
+      </div>
+
+      {/* Affiliate: offer tier (auto-fills default rate) + rate + payout */}
+      <div className="space-y-2 rounded-lg border border-zinc-100 p-2">
+        <div className="text-xs font-medium text-zinc-500">Affiliate</div>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-zinc-500">Tier</label>
+            <select
+              value={offerTier ?? ""}
+              disabled={saving}
+              onChange={(e) => {
+                const t = e.target.value;
+                if (t) {
+                  const rate =
+                    TIER_DEFAULT_RATE_PCT[t as keyof typeof TIER_DEFAULT_RATE_PCT];
+                  setRateDraft(String(rate));
+                  patch({ offerTier: t, commissionRatePct: rate });
+                } else {
+                  patch({ offerTier: null });
+                }
+              }}
+              className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-sm capitalize"
+            >
+              <option value="">—</option>
+              {OFFER_TIERS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-zinc-500">Rate %</label>
+            <input
+              value={rateDraft}
+              onChange={(e) =>
+                setRateDraft(e.target.value.replace(/[^0-9.]/g, ""))
+              }
+              placeholder="—"
+              className="w-16 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-center text-sm"
+            />
+            <button
+              onClick={() =>
+                patch({
+                  commissionRatePct:
+                    rateDraft.trim() === "" ? null : Number(rateDraft),
+                })
+              }
+              disabled={
+                saving ||
+                rateDraft.trim() === (commissionRatePct?.toString() ?? "")
+              }
+              className="rounded-lg bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700 disabled:opacity-40"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-zinc-500">
+            Payout email
+          </label>
+          <input
+            value={payoutDraft}
+            onChange={(e) => setPayoutDraft(e.target.value)}
+            placeholder="paypal@…"
+            className={`${inputCls} flex-1`}
+          />
+          <button
+            onClick={() => patch({ payoutEmail: payoutDraft.trim() || null })}
+            disabled={saving || payoutDraft.trim() === (payoutEmail ?? "")}
+            className="rounded-lg bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700 disabled:opacity-40"
+          >
+            Save
+          </button>
+        </div>
       </div>
 
       <div>

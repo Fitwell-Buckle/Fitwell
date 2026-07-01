@@ -11,6 +11,20 @@
 /** Don't cut a payout below this (D3). */
 export const PAYOUT_FLOOR_CENTS = 2500; // $25
 
+/** Offer bands, ordered by size/priority (creator-outreach-campaign.md L2). */
+export const OFFER_TIERS = ["seed", "partner", "anchor"] as const;
+export type OfferTier = (typeof OFFER_TIERS)[number];
+
+/** Default commission rate per tier — 10 seed / 15 partner / 20 anchor (L2). */
+export const TIER_DEFAULT_RATE_PCT: Record<OfferTier, number> = {
+  seed: 10,
+  partner: 15,
+  anchor: 20,
+};
+
+/** W-9 collection states, gathered at first payout over the floor (D5). */
+export const TAX_FORM_STATUSES = ["none", "requested", "received"] as const;
+
 export interface CommissionResult {
   /** Effective rate applied (0 when the creator has no rate assigned yet). */
   ratePct: number;

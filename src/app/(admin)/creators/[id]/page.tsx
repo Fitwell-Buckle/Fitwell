@@ -692,6 +692,9 @@ export default async function CreatorDetailPage({
               notes={record.notes}
               country={record.country}
               phone={record.phone}
+              offerTier={record.offerTier}
+              commissionRatePct={record.commissionRatePct}
+              payoutEmail={record.payoutEmail}
             />
           </DataTable>
         </div>
