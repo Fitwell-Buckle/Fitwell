@@ -114,6 +114,11 @@ hash matches no on-disk file. The hash-based pending check stays correct.
 Optional one-time cleanup (needs Greg's sign-off — manual prod-DB write):
 `DELETE FROM drizzle.__drizzle_migrations WHERE id = 60;`.
 
+Re-confirmed 2026-07-01 while applying the creator Phase-1 migration (`0097`):
+prod shows 99 applied rows vs. 98 on-disk; the +1 is still this same orphan
+(`id=60`) — recent migrations `0092`–`0097` match prod 1:1 by timestamp, and
+`0097` is confirmed live. Nothing new; still safe to leave.
+
 ## 🆕 Shipped 2026-06-16 — Trade Shows section (EPHJ Geneva)
 
 New top-level **Trade Shows** admin section for booth-walking at EPHJ Geneva
