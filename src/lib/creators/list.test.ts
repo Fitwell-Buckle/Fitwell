@@ -19,6 +19,7 @@ function row(partial: Partial<CreatorListRow> & { id: string }): CreatorListRow 
     primaryPlatform: "ig",
     crossPlatformFit: 50,
     source: null,
+    offerTier: null,
     platforms: [{ platform: "ig", handle: partial.id, fitScore: 50, watchConfidence: "medium" }],
     followersTotal: 10_000,
     bestErPct: 2,
@@ -71,6 +72,19 @@ describe("filterCreators", () => {
 
   it("q matches name or handle", () => {
     expect(filterCreators(ROWS, { q: "watchd" }).map((r) => r.id)).toEqual(["d"]);
+  });
+
+  it("tier filters by offer tier and overrides the to-vet default", () => {
+    // The approved seed row must survive — selecting a tier opts out of the
+    // unreviewed-only landing default (same as stage/source do).
+    const rows = [
+      row({ id: "seed1", offerTier: "seed", vettingStatus: "approved" }),
+      row({ id: "anchor1", offerTier: "anchor" }),
+      row({ id: "untiered" }),
+    ];
+    expect(filterCreators(rows, { tier: "seed" }).map((r) => r.id)).toEqual([
+      "seed1",
+    ]);
   });
 });
 

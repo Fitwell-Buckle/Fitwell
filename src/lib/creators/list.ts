@@ -36,6 +36,8 @@ export interface CreatorListRow {
   crossPlatformFit: number | null;
   /** How the creator entered the system (creator.source); null = legacy/import. */
   source: string | null;
+  /** Affiliate offer tier (seed | partner | anchor); null until assigned. */
+  offerTier: string | null;
   platforms: {
     platform: string;
     handle: string;
@@ -62,6 +64,8 @@ export interface CreatorListParams {
   stage?: string;
   /** Provenance filter, e.g. "self_registration" for the signup review queue. */
   source?: string;
+  /** Affiliate offer tier filter: seed | partner | anchor. */
+  tier?: string;
   /** substring match on name or any handle */
   q?: string;
   /** fit | followers | er | lastpost | name */
@@ -115,6 +119,7 @@ export function filterCreators(
     !params.status &&
     !params.stage &&
     !params.source &&
+    !params.tier &&
     params.market !== "out" &&
     params.mismatch !== "1"
   ) {
@@ -125,6 +130,9 @@ export function filterCreators(
   }
   if (params.source) {
     out = out.filter((r) => r.source === params.source);
+  }
+  if (params.tier) {
+    out = out.filter((r) => r.offerTier === params.tier);
   }
   if (params.platform === "multi") {
     out = out.filter((r) => r.platforms.length > 1);

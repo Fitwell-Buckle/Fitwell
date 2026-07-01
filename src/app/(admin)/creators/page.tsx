@@ -24,6 +24,7 @@ import {
 } from "@/lib/creators/list";
 import { getActiveMarkets, isOutOfMarket } from "@/lib/creators/markets";
 import { flagPossibleMismatch } from "@/lib/creators/edit";
+import { OFFER_TIERS } from "@/lib/creators/commission";
 import { AddCreator } from "./add-creator";
 import { VetActions } from "./vet-actions";
 import { PageHeader } from "@/components/ui/page-header";
@@ -183,6 +184,7 @@ export default async function CreatorsPage({
       primaryPlatform: c.primaryPlatform,
       crossPlatformFit: c.crossPlatformFit,
       source: c.source,
+      offerTier: c.offerTier,
       platforms: c.platforms.map((p) => ({
         platform: p.platform,
         handle: p.handle,
@@ -373,6 +375,15 @@ export default async function CreatorsPage({
           pill(s, "status", s, params.status === s),
         )}
         {pill("Everything", "all", "1", params.all === "1" && !params.status)}
+        <span className="mx-1 h-4 w-px bg-zinc-200" />
+        {OFFER_TIERS.map((t) =>
+          pill(
+            t.charAt(0).toUpperCase() + t.slice(1),
+            "tier",
+            t,
+            params.tier === t,
+          ),
+        )}
         <form action="/creators" className="ml-auto">
           {Object.entries(params)
             .filter(([k, v]) => v && k !== "q")
