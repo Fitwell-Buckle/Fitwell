@@ -114,6 +114,12 @@ Magic-link auth; middleware requires `role='company'` (else → `/portal/login`)
 |--------|------|-------------|
 | GET | `/api/health` | App health check |
 
+### Public (storefront)
+No auth. Read-only, open CORS + edge-cached so the Shopify storefront can fetch them cross-origin.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/review-summary` | Shop-wide review rating + count (`{ data: { rating, count } }`) from the `review` table. Powers the dynamic storefront "review pill" (snippet `fw-review-pill.liquid`) that replaced the old hardcoded static pills. 1h edge cache; source data refreshed daily by the Judge.me extract. |
+
 ### Admin API (protected)
 | Method | Path | Description |
 |--------|------|-------------|
