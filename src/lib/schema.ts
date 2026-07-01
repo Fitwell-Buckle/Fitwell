@@ -2253,6 +2253,12 @@ export const creator = pgTable(
     // Set on the creator's first attributed sale — activation metric;
     // time-to-first-sale is the engagement layer's north star (Phase 6).
     firstSaleAt: timestamp("first_sale_at", { mode: "date" }),
+    // --- Parked ("pass for now") — creator-portal-redesign.md Phase 1 ---
+    // Approved creators you're not contacting THIS pass. Set = parked (drops out
+    // of every working view, stays approved); null = active. First real state on
+    // the reimagined creator spine. Unparking clears both fields.
+    parkedAt: timestamp("parked_at", { mode: "date" }),
+    parkedReason: text("parked_reason"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   },
@@ -3408,8 +3414,16 @@ export const newsletterCampaign = pgTable(
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
     klaviyoCampaignId: text("klaviyo_campaign_id"),
-    // 'draft' | 'sent' — flipped by the extract-klaviyo cron once send
-    // stats start arriving.
+    // Regional edition this row is for: 'emea' (EMEA+APAC) | 'amer'
+    // (Americas) | null (single-list send, pre-regional). One issue produces
+    // one row per region, so region is what distinguishes the two — the key
+    // for comparing per-region open/click rates.
+    region: text("region"),
+    // 'draft' | 'scheduled' | 'sent' — set at send time in newsletter/main.ts:
+    // a --send run writes 'sent' (immediate) or 'scheduled' (a regional send
+    // queued for a future UTC time); a draft-only run writes 'draft'. The
+    // extract-klaviyo cron does NOT touch status; it only backfills the stat
+    // columns below (see backfillNewsletterStats).
     status: text("status").notNull().default("draft"),
     sentAt: timestamp("sent_at", { mode: "date" }),
     subject: text("subject").notNull(),

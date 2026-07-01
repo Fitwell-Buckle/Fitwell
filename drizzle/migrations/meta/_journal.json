@@ -687,6 +687,20 @@
       "when": 1782937870668,
       "tag": "0097_smart_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1782940202020,
+      "tag": "0098_redundant_stepford_cuckoos",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1782945918348,
+      "tag": "0099_slim_sleepwalker",
+      "breakpoints": true
     }
   ]
 }

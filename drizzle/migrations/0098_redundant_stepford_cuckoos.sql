@@ -1,0 +1,1 @@
+ALTER TABLE "newsletter_campaign" ADD COLUMN "region" text;
