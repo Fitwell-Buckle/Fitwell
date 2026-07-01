@@ -1,6 +1,6 @@
 # Priorities
 
-Last updated: 2026-06-29
+Last updated: 2026-07-01
 
 ## 🚀 Active (2026-06-27) — D2C 360 growth push: GO
 
@@ -22,6 +22,33 @@ modeled ~$120k (Feb '27); they come back in as returns prove out. Next: onboard
 Lucas, content blitz, verify conversion
 tracking, Shopify audit, creator import + Wave 1 outreach, TikTok Shop standup.
 Open (Oliver): wholesale/OEM ramp, TikTok Shop fulfillment, deployant timing.
+
+## 🔧 Shipped 2026-07-01 — On-wrist copy scrubbed sitewide + dynamic review pill
+
+Brand cleanup enacting **between-holes-first positioning (H14)**: pulled on-*wrist*
+adjustment claims across the storefront (kept "on-the-fly," which Tom is fine with).
+Reviews page + collection SEO from the same stretch is tracked in
+`specs/work-plans/todo/gsc-organic-search-plays.md`.
+
+- **Theme (5 templates, live):** buckles collection, M1 meta-ads landing (both
+  blocks), shop-Fitwell, blog, footer. Reworded to lead with fit ("Set your perfect
+  fit," "for all-day comfort"). M4 collection SEO paragraph intentionally left as-is.
+- **⚠️ Product descriptions — LIVE SHOPIFY DATA, NOT IN GIT.** Scrubbed on-wrist
+  copy ("on-wrist," "on the wrist," "whenever your wrist size changes throughout the
+  day") from all 7 M1 models + the M3 keeperless, via the Admin API (client-credentials
+  OAuth, `write_products`). **Do not reintroduce on-wrist language when editing product
+  copy — it was removed deliberately.** Also fixed a factual error: stainless models
+  were calling themselves "titanium." Now: plain stainless → "precision 316L stainless
+  steel buckle"; colored → "gold- / rose-gold- / black-finished 316L stainless steel";
+  the 2 titanium models keep "lightweight titanium." (One-off scripts were run from the
+  session scratchpad, not committed.)
+- **Dynamic review pill — NEW.** `/api/review-summary` (public, open CORS, 1h edge
+  cache; commits `119dce4` endpoint+tests, `cc992db` routes doc) returns live
+  `{rating,count}` from the `review` table (daily Judge.me sync). Theme snippet
+  `fw-review-pill.liquid` fetches it and **replaced the hardcoded static pills** — which
+  had drifted to inconsistent numbers (4.6/4.7/4.8, 30+/60+/97) — on the buckles
+  collection, M4 collection, M1 landing, and reviews page. Self-updates as reviews accrue,
+  so pills never go stale again.
 
 ## 🔧 Shipped 2026-06-29 — Analytics pipelines repaired + GSC stood up + staleness monitoring
 
