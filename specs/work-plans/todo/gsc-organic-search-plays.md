@@ -100,8 +100,10 @@ collision, 0 clicks — ignore).
         page-2 head terms. Verified live. Note: edits are on the shared default
         `collection.json`, so they show on all default-template collections
         (fine — Fitwell-generic + the hero was already global).
-- [ ] **M4 page title/meta** (`/pages/micro-adjust-for-your-existing-watch-straps`,
-      325 impr / 2 clicks, near-invisible) — still to do.
+- [x] **M4 page title/meta** done 2026-07-01 (Tom, via Edit website SEO):
+      title "Micro-Adjust Link for Watch Straps and Deployants | Fitwell M4" +
+      meta description aimed at deployant / universal-link intent (distinct from
+      the buckle collection to avoid cannibalization).
 - [ ] Re-check positions after ~2-4 weeks of GSC data (the staleness monitor
       keeps the feed live).
 
