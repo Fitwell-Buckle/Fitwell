@@ -287,6 +287,9 @@ export default async function CreatorsPage({
             {visible.length} of {rows.length}
           </Muted>
           <Button variant="ghost" size="sm" asChild>
+            <Link href="/creators/payouts">Payouts</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
             <Link href="/influencer-tracking">Gifting orders</Link>
           </Button>
           <AddCreator />
