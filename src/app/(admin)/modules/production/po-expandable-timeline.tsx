@@ -303,7 +303,29 @@ export function PoExpandableTimeline({
                         masters get a stack, one bar per supplier. */}
                     {isSelected && (
                       <div className="flex items-center gap-3 border-t border-zinc-100 px-4 py-2.5">
-                        <div className="w-48 shrink-0" />
+                        {/* Label the bottom bar row with the supplier per bar
+                            (multi-supplier) or the PO#·supplier (single), so the
+                            vendor sits beside its own timeline rather than only in
+                            the header card far above the SKU breakdown. Each name
+                            row is h-6 to match a TimelineBar's height; gap-1 mirrors
+                            the bar stack so name↔bar stay aligned. */}
+                        {t.subBars ? (
+                          <div className="flex w-48 shrink-0 flex-col gap-1">
+                            {t.subBars.map((b) => (
+                              <div
+                                key={b.poId}
+                                className="flex h-6 items-center truncate text-[11px] text-zinc-500"
+                                title={b.supplierName}
+                              >
+                                {b.supplierName}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex h-6 w-48 shrink-0 items-center truncate text-[11px] text-zinc-400">
+                            {t.poNumber} · {t.supplier}
+                          </div>
+                        )}
                         {t.subBars ? (
                           <div className="flex flex-1 flex-col gap-1">
                             {t.subBars.map((b) => (

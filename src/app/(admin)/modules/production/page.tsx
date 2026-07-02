@@ -777,6 +777,27 @@ export default async function ProductionPage({
       segs: ReturnType<typeof buildLineSegments>;
     }[] | undefined;
     if (subPos.length > 0 && masterPo) {
+      // "Accepted = started": collapse the internal supplier_po kickoff into the
+      // first real work stage so a multi-supplier master that's been issued reads
+      // as already in raw material — matching the sub-PO detail + supplier portal.
+      // Walk work stages only, and remap a still-at-kickoff current stage AND its
+      // kickoff stage_event onto the first work stage. Remapping (not dropping) the
+      // event keeps the bar anchored to the issue date — the acceptance span folds
+      // into raw material instead of collapsing to a today-anchored sliver.
+      const kickoff = order[0] as ProductionStage;
+      const terminal = order[order.length - 1] as ProductionStage;
+      const workStages = order
+        .slice(0, -1)
+        .filter((s) => s !== kickoff) as ProductionStage[];
+      const firstWork = workStages[0];
+      const walkOrder = firstWork
+        ? ([...workStages, terminal] as ProductionStage[])
+        : order;
+      const effCurrentStage =
+        firstWork && g.currentStage === kickoff ? firstWork : g.currentStage;
+      const effEvents = stageEvents.map((ev) =>
+        firstWork && ev.stage === kickoff ? { ...ev, stage: firstWork } : ev,
+      );
       // Walk the master's stage list and group stages by their owning
       // supplier (fall back to master's primary for unassigned stages).
       const assignmentsByStage = new Map(
@@ -784,7 +805,7 @@ export default async function ProductionPage({
       );
       const stagesBySupplier = new Map<string, ProductionStage[]>();
       const supplierOrder: string[] = [];
-      for (const s of order.slice(0, -1)) {
+      for (const s of walkOrder.slice(0, -1)) {
         const ownerId =
           assignmentsByStage.get(s) ?? masterPo.supplierId;
         if (!stagesBySupplier.has(ownerId)) {
@@ -797,7 +818,7 @@ export default async function ProductionPage({
       // (use the supplier-of-stage's sub-PO targets when available; else
       // master's own), then filter per supplier.
       const combinedTargets = new Map<ProductionStage, number>();
-      for (const stage of order.slice(0, -1)) {
+      for (const stage of walkOrder.slice(0, -1)) {
         const ownerId =
           assignmentsByStage.get(stage) ?? masterPo.supplierId;
         const sub = subPos.find((s) => s.supplierId === ownerId);
@@ -812,10 +833,10 @@ export default async function ProductionPage({
         }
       }
       const allSegs = buildLineSegments(
-        { currentStage: g.currentStage, stageEvents },
+        { currentStage: effCurrentStage, stageEvents: effEvents },
         todayMsForTimeline,
         todayIsoForTimeline,
-        order,
+        walkOrder,
         estimates,
         combinedTargets,
       );
